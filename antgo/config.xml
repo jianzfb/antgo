@@ -1,0 +1,4 @@
+<antgo>
+    <data_factory>/home/mi/antgo/antgo-dataset</data_factory>
+    <task_factory>/home/mi/antgo/antgo-task</task_factory>
+</antgo>

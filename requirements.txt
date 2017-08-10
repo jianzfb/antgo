@@ -1,0 +1,12 @@
+numpy
+scipy
+six
+cython
+termcolor
+tqdm
+msgpack_numpy
+psutil
+pyzmq
+jinja2
+pyyaml
+plyvel

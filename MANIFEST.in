@@ -1,0 +1,7 @@
+include antgo/utils/_mask.pyx
+include antgo/cutils/maskApi.h
+include antgo/html/templates/statistic-report.html
+include antgo/config.xml
+include requirements.txt
+include README.rst
+include roadmap.txt

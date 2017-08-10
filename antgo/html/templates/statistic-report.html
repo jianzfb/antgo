@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ml-statistic-report</title>
+    <script src="https://cdn.bootcss.com/d3/3.2.8/d3.min.js" type="text/javascript"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+</head>
+<script>
+
+function matrix_chart(canvas_id){
+    var _chart = {}
+    var _width = 300, _height = 300,
+        _margins = {top: 30, left: 30, right: 30, bottom: 30},
+        _data = [], _x_keys=[], _y_keys=[],
+        _svg,
+        _canvasG,
+        _x,
+        _y,
+        _rows,
+        _cols,
+        _axesG;
+
+    _chart.render = function(){
+      if (!_svg){
+        _svg = d3.select('#'+canvas_id)
+                .append('svg')
+                .attr('height',_height)
+                .attr('width',_width)
+
+          _axesG = _svg.append("g")
+                  .attr("class", "axes");
+
+        renderAxes(_svg);
+      }
+      renderCanvas(_svg)
+    }
+
+    function renderAxes(svg) {
+      if (!_axesG){
+        _axesG = svg.append("g")
+            .attr("class", "axes");
+      }
+
+      renderXAxis(_axesG);
+      renderYAxis(_axesG);
+    }
+
+    function renderXAxis(axesG){
+      _x = d3.scale.ordinal()
+          .domain(_x_keys)
+          .rangeRoundBands([0,quadrantWidth()],0.1)
+
+      var xAxis = d3.svg.axis()
+          .scale(_x)
+          .orient("bottom");
+
+      axesG.append("g")
+          .attr("class", "x axis")
+          .attr("transform", function () {
+            return "translate(" + xStart() + "," + yStart() + ")";})
+          .call(xAxis);
+
+      }
+    function renderYAxis(axesG){
+      _y = d3.scale.ordinal()
+          .domain(_y_keys)
+          .rangeRoundBands([0,quadrantHeight()],0.1)
+
+      var yAxis = d3.svg.axis()
+          .scale(_y)
+          .orient("left");
+
+        axesG.append("g")
+                .attr("class", "y axis")
+                .attr("transform", function () {
+                    return "translate(" + xStart() + "," + yEnd() + ")";
+                })
+                .call(yAxis);
+    }
+    function renderCanvas(svg){
+      if (!_canvasG){
+        _canvasG = svg.append('g')
+                .attr('class','body')
+                .attr("transform", "translate("
+                        + xStart() + ","
+                        + yEnd() + ")") // <-2E
+      }
+
+      renderMatrix();
+    }
+
+    function renderMatrix(){
+      x_domain = []
+      for(var i = 0; i < _cols; i = i+1){
+        x_domain.push(i)
+      }
+      x = d3.scale.ordinal()
+          .domain(x_domain)
+          .rangeRoundBands([0,quadrantWidth()],0.01)
+
+      y_domain=[]
+      for(var i = 0; i < _rows; i = i+1){
+        y_domain.push(i)
+      }
+      y = d3.scale.ordinal()
+          .domain(y_domain)
+          .rangeRoundBands([0,quadrantHeight()],0.01)
+
+      color_scale = d3.scale.linear()
+          .domain([d3.min(_data),d3.max(_data)])
+          .range(['#72aeda','#18405e'])
+
+      _canvasG.selectAll('rect')
+          .data(_data)
+          .enter()
+          .append('rect')
+          .attr('x',function(d,i){return x(i % _cols);})
+          .attr('y',function(d,i){return y(parseInt(i / _cols))})
+          .attr('width',function(d){return x.rangeBand();})
+          .attr('height',function(d){return y.rangeBand();})
+          .attr('fill',function(d){return color_scale(d);})
+          .append('title')
+          .text(function(d){
+            return d;
+          })
+
+      _canvasG.selectAll('rect')
+          .data(_data)
+          .transition()
+          .attr('fill',function(d){return color_scale(d);})
+          .select('title')
+          .text(function(d){
+            return d;
+          })
+
+      _canvasG.selectAll('rect')
+          .data(_data)
+          .exit()
+          .remove()
+    }
+
+    function xStart() {
+        return _margins.left;
+    }
+
+    function yStart() {
+        return _height - _margins.bottom;
+    }
+
+    function xEnd() {
+        return _width - _margins.right;
+    }
+
+    function yEnd() {
+        return _margins.top;
+    }
+
+    function quadrantWidth() {
+        return _width - _margins.left - _margins.right;
+    }
+
+    function quadrantHeight() {
+        return _height - _margins.top - _margins.bottom;
+    }
+
+    _chart.width = function (w) {
+        if (!arguments.length) return _width;
+        _width = w;
+        return _chart;
+    };
+
+    _chart.height = function (h) { // <-1C
+        if (!arguments.length) return _height;
+        _height = h;
+        return _chart;
+    };
+
+    _chart.margins = function (m) {
+        if (!arguments.length) return _margins;
+        _margins = m;
+        return _chart;
+    };
+
+    _chart.colors = function (c) {
+        if (!arguments.length) return _colors;
+        _colors = c;
+        return _chart;
+    };
+
+    _chart.addSeries = function(data){
+        _rows = data.length
+        _cols = data[0].length
+        _data = data.reduce(function(a, b) {return a.concat(b);});
+        return _chart
+    };
+
+      _chart.addLegends = function(legends){
+          _x_keys = legends['x']
+          _y_keys = legends['y']
+        return _chart;
+    }
+
+      return _chart;
+  }
+function line_chart(canvas_id) { // <-1A
+    var _chart = {};
+    var _width = 600, _height = 300, // <-1B
+        _margins = {top: 30, left: 30, right: 30, bottom: 30},
+            _x, _y,
+            _data = [], _legends=[],
+            _colors = d3.scale.category20(),
+            _svg,
+            _bodyG,
+            _line,
+            _axes_x,
+            _axes_y,
+            _axesG,
+            _x_label,
+            _y_label;
+
+    _chart.render = function () { // <-2A
+        if (!_svg) {
+            _svg = d3.select("#"+canvas_id)
+                .append("svg") // <-2B
+                .attr("height", _height)
+                .attr("width", _width);
+            //defineBodyClip(_svg);
+        }
+
+        renderAxes(_svg);
+        renderBody(_svg);
+    };
+
+    function renderAxes(svg) {
+        if(!_axesG) {
+            _axesG = svg.append("g")
+                    .attr("class", "axes");
+        }
+
+        if(_axes_x || _axes_y){
+            _axesG.selectAll('*').remove()
+        }
+
+        renderXAxis(_axesG);
+        renderYAxis(_axesG);
+    }
+
+    function renderXAxis(axesG){
+        _x = d3.scale.linear()
+                .domain([0, d3.max(_data, function(d,i){return d3.max(d, function(d){return d.x;})})])
+                .range([0, quadrantWidth()]);
+
+        var xAxis = d3.svg.axis()
+                .scale(_x)
+                .orient("bottom");
+
+        _axes_x = axesG.append("g")
+                .attr("class", "x axis")
+                .attr("transform", function () {
+                    return "translate(" + xStart() + "," + yStart() + ")";
+                })
+                .call(xAxis)
+                .append("text")
+                .attr("fill", "#000")
+                .attr('x',quadrantWidth())
+                .attr('y',30)
+                .attr("dx", "0.71em")
+                .style("text-anchor", "end")
+                .text(_x_label);
+
+        d3.selectAll("g.x g.tick")
+            .append("line")
+                .classed("grid-line", true)
+                .attr("x1", 0)
+                .attr("y1", 0)
+                .attr("x2", 0)
+                .attr("y2", - quadrantHeight());
+    }
+
+    function renderYAxis(axesG){
+        _y = d3.scale.linear()
+                .domain([0, d3.max(_data, function(d,i){return d3.max(d, function(d){return d.y;})})])
+                .range([quadrantHeight(), 0])
+
+        var yAxis = d3.svg.axis()
+                .scale(_y)
+                .orient("left");
+
+        _axes_y = axesG.append("g")
+                .attr("class", "y axis")
+                .attr("transform", function () {
+                    return "translate(" + xStart() + "," + yEnd() + ")";
+                })
+                .call(yAxis)
+                .append("text")
+                .attr("fill", "#000")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 6)
+                .attr("dy", "0.71em")
+                .style("text-anchor", "end")
+                .text(_y_label);
+
+        d3.selectAll("g.y g.tick")
+            .append("line")
+                .classed("grid-line", true)
+                .attr("x1", 0)
+                .attr("y1", 0)
+                .attr("x2", quadrantWidth())
+                .attr("y2", 0);
+    }
+
+    function defineBodyClip(svg) { // <-2C
+        var padding = 5;
+
+        svg.append("defs")
+                .append("clipPath")
+                .attr("id", "body-clip")
+                .append("rect")
+                .attr("x", 0 - padding)
+                .attr("y", 0)
+                .attr("width", quadrantWidth() + 2 * padding)
+                .attr("height", quadrantHeight());
+    }
+
+    function renderBody(svg) { // <-2D
+        if (!_bodyG)
+            _bodyG = svg.append("g")
+                    .attr("class", "body")
+                    .attr("transform", "translate("
+                        + xStart() + ","
+                        + yEnd() + ")") // <-2E
+                    .attr("clip-path", "url(#body-clip)");
+
+        renderLines();
+        renderDots();
+        renderLengend();
+    }
+
+    function renderLines() {
+        _line = d3.svg.line() //<-4A
+                        .x(function (d) { return _x(d.x); })
+                        .y(function (d) { return _y(d.y); });
+
+        _bodyG.selectAll("path.line")
+                    .data(_data)
+                .enter() //<-4B
+                .append("path")
+                .style("stroke", function (d, i) {
+                    return _colors(i); //<-4C
+                })
+                .attr("class", "line")
+
+        _bodyG.selectAll("path.line")
+                .data(_data)
+                .transition() //<-4D
+                .attr("d", function (d) { return _line(d); });
+    }
+
+    function renderDots() {
+        _data.forEach(function (list, i) {
+            _bodyG.selectAll("circle._" + i) //<-4E
+                        .data(list)
+                    .enter()
+                    .append("circle")
+                    .attr("class", "dot _" + i);
+
+            _bodyG.selectAll("circle._" + i)
+                    .data(list)
+                    .style("stroke", function (d) {
+                        return _colors(i); //<-4F
+                    })
+                    .transition() //<-4G
+                    .attr("cx", function (d) { return _x(d.x); })
+                    .attr("cy", function (d) { return _y(d.y); })
+                    .attr("r", 4.5)
+        });
+    }
+    function renderLengend(){
+        if (_legends.length != 0){
+            legend = _bodyG.selectAll('.legend')
+                    .data(_legends)
+                    .enter()
+                    .append('g')
+                    .attr('class','legend')
+                    .attr('transform',function(d,i){
+                        return 'translate(' + 0 + ',' + 0 + ')';
+                    });
+            legend.append('circle')
+                    .attr('class',function(d,i){
+                        return "dot_"+i
+                    })
+                    .attr('stroke',function(d,i){
+                        return _colors(i);
+                    })
+                    .attr('fill','#fff')
+                    .attr('cx',function(d,i){
+                        return xStart() + quadrantWidth() - 100;
+                    })
+                    .attr('cy',function(d,i){
+                        return 10 * i + 20;
+                    })
+                    .attr('r',3)
+
+            legend.append('text')
+                    .attr('x', function (d,i) {
+                        return xStart() + quadrantWidth() - 100 + 10
+                    })
+                    .attr('y',function (d,i) {
+                        return 10 * i + 20 + 4
+                    })
+                    .attr('font-size',10)
+                    .text(function(d,i){
+                        return d
+                    });
+        }
+    }
+
+    function xStart() {
+        return _margins.left;
+    }
+
+    function yStart() {
+        return _height - _margins.bottom;
+    }
+
+    function xEnd() {
+        return _width - _margins.right;
+    }
+
+    function yEnd() {
+        return _margins.top;
+    }
+
+    function quadrantWidth() {
+        return _width - _margins.left - _margins.right;
+    }
+
+    function quadrantHeight() {
+        return _height - _margins.top - _margins.bottom;
+    }
+
+    _chart.width = function (w) {
+        if (!arguments.length) return _width;
+        _width = w;
+        return _chart;
+    };
+
+    _chart.height = function (h) { // <-1C
+        if (!arguments.length) return _height;
+        _height = h;
+        return _chart;
+    };
+
+    _chart.margins = function (m) {
+        if (!arguments.length) return _margins;
+        _margins = m;
+        return _chart;
+    };
+
+    _chart.colors = function (c) {
+        if (!arguments.length) return _colors;
+        _colors = c;
+        return _chart;
+    };
+
+    _chart.x = function (x) {
+        if (!arguments.length) return _x;
+        _x = x;
+        return _chart;
+    };
+
+    _chart.y = function (y) {
+        if (!arguments.length) return _y;
+        _y = y;
+        return _chart;
+    };
+
+    _chart.addSeries = function (series) { // <-1D
+        _data = series;
+        return _chart;
+    };
+    _chart.addLegends = function(legends){
+        _legends = legends;
+        return _chart;
+    }
+    _chart.addAxisLabel = function(x_label,y_label){
+        _x_label = x_label
+        _y_label = y_label
+        return _chart
+    }
+
+    return _chart; // <-1E
+}
+function groupbar_chart(canvas_id){
+    var _chart = {}
+    var _width = 600, _height = 300,
+        _margins = {top: 30, left: 30, right: 30, bottom: 30},
+        _data = [], _keys=[],
+        _colors = d3.scale.category20c(),
+        _svg,
+        _canvasG,
+        _axesG,
+        _axes_x,
+        _axes_y;
+
+    _chart.render = function(){
+      if (!_svg){
+        _svg = d3.select('#'+canvas_id)
+            .append('svg')
+            .attr('height',_height)
+            .attr('width',_width)
+      }
+
+      renderAxes(_svg)
+      renderCanvas(_svg)
+    }
+
+    function renderAxes(svg){
+      if(!_axesG) {
+        _axesG = svg.append("g")
+            .attr("class", "axes");
+      }
+
+      renderYAxis(_axesG);
+    }
+
+    function renderYAxis(axesG){
+      y_axis_scale = d3.scale.linear()
+          .domain([0, d3.max(_data, function(d,i){return d3.max(d, function(d){return d.y;})})])
+          .range([quadrantHeight(), 0])
+
+      var yAxis = d3.svg.axis()
+          .scale(y_axis_scale)
+          .orient("left");
+
+      if(!_axes_y) {
+        _axes_y = axesG.append("g")
+            .attr("class", "y axis")
+            .attr("transform", function () {
+              return "translate(" + xStart() + "," + yEnd() + ")";
+            })
+            .call(yAxis);
+      }
+      else{
+        axesG.select('g.y')
+            .attr("class", "y axis")
+            .attr("transform", function () {
+              return "translate(" + xStart() + "," + yEnd() + ")";
+            })
+            .call(yAxis);
+      }
+    }
+
+    function renderCanvas(svg){
+      if (!_canvasG){
+        _canvasG = svg.append('g')
+            .attr('class','body')
+            .attr("transform", "translate("
+                + xStart() + "," + yEnd() + ")") // <-2E
+      }
+
+      renderGroupBar()
+      renderLengend()
+    }
+
+    function renderGroupBar(){
+      x0_domain=[]
+      for (var i = 0; i < _data.length; ++i) x0_domain.push(i);
+      var x0 = d3.scale.ordinal()
+          .domain(x0_domain)
+          .rangeRoundBands([0,quadrantWidth()],0.1)
+
+      var x1 = d3.scale.ordinal()
+          .domain(_keys)
+          .rangeRoundBands([0,x0.rangeBand()],0.05)
+
+      var y = d3.scale.linear()
+          .domain([0, d3.max(_data, function(d,i){return d3.max(d, function(d){return d.y;})})])
+          .rangeRound([quadrantHeight(),0])
+
+      _canvasG.selectAll("g")
+          .data(_data)
+          .enter()
+          .append("g")
+          .attr('transform',function(d,i){return "translate(" + x0(i) + ",0)";})
+          .selectAll("rect")
+          .data(function (d) {return d;})
+          .enter()
+          .append('rect')
+          .attr("x",function(d){return x1(d.x)})
+          .attr("y",function (d) {return y(d.y)})
+          .attr("width",x1.rangeBand())
+          .attr("height",function(d){return quadrantHeight() - y(d.y)})
+          .attr("fill", function(d,i){return _colors(i)})
+          .attr('stroke',function(d,i){return _colors(i)})
+          .on('mouseover',function(d,i){
+            var rects = d3.select(this.parentNode.parentNode).selectAll('rect')
+            rects.each(function (rd,ri) {
+              if (ri % _keys.length == i){
+                d3.select(this).attr('fill','	#696969').attr('stroke','#FFFAF0')
+              }
+            })
+          })
+          .on('mouseout',function(d,i){
+            var rects = d3.select(this.parentNode.parentNode).selectAll('rect')
+            rects.each(function (rd,ri) {
+              if (ri % _keys.length == i){
+                d3.select(this).attr('fill', _colors(i)).attr('stroke',_colors(i))
+              }
+            })
+          })
+          .append("title")
+          .text(function(d) {
+            return 'x= '+d.x + '\n' +'y= '+ d.y; })
+
+      _canvasG.selectAll("g")
+          .data(_data)
+          .attr('transform',function(d,i){return "translate(" + x0(i) + ",0)";})
+          .selectAll("rect")
+          .data(function(d){return d;})
+          .attr("x",function(d){return x1(d.x)})
+          .attr("y",function (d) {return y(d.y)})
+          .attr("width",x1.rangeBand())
+          .attr("height",function(d){return quadrantHeight() - y(d.y)})
+          .attr("fill", function(d,i){return _colors(i)})
+          .attr('stroke',function(d,i){return _colors(i)})
+          .select('title')
+          .text(function(d) {
+            return 'x= '+d.x + '\n' +'y= '+ d.y; })
+
+
+      xAxis = d3.svg.axis()
+          .scale(x0)
+          .orient('bottom')
+
+      if(!_axes_x) {
+        _axes_x = _axesG.append("g")
+            .attr('class', 'x axis')
+            .attr('transform', function () {
+              return "translate(" + xStart() + "," + yStart() + ")";
+            })
+            .call(xAxis)
+      }
+      else{
+        _axesG.select("g.x")
+            .attr('transform', function () {
+              return "translate(" + xStart() + "," + yStart() + ")";
+            })
+            .call(xAxis)
+      }
+    }
+
+    function renderLengend(){
+      legend = _canvasG.selectAll('.legend')
+          .data(_keys)
+          .enter()
+          .append('g')
+          .attr('class','legend')
+
+      legend.append('rect')
+          .attr('x',function(d,i){return xStart() + quadrantWidth() - 150; })
+          .attr('y',function(d,i){return 20 * i + 20;})
+          .attr('width',10)
+          .attr('height',10)
+          .attr('fill',function(d,i){return _colors(i);})
+      legend.append('text')
+          .attr('x',function(d,i){return xStart() + quadrantWidth() - 150 + 20; })
+          .attr('y',function(d,i){return 20 * i + 20 + 8;})
+          .attr('font-size',10)
+          .text(function(d,i){
+            return d;})
+      }
+
+    function xStart() {
+        return _margins.left;
+    }
+
+    function yStart() {
+        return _height - _margins.bottom;
+    }
+
+    function xEnd() {
+        return _width - _margins.right;
+    }
+
+    function yEnd() {
+        return _margins.top;
+    }
+
+    function quadrantWidth() {
+        return _width - _margins.left - _margins.right;
+    }
+
+    function quadrantHeight() {
+        return _height - _margins.top - _margins.bottom;
+    }
+
+    _chart.width = function (w) {
+        if (!arguments.length) return _width;
+        _width = w;
+        return _chart;
+    };
+
+    _chart.height = function (h) { // <-1C
+        if (!arguments.length) return _height;
+        _height = h;
+        return _chart;
+    };
+
+    _chart.margins = function (m) {
+        if (!arguments.length) return _margins;
+        _margins = m;
+        return _chart;
+    };
+
+    _chart.colors = function (c) {
+        if (!arguments.length) return _colors;
+        _colors = c;
+        return _chart;
+    };
+
+    _chart.y = function (y) {
+        if (!arguments.length) return _y;
+        _y = y;
+        return _chart;
+    };
+
+    _chart.addSeries = function(data){
+        _data = data;
+        if (_keys.length == 0){
+            for (d in data[0]){
+                _keys.push(data[0][d].x)
+            }
+        }
+
+      return _chart
+    };
+
+    return _chart;
+  }
+function draw_table(data,div_id,title) {
+    $("<style>\
+        .data-table table {\
+            font-family: arial, sans-serif;\
+            border-collapse: collapse;\
+            text-align: center;\
+        }\
+        .data-table td,.data-table th{  border: 1px solid #dddddd;\
+            text-align: left;\
+            padding: 8px;\
+            text-align: center;\
+        }\
+     </style>").appendTo("head");
+
+    var dvTable = document.getElementById(div_id);
+    var width=dvTable.clientWidth;
+    var height=dvTable.clientHeight*0.8;
+
+    //Create a HTML Table element.
+    var table = document.createElement("TABLE");
+    table.width=width;
+    table.height=height;
+
+    //Get the count of columns.
+    var columnCount = data[0].length;
+
+    //Add the header row.
+    var row = table.insertRow(-1);
+    for (var i = 0; i < columnCount; i++) {
+        var headerCell = document.createElement("TH");
+        headerCell.innerHTML = data[0][i];
+        row.appendChild(headerCell);
+    }
+
+    //Add the data rows.
+    for (var i = 1; i < data.length; i++) {
+        row = table.insertRow(-1);
+        for (var j = 0; j < columnCount; j++) {
+            var cell = row.insertCell(-1);
+            cell.innerHTML = data[i][j];
+        }
+    }
+
+    dvTable.appendChild(table);
+}
+
+function draw_image(canvas_id, data){
+    $('#'+canvas_id).append('<img src="data:image/png;base64,'+data+'">')
+}
+
+curve_data = [
+    {% for measure in measures %}
+        {% for model_statistic_val in measure.statistic.value %}
+            {% if model_statistic_val.type == 'CURVE' %}
+                    {'name':"{{model_statistic_val.name}}",'x-name':'{{model_statistic_val.x}}','y-name':'{{model_statistic_val.y}}','data':[
+                        {% for data in model_statistic_val.value %}
+                            [
+                                {% for xy in data %}
+                                    {'x':{{xy.x}},'y':{{xy.y}}},
+                                {% endfor %}
+                            ],
+                        {% endfor %}
+                    ],},
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+]
+
+bar_data = [
+    {% for measure in measures %}
+        {% for model_statistic_val in measure.statistic.value %}
+            {% if model_statistic_val.type == 'HISTOGRAM' %}
+                    {'name':"{{model_statistic_val.name}}",'x-name':'{{model_statistic_val.x}}','y-name':'{{model_statistic_val.y}}','data':[
+                        {% for data in model_statistic_val.value %}
+                        [
+                                {% for xy in data %}
+                                    {'x':{{xy.x}},'y':{{xy.y}}},
+                                {% endfor %}
+                            ],
+                        {% endfor %}
+                    ],},
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+]
+
+matrix_data = [
+    {% for measure in measures%}
+        {% for model_statistic_val in measure.statistic.value %}
+            {% if model_statistic_val.type == 'MATRIX' %}
+                {'name':"{{model_statistic_val.name}}",'x-name':{{model_statistic_val.x}},'y-name':{{model_statistic_val.y}}, 'data':{{model_statistic_val.value }}},
+            {%endif%}
+        {% endfor%}
+    {% endfor%}
+]
+
+table_data = [
+    {% for measure in measures %}
+        {% for model_statistic_val in measure.statistic.value %}
+            {% if model_statistic_val.type == 'TABLE' %}
+                    {'name':"{{model_statistic_val.name}}",'data':{{model_statistic_val.value}},},
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+]
+
+image_data = [
+  {% for measure in measures %}
+        {% for model_statistic_val in measure.statistic.value %}
+            {% if model_statistic_val.type == 'IMAGE' %}
+                    {'name':"{{model_statistic_val.name}}",'data':'{{model_statistic_val.value}}',},
+            {% endif %}
+        {% endfor %}
+  {% endfor %}
+]
+
+
+$(document).ready( function () {
+    for(var index in curve_data){
+        var measure_name = curve_data[index]['name'];
+        var x_name = curve_data[index]['x-name'];
+        var y_name = curve_data[index]['y-name'];
+        var data = curve_data[index]['data'];
+
+        var curve_chart = line_chart(measure_name+'-dashboard');
+        curve_chart.addSeries(data);
+        curve_chart.addAxisLabel(x_name, y_name);
+        curve_chart.render()
+    }
+    for(var index in bar_data){
+        var measure_name = bar_data[index]['name'];
+        var x_name = bar_data[index]['x-name'];
+        var y_name = bar_data[index]['y-name'];
+        var data = bar_data[index]['data'];
+
+        var bar_chart = groupbar_chart(measure_name+'-dashboard');
+        bar_chart.addSeries(data)
+        bar_chart.render()
+    }
+    for(var index in table_data){
+        var measure_name = table_data[index]['name'];
+        var data = table_data[index]['data']
+
+        draw_table(data,measure_name+'-dashboard',measure_name)
+    }
+    for(var index in matrix_data){
+        var measure_name = matrix_data[index]['name'];
+        var data = matrix_data[index]['data'];
+        var x_name = matrix_data[index]['x-name'];
+        var y_name = matrix_data[index]['y-name'];
+
+        var mc = matrix_chart(measure_name+'-dashboard');
+        mc.addLegends({'x':x_name, 'y':y_name});
+        mc.addSeries(data);
+        mc.render();
+    }
+
+    for(var index in image_data){
+      var measure_name = image_data[index]['name'];
+      var data = image_data[index]['data'];
+      draw_image(measure_name+'-dashboard', data)
+    }
+} );
+</script>
+<style>
+.cardtable {
+    box-shadow: 0 0 4px rgba(0,0,0,.14),0px 4px 8px rgba(0,0,0,.14) !important;
+    background: #fff;
+    margin-bottom: 10px;
+}
+.table-responsive {
+    width: 100%;
+    overflow-y: hidden;
+    overflow-x: scroll;
+    -ms-overflow-style: -ms-autohiding-scrollbar;
+    -webkit-overflow-scrolling: touch;
+}
+.list-group .list-group-separator-full {
+    clear: both;
+    overflow: hidden;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+.list-group .list-group-item {
+    background-color: transparent;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    padding: 0 16px;
+}
+.list-group-item .item-title {
+    overflow: hidden;
+    font-size: 120%;
+    color: #444;
+    display: inline-block;
+    padding-bottom: 10px;
+    padding-top: 10px;
+}
+.list-group .list-group-separator-full:before {
+    content: "";
+    width: 100%;
+    border-bottom: 1px solid rgba(0,0,0,.1);
+    float: right;
+}
+table td {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+td {
+    color: #666;
+    font-size: 11pt;
+}
+.evaltitle {
+    padding-top: 10px;
+    padding-bottom: 30px;
+    font-size: 140%;
+}
+.mainvalue {
+    font-size: 150%;
+}
+
+h1, h2, h3 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700 !important;
+    margin-bottom: 10px;
+    margin-top: 10px;
+    line-height: 48px;
+}
+h3 {
+    font-size: 20px;
+    padding-top: 30px;
+    padding-bottom: 5px;
+    clear: both;
+    color: gray;
+}
+a {
+    cursor: pointer;
+}
+
+.cardrow > td {
+    padding-left: 15px !important;
+    padding-top: 15px !important;
+}
+
+body {
+    font-family: "helvetica";
+}
+
+button {
+    margin: 0 7px 0 0;
+    background-color: #f5f5f5;
+    border: 1px solid #dedede;
+    border-top: 1px solid #eee;
+    border-left: 1px solid #eee;
+
+    font-size: 12px;
+    line-height: 130%;
+    text-decoration: none;
+    font-weight: bold;
+    color: #565656;
+    cursor: pointer;
+}
+
+.box {
+    width: 200px;
+    height: 200px;
+    margin: 40px;
+    float: left;
+    text-align: center;
+    border: #969696 solid thin;
+    padding: 5px;
+}
+
+.red {
+    background-color: #e9967a;
+    color: #f0f8ff;
+}
+
+.blue {
+    background-color: #add8e6;
+    color: #f0f8ff;
+}
+
+.cell {
+    min-width: 40px;
+    min-height: 20px;
+    margin: 5px;
+    float: left;
+    text-align: center;
+    border: #969696 solid thin;
+    padding: 5px;
+}
+
+.fixed-cell {
+    min-width: 40px;
+    min-height: 20px;
+    margin: 5px;
+    position: fixed;
+    text-align: center;
+    border: #969696 solid thin;
+    padding: 5px;
+}
+
+.h-bar {
+    min-height: 15px;
+    min-width: 10px;
+    background-color: steelblue;
+    margin-bottom: 2px;
+    font-size: 11px;
+    color: #f0f8ff;
+    text-align: right;
+    padding-right: 2px;
+}
+
+.v-bar {
+    min-height: 1px;
+    min-width: 30px;
+    background-color: #4682b4;
+    margin-right: 2px;
+    font-size: 10px;
+    color: #f0f8ff;
+    text-align: center;
+    width: 10px;
+    display: inline-block;
+}
+
+.baseline {
+    height: 1px;
+    background-color: black;
+}
+
+.clear {
+    clear: both;
+}
+
+.selected {
+    background-color: #f08080;
+}
+
+.control-group {
+    padding-top: 10px;
+    margin: 10px;
+}
+
+.table {
+    width: 70%;
+}
+
+.table td, th {
+    padding: 5px;
+}
+
+.table-header {
+    background-color: #00AFEF;
+    font-weight: bold;
+}
+
+.table-row-odd {
+    background-color: #f0f8ff;
+}
+
+.table-row-odd {
+    background-color: #d3d3d3;
+}
+
+.code {
+    display: inline-block;
+    font-style: italic;
+    background-color: #d3d3d3;
+    border: #969696 solid thin;
+    padding: 10px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.countdown{
+    width: 150px;
+    height: 150px;
+    font-size: 5em;
+    font-weight: bold;
+}
+
+.axis path, .axis line {
+    fill: none;
+    stroke: #000;
+    shape-rendering: crispEdges;
+}
+
+.axis text {
+    font: 10px sans-serif;
+}
+
+.axis .grid-line{
+    stroke: black;
+    shape-rendering: crispEdges;
+    stroke-opacity: .2;
+}
+
+.line{
+    fill: none;
+    stroke: steelblue;
+    stroke-width: 2;
+}
+
+.dot {
+  fill: #fff;
+  stroke: steelblue;
+}
+
+.area {
+    stroke: none;
+    fill: steelblue;
+    fill-opacity: .2;
+}
+
+.pie text{
+    fill: white;
+    font-weight: bold;
+}
+
+.circle {
+    stroke: none;
+    fill: red;
+    fill-opacity: .7;
+}
+
+.cross {
+    stroke: none;
+    fill: blue;
+    fill-opacity: .7;
+}
+
+.diamond {
+    stroke: none;
+    fill: green;
+    fill-opacity: .7;
+}
+
+.square{
+    stroke: none;
+    fill: yellow;
+    fill-opacity: .7;
+}
+
+.triangle-down{
+    stroke: none;
+    fill: blueviolet;
+    fill-opacity: .7;
+}
+
+.triangle-up{
+    stroke: none;
+    fill: darkred;
+    fill-opacity: .7;
+}
+
+.bubble{
+    fill-opacity: .3;
+}
+
+.bar{
+    stroke: none;
+    fill: steelblue;
+}
+
+</style>
+<body>
+  <nav class="navbar navbar-default" style="background-color:black;">
+  <div class="container">
+    <!-- Brand and toggle get grouped for better mobile display -->
+    <div class="navbar-header">
+      <!--<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1" aria-expanded="false">-->
+        <!--<span class="sr-only">Toggle navigation</span>-->
+        <!--<span class="icon-bar"></span>-->
+        <!--<span class="icon-bar"></span>-->
+        <!--<span class="icon-bar"></span>-->
+      <!--</button>-->
+      <!--<a class="navbar-brand" href="#">Brand</a>-->
+      <a class="navbar-brand" href="" style="font-family: \'Source Sans Pro\', sans-serif;color:#20BEFF;font-size: 50px;font-weight: bolder;background-color: transparent;">MLTalker</a>
+    </div>
+
+  </div><!-- /.container-fluid -->
+</nav>
+<div class="container">
+    <div class="cardtable">
+        <div class="table-responsive">
+            <table class="table" style="table-layout:fixed">
+            <tbody>
+            {% if time %}
+            <tr class="cardrow">
+                <td>
+                    <div class="col-md-3 evaltitle">
+                        <b>elpased time</b>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="list-group">
+                            <div class="list-group-item">
+                                <span class="mainvalue">{{time.elapsed_time}}</span>s
+                            </div>
+                            <div class="list-group-separator-full"></div>
+                            <div class="list-group-item">
+                                <div class="item-title">elapsed time per unit</div>
+                                <span class="mainvalue">{{time.elapsed_time_per_sample}}</span>s
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
+
+            {% if cpu %}
+            <tr class="cardrow">
+                <td>
+                    <div class="col-md-3 evaltitle">
+                        <b>cpu model</b>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="list-group">
+                            <div class="list-group-item">
+                                <span class="mainvalue">{{cpu.cpu_model}}</span>
+                            </div>
+                            <div class="list-group-separator-full"></div>
+                            <div class="list-group-item">
+                                <div class="item-title">cpu running status</div>
+                                <b>cpu max usage {{cpu.cpu_max_usage}}</b>
+                                <b>cpu mean usage {{cpu.cpu_mean_usage}}</b>
+                                <b>cpu median usage {{cpu.cpu_median_usage}}</b>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            <tr class="cardrow">
+                <td>
+                    <div class="col-md-3 evaltitle">
+                        <b>memory staus</b>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="list-group">
+                            <div class="list-group-item">
+                                <span class="mainvalue">statistic</span>
+                            </div>
+                            <div class="list-group-separator-full"></div>
+                            <div class="list-group-item">
+                                <div class="item-title">memory usage</div>
+                                <b>memory max usage {{cpu.mem_max_usage}}</b>
+                                <b>memory mean usage {{cpu.mem_mean_usage}}</b>
+                                <b>memory median usage {{cpu.mem_median_usage}}</b>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
+            {% if gpu%}
+            <tr class="cardrow">
+                <td>
+                    <div class="col-md-3 evaltitle">
+                        <b>gpu model</b>
+                    </div>
+                    <div class="col-md-9">
+                        <div class="list-group">
+                            <div class="list-group-item">
+                                <span class="mainvalue">{{gpu.gpu_model}}</span>
+                            </div>
+                            <div class="list-group-separator-full"></div>
+                            <div class="list-group-item">
+                                <div class="item-title">gpu util</div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
+            {% for measure in measures %}
+            <tr class="cardrow">
+                <td>
+                    <div class="col-md-3 evaltitle">
+                        <b>{{measure.statistic.name}}</b>
+                    </div>
+                    <div class="col-md-9">
+                        {% for model_statistic_val in measure.statistic.value %}
+                            {% if model_statistic_val.type == 'SCALAR' %}
+                            <div class="list-group">
+                                <div class="list-group-item">
+                                    <span class="mainvalue">{{model_statistic_val.value}}</span>{% if model_statistic_val.interval %}±{{model_statistic_val.interval}}{% endif %}
+                                </div>
+                                <div class="list-group-separator-full"></div>
+                                <div class="list-group-item">
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if model_statistic_val.type == 'HISTOGRAM' %}
+                            <div class="list-group">
+                                <div class="list-group-item">
+                                    <span class="mainvalue">{{model_statistic_val.name}}</span>
+                                </div>
+                                <div class="list-group-separator-full"></div>
+                                <div class="list-group-item">
+                                    <div id="{{model_statistic_val.name}}-dashboard"></div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if model_statistic_val.type == 'CURVE' %}
+                            <div class="list-group">
+                                <div class="list-group-item">
+                                    <span class="mainvalue">{{model_statistic_val.name}}</span>
+                                </div>
+                                <div class="list-group-separator-full"></div>
+                                <div class="list-group-item">
+                                    <div id="{{model_statistic_val.name}}-dashboard"></div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if model_statistic_val.type == 'IMAGE' %}
+                            <div class="list-group">
+                                <div class="list-group-item">
+                                    <span class="mainvalue">{{model_statistic_val.name}}</span>
+                                </div>
+                                <div class="list-group-separator-full"></div>
+                                <div class="list-group-item">
+                                    <div id="{{model_statistic_val.name}}-dashboard"></div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if model_statistic_val.type == 'MATRIX' %}
+                            <div class="list-group">
+                                <div class="list-group-item">
+                                    <span class="mainvalue">{{model_statistic_val.name}}</span>
+                                </div>
+                                <div class="list-group-separator-full"></div>
+                                <div class="list-group-item">
+                                    <div id="{{model_statistic_val.name}}-dashboard"></div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if model_statistic_val.type == 'TABLE' %}
+                            <div class="list-group">
+                                <div class="list-group-item">
+                                    <span class="mainvalue">{{model_statistic_val.name}}</span>
+                                </div>
+                                <div class="list-group-separator-full"></div>
+                                <div class="list-group-item">
+                                    <div id="{{model_statistic_val.name}}-dashboard" class="data-table"></div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>
