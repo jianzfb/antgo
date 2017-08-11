@@ -12,16 +12,17 @@ help researchers analyze their model and users trade-off.
 
 Installation
 ----------------------
-0. install 3rd software or packages::
-    . leveldb
+install 3rd software or packages::
+    (1) leveldb
     apt-get install libleveldb1 libleveldb-dev
-    . graphviz
+    (2) graphviz
     http://www.graphviz.org/Download_linux_ubuntu.php
 
-1. git clone https://github.com/jianzfb/antgo.git
-2. cd antgo
-3. pip install -r requirements.txt
-4. python setup.py build_ext install
+install antgo::
+    1. git clone https://github.com/jianzfb/antgo.git
+    2. cd antgo
+    3. pip install -r requirements.txt
+    4. python setup.py build_ext install
 
 
 Example
