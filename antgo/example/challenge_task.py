@@ -8,7 +8,6 @@ from __future__ import print_function
 
 from antgo.context import *
 from antgo.dataflow.recorder import *
-
 import tensorflow as tf
 
 # 1.step set context (take control interaction with antgo)
