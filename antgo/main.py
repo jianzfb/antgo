@@ -8,7 +8,7 @@ import os
 import sys
 import getopt
 import yaml
-from antgo.ant.run import *
+from antgo.ant.train import *
 from antgo.ant.deploy import *
 from antgo.ant.challenge import *
 from antgo.utils import logger
@@ -32,7 +32,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT','') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["run", "challenge", "deploy"]
+_ant_support_commands = ["train", "challenge", "deploy"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -109,7 +109,7 @@ def main():
     name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 
   # 5.step ant running
-  if ant_cmd == "run":
+  if ant_cmd == "train":
     running_process = AntRun(ant_context,
                              name,
                              data_factory,
