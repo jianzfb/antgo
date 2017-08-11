@@ -95,30 +95,32 @@ Example
 
 
 2. Challenge Task::
-(1) build running main file (eg. challenge_task.py)
-    from antgo.context import *
-    # 1.step ctx take control interaction with antgo
-    ctx = Context()
 
-    # 2.step custom infer process
-    def infer_callback(data_source, dump_dir):
-        # data_source: data generator
-        # dump_dir : your training intermidiate data folder
+    (1) build running main file (eg. challenge_task.py)
+        from antgo.context import *
+        # 1.step ctx take control interaction with antgo
+        ctx = Context()
 
-        # 2.1 step load custom model
-        ...
-        # 2.2 step traverse data and do forward process
-        for data in data_source.iterator_value():
-            # forward process
+        # 2.step custom infer process
+        def infer_callback(data_source, dump_dir):
+            # data_source: data generator
+            # dump_dir : your training intermidiate data folder
+
+            # 2.1 step load custom model
             ...
-            # record result
-            ctx.recorder.record(result)
+            # 2.2 step traverse data and do forward process
+            for data in data_source.iterator_value():
+                # forward process
+                ...
+                # record result
+                ctx.recorder.record(result)
 
-    # bind infer_callback
-    ctx.infer_process = infer_callback
-(2) call antgo cli at terminal
-antgo challenge --main_file=challenge_task.py --task=yourtask.xml
-# --task=yourtask.xml config your challenge task
+        # bind infer_callback
+        ctx.infer_process = infer_callback
+    (2) call antgo cli at terminal
+    antgo challenge --main_file=challenge_task.py --task=yourtask.xml
+    # --task=yourtask.xml config your challenge task
 
 
 3. Custom Train Explore Task::
+
