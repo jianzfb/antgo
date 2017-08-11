@@ -1,5 +1,5 @@
 # encoding=utf-8
-# File: run.py
+# File: train.py
 # Author: jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals

@@ -29,7 +29,7 @@ install antgo::
 
 Example
 -----------------------
-1. Train Task::
+1. Run Train Task::
 
     (1) build running main file (eg. training_task.py)
         from antgo.context import *
@@ -94,7 +94,7 @@ Example
         # --task=yourtask.xml config your challenge task
 
 
-2. Challenge Task::
+2. Run Challenge Task::
 
     (1) build running main file (eg. challenge_task.py)
         from antgo.context import *
