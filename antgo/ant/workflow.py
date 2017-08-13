@@ -1,7 +1,7 @@
 # encoding=utf-8
 # @Time    : 17-6-22
 # @File    : workflow.py
-# @Author  :
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -31,9 +31,6 @@ def _main_context(main_file, source_paths):
 
 
 class BaseWork(object):
-    '''
-    two loop shouldn't interleave
-    '''
     class _LinkPipe(object):
         def __init__(self, nest, link_type='NORMAL'):
             self._nest = nest

@@ -6,6 +6,7 @@ from antgo.measures.regression_task import *
 from antgo.measures.segmentation_task import *
 from antgo.measures.matting_task import *
 from antgo.html.html import *
+from antgo.measures.significance import *
 import copy
 
 
@@ -64,188 +65,190 @@ class AntMeasures():
             return all_measures
 
 
-def multi_repeats_measures_statistic(multi_statistics):
-    # time
-    series_elapsed_time = []
-    series_elapsed_time_per_sample = []
+def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'):
+  # time
+  series_elapsed_time = []
+  series_elapsed_time_per_sample = []
 
-    # cpu
-    series_cpu_mean_usage = []
-    series_cpu_median_usage = []
-    series_cpu_max_usage = []
+  # cpu
+  series_cpu_mean_usage = []
+  series_cpu_median_usage = []
+  series_cpu_max_usage = []
 
-    # memory
-    series_mem_mean_usage = []
-    series_mem_median_usage = []
-    series_mem_max_usage = []
+  # memory
+  series_mem_mean_usage = []
+  series_mem_median_usage = []
+  series_mem_max_usage = []
 
-    # measures
-    series_measures = []
-    cpu_model = None
-    title = ""
+  # measures
+  series_measures = []
+  cpu_model = None
+  title = ""
 
-    for statistic_result_index, statistic_result in enumerate(multi_statistics):
-        for ant_name, ant_statistic in statistic_result.items():
-            title = ant_name
-            if 'time' in ant_statistic:
-                series_elapsed_time.append(ant_statistic['time']['elapsed_time'])
-                if 'elapsed_time_per_sample' in ant_statistic['time']:
-                    series_elapsed_time_per_sample.append(ant_statistic['time']['elapsed_time_per_sample'])
+  for statistic_result_index, statistic_result in enumerate(multi_statistics):
+    for ant_name, ant_statistic in statistic_result.items():
+      title = ant_name
+      if 'time' in ant_statistic:
+        series_elapsed_time.append(ant_statistic['time']['elapsed_time'])
+        if 'elapsed_time_per_sample' in ant_statistic['time']:
+          series_elapsed_time_per_sample.append(ant_statistic['time']['elapsed_time_per_sample'])
 
-            if 'cpu' in ant_statistic:
-                if 'cpu_mean_usage' in ant_statistic['cpu']:
-                    series_cpu_mean_usage.append(ant_statistic['cpu']['cpu_mean_usage'])
-                if 'cpu_median_usage' in ant_statistic['cpu']:
-                    series_cpu_median_usage.append(ant_statistic['cpu']['cpu_median_usage'])
-                if 'cpu_max_usage' in ant_statistic['cpu']:
-                    series_cpu_max_usage.append(ant_statistic['cpu']['cpu_max_usage'])
+      if 'cpu' in ant_statistic:
+        if 'cpu_mean_usage' in ant_statistic['cpu']:
+          series_cpu_mean_usage.append(ant_statistic['cpu']['cpu_mean_usage'])
+        if 'cpu_median_usage' in ant_statistic['cpu']:
+          series_cpu_median_usage.append(ant_statistic['cpu']['cpu_median_usage'])
+        if 'cpu_max_usage' in ant_statistic['cpu']:
+          series_cpu_max_usage.append(ant_statistic['cpu']['cpu_max_usage'])
 
-                if 'mem_mean_usage' in ant_statistic['cpu']:
-                    series_mem_mean_usage.append(ant_statistic['cpu']['mem_mean_usage'])
-                if 'mem_median_usage' in ant_statistic['cpu']:
-                    series_mem_median_usage.append(ant_statistic['cpu']['mem_median_usage'])
-                if 'mem_max_usage' in ant_statistic['cpu']:
-                    series_mem_max_usage.append(ant_statistic['cpu']['mem_max_usage'])
-                if 'cpu_model' in ant_statistic['cpu']:
-                    cpu_model = ant_statistic['cpu']['cpu_model']
+        if 'mem_mean_usage' in ant_statistic['cpu']:
+          series_mem_mean_usage.append(ant_statistic['cpu']['mem_mean_usage'])
+        if 'mem_median_usage' in ant_statistic['cpu']:
+          series_mem_median_usage.append(ant_statistic['cpu']['mem_median_usage'])
+        if 'mem_max_usage' in ant_statistic['cpu']:
+          series_mem_max_usage.append(ant_statistic['cpu']['mem_max_usage'])
+        if 'cpu_model' in ant_statistic['cpu']:
+          cpu_model = ant_statistic['cpu']['cpu_model']
 
-            if 'gpu' in ant_statistic:
-                pass
+      if 'gpu' in ant_statistic:
+        pass
 
-            if 'measure' in ant_statistic:
-                for measure_index, measure_statistic in enumerate(ant_statistic['measure']):
-                    if statistic_result_index == 0:
-                        series_measures.append(copy.deepcopy(measure_statistic))
+      if 'measure' in ant_statistic:
+        for measure_index, measure_statistic in enumerate(ant_statistic['measure']):
+          if statistic_result_index == 0:
+            series_measures.append(copy.deepcopy(measure_statistic))
 
-                        for per_value in series_measures[measure_index]['statistic']['value']:
-                            if per_value['type'] == 'SCALAR':
-                                # (1) shape - scalar
-                                # (2) shape - [scalar, scalar, ...]
-                                per_value['value'] = [per_value['value']]
-                            elif per_value['type'] == 'CURVE':
-                                # (1) shape - [np.array.tolist(),np.array.tolist(),...]
-                                per_value['value'] = [per_value['value']]
-                            elif per_value['type'] == 'MATRIX':
-                                # (1) shape - Matrix(np.array)
-                                per_value['value'] = [per_value['value']]
+            for per_value in series_measures[measure_index]['statistic']['value']:
+              if per_value['type'] == 'SCALAR':
+                # (1) shape - scalar
+                # (2) shape - [scalar, scalar, ...]
+                per_value['value'] = [per_value['value']]
+              elif per_value['type'] == 'CURVE':
+                # (1) shape - [np.array.tolist(),np.array.tolist(),...]
+                per_value['value'] = [per_value['value']]
+              elif per_value['type'] == 'MATRIX':
+                # (1) shape - Matrix(np.array)
+                per_value['value'] = [per_value['value']]
+            #
+            continue
 
-                        #
-                        continue
-
-                    # combine others
-                    final_measure_statistic = series_measures[measure_index]
-                    for per_value_index, per_value in enumerate(measure_statistic['statistic']['value']):
-                        if per_value['type'] == 'SCALAR':
-                            # (1) shape - scalar
-                            # (2) shape - [scalar, scalar, ...]
-                            final_measure_statistic['statistic']['value'][per_value_index]['value'].append(per_value['value'])
-                        elif per_value['type'] == 'CURVE':
-                            # (1) shape - [np.array,np.array,...]
-                            final_measure_statistic['statistic']['value'][per_value_index]['value'].append([a for a in per_value['value']])
-                        elif per_value['type'] == 'MATRIX':
-                            # (1) shape - Matrix
-                            final_measure_statistic['statistic']['value'][per_value_index]['value'].append(per_value['value'])
-
-
-    multi_statistics = {}
-    # time
-    multi_statistics['time'] = {}
-    series_elapsed_time_mean = np.mean(series_elapsed_time)
-    series_elapsed_time_std = np.std(series_elapsed_time)
-    multi_statistics['time']['elapsed_time'] = series_elapsed_time_mean
-    multi_statistics['time']['elapsed_time_interval'] = series_elapsed_time_std
-
-    if len(series_elapsed_time_per_sample) > 0:
-        series_elapsed_time_mean_per_sample = np.mean(series_elapsed_time_per_sample)
-        series_elapsed_time_std_per_sample = np.std(series_elapsed_time_per_sample)
-        multi_statistics['time']['elapsed_time_per_sample'] = series_elapsed_time_mean_per_sample
-        multi_statistics['time']['elapsed_time_per_sample_interval'] = series_elapsed_time_std_per_sample
-
-    # cpu
-    series_cpu_mean_usage_mean = np.mean(series_mem_max_usage)
-    series_cpu_mean_usage_std = np.std(series_mem_max_usage)
-    multi_statistics['cpu'] = {}
-    if cpu_model is not None:
-        multi_statistics['cpu']['cpu_model'] = cpu_model
-    multi_statistics['cpu']['cpu_mean_usage'] = series_cpu_mean_usage_mean
-    multi_statistics['cpu']['cpu_mean_usage_interval'] = series_cpu_mean_usage_std
-
-    series_cpu_median_usage_mean = np.mean(series_cpu_median_usage)
-    series_cpu_median_usage_std = np.std(series_cpu_median_usage)
-    multi_statistics['cpu']['cpu_median_usage'] = series_cpu_median_usage_mean
-    multi_statistics['cpu']['cpu_median_usage_interval'] = series_cpu_median_usage_std
-
-    series_cpu_max_usage_mean = np.mean(series_cpu_max_usage)
-    series_cpu_max_usage_std = np.std(series_cpu_max_usage)
-    multi_statistics['cpu']['cpu_max_usage'] = series_cpu_max_usage_mean
-    multi_statistics['cpu']['cpu_max_usage_interval'] = series_cpu_max_usage_std
-
-    # memory
-    series_mem_mean_usage_mean = np.mean(series_mem_mean_usage)
-    series_mem_mean_usage_std = np.std(series_mem_mean_usage)
-    multi_statistics['cpu']['mem_mean_usage'] = series_mem_mean_usage_mean
-    multi_statistics['cpu']['mem_mean_usage_interval'] = series_mem_mean_usage_std
-
-    series_mem_median_usage_mean = np.mean(series_mem_median_usage)
-    series_mem_median_usage_std = np.std(series_mem_median_usage)
-    multi_statistics['cpu']['mem_median_usage'] = series_mem_median_usage_mean
-    multi_statistics['cpu']['mem_median_usage_interval'] = series_mem_median_usage_std
-
-    series_mem_max_usage_mean = np.mean(series_mem_max_usage)
-    series_mem_max_usage_std = np.std(series_mem_max_usage)
-    multi_statistics['cpu']['mem_max_usage'] = series_mem_max_usage_mean
-    multi_statistics['cpu']['mem_max_usage_interval'] = series_mem_max_usage_std
-
-    # measure
-    for measure in series_measures:
-        for per_value in measure['statistic']['value']:
+          # combine others
+          final_measure_statistic = series_measures[measure_index]
+          for per_value_index, per_value in enumerate(measure_statistic['statistic']['value']):
             if per_value['type'] == 'SCALAR':
-                scalar_array = np.array(per_value['value'])
-                if len(scalar_array.shape) == 1:
-                    per_value['value'] = np.mean(scalar_array)
-                    per_value['interval'] = np.std(scalar_array)
-                else:
-                    assert(len(scalar_array.shape) == 2)
-                    per_value['value'] = np.mean(scalar_array,axis=0).tolist()
-                    per_value['interval'] = np.std(scalar_array,axis=0).tolist()
+              # (1) shape - scalar
+              # (2) shape - [scalar, scalar, ...]
+              final_measure_statistic['statistic']['value'][per_value_index]['value'].append(per_value['value'])
             elif per_value['type'] == 'CURVE':
-                # shape (N,curves_num,point_num,2)
-                scalar_array = np.array(per_value['value'])
-                assert(len(scalar_array.shape) == 4)
-                x,y = np.split(scalar_array,2,axis=3)
-                x = np.squeeze(x,axis=3)
-                xt = np.transpose(x,[1,2,0])
-                x_mean = np.mean(xt,axis=2)
-
-                y = np.squeeze(y,axis=3)
-                yt = np.transpose(y,[1,2,0])
-                y_mean = np.mean(yt,axis=2) # (curves_num,point_num)
-                y_std = np.std(yt,axis=2)   # (curves_num,point_num)
-
-                # shape (curves_num,point_num,2)
-                xy = np.concatenate((np.expand_dims(x_mean,2),np.expand_dims(y_mean,2)),axis=2)
-                curves_num = xy.shape[0]
-                curves_list = np.split(xy,curves_num,axis=0)
-
-                xy_std = np.concatenate((np.expand_dims(x_mean,2),np.expand_dims(y_std,2)),axis=2)
-                curves_std_list = np.split(xy_std,curves_num,axis=0)
-
-                per_value['value'] = [np.squeeze(cl).tolist() for cl in curves_list]
-                per_value['interval'] = [np.squeeze(cl).tolist() for cl in curves_std_list]
+              # (1) shape - [np.array,np.array,...]
+              final_measure_statistic['statistic']['value'][per_value_index]['value'].append([a for a in per_value['value']])
             elif per_value['type'] == 'MATRIX':
-                # shape (N,rows,cols)
-                scalar_array = np.array(per_value['value'])
-                assert(len(scalar_array.shape) == 3)
-                m_mean = np.mean(scalar_array,axis=0)
-                m_std = np.std(scalar_array,axis=0)
+              # (1) shape - Matrix
+              final_measure_statistic['statistic']['value'][per_value_index]['value'].append(per_value['value'])
 
-                per_value['value'] = m_mean
-                per_value['interval'] = m_std
 
-    multi_statistics['measure'] = series_measures
-    ant_statistic_warp = {}
-    ant_statistic_warp[title] = multi_statistics
-    return ant_statistic_warp
+  multi_statistics = {}
+  # time
+  multi_statistics['time'] = {}
+  series_elapsed_time_mean = np.mean(series_elapsed_time)
+  series_elapsed_time_std = np.std(series_elapsed_time)
+  multi_statistics['time']['elapsed_time'] = series_elapsed_time_mean
+  multi_statistics['time']['elapsed_time_interval'] = series_elapsed_time_std
+
+  if len(series_elapsed_time_per_sample) > 0:
+    series_elapsed_time_mean_per_sample = np.mean(series_elapsed_time_per_sample)
+    series_elapsed_time_std_per_sample = np.std(series_elapsed_time_per_sample)
+    multi_statistics['time']['elapsed_time_per_sample'] = series_elapsed_time_mean_per_sample
+    multi_statistics['time']['elapsed_time_per_sample_interval'] = series_elapsed_time_std_per_sample
+
+  # cpu
+  series_cpu_mean_usage_mean = np.mean(series_mem_max_usage)
+  series_cpu_mean_usage_std = np.std(series_mem_max_usage)
+  multi_statistics['cpu'] = {}
+  if cpu_model is not None:
+    multi_statistics['cpu']['cpu_model'] = cpu_model
+  multi_statistics['cpu']['cpu_mean_usage'] = series_cpu_mean_usage_mean
+  multi_statistics['cpu']['cpu_mean_usage_interval'] = series_cpu_mean_usage_std
+
+  series_cpu_median_usage_mean = np.mean(series_cpu_median_usage)
+  series_cpu_median_usage_std = np.std(series_cpu_median_usage)
+  multi_statistics['cpu']['cpu_median_usage'] = series_cpu_median_usage_mean
+  multi_statistics['cpu']['cpu_median_usage_interval'] = series_cpu_median_usage_std
+
+  series_cpu_max_usage_mean = np.mean(series_cpu_max_usage)
+  series_cpu_max_usage_std = np.std(series_cpu_max_usage)
+  multi_statistics['cpu']['cpu_max_usage'] = series_cpu_max_usage_mean
+  multi_statistics['cpu']['cpu_max_usage_interval'] = series_cpu_max_usage_std
+
+  # memory
+  series_mem_mean_usage_mean = np.mean(series_mem_mean_usage)
+  series_mem_mean_usage_std = np.std(series_mem_mean_usage)
+  multi_statistics['cpu']['mem_mean_usage'] = series_mem_mean_usage_mean
+  multi_statistics['cpu']['mem_mean_usage_interval'] = series_mem_mean_usage_std
+
+  series_mem_median_usage_mean = np.mean(series_mem_median_usage)
+  series_mem_median_usage_std = np.std(series_mem_median_usage)
+  multi_statistics['cpu']['mem_median_usage'] = series_mem_median_usage_mean
+  multi_statistics['cpu']['mem_median_usage_interval'] = series_mem_median_usage_std
+
+  series_mem_max_usage_mean = np.mean(series_mem_max_usage)
+  series_mem_max_usage_std = np.std(series_mem_max_usage)
+  multi_statistics['cpu']['mem_max_usage'] = series_mem_max_usage_mean
+  multi_statistics['cpu']['mem_max_usage_interval'] = series_mem_max_usage_std
+
+  # measure
+  for measure in series_measures:
+    for per_value in measure['statistic']['value']:
+      if per_value['type'] == 'SCALAR':
+        scalar_array = np.array(per_value['value'])
+        if len(scalar_array.shape) == 1:
+          per_value['value'] = np.mean(scalar_array)
+          if method == 'bootstrap':
+            per_value['interval'] = bootstrap_direct_confidence_interval(scalar_array)
+          else:
+            per_value['interval'] = np.std(scalar_array)
+        else:
+          assert(len(scalar_array.shape) == 2)
+          per_value['value'] = np.mean(scalar_array,axis=0).tolist()
+          per_value['interval'] = np.std(scalar_array,axis=0).tolist()
+      elif per_value['type'] == 'CURVE':
+        # shape (N,curves_num,point_num,2)
+        scalar_array = np.array(per_value['value'])
+        assert(len(scalar_array.shape) == 4)
+        x,y = np.split(scalar_array,2,axis=3)
+        x = np.squeeze(x,axis=3)
+        xt = np.transpose(x,[1,2,0])
+        x_mean = np.mean(xt,axis=2)
+
+        y = np.squeeze(y,axis=3)
+        yt = np.transpose(y,[1,2,0])
+        y_mean = np.mean(yt,axis=2) # (curves_num,point_num)
+        y_std = np.std(yt,axis=2)   # (curves_num,point_num)
+
+        # shape (curves_num,point_num,2)
+        xy = np.concatenate((np.expand_dims(x_mean,2),np.expand_dims(y_mean,2)),axis=2)
+        curves_num = xy.shape[0]
+        curves_list = np.split(xy,curves_num,axis=0)
+
+        xy_std = np.concatenate((np.expand_dims(x_mean,2),np.expand_dims(y_std,2)),axis=2)
+        curves_std_list = np.split(xy_std,curves_num,axis=0)
+
+        per_value['value'] = [np.squeeze(cl).tolist() for cl in curves_list]
+        per_value['interval'] = [np.squeeze(cl).tolist() for cl in curves_std_list]
+      elif per_value['type'] == 'MATRIX':
+        # shape (N,rows,cols)
+        scalar_array = np.array(per_value['value'])
+        assert(len(scalar_array.shape) == 3)
+        m_mean = np.mean(scalar_array,axis=0)
+        m_std = np.std(scalar_array,axis=0)
+
+        per_value['value'] = m_mean
+        per_value['interval'] = m_std
+
+  multi_statistics['measure'] = series_measures
+  ant_statistic_warp = {}
+  ant_statistic_warp[title] = multi_statistics
+  return ant_statistic_warp
 
 if __name__ == '__main__':
     # experiment 1

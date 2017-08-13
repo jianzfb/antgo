@@ -1,7 +1,7 @@
 # encoding=utf-8
 # @Time    : 17-6-22
 # @File    : work.py
-# @Author  :
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -22,361 +22,333 @@ from antgo.utils.gpu import *
 
 
 class Training(BaseWork):
-    def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
-        super(Training, self).__init__(name=name,
-                                       code_path=code_path,
-                                       code_main_file=code_main_file,
-                                       config_parameters=config_parameters,
-                                       port=port)
+  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+    super(Training, self).__init__(name=name,
+                                   code_path=code_path,
+                                   code_main_file=code_main_file,
+                                   config_parameters=config_parameters,
+                                   port=port)
 
-    def run(self, *args, **kwargs):
-        # 0.step load context
-        ctx = self.load()
+  def run(self, *args, **kwargs):
+    # 0.step load context
+    ctx = self.load()
 
-        # 1.step load config file
-        loaded_training_config = self.load_config()
+    # 1.step load config file
+    loaded_training_config = self.load_config()
 
-        # update by loaded training config
-        dataset_name = None
-        dataset_train_or_test = 'train'
-        dataset_params = {}
-        if 'dataset' in loaded_training_config:
-            dataset_name = loaded_training_config['dataset'].get('name', dataset_name)
-            dataset_params = loaded_training_config['dataset'].get('params', dataset_params)
+    # update by loaded training config
+    dataset_name = None
+    dataset_train_or_test = 'train'
+    dataset_params = {}
+    if 'dataset' in loaded_training_config:
+      dataset_name = loaded_training_config['dataset'].get('name', dataset_name)
+      dataset_params = loaded_training_config['dataset'].get('params', dataset_params)
 
-            # how to split dataset as training dataset
-            how_to_split = loaded_training_config['dataset'].get('split', {})
-            if len(how_to_split) > 0:
-                if 'train' in how_to_split:
-                    if type(how_to_split['train']) == str:
-                        # dataset flag (train)
-                        dataset_train_or_test = how_to_split['train']
-                    else:
-                        assert(how_to_split['train'] == list)
-                        # id list
-                        dataset_params['filter'] = how_to_split['train']
+      # how to split dataset as training dataset
+      how_to_split = loaded_training_config['dataset'].get('split', {})
+      if len(how_to_split) > 0:
+        if 'train' in how_to_split:
+          if type(how_to_split['train']) == str:
+            # dataset flag (train)
+            dataset_train_or_test = how_to_split['train']
+          else:
+            assert(how_to_split['train'] == list)
+            # id list
+            dataset_params['filter'] = how_to_split['train']
 
-        model_parameters = copy.deepcopy(loaded_training_config)
-        if 'dataset' in model_parameters:
-            model_parameters.pop('dataset')
+    model_parameters = copy.deepcopy(loaded_training_config)
+    if 'dataset' in model_parameters:
+      model_parameters.pop('dataset')
 
-        if 'dataset' in self.config_parameters:
-            dn = self.config_parameters['dataset'].get('name', None)
-            dataset_name = dn if dn is not None else dataset_name
-            dataset_params.update(self.config_parameters['dataset'].get('params', {}))
+    if 'dataset' in self.config_parameters:
+      dn = self.config_parameters['dataset'].get('name', None)
+      dataset_name = dn if dn is not None else dataset_name
+      dataset_params.update(self.config_parameters['dataset'].get('params', {}))
 
-        if 'model' in self.config_parameters:
-            model_parameters.update(self.config_parameters.get('model', {}))
+    if 'model' in self.config_parameters:
+      model_parameters.update(self.config_parameters.get('model', {}))
 
-        continue_condition = None
-        if 'continue' in self.config_parameters:
-            continue_condition = {}
-            continue_condition['key'] = self.config_parameters['continue']['key']
-            continue_condition['value'] = self.config_parameters['continue']['value']
-            continue_condition['condition'] = self.config_parameters['continue']['condition']
+    continue_condition = None
+    if 'continue' in self.config_parameters:
+      continue_condition = {}
+      continue_condition['key'] = self.config_parameters['continue']['key']
+      continue_condition['value'] = self.config_parameters['continue']['value']
+      continue_condition['condition'] = self.config_parameters['continue']['condition']
 
-        if self.gpu is not None:
-            model_parameters['gpu'] = self.gpu
-        elif self.cpu is not None:
-            model_parameters['cpu'] = self.cpu
+    if self.gpu is not None:
+      model_parameters['gpu'] = self.gpu
+    elif self.cpu is not None:
+      model_parameters['cpu'] = self.cpu
 
-        # update config file
-        loaded_training_config.update(model_parameters)
-        loaded_training_config.update(
-            {'dataset': {'name': dataset_name, 'train_or_test': dataset_train_or_test, 'params': dataset_params}})
-        self.update_config(loaded_training_config)
+    # update config file
+    loaded_training_config.update(model_parameters)
+    loaded_training_config.update(
+        {'dataset': {'name': dataset_name, 'train_or_test': dataset_train_or_test, 'params': dataset_params}})
+    self.update_config(loaded_training_config)
 
-        # 2.step registry trigger
-        if continue_condition is not None:
-            ctx.registry_trainer_callback(continue_condition['key'],
-                                          continue_condition['value'],
-                                          continue_condition['condition'],
-                                          self.notify_func)
+    # 2.step registry trigger
+    if continue_condition is not None:
+      ctx.registry_trainer_callback(continue_condition['key'],
+                                    continue_condition['value'],
+                                    continue_condition['condition'],
+                                    self.notify_func)
 
-        # 3.step start running
-        ctx.params = model_parameters
-        assert(dataset_name is not None)
-        dataset_cls = ctx.dataset_factory(dataset_name)
-        dataset = dataset_cls(dataset_train_or_test, self.datasource, dataset_params)
-        dataset.build()
-        ctx.call_training_process(dataset, self.dump_dir)
+    # 3.step start running
+    ctx.params = model_parameters
+    assert(dataset_name is not None)
+    dataset_cls = ctx.dataset_factory(dataset_name)
+    dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
+    ctx.call_training_process(dataset, self.dump_dir)
 
-        # 4.step work is done
-        if continue_condition is None:
-            self.send(self.dump_dir, 'DONE')
-        else:
-            self.send('', 'DONE')
-        ctx.wait_until_clear()
+    # 4.step work is done
+    if continue_condition is None:
+      self.send(self.dump_dir, 'DONE')
+    else:
+      self.send('', 'DONE')
+    ctx.wait_until_clear()
 
-    def notify_func(self):
-        # 1.step notify
-        self.send(self.dump_dir, 'CONTINUE')
+  def notify_func(self):
+    # 1.step notify
+    self.send(self.dump_dir, 'CONTINUE')
 
 
 class Inference(BaseWork):
-    def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
-        super(Inference, self).__init__(name=name,
-                                        code_path=code_path,
-                                        code_main_file=code_main_file,
-                                        config_parameters=config_parameters,
-                                        port=port)
+  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+    super(Inference, self).__init__(name=name,
+                                    code_path=code_path,
+                                    code_main_file=code_main_file,
+                                    config_parameters=config_parameters,
+                                    port=port)
 
-    def run(self, *args, **kwargs):
-        # 0.step load ctx
-        ctx = self.load()
+  def run(self, *args, **kwargs):
+    # 0.step load ctx
+    ctx = self.load()
 
-        # 1.step load config file
-        dataset_name = None
-        dataset_train_or_test = 'test'
-        dataset_params = None
-        loaded_infer_config = self.load_config()
+    # 1.step load config file
+    dataset_name = None
+    dataset_train_or_test = 'test'
+    dataset_params = None
+    loaded_infer_config = self.load_config()
 
-        model_parameters = {}
-        if loaded_infer_config is not None:
-            if 'dataset' in loaded_infer_config:
-                dataset_name = loaded_infer_config['dataset'].get('name', None)
-                dataset_params = loaded_infer_config['dataset'].get('params', {})
+    model_parameters = {}
+    if loaded_infer_config is not None:
+      if 'dataset' in loaded_infer_config:
+        dataset_name = loaded_infer_config['dataset'].get('name', None)
+        dataset_params = loaded_infer_config['dataset'].get('params', {})
 
-                # how to split dataset as training dataset
-                how_to_split = loaded_infer_config['dataset'].get('split', {})
-                if len(how_to_split) > 0:
-                    if 'test' in how_to_split:
-                        if type(how_to_split['test']) == str:
-                            # dataset flag (train)
-                            dataset_train_or_test = how_to_split['test']
-                        else:
-                            assert (how_to_split['test'] == list)
-                            # id list
-                            dataset_params['filter'] = how_to_split['test']
+        # how to split dataset as training dataset
+        how_to_split = loaded_infer_config['dataset'].get('split', {})
+        if len(how_to_split) > 0:
+          if 'test' in how_to_split:
+            if type(how_to_split['test']) == str:
+              # dataset flag (train)
+              dataset_train_or_test = how_to_split['test']
+            else:
+              assert (how_to_split['test'] == list)
+              # id list
+              dataset_params['filter'] = how_to_split['test']
 
-            model_parameters = copy.deepcopy(loaded_infer_config)
-            if 'dataset' in model_parameters:
-                model_parameters.pop('dataset')
+      model_parameters = copy.deepcopy(loaded_infer_config)
+      if 'dataset' in model_parameters:
+        model_parameters.pop('dataset')
 
-        # custom config
-        if 'dataset' in self.config_parameters:
-            dn = self.config_parameters['dataset'].get('name', None)
-            dataset_name = dn if dn is not None else dataset_name
-            dataset_params.update(self.config_parameters['dataset'].get('params', {}))
+    # custom config
+    if 'dataset' in self.config_parameters:
+      dn = self.config_parameters['dataset'].get('name', None)
+      dataset_name = dn if dn is not None else dataset_name
+      dataset_params.update(self.config_parameters['dataset'].get('params', {}))
 
-        if 'model' in self.config_parameters:
-            model_parameters.update(self.config_parameters.get('model', {}))
+    if 'model' in self.config_parameters:
+      model_parameters.update(self.config_parameters.get('model', {}))
 
-        if self.gpu is not None:
-            model_parameters['gpu'] = self.gpu
-        elif self.cpu is not None:
-            model_parameters['cpu'] = self.cpu
+    if self.gpu is not None:
+      model_parameters['gpu'] = self.gpu
+    elif self.cpu is not None:
+      model_parameters['cpu'] = self.cpu
 
-        # update config file
-        loaded_infer_config.update(model_parameters)
-        loaded_infer_config.update(
-            {'dataset': {'name': dataset_name, 'train_or_test':dataset_train_or_test, 'params':dataset_params}})
+    # update config file
+    loaded_infer_config.update(model_parameters)
+    loaded_infer_config.update(
+        {'dataset': {'name': dataset_name, 'train_or_test':dataset_train_or_test, 'params':dataset_params}})
 
-        assert(dataset_name is not None)
-        self.update_config(loaded_infer_config)
+    assert(dataset_name is not None)
+    self.update_config(loaded_infer_config)
 
-        # 2.step start running
-        ctx.params = model_parameters
-        dataset_cls = ctx.dataset_factory(dataset_name)
-        dataset = dataset_cls(dataset_train_or_test, self.datasource, dataset_params)
-        dataset.build()
-        data_annotation_branch = DataAnnotationBranch(Node.inputs(dataset))
-        ctx.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-        ctx.call_infer_process(data_annotation_branch.output(0), self.dump_dir)
+    # 2.step start running
+    ctx.params = model_parameters
+    dataset_cls = ctx.dataset_factory(dataset_name)
+    dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
 
-        # work is done
-        self.send(os.path.join(self.dump_dir, ctx.recorder.recorder_name), 'DONE')
-        ctx.wait_until_clear()
+    data_annotation_branch = DataAnnotationBranch(Node.inputs(dataset))
+    ctx.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+    ctx.call_infer_process(data_annotation_branch.output(0), self.dump_dir)
+    ctx.recorder.close()
+
+    # work is done
+    self.send(os.path.join(self.dump_dir, ctx.recorder.recorder_name), 'DONE')
+    ctx.wait_until_clear()
 
 
 class Evaluating(BaseWork):
-    def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
-        super(Evaluating, self).__init__(name=name,
-                                         code_path=code_path,
-                                         code_main_file=code_main_file,
-                                         config_parameters=config_parameters,
-                                         port=port)
+  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+    super(Evaluating, self).__init__(name=name,
+                                     code_path=code_path,
+                                     code_main_file=code_main_file,
+                                     config_parameters=config_parameters,
+                                     port=port)
 
-    def run(self, *args, **kwargs):
-        assert('task' in self.config_parameters)
-        assert('type' in self.config_parameters['task'])
-        class_label = []
-        if 'class_label' in self.config_parameters['task']:
-            class_label = self.config_parameters['task']['class_label']
+  def run(self, *args, **kwargs):
+    assert('task' in self.config_parameters)
+    assert('type' in self.config_parameters['task'])
+    class_label = []
+    if 'class_label' in self.config_parameters['task']:
+      class_label = self.config_parameters['task']['class_label']
 
-        dummy_ant_task = AntTask(task_id=-1, task_name=None, task_type_id=-1,
-                                 task_type=self.config_parameters['task']['type'],
-                                 dataset_id=-1, dataset_name=None, dataset_params=None,
-                                 estimation_procedure_type=None, estimation_procedure_params=None,
-                                 evaluation_measure=None, cost_matrix=None,
-                                 class_label=class_label)
+		method = ''
+		if 'method' in self.config_parameters['method']:
+			method = self.config_parameters['method']
 
-        ant_measures = AntMeasures(dummy_ant_task)
-        measures_name = self.config_parameters.get('measure', None)
-        applied_measures = ant_measures.measures(measures_name)
+    dummy_ant_task = AntTask(task_id=-1, task_name=None, task_type_id=-1,
+                             task_type=self.config_parameters['task']['type'],
+                             dataset_id=-1, dataset_name=None, dataset_params=None,
+                             estimation_procedure_type=None, estimation_procedure_params=None,
+                             evaluation_measure=None, cost_matrix=None,
+                             class_label=class_label)
 
-        flag, _, infer_result, gt = load_records(self.dump_dir)
+    ant_measures = AntMeasures(dummy_ant_task)
+    measures_name = self.config_parameters.get('measure', None)
+    applied_measures = ant_measures.measures(measures_name)
 
-        statistic_data = []
-        if flag == 'single':
-            # single process
-            for measure_obj in applied_measures:
-                statistic_data.append(measure_obj.eva(infer_result, gt))
-        else:
-            # multi process (need to give confidence interval)
-            statistic_experiment_data = []
-            for index in range(len(infer_result)):
-                p_infer_result = infer_result[index]
-                p_gt = gt[index]
-
-                for measure_obj in applied_measures:
-                    statistic_experiment_data.append(measure_obj.eva(p_infer_result, p_gt))
-
-            # compute confidence interval
-            statistic_data = compute_confidence_interval(statistic_experiment_data)
-
-        # visualization
-        everything_to_html(statistic_data, self.dump_dir, True, name=self.name)
-
-        self.send('', 'DONE')
+		temp = os.listdir(self.dump_dir)
+    experiment_folders = []
+    for f in temp:
+	    if os.path.isdir(os.path.join(self.dump_dir, f)):
+		    experiment_folders.append(os.path.join(self.dump_dir, f))
 
 
-class DataMarket(BaseWork):
-    def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
-        super(DataMarket, self).__init__(name=name,
-                                         code_path=code_path,
-                                         code_main_file=code_main_file,
-                                         config_parameters=config_parameters,
-                                         port=port)
+		if len(experiment_folders) == 0:
+			task_running_statictic = {}
+			task_running_statictic[self.name] = {}
+			evaluation_measure_result = []
+			record_reader = RecordReader(self.dump_dir)
+			for measure in dummy_ant_task.evaluation_measures:
+				record_generator = record_reader.iterate_read('predict', 'groundtruth')
+				result = measure.eva(record_generator, None)
+				evaluation_measure_result.append(result)
+			task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+			# visualization
+	    everything_to_html(task_running_statictic, self.dump_dir, True, name=self.name)
+		else:
+			multi_expriments = []
+			for experiment_folder in experiment_folders:
+				task_running_statictic = {}
+				task_running_statictic[self.name] = {}
 
-    def run(self, *args, **kwargs):
-        dataset_kv = self.config_parameters['dataset']
-        for k, v in dataset_kv.items():
-            params = {}
-            if 'params' in v:
-                params = v['params']
+				evaluation_measure_result = []
+				record_reader = RecordReader(self.dump_dir)
+				for measure in dummy_ant_task.evaluation_measures:
+					record_generator = record_reader.iterate_read('predict', 'groundtruth')
+					result = measure.eva(record_generator, None)
+					evaluation_measure_result.append(result)
+				task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
-            split = {}
-            if 'split' in v:
-                split = v['split']
+			  multi_expriments.append(task_running_statictic)
+			evaluation_result = multi_repeats_measures_statistic(multi_expriments, method=method)	# visualization
+			everything_to_html(evaluation_result, self.dump_dir, True, name=self.name)
 
-            # generate yaml configue file
-            dataset_config = {}
-            dataset_config['dataset'] = {}
-            dataset_config['dataset']['name'] = k
-            dataset_config['dataset']['params'] = params
-            if len(split) > 0:
-                dataset_config['dataset']['split'] = split
-
-            fp = open(os.path.join(self.dump_dir, 'dataset-%s-config.yaml'%k), 'w')
-            yaml.dump(dataset_config, fp)
-            fp.close()
-            # continue
-            self.send(os.path.join(self.dump_dir, 'dataset-%s-config.yaml'%k), 'CONTINUE')
-
-        self.send('', 'DONE')
+    self.send('', 'DONE')
 
 
-class StatisticExperiment(BaseWork):
-    def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
-        super(StatisticExperiment, self).__init__(name=name,
-                                                  code_path=code_path,
-                                                  code_main_file=code_main_file,
-                                                  config_parameters=config_parameters,
-                                                  port=port)
+class DataSplit(BaseWork):
+  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+    super(DataSplit, self).__init__(name=name,
+                                    code_path=code_path,
+                                    code_main_file=code_main_file,
+                                    config_parameters=config_parameters,
+                                    port=port)
 
-    def run(self, *args, **kwargs):
-        # 0.step load model
-        ctx = self.load()
+  def run(self, *args, **kwargs):
+    # 0.step load model
+    ctx = self.load()
 
-        # 1.step load config (including dataset config)
-        loaded_config = self.load_config()
-        assert(loaded_config is not None)
-        assert('dataset' in loaded_config)
+    # 1.step load config (including dataset config)
+    loaded_config = self.load_config()
+    assert(loaded_config is not None)
+    assert('dataset' in loaded_config)
 
-        # 2.step using custom experiment
-        split_method = self.config_parameters['method']
-        split_params = self.config_parameters.get('params', {})
+    # 2.step using custom experiment
+    split_method = self.config_parameters['method']
+    split_params = self.config_parameters.get('params', {})
 
-        assert(split_method in ['holdout', 'repeated-holdout', 'bootstrap', 'kfold'])
+    assert(split_method in ['holdout', 'repeated-holdout', 'bootstrap', 'kfold'])
 
-        dataset_name = loaded_config['dataset'].get('name', None)
-        dataset_params = loaded_config['dataset'].get('params', {})
-        dataset_train_or_test = 'train'
+    dataset_name = loaded_config['dataset'].get('name', None)
+    dataset_params = loaded_config['dataset'].get('params', {})
+    dataset_train_or_test = 'train'
 
-        dataset_cls = ctx.dataset_factory(dataset_name)
-        dataset = dataset_cls(dataset_train_or_test, self.datasource, dataset_params)
-        dataset.build()
+    dataset_cls = ctx.dataset_factory(dataset_name)
+    dataset = dataset_cls(dataset_train_or_test, self.datasource, dataset_params)
 
-        if split_method == 'holdout':
-            t, v = dataset.split_index(split_params, split_method)
-            dataset_config = copy.deepcopy(loaded_config)
-            dataset_config['dataset']['split'] = {}
-            dataset_config['dataset']['split']['train'] = t
-            dataset_config['dataset']['split']['test'] = v
+    if split_method == 'holdout':
+      t, v = dataset.split(split_params, split_method)
+      dataset_config = copy.deepcopy(loaded_config)
+      dataset_config['dataset']['split'] = {}
+      dataset_config['dataset']['split']['train'] = t.ids
+      dataset_config['dataset']['split']['test'] = v.ids
 
-            fp = open(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'w')
-            yaml.dump(dataset_config, fp)
-            fp.close()
-            self.send(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'DONE')
-        elif split_method == 'repeated-holdout':
-            repeated_times = split_params['repeated_times']
-            for index in range(repeated_times):
-                t, v = dataset.split_index(split_params, split_method)
-                dataset_config = copy.deepcopy(loaded_config)
-                dataset_config['dataset']['split'] = {}
-                dataset_config['dataset']['split']['train'] = t
-                dataset_config['dataset']['split']['test'] = v
+      fp = open(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'w')
+      yaml.dump(dataset_config, fp)
+      fp.close()
+      self.send(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'DONE')
+    elif split_method == 'repeated-holdout':
+      repeated_times = split_params['repeated_times']
+      for index in range(repeated_times):
+        t, v = dataset.split(split_params, split_method)
+        dataset_config = copy.deepcopy(loaded_config)
+        dataset_config['dataset']['split'] = {}
+        dataset_config['dataset']['split']['train'] = t.ids
+        dataset_config['dataset']['split']['test'] = v.ids
 
-                fp = open(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml'%index), 'w')
-                yaml.dump(dataset_config, fp)
-                fp.close()
-                self.send(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml'%index), 'CONTINUE')
+        fp = open(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml'%index), 'w')
+        yaml.dump(dataset_config, fp)
+        fp.close()
+        self.send(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml'%index), 'CONTINUE')
 
-            self.send('', 'DONE')
-        elif split_method == 'bootstrap':
-            repeated_times = split_params['repeated_times']
-            for index in range(repeated_times):
-                t, v = dataset.split_index(split_params, split_method)
-                dataset_config = copy.deepcopy(loaded_config)
-                dataset_config['dataset']['split'] = {}
-                dataset_config['dataset']['split']['train'] = t
-                dataset_config['dataset']['split']['test'] = v
+      self.send('', 'DONE')
+    elif split_method == 'bootstrap':
+      repeated_times = split_params['repeated_times']
+      for index in range(repeated_times):
+        t, v = dataset.split(split_params, split_method)
+        dataset_config = copy.deepcopy(loaded_config)
+        dataset_config['dataset']['split'] = {}
+        dataset_config['dataset']['split']['train'] = t.ids
+        dataset_config['dataset']['split']['test'] = v.ids
 
-                fp = open(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml'%index), 'w')
-                yaml.dump(dataset_config, fp)
-                fp.close()
-                self.send(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml'%index), 'CONTINUE')
+        fp = open(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml'%index), 'w')
+        yaml.dump(dataset_config, fp)
+        fp.close()
+        self.send(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml'%index), 'CONTINUE')
 
-            self.send('', 'DONE')
+      self.send('', 'DONE')
+    elif split_method == 'kfold':
+      kfold = split_params['kfold']
+      for k in range(kfold):
+        split_params['k'] = k
 
-        elif split_method == 'kfold':
-            kfold = split_params['kfold']
-            for k in range(kfold):
-                split_params['k'] = k
+        t, v = dataset.split(split_params, split_method)
+        dataset_config = copy.deepcopy(loaded_config)
+        dataset_config['dataset']['split'] = {}
+        dataset_config['dataset']['split']['train'] = t.ids
+        dataset_config['dataset']['split']['test'] = v.ids
 
-                t, v = dataset.split_index(split_params, split_method)
-                dataset_config = copy.deepcopy(loaded_config)
-                dataset_config['dataset']['split'] = {}
-                dataset_config['dataset']['split']['train'] = t
-                dataset_config['dataset']['split']['test'] = v
+        fp = open(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml'%k), 'w')
+        yaml.dump(dataset_config, fp)
+        fp.close()
+        self.send(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml'%k), 'CONTINUE')
 
-                fp = open(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml'%k), 'w')
-                yaml.dump(dataset_config, fp)
-                fp.close()
-                self.send(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml'%k), 'CONTINUE')
-
-            self.send('', 'DONE')
-        else:
-            raise NotImplementedError()
-
-
-class HyperParameterSelection(object):
-    def __init__(self):
-        pass
-
-    def start(self):
-        pass
+      self.send('', 'DONE')
+    else:
+        raise NotImplementedError()
 
 
 class A(BaseWork):
@@ -521,8 +493,6 @@ class E(BaseWork):
 WorkNodes = {'Training': Training,
              'Inference': Inference,
              'Evaluating':Evaluating,
-             'DataMarket':DataMarket,
-             'HyperParameterSelection':HyperParameterSelection,
              'A':A,
              'B':B,
              'C':C,

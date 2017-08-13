@@ -363,19 +363,20 @@ class Dataset(BaseNode):
             # cls filter
             for obj_index, obj in enumerate(label['category']):
                 if obj in included_cls:
-                    x0, y0, x1, y1 = label['bbox'][obj_index, :]
-                    # size filter
-                    if min_size is not None:
-                        if (x1 - x0) < min_size or (y1 - y0) < min_size:
-                            continue
+                    if 'bbox' in label:
+                        x0, y0, x1, y1 = label['bbox'][obj_index, :]
+                        # size filter
+                        if min_size is not None:
+                            if (x1 - x0) < min_size or (y1 - y0) < min_size:
+                                continue
 
-                    if min_aspect_ratio is not None:
-                        if float(x1 - x0) / float(y1 - y0) < min_aspect_ratio:
-                            continue
+                        if min_aspect_ratio is not None:
+                            if float(x1 - x0) / float(y1 - y0) < min_aspect_ratio:
+                                continue
 
-                    if max_aspect_ratio is not None:
-                        if float(x1 - x0) / float(y1 - y0) > max_aspect_ratio:
-                            continue
+                        if max_aspect_ratio is not None:
+                            if float(x1 - x0) / float(y1 - y0) > max_aspect_ratio:
+                                continue
 
                     # ext filter
                     if ext_filter is not None:
@@ -395,10 +396,11 @@ class Dataset(BaseNode):
             if len(keep_index) == 0:
                 return None
 
-            label['bbox'] = label['bbox'][keep_index, :]
+            if 'bbox' in label:
+                label['bbox'] = label['bbox'][keep_index, :]
             label['category_id'] = label['category_id'][keep_index]
             label['category'] = [label['category'][i] for i in keep_index]
-            label['area'] = label['area'][keep_index]
+
             if ext_annotation is not None:
                 for annotation_name in ext_annotation:
                     if annotation_name in label:
@@ -412,18 +414,19 @@ class Dataset(BaseNode):
             for obj_index, obj in enumerate(label['category']):
                 if obj not in excluded_cls:
                     # size filter
-                    x0, y0, x1, y1 = label['bbox'][obj_index, :]
-                    if min_size is not None:
-                        if (x1 - x0) < min_size or (y1 - y0) < min_size:
-                            continue
+                    if 'bbox' in label:
+                        x0, y0, x1, y1 = label['bbox'][obj_index, :]
+                        if min_size is not None:
+                            if (x1 - x0) < min_size or (y1 - y0) < min_size:
+                                continue
 
-                    if min_aspect_ratio is not None:
-                        if float(x1 - x0) / float(y1 - y0) < min_aspect_ratio:
-                            continue
+                        if min_aspect_ratio is not None:
+                            if float(x1 - x0) / float(y1 - y0) < min_aspect_ratio:
+                                continue
 
-                    if max_aspect_ratio is not None:
-                        if float(x1 - x0) / float(y1 - y0) > max_aspect_ratio:
-                            continue
+                        if max_aspect_ratio is not None:
+                            if float(x1 - x0) / float(y1 - y0) > max_aspect_ratio:
+                                continue
 
                     # ext filter
                     if ext_filter is not None:
@@ -443,10 +446,11 @@ class Dataset(BaseNode):
             if len(keep_index) == 0:
                 return None
 
-            label['bbox'] = label['bbox'][keep_index, :]
+            if 'bbox' in label:
+                label['bbox'] = label['bbox'][keep_index, :]
             label['category_id'] = label['category_id'][keep_index]
             label['category'] = [label['category'][i] for i in keep_index]
-            label['area'] = label['area'][keep_index]
+
             if ext_annotation is not None:
                 for annotation_name in ext_annotation:
                     if annotation_name in label:

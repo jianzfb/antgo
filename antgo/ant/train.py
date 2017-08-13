@@ -1,6 +1,7 @@
 # encoding=utf-8
-# File: train.py
-# Author: jian<jian@mltalker.com>
+# @Time    : 17-6-22
+# @File    : train.py
+# Author   : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 
@@ -200,7 +201,7 @@ class AntRun(AntBase):
 
             repeated_running_statistic.append(task_running_statictic)
 
-        evaluation_result = multi_repeats_measures_statistic(repeated_running_statistic)
+        evaluation_result = multi_repeats_measures_statistic(repeated_running_statistic, method='repeated-holdout')
         return evaluation_result
 
     def _bootstrap_validation(self, bootstrap_rounds, train_dataset, evaluation_measures):
@@ -253,7 +254,7 @@ class AntRun(AntBase):
 
             bootstrap_running_statistic.append(task_running_statictic)
 
-        evaluation_result = multi_repeats_measures_statistic(bootstrap_running_statistic)
+        evaluation_result = multi_repeats_measures_statistic(bootstrap_running_statistic, method='bootstrap')
         return evaluation_result
 
     def _kfold_cross_validation(self, kfolds, train_dataset, evaluation_measures):
@@ -308,5 +309,5 @@ class AntRun(AntBase):
 
             kfolds_running_statistic.append(task_running_statictic)
 
-        evaluation_result = multi_repeats_measures_statistic(kfolds_running_statistic)
+        evaluation_result = multi_repeats_measures_statistic(kfolds_running_statistic, method='kfold')
         return evaluation_result
