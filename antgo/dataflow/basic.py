@@ -10,10 +10,6 @@ import numpy as np
 import os
 import yaml
 import plyvel
-try:
-    import xml.etree.cElementTree as ET
-except ImportError:
-    import xml.etree.ElementTree as ET
 
 global_dbs = {}
 
@@ -81,6 +77,7 @@ class RecordWriter(object):
 class RecordReader(object):
   def __init__(self, record_path):
     # db
+    self._record_path = record_path
     self._db = _global_db(record_path)
 
     # db attributes
@@ -93,6 +90,8 @@ class RecordReader(object):
       setattr(self, attr_key, attr_value)
 
   def close(self):
+    global global_dbs
+    global_dbs.pop(self._record_path)
     self._db.close()
 
   def record_attrs(self):

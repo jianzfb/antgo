@@ -28,43 +28,45 @@ def everything_to_html(data, dump_dir):
     everything_statistics = []
     for ant_name, ant_info in data.items():
         # 0.step cpu statistic
-        cpu_model = ant_info['cpu']['cpu_model']
-        cpu_max_util = ant_info['cpu']['cpu_max_usage']
-        cpu_mean_util = ant_info['cpu']['cpu_mean_usage']
-        cpu_median_util = ant_info['cpu']['cpu_median_usage']
+        if 'cpu' in ant_info:
+            cpu_model = ant_info['cpu']['cpu_model']
+            cpu_max_util = ant_info['cpu']['cpu_max_usage']
+            cpu_mean_util = ant_info['cpu']['cpu_mean_usage']
+            cpu_median_util = ant_info['cpu']['cpu_median_usage']
 
-        cpu_statistic = {'statistic': {'name': 'cpu',
-                                       'value': [
-                                           {'name': cpu_model,
-                                            'value': [['cpu', 'max util', 'mean util','median util'],
-                                                      ['-', cpu_max_util, cpu_mean_util,cpu_median_util]],
-                                            'type': "TABLE"}]}}
-        everything_statistics.append(cpu_statistic)
+            cpu_statistic = {'statistic': {'name': 'cpu',
+                                           'value': [
+                                               {'name': cpu_model,
+                                                'value': [['cpu', 'max util', 'mean util','median util'],
+                                                          ['-', cpu_max_util, cpu_mean_util,cpu_median_util]],
+                                                'type': "TABLE"}]}}
+            everything_statistics.append(cpu_statistic)
 
-        # 1.step memory statistic
-        mem_max_util = ant_info['cpu']['mem_max_usage']
-        mem_mean_util = ant_info['cpu']['mem_mean_usage']
-        mem_median_util = ant_info['cpu']['mem_median_usage']
+            # 1.step memory statistic
+            mem_max_util = ant_info['cpu']['mem_max_usage']
+            mem_mean_util = ant_info['cpu']['mem_mean_usage']
+            mem_median_util = ant_info['cpu']['mem_median_usage']
 
-        memory_statistic = {'statistic': {'name': 'memory',
-                                          'value': [
-                                              {'name': 'memory info',
-                                               'value': [['memory', 'max util', 'mean util', 'median util'],
-                                                         ['-', mem_max_util, mem_mean_util, mem_median_util]],
-                                               'type': "TABLE"}]}}
-        everything_statistics.append(memory_statistic)
+            memory_statistic = {'statistic': {'name': 'memory',
+                                              'value': [
+                                                  {'name': 'memory info',
+                                                   'value': [['memory', 'max util', 'mean util', 'median util'],
+                                                             ['-', mem_max_util, mem_mean_util, mem_median_util]],
+                                                   'type': "TABLE"}]}}
+            everything_statistics.append(memory_statistic)
 
         # 2.step time statistic
-        elapsed_time_per_sample = '-'
-        if 'elapsed_time_per_sample' in ant_info['time']:
-            elapsed_time_per_sample = ant_info['time']['elapsed_time_per_sample']
-        time_statistic = {'statistic': {'name': 'time',
-                                        'value': [
-                                            {'name': 'time',
-                                             'value': [['time', 'total time', 'per sample time'],
-                                                       ['-', ant_info['time']['elapsed_time'], elapsed_time_per_sample]],
-                                             'type': "TABLE"}]}}
-        everything_statistics.append(time_statistic)
+        if 'time' in ant_info:
+            elapsed_time_per_sample = '-'
+            if 'elapsed_time_per_sample' in ant_info['time']:
+                elapsed_time_per_sample = ant_info['time']['elapsed_time_per_sample']
+            time_statistic = {'statistic': {'name': 'time',
+                                            'value': [
+                                                {'name': 'time',
+                                                 'value': [['time', 'total time', 'per sample time'],
+                                                           ['-', ant_info['time']['elapsed_time'], elapsed_time_per_sample]],
+                                                 'type': "TABLE"}]}}
+            everything_statistics.append(time_statistic)
 
         # 3.step model measures
         if 'measure' in ant_info:

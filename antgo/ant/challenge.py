@@ -99,7 +99,7 @@ class AntChallenge(AntBase):
             record_generator = record_reader.iterate_read('predict', 'groundtruth')
             result = measure.eva(record_generator, None)
             evaluation_measure_result.append(result)
-        task_running_statictic[self.ant_name]['measure']=evaluation_measure_result
+        task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
         self.stage = 'COMPARISION'
         logger.info('start compare process')

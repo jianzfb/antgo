@@ -140,7 +140,7 @@ class Context(object):
         self.dataset_factory_callback = callback
 
     def registry_trainer_callback(self, key, value, condition, func):
-        #condition: equal, less, greater or mod
+        # condition: equal, less, greater or mod
         self.trainer_callbacks.append((key, value, condition, func))
 
     @property

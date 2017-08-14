@@ -105,7 +105,7 @@ class AntTask(object):
         '''
         return self._ant_measures.measures(self._evaluation_measure)
 
-    def evaluation_measure(self,measure_name):
+    def evaluation_measure(self, measure_name):
         '''
         
         :param measure_name: 

@@ -1,449 +1,229 @@
 # encoding=utf-8
-# @Time    : 17-6-22
+# @Time    : 17-8-14
 # @File    : workflow.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-import os
-import re
 import yaml
-import imp
-import sys
-import shutil
+import os
 import time
-import json
-from multiprocessing import Queue
-from antgo.utils import logger
+import shutil
+from antgo.ant.basework import *
+from multiprocessing import Process, Lock
+from antgo.dataflow.common import *
+from antgo.dataflow.recorder import *
+from antgo.context import *
+from antgo.task.task import *
+from antgo.measures.measure import *
+from antgo.html.html import *
+from antgo.utils.cpu import *
+from antgo.utils.gpu import *
+from antgo.ant.work import *
 
 
-def _main_context(main_file, source_paths):
-    # filter .py
-    key_model = main_file
-    dot_pos = key_model.rfind(".")
-    if dot_pos != -1:
-        key_model = key_model[0:dot_pos]
-
-    sys.path.append(source_paths)
-    f, p, d = imp.find_module(key_model, [source_paths])
-    module = imp.load_module('mm', f, p, d)
-    return module.get_global_context()
+WorkNodes = {'Training': Training,
+             'Inference': Inference,
+             'Evaluating':Evaluating,
+             'DataSplit': DataSplit}
 
 
-class BaseWork(object):
-    class _LinkPipe(object):
-        def __init__(self, nest, link_type='NORMAL'):
-            self._nest = nest
-            self._link_type = 'NORMAL'
-            self._queue = Queue()
+class WorkFlow(object):
+  def __init__(self, main_file, main_folder, dump_dir, data_factory, config_file):
+    self.config_content = yaml.load(open(config_file, 'r'))
+    self.work_nodes = []
+    self.work_acquired_locks = []
+    self.nr_cpu = 0
+    self.nr_gpu = 0
+    self._main_file = main_file
+    self._main_folder = main_folder
+    self._dump_dir = dump_dir
+    self._data_factory = data_factory
 
-        @property
-        def nest(self):
-            return self._nest
+    # parse work flow
+    self._parse_work_flow()
+    # analyze work computing resource
+    self._analyze_computing_resource()
 
-        @property
-        def link_type(self):
-            return self._link_type
-        @link_type.setter
-        def link_type(self, val):
-            self._link_type = val
+  class _WorkConfig(object):
+    def __init__(self):
+      self._config = None
+      self._input_bind = []
+      self._feedback_bind = []
+      self._name = ""
+      self._nike_name = ""
 
-        def put(self, sender='', identity='', value=''):
-            self._queue.put(json.dumps({'sender':sender,'identity':identity,'value':value}))
+    @property
+    def config(self):
+      return self._config
 
-        def get(self):
-            return self._queue.get(True)
+    @config.setter
+    def config(self, val):
+      self._config = val
 
-    def __init__(self, name, code_path, code_main_file, config_parameters, port=None):
-        self._running_config = None
-        self._workspace_base = ''
-        self._datasource = ''
-        self._workspace = None
-        self._dump_dir = None
+    @property
+    def input_bind(self):
+      return self._input_bind
 
-        self.port = port
-        self._output_pipes = []
-        self._input_pipes = []
+    @input_bind.setter
+    def input_bind(self, val):
+      self._input_bind.extend(val)
 
-        self._feedback_output = []
-        self._feedback_input = []
+    @property
+    def feedback_bind(self):
+      return self._feedback_bind
 
-        self._stop_shortcuts = []
-
-        self._name = name
-
-        self._code_path = code_path
-        self._code_main_file = code_main_file
-
-        self.config_parameters = config_parameters
-        self._cpu = config_parameters.get('cpu', None)
-        self._gpu = config_parameters.get('gpu', None)
-        self._nr_cpu = 0
-        self._nr_gpu = 0
-        self._occupy = config_parameters.get('occupy', 'share')
-
-        self.status = 'DONE'
-        self._need_waiting_feedback = False
-        self._is_first = True
-        self.collected_value = []
-
-        self._is_root = False
+    @feedback_bind.setter
+    def feedback_bind(self, val):
+      self._feedback_bind.extend(val)
 
     @property
     def name(self):
-        return self._name
+      return self._name
+
+    @name.setter
+    def name(self, val):
+      self._name = val
 
     @property
-    def output(self):
-        output_pipe = BaseWork._LinkPipe(self)
-        self._output_pipes.append(output_pipe)
-        return output_pipe
-    @property
-    def output_num(self):
-        return len(self._output_pipes)
-    @property
-    def output_feedback_num(self):
-        num = 0
-        for output_pipe in self._output_pipes:
-            if output_pipe.link_type == 'FEEDBACK':
-                num += 1
+    def nick_name(self):
+      return self._nike_name
 
-        return num
-    @property
-    def output_nonfeedback_num(self):
-        num = 0
-        for output_pipe in self._output_pipes:
-            if output_pipe.link_type != 'FEEDBACK':
-                num += 1
+    @nick_name.setter
+    def nick_name(self, val):
+      self._nike_name = val
 
-        return num
+  def _find_all_root(self, leaf_node, root_list):
+    if leaf_node.is_root:
+      root_list.append(leaf_node)
 
-    @property
-    def input(self):
-        return self._input_pipes
-    @input.setter
-    def input(self, val):
-        link_pipe, link_type = val
-        link_pipe.link_type = link_type
-        self._input_pipes.append(link_pipe)
-    @property
-    def input_num(self):
-        return len(self._input_pipes)
-
-    @property
-    def stop_shortcut(self):
-        stop_shortcut = BaseWork._LinkPipe(self)
-        self._stop_shortcuts.append(stop_shortcut)
-        return stop_shortcut
-
-    @property
-    def is_root(self):
-        return self._is_root
-    @is_root.setter
-    def is_root(self, val):
-        self._is_root = val
-
-    @property
-    def workspace_base(self):
-        return self._workspace_base
-    @workspace_base.setter
-    def workspace_base(self, val):
-        self._workspace_base = val
-
-    @property
-    def workspace(self):
-        if self._workspace is None:
-            self._workspace = os.path.join(self.workspace_base, self.name)
-        return self._workspace
-    @workspace.setter
-    def workspace(self, val):
-        self._workspace = val
-
-    @property
-    def datasource(self):
-        return self._datasource
-    @datasource.setter
-    def datasource(self, val):
-        self._datasource = val
-
-    @property
-    def dump_dir(self):
-        return self._dump_dir
-    @dump_dir.setter
-    def dump_dir(self, val):
-        self._dump_dir = val
-
-    @property
-    def nr_cpu(self):
-        return self._nr_cpu
-    @property
-    def nr_gpu(self):
-        return self._nr_gpu
-
-    @property
-    def cpu(self):
-        return self._cpu
-    @property
-    def gpu(self):
-        return self._gpu
-
-    @property
-    def occupy(self):
-        return self._occupy
-
-    @property
-    def need_waiting_feedback(self):
-        return self._need_waiting_feedback
-    @need_waiting_feedback.setter
-    def need_waiting_feedback(self, val):
-        self._need_waiting_feedback = val
-
-    @property
-    def feedback_output(self):
-        return self._feedback_output
-    @feedback_output.setter
-    def feedback_output(self, val):
-        self._feedback_output = val
-
-    @property
-    def feedback_input(self):
-        return self._feedback_input
-    @feedback_input.setter
-    def feedback_input(self, val):
-        self._feedback_input = val
-
-    def set_computing_resource(self, nr_cpu, nr_gpu):
-        self._nr_cpu = nr_cpu
-        self._nr_gpu = nr_gpu
-
-    def load(self):
-        # load ant context
-        _context = _main_context(self._code_main_file, self._code_path)
-        return _context
-
-    def load_config(self):
-        config_file = None
-        for ff in os.listdir(self.dump_dir):
-            if 'config.yaml' in ff:
-                config_file = os.path.join(self.dump_dir, ff)
-
-        if config_file is not None:
-            config = yaml.load(open(config_file, 'r'))
-            return config
-
-        return {}
-
-    def update_config(self, config_parameters):
-        fp = open(os.path.join(self.dump_dir, 'config.yaml'), 'w')
-        yaml.dump(config_parameters, fp)
-        fp.close()
-
-    def run(self, *args, **kwargs):
-        # flag 'CONTINUE', 'DONE', 'FEEDBACK-DONE' and 'STOP'
-        pass
-
-    def send(self, value, identity='CONTINUE'):
-        if identity == 'DONE' \
-                and len(self._feedback_input) > 0 \
-                and not self._need_waiting_feedback:
-            identity = 'FEEDBACK-DONE'
-
-        # update current status
-        self.status = identity
-
-        if len(self._stop_shortcuts) == 0:
-            if len(value) == 0 and identity == 'DONE':
-                return
-
-        if len(self.feedback_output) > 0:
-            if identity == 'DONE' or identity == 'CONTINUE':
-                self.collected_value.append(value)
-                for output_pipe in self._output_pipes:
-                    if output_pipe.link_type == 'FEEDBACK':
-                        # collect all computing result
-                        output_pipe.put(sender=self._name, value=value, identity=identity)
-            else:
-                # 'FEEDBACK-DONE' or 'STOP'
-                self.collected_value.append(value)
-                for output_pipe in self._output_pipes:
-                    if output_pipe.link_type != 'FEEDBACK':
-                        output_pipe.put(sender=self._name, value=self.collected_value, identity=identity)
-                self.collected_value = []
+    for input_link in leaf_node.input:
+      if input_link.link_type == 'NORMAL':
+        if input_link.nest.is_root:
+          root_list.append(input_link.nest)
         else:
-            for output_pipe in self._output_pipes:
-                output_pipe.put(sender=self._name, value=value, identity=identity)
+          self._find_all_root(input_link.nest, root_list)
 
-        for ss in self._stop_shortcuts:
-            ss.put(sender=self._name, value='', identity='STOP')
+  def _parse_work_flow(self):
+    works_config = {}
+    # self._datasource = ""
+    # self._workspace = ""
+    # self._code_path = ""
+    # self._code_main_file = ""
 
-    def start(self, acquired_lock=None):
-        # finding feedback output
-        for output_pipe in self._output_pipes:
-            if output_pipe.link_type == 'FEEDBACK':
-                self.feedback_output.append(output_pipe)
+    for k, v in self.config_content.items():
+      if type(v) == dict:
+        if 'type' in v and v['type'] != 'work':
+          logger.error('type must be work...')
+          return
 
-        for input_pipe in self._input_pipes:
-            if input_pipe.link_type == 'FEEDBACK':
-                self.feedback_input.append(input_pipe)
+        work_config = WorkFlow._WorkConfig()
+        work_config.name = v['name']
+        v.pop('name')
+        work_config.nick_name = k
+        if 'input-bind' in v:
+          work_config.input_bind = v['input-bind']
+          v.pop('input-bind')
+        if 'feedback-bind' in v:
+          work_config.feedback_bind = v['feedback-bind']
+          v.pop('feedback-bind')
+        work_config.config = v
+        works_config[work_config.nick_name] = work_config
+        # elif k == 'datasource':
+        #     self._datasource = v
+        # elif k == 'workspace':
+        #     self._workspace = v
+        # elif k == 'code_path':
+        #     self._code_path = v
+        # elif k == 'code_main_file':
+        #     self._code_main_file = v
 
-        # waiting or running
-        self.waiting_and_run(acquired_lock)
+    # reset worknodes connections
+    work_nodes = {}
+    for nick_name, cf in works_config.items():
+      if cf.name not in WorkNodes:
+        logger.error('no exist work')
+        return
 
-    def _unwarp_value(self, value):
-        value_obj = json.loads(value)
-        sender = value_obj['sender']
-        identity = value_obj['identity']
-        info = value_obj['value']
+      work_node = WorkNodes[cf.name](name=cf.nick_name,
+                                     config_parameters=cf.config,
+                                     code_path=self._main_folder,
+                                     code_main_file=self._main_file)
+      work_node.workspace_base = self._dump_dir
+      work_node.data_factory = self._data_factory
+      work_nodes[cf.nick_name] = work_node
+      self.work_nodes.append(work_node)
 
-        return sender, identity, info
+    root_work_nodes = []
+    for nick_name, work_node in work_nodes.items():
+      if works_config[nick_name].input_bind is not None:
+        for mm in works_config[nick_name].input_bind:
+          output_pipe = work_nodes[mm].output
+          work_node.input = (output_pipe, 'NORMAL')
+      else:
+        work_node.node_type = 'ROOT'
+        root_work_nodes.append(work_node)
 
-    def _prepare_running_data(self, identity_list, info_list):
-        # check is ok
-        for identity, info in zip(identity_list, info_list):
-            if self._is_root:
-                if len(self.feedback_input) > 0 and self.status == 'FEEDBACK-DONE' and identity == 'STOP':
-                    self.send('', identity='STOP')
-                    return 0
+      # worknode is root
+      if work_node.input_num == 0:
+        work_node.is_root = True
 
-                if len(self.feedback_input) == 0 and self.status == 'DONE' and identity == 'STOP':
-                    self.send('', identity='STOP')
-                    return 0
+      # config feedback input
+      if works_config[nick_name].feedback_bind is not None:
+        for mm in works_config[nick_name].feedback_bind:
+          work_node.input = (work_nodes[mm].output, 'FEEDBACK')
 
-                if identity == 'STOP':
-                    # ignore
-                    return -1
+    for nick_name, work_node in work_nodes.items():
+      if work_node.output_nonfeedback_num == 0:
+        # is leaf
+        root_nodes_of_leaf = []
+        self._find_all_root(work_node, root_nodes_of_leaf)
+        for r in root_nodes_of_leaf:
+          r.input = (work_node.stop_shortcut, 'NORMAL')
 
-            if identity == 'STOP':
-                # for none root, return directly
-                self.send('', identity='STOP')
-                return 0
+  def _analyze_computing_resource(self):
+    # cpu number
+    self.nr_cpu = get_nr_cpu()
+    # gpu number
+    self.nr_gpu = get_nr_gpu()
+    for work in self.work_nodes:
+      work.set_computing_resource(self.nr_cpu, self.nr_gpu)
 
-        # using time stamp as running dump folder
-        now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
-        self.dump_dir = os.path.join(self.workspace, now_time)
-        while True:
-            index_offset = 0
-            if os.path.exists(self.dump_dir):
-                self.dump_dir = os.path.join(self.workspace, "%s-%d" % (now_time, index_offset))
-            else:
-                break
+    # computing resource locks
+    locks_pool = {}
+    self.work_acquired_locks = [None for _ in range(len(self.work_nodes))]
+    for work_i, work in enumerate(self.work_nodes):
+      if work.occupy != 'share':
+        resource_id = None
+        if work.cpu is not None:
+          resource_id = 'cpu:' + '-'.join([str(c) for c in work.cpu])
+        if work.gpu is not None:
+          if resource_id is None:
+            resource_id = 'gpu:' + '-'.join([str(g) for g in work.gpu])
+          else:
+            resource_id = resource_id + 'gpu:' + '-'.join([str(g) for g in work.gpu])
 
-        if not os.path.exists(self.dump_dir):
-            os.makedirs(self.dump_dir)
+        if resource_id is not None:
+          if resource_id not in locks_pool:
+            locks_pool[resource_id] = Lock()
 
-        # collect
-        index_offset = 0
-        for identity, info in zip(identity_list, info_list):
-            # prepare data
-            if type(info) != list:
-                info = [info]
-            # tranverse in info
-            for record in info:
-                if len(record) == 0:
-                    continue
-                if os.path.isfile(record):
-                    pos = record.rfind('/')
-                    file_name = record[pos+1:]
-                    if os.path.exists(os.path.join(self.dump_dir, file_name)):
-                        dot_p = file_name.rfind('.')
-                        pure_name = file_name if dot_p == -1 else file_name[:dot_p]
-                        pure_name = '%s%d'%(pure_name,index_offset)
-                        file_name = pure_name+file_name[dot_p:]
+        self.work_acquired_locks[work_i] = locks_pool[resource_id]
 
-                    shutil.copyfile(record, os.path.join(self.dump_dir, file_name))
-                else:
-                    for ff in os.listdir(record):
-                        if ff[0] == '.':
-                            continue
+  def start(self):
+    processes = [Process(target=lambda x, y: x.start(y),
+                         args=(self.work_nodes[i], self.work_acquired_locks[i]))
+                 for i in range(len(self.work_nodes))]
+    for p in processes:
+      p.start()
 
-                        if os.path.exists(os.path.join(self.dump_dir, ff)):
-                            ff = '%s%d' % (ff, index_offset)
+    for p in processes:
+      p.join()
 
-                        if os.path.isdir(os.path.join(info, ff)):
-                            shutil.copytree(os.path.join(info, ff), os.path.join(self.dump_dir, ff))
-                        elif os.path.isfile(os.path.join(info, ff)):
-                            shutil.copyfile(os.path.join(info, ff), os.path.join(self.dump_dir, ff))
 
-                index_offset += 1
-
-        # normally run
-        return 1
-
-    def waiting_and_run(self, acquired_lock=None):
-        while True:
-            if len(self._feedback_input) > 0:
-                if self.status == 'FEEDBACK-DONE' or not self.need_waiting_feedback or self._is_first:
-                    if (self.is_root and not self._is_first) or not self.is_root:
-                        # only listening non-feedback pipes
-                        identity_list = []
-                        info_list = []
-                        for input_pipe in self._input_pipes:
-                            if input_pipe.link_type == 'NORMAL':
-                                value = input_pipe.get()
-                                sender, identity, info = self._unwarp_value(value)
-                                identity_list.append(identity)
-                                info_list.append(info)
-
-                        flag = self._prepare_running_data(identity_list, info_list)
-                        if flag == 0:
-                            return
-                        elif flag == -1:
-                            continue
-                else:
-                    # only listening feedback pipes
-                    identity_list = []
-                    info_list = []
-                    for input_pipe in self._input_pipes:
-                        if input_pipe.link_type == 'FEEDBACK':
-                            value = input_pipe.get()
-                            sender, identity, info = self._unwarp_value(value)
-                            identity_list.append(identity)
-                            info_list.append(info)
-
-                    flag = self._prepare_running_data(identity_list, info_list)
-                    if flag == 0:
-                        return
-                    elif flag == -1:
-                        continue
-            else:
-                if (self.is_root and not self._is_first) or not self.is_root:
-                    identity_list = []
-                    info_list = []
-                    for input_pipe in self._input_pipes:
-                        value = input_pipe.get()
-                        sender, identity, info = self._unwarp_value(value)
-                        identity_list.append(identity)
-                        info_list.append(info)
-
-                    if 'FEEDBACK-DONE' in identity_list:
-                        is_continue_pass_next = False
-                        for id, identity in enumerate(identity_list):
-                            if identity == 'FEEDBACK-DONE' and self._input_pipes[id].nest.output_feedback_num == 0:
-                                # directly trigger next
-                                self.send('', 'FEEDBACK-DONE')
-                                is_continue_pass_next = True
-                                break
-                        if is_continue_pass_next:
-                            continue
-
-                    flag = self._prepare_running_data(identity_list, info_list)
-                    if flag == 0:
-                        return
-                    elif flag == -1:
-                        continue
-
-            if self.is_root and self._is_first:
-                now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
-                self.dump_dir = os.path.join(self.workspace, now_time)
-                if not os.path.exists(self.dump_dir):
-                    os.makedirs(self.dump_dir)
-
-            # run until accquiring computing resource
-            if acquired_lock is not None:
-                with acquired_lock:
-                    self.run()
-            else:
-                self.run()
-
-            #
-            self._is_first = False
+if __name__ == '__main__':
+    mm = WorkFlow(main_file='icnet_example.py',
+                  main_folder='/home/mi/antgo/code',
+                  dump_dir='/home/mi/antgo-workspace/test',
+                  data_factory='/home/mi/antgo/antgo-dataset',
+                  config_file='/home/mi/antgo-workspace/test/ant-compose-abca.yaml')
+    mm.start()

@@ -41,20 +41,19 @@ class Standard(Dataset):
       if self.rng:
         self.rng.shuffle(ids)
 
-	    # filter by ids
+      # filter by ids
       filter_ids = getattr(self, 'filter', None)
       if filter_ids is not None:
-				ids = [i for i in ids if i in filter_ids]
+        ids = [i for i in ids if i in filter_ids]
 
       for id in ids:
         data, label = self._record_reader.read(id, 'data', 'label')
         # filter by condition
         if type(label) == dict:
-	        if 'category' in label and \
-					        'category_id' in label:
-		        label = self.filter_by_condition(label)
-		        if label is None:
-			        continue
+          if 'category' in label and 'category_id' in label:
+            label = self.filter_by_condition(label)
+            if label is None:
+              continue
         yield [data, label]
 
   def split(self, split_params={}, split_method='holdout'):
