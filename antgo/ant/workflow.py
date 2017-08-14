@@ -24,7 +24,7 @@ from antgo.ant.work import *
 
 WorkNodes = {'Training': Training,
              'Inference': Inference,
-             'Evaluating':Evaluating,
+             'Evaluating': Evaluating,
              'DataSplit': DataSplit}
 
 
@@ -106,11 +106,6 @@ class WorkFlow(object):
 
   def _parse_work_flow(self):
     works_config = {}
-    # self._datasource = ""
-    # self._workspace = ""
-    # self._code_path = ""
-    # self._code_main_file = ""
-
     for k, v in self.config_content.items():
       if type(v) == dict:
         if 'type' in v and v['type'] != 'work':
@@ -129,14 +124,6 @@ class WorkFlow(object):
           v.pop('feedback-bind')
         work_config.config = v
         works_config[work_config.nick_name] = work_config
-        # elif k == 'datasource':
-        #     self._datasource = v
-        # elif k == 'workspace':
-        #     self._workspace = v
-        # elif k == 'code_path':
-        #     self._code_path = v
-        # elif k == 'code_main_file':
-        #     self._code_main_file = v
 
     # reset worknodes connections
     work_nodes = {}
