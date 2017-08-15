@@ -29,6 +29,10 @@ class Standard(Dataset):
     # fixed seed
     self.seed = time.time()
 
+  def close(self):
+    self._record_reader.close()
+    self._record_reader = None
+
   def data_pool(self):
     epoch = 0
     while True:

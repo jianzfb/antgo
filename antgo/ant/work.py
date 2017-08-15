@@ -263,91 +263,136 @@ class DataSplit(BaseWork):
                                     config_parameters=config_parameters,
                                     port=port)
 
+    # custom experiment
+    self.split_method = self.config_parameters['method']
+    self.split_params = self.config_parameters.get('params', {})
+
+    assert (self.split_method in ['holdout', 'repeated-holdout', 'bootstrap', 'kfold'])
+
+    self.dataset_name = self.config_parameters['dataset']['name']
+    self.dataset_params = self.config_parameters['dataset'].get('params', {})
+    self.dataset_train_or_test = self.config_parameters['dataset'].get('train_or_test', 'train')
+
+    self.need_waiting_feedback = True
+
+    self.trials = 0
+    if self.split_method == 'repeated-holdout':
+      self.repeated_times = self.split_params['number_repeats']
+    elif self.split_method == 'bootstrap':
+      self.bootstrap_counts = self.split_params['bootstrap_counts']
+    elif self.split_method == 'kfold':
+      self.kfold = self.split_params['kfold']
+
+
   def run(self, *args, **kwargs):
     # 0.step load model
     ctx = self.load()
+    if self.split_method == 'holdout':
+      if self.trials == 1:
+        self.send('', 'STOP')
+        return
 
-    # 1.step using custom experiment
-    split_method = self.config_parameters['method']
-    split_params = self.config_parameters.get('params', {})
+      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset = dataset_cls(self.dataset_train_or_test,
+                            os.path.join(self.data_factory, self.dataset_name),
+                            self.dataset_params)
 
-    assert(split_method in ['holdout', 'repeated-holdout', 'bootstrap', 'kfold'])
-
-    dataset_name = self.config_parameters['dataset']['name']
-    dataset_params = self.config_parameters['dataset'].get('params', {})
-    dataset_train_or_test = self.config_parameters['dataset'].get('train_or_test', 'train')
-
-    dataset_cls = ctx.dataset_factory(dataset_name)
-    dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
-
-    if split_method == 'holdout':
-      t, v = dataset.split(split_params, split_method)
+      t, v = dataset.split(self.split_params, self.split_method)
       dataset_config = copy.deepcopy(self.config_parameters)
       dataset_config['dataset']['split'] = {}
       dataset_config['dataset']['split']['train'] = t.ids
       dataset_config['dataset']['split']['test'] = v.ids
 
-      fp = open(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'w')
-      yaml.dump(dataset_config, fp)
-      fp.close()
+      with open(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'w') as fp:
+        yaml.dump(dataset_config, fp)
+
+
+      t.close()
+      v.close()
+      dataset.close()
+
+      self.trials += 1
 
       # task is done
       self.send(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'DONE')
-    elif split_method == 'repeated-holdout':
-      repeated_times = split_params['number_repeats']
-      for index in range(repeated_times):
-        t, v = dataset.split(split_params, split_method)
-        dataset_config = copy.deepcopy(self.config_parameters)
-        dataset_config['dataset']['split'] = {}
-        dataset_config['dataset']['split']['train'] = t.ids
-        dataset_config['dataset']['split']['test'] = v.ids
+    elif self.split_method == 'repeated-holdout':
+      if self.trials == self.repeated_times:
+        self.send('', 'STOP')
+        return
 
-        fp = open(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml'%index), 'w')
+      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset = dataset_cls(self.dataset_train_or_test,
+                            os.path.join(self.data_factory, self.dataset_name),
+                            self.dataset_params)
+
+      t, v = dataset.split(self.split_params, self.split_method)
+      dataset_config = copy.deepcopy(self.config_parameters)
+      dataset_config['dataset']['split'] = {}
+      dataset_config['dataset']['split']['train'] = t.ids
+      dataset_config['dataset']['split']['test'] = v.ids
+
+      with open(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml' % self.trials), 'w') as fp:
         yaml.dump(dataset_config, fp)
-        fp.close()
-        # trigger next task
-        self.send(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml'%index), 'CONTINUE')
 
-      # task is done
-      self.send('', 'DONE')
-    elif split_method == 'bootstrap':
-      bootstrap_counts = split_params['bootstrap_counts']
-      for index in range(bootstrap_counts):
-        t, v = dataset.split(split_params, split_method)
-        dataset_config = copy.deepcopy(self.config_parameters)
-        dataset_config['dataset']['split'] = {}
-        dataset_config['dataset']['split']['train'] = t.ids
-        dataset_config['dataset']['split']['test'] = v.ids
+      t.close()
+      v.close()
+      dataset.close()
 
-        fp = open(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml'%index), 'w')
+      self.trials += 1
+
+      # trigger next task
+      self.send(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml' % self.trials), 'DONE')
+    elif self.split_method == 'bootstrap':
+      if self.trials == self.bootstrap_counts:
+        self.send('', 'STOP')
+        return
+
+      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset = dataset_cls(self.dataset_train_or_test,
+                            os.path.join(self.data_factory, self.dataset_name),
+                            self.dataset_params)
+
+      t, v = dataset.split(self.split_params, self.split_method)
+      dataset_config = copy.deepcopy(self.config_parameters)
+      dataset_config['dataset']['split'] = {}
+      dataset_config['dataset']['split']['train'] = t.ids
+      dataset_config['dataset']['split']['test'] = v.ids
+
+      with open(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml' % self.trials), 'w') as fp:
         yaml.dump(dataset_config, fp)
-        fp.close()
 
-        # trigger next task
-        self.send(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml'%index), 'CONTINUE')
+      t.close()
+      v.close()
+      dataset.close()
 
-      # task is done
-      self.send('', 'DONE')
-      time.sleep(10000)
-    elif split_method == 'kfold':
-      kfold = split_params['kfold']
-      for k in range(kfold):
-        split_params['k'] = k
+      # trigger next task
+      self.send(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml' % self.trials), 'DONE')
+    elif self.split_method == 'kfold':
+      if self.trials == self.kfold:
+        self.send('', 'STOP')
+        return
 
-        t, v = dataset.split(split_params, split_method)
-        dataset_config = copy.deepcopy(self.config_parameters)
-        dataset_config['dataset']['split'] = {}
-        dataset_config['dataset']['split']['train'] = t.ids
-        dataset_config['dataset']['split']['test'] = v.ids
+      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset = dataset_cls(self.dataset_train_or_test,
+                            os.path.join(self.data_factory, self.dataset_name),
+                            self.dataset_params)
 
-        fp = open(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml'%k), 'w')
+      self.split_params['k'] = self.trials
+
+      t, v = dataset.split(self.split_params, self.split_method)
+      dataset_config = copy.deepcopy(self.config_parameters)
+      dataset_config['dataset']['split'] = {}
+      dataset_config['dataset']['split']['train'] = t.ids
+      dataset_config['dataset']['split']['test'] = v.ids
+
+      with open(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml' % self.trials), 'w') as fp:
         yaml.dump(dataset_config, fp)
-        fp.close()
 
-        # trigger next task
-        self.send(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml'%k), 'CONTINUE')
+      t.close()
+      v.close()
+      dataset.close()
 
-      # task is done
-      self.send('', 'DONE')
+      # trigger next task
+      self.send(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml' % self.trials), 'DONE')
     else:
         raise NotImplementedError()

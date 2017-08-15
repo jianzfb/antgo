@@ -91,7 +91,8 @@ class RecordReader(object):
 
   def close(self):
     global global_dbs
-    global_dbs.pop(self._record_path)
+    if self._record_path in global_dbs:
+      global_dbs.pop(self._record_path)
     self._db.close()
 
   def record_attrs(self):
