@@ -427,6 +427,8 @@ class COCO(Dataset):
         self.train_or_test = train_or_test
         self.data_type = None
 
+        self.build()
+
     def build(self):
         assert(self.annotation_type in ['Caption', 'PersonKeypoint', 'Instance'])
         assert(self.year in ["2014", "2015"])
@@ -628,13 +630,11 @@ class COCO(Dataset):
 
 class COCO2014(COCO):
     def __init__(self, train_or_test, dir=None, ext_params=None):
+        ext_params.update({'year': '2014', 'annotation': 'Instance'})
         super(COCO2014, self).__init__(train_or_test, dir, ext_params)
-        self.set_year('2014')
-        self.set_annotation_type('Instance')
 
 
 class COCO2015(COCO):
     def __init__(self, train_or_test, dir=None, ext_params=None):
+        ext_params.update({'year': '2014', 'annotation': 'Instance'})
         super(COCO2015, self).__init__(train_or_test, dir, ext_params)
-        self.set_year('2015')
-        self.set_annotation_type('Instance')

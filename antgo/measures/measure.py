@@ -149,11 +149,12 @@ def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'
 
   multi_statistics = {}
   # time
-  multi_statistics['time'] = {}
-  series_elapsed_time_mean = np.mean(series_elapsed_time)
-  series_elapsed_time_std = np.std(series_elapsed_time)
-  multi_statistics['time']['elapsed_time'] = series_elapsed_time_mean
-  multi_statistics['time']['elapsed_time_interval'] = series_elapsed_time_std
+  if len(series_elapsed_time) > 0:
+    multi_statistics['time'] = {}
+    series_elapsed_time_mean = np.mean(series_elapsed_time)
+    series_elapsed_time_std = np.std(series_elapsed_time)
+    multi_statistics['time']['elapsed_time'] = series_elapsed_time_mean
+    multi_statistics['time']['elapsed_time_interval'] = series_elapsed_time_std
 
   if len(series_elapsed_time_per_sample) > 0:
     series_elapsed_time_mean_per_sample = np.mean(series_elapsed_time_per_sample)
@@ -162,39 +163,40 @@ def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'
     multi_statistics['time']['elapsed_time_per_sample_interval'] = series_elapsed_time_std_per_sample
 
   # cpu
-  series_cpu_mean_usage_mean = np.mean(series_mem_max_usage)
-  series_cpu_mean_usage_std = np.std(series_mem_max_usage)
-  multi_statistics['cpu'] = {}
   if cpu_model is not None:
+    multi_statistics['cpu'] = {}
     multi_statistics['cpu']['cpu_model'] = cpu_model
-  multi_statistics['cpu']['cpu_mean_usage'] = series_cpu_mean_usage_mean
-  multi_statistics['cpu']['cpu_mean_usage_interval'] = series_cpu_mean_usage_std
 
-  series_cpu_median_usage_mean = np.mean(series_cpu_median_usage)
-  series_cpu_median_usage_std = np.std(series_cpu_median_usage)
-  multi_statistics['cpu']['cpu_median_usage'] = series_cpu_median_usage_mean
-  multi_statistics['cpu']['cpu_median_usage_interval'] = series_cpu_median_usage_std
+    series_cpu_mean_usage_mean = np.mean(series_cpu_mean_usage)
+    series_cpu_mean_usage_std = np.std(series_cpu_mean_usage)
+    multi_statistics['cpu']['cpu_mean_usage'] = series_cpu_mean_usage_mean
+    multi_statistics['cpu']['cpu_mean_usage_interval'] = series_cpu_mean_usage_std
 
-  series_cpu_max_usage_mean = np.mean(series_cpu_max_usage)
-  series_cpu_max_usage_std = np.std(series_cpu_max_usage)
-  multi_statistics['cpu']['cpu_max_usage'] = series_cpu_max_usage_mean
-  multi_statistics['cpu']['cpu_max_usage_interval'] = series_cpu_max_usage_std
+    series_cpu_median_usage_mean = np.mean(series_cpu_median_usage)
+    series_cpu_median_usage_std = np.std(series_cpu_median_usage)
+    multi_statistics['cpu']['cpu_median_usage'] = series_cpu_median_usage_mean
+    multi_statistics['cpu']['cpu_median_usage_interval'] = series_cpu_median_usage_std
 
-  # memory
-  series_mem_mean_usage_mean = np.mean(series_mem_mean_usage)
-  series_mem_mean_usage_std = np.std(series_mem_mean_usage)
-  multi_statistics['cpu']['mem_mean_usage'] = series_mem_mean_usage_mean
-  multi_statistics['cpu']['mem_mean_usage_interval'] = series_mem_mean_usage_std
+    series_cpu_max_usage_mean = np.mean(series_cpu_max_usage)
+    series_cpu_max_usage_std = np.std(series_cpu_max_usage)
+    multi_statistics['cpu']['cpu_max_usage'] = series_cpu_max_usage_mean
+    multi_statistics['cpu']['cpu_max_usage_interval'] = series_cpu_max_usage_std
 
-  series_mem_median_usage_mean = np.mean(series_mem_median_usage)
-  series_mem_median_usage_std = np.std(series_mem_median_usage)
-  multi_statistics['cpu']['mem_median_usage'] = series_mem_median_usage_mean
-  multi_statistics['cpu']['mem_median_usage_interval'] = series_mem_median_usage_std
+    # memory
+    series_mem_mean_usage_mean = np.mean(series_mem_mean_usage)
+    series_mem_mean_usage_std = np.std(series_mem_mean_usage)
+    multi_statistics['cpu']['mem_mean_usage'] = series_mem_mean_usage_mean
+    multi_statistics['cpu']['mem_mean_usage_interval'] = series_mem_mean_usage_std
 
-  series_mem_max_usage_mean = np.mean(series_mem_max_usage)
-  series_mem_max_usage_std = np.std(series_mem_max_usage)
-  multi_statistics['cpu']['mem_max_usage'] = series_mem_max_usage_mean
-  multi_statistics['cpu']['mem_max_usage_interval'] = series_mem_max_usage_std
+    series_mem_median_usage_mean = np.mean(series_mem_median_usage)
+    series_mem_median_usage_std = np.std(series_mem_median_usage)
+    multi_statistics['cpu']['mem_median_usage'] = series_mem_median_usage_mean
+    multi_statistics['cpu']['mem_median_usage_interval'] = series_mem_median_usage_std
+
+    series_mem_max_usage_mean = np.mean(series_mem_max_usage)
+    series_mem_max_usage_std = np.std(series_mem_max_usage)
+    multi_statistics['cpu']['mem_max_usage'] = series_mem_max_usage_mean
+    multi_statistics['cpu']['mem_max_usage_interval'] = series_mem_max_usage_std
 
   # measure
   for measure in series_measures:

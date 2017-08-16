@@ -13,6 +13,7 @@ import numpy as np
 import copy
 import time
 
+
 class Standard(Dataset):
   def __init__(self, train_or_test, dataset_dir=None, ext_params=None):
     dataset_name = dataset_dir.split('/')[-1]
@@ -65,7 +66,7 @@ class Standard(Dataset):
 
     category_ids = copy.copy(self.ids)
     if 'is_stratified' in split_params and split_params['is_stratified'] and \
-        (split_method == 'holdout' or split_method == 'repeated-holdout'):
+        split_method == 'repeated-holdout':
 
       # traverse dataset
       for id in self.ids:
@@ -74,6 +75,12 @@ class Standard(Dataset):
           category_ids[id] = label['category']
         else:
           category_ids[id] = 0 if random.random() > 0.5 else 1
+
+    if split_method == 'holdout':
+      train_dataset = Standard(self.train_or_test, self.dir, self.ext_params)
+      val_dataset = Standard('val', self.dir, self.ext_params)
+
+      return train_dataset, val_dataset
 
     if split_method == 'kfold':
       np.random.seed(np.int64(self.seed))

@@ -10,10 +10,12 @@ import getopt
 import yaml
 from antgo.ant.train import *
 from antgo.ant.deploy import *
+from antgo.ant.workflow import *
 from antgo.ant.challenge import *
 from antgo.utils import logger
 from antgo.ant import flags
 from antgo.config import *
+
 
 def _main_context(main_file, source_paths):
   # filter .py
@@ -32,7 +34,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT','') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "deploy"]
+_ant_support_commands = ["train", "challenge", "compose","deploy"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -85,21 +87,6 @@ def main():
     logger.error('must set data factory')
     sys.exit(-1)
 
-  # (optional) task config
-  task = FLAGS.task()
-  if task is not None:
-    task = os.path.join(task_factory, task)
-
-  # 3.step load ant context
-  ant_context = _main_context(main_file, main_folder)
-
-  # 4.step load model config
-  main_param = FLAGS.main_param()
-  if main_param is not None:
-    main_config_path = os.path.join(main_folder, main_param)
-    params = yaml.load(open(main_config_path, 'r'))
-    ant_context.params = params
-
   # client token
   token = FLAGS.token()
 
@@ -108,7 +95,35 @@ def main():
   if name is None:
     name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
 
-  # 5.step ant running
+  # 5.0 step custom workflow
+  if ant_cmd == 'compose':
+    # user custom workflow
+    work_flow = WorkFlow(name,
+                         token,
+                         yaml.load(open(os.path.join(main_folder, FLAGS.main_param()), 'r')),
+                         main_file,
+                         main_folder,
+                         dump_dir,
+                         data_factory)
+    work_flow.start()
+    return
+
+  # 5.1 step ant running
+  # 5.1.1 step what is task
+  task = FLAGS.task()
+  if task is not None:
+    task = os.path.join(task_factory, task)
+
+  # 5.1.2 step load ant context
+  ant_context = _main_context(main_file, main_folder)
+
+  # 5.1.3 step load model config
+  main_param = FLAGS.main_param()
+  if main_param is not None:
+    main_config_path = os.path.join(main_folder, main_param)
+    params = yaml.load(open(main_config_path, 'r'))
+    ant_context.params = params
+
   if ant_cmd == "train":
     running_process = AntRun(ant_context,
                              name,

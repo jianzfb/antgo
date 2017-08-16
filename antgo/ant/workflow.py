@@ -8,15 +8,7 @@ from __future__ import print_function
 import yaml
 import os
 import time
-import shutil
-from antgo.ant.basework import *
 from multiprocessing import Process, Lock
-from antgo.dataflow.common import *
-from antgo.dataflow.recorder import *
-from antgo.context import *
-from antgo.task.task import *
-from antgo.measures.measure import *
-from antgo.html.html import *
 from antgo.utils.cpu import *
 from antgo.utils.gpu import *
 from antgo.ant.work import *
@@ -29,8 +21,14 @@ WorkNodes = {'Training': Training,
 
 
 class WorkFlow(object):
-  def __init__(self, main_file, main_folder, dump_dir, data_factory, config_file):
-    self.config_content = yaml.load(open(config_file, 'r'))
+  def __init__(self, ant_name,
+               ant_token,
+               ant_workflow_config,
+               main_file,
+               main_folder,
+               dump_dir,
+               data_factory):
+    self.config_content = ant_workflow_config
     self.work_nodes = []
     self.work_acquired_locks = []
     self.nr_cpu = 0
@@ -39,6 +37,9 @@ class WorkFlow(object):
     self._main_folder = main_folder
     self._dump_dir = dump_dir
     self._data_factory = data_factory
+
+    self._ant_name = ant_name
+    self._ant_token = ant_token
 
     # parse work flow
     self._parse_work_flow()
@@ -135,7 +136,9 @@ class WorkFlow(object):
       work_node = WorkNodes[cf.name](name=cf.nick_name,
                                      config_parameters=cf.config,
                                      code_path=self._main_folder,
-                                     code_main_file=self._main_file)
+                                     code_main_file=self._main_file,
+                                     ant_name=self._ant_name,
+                                     ant_token=self._ant_token)
       work_node.workspace_base = self._dump_dir
       work_node.data_factory = self._data_factory
       work_nodes[cf.nick_name] = work_node
@@ -208,9 +211,13 @@ class WorkFlow(object):
 
 
 if __name__ == '__main__':
-    mm = WorkFlow(main_file='icnet_example.py',
+  # self.config_content =
+    config_content = yaml.load(open('/home/mi/antgo-workspace/test/ant-compose-abca.yaml', 'r'))
+    mm = WorkFlow(ant_name='ZJ',
+                  ant_token=None,
+                  ant_workflow_config=config_content,
+                  main_file='icnet_example.py',
                   main_folder='/home/mi/antgo/code',
                   dump_dir='/home/mi/antgo-workspace/test',
-                  data_factory='/home/mi/antgo/antgo-dataset',
-                  config_file='/home/mi/antgo-workspace/test/ant-compose-abca.yaml')
+                  data_factory='/home/mi/antgo/antgo-dataset')
     mm.start()

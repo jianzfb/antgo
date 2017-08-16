@@ -29,8 +29,10 @@ class PascalBase(Dataset):
     self._image_set = image_set
     self._devkit_path = dir
 
+    self.build()
+
   def build(self):
-    maybe_data_path = maybe_here_match_format(self._devkit_path,'VOC' + self._year)
+    maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
     # todo: download automatically
     assert maybe_data_path is not None
     self._data_path = os.path.join(maybe_data_path, 'VOC' + self._year)
@@ -39,23 +41,23 @@ class PascalBase(Dataset):
                      'aeroplane',
                      'bicycle',
                      'bird',
-                         'boat',
-                         'bottle',
-                         'bus',
-                         'car',
-                         'cat',
-                         'chair',
-                         'cow',
-                         'diningtable',
-                         'dog',
-                         'horse',
-                         'motorbike',
-                         'person',
-                         'pottedplant',
-                         'sheep',
-                         'sofa',
-                         'train',
-                         'tvmonitor')
+                     'boat',
+                     'bottle',
+                     'bus',
+                     'car',
+                     'cat',
+                     'chair',
+                     'cow',
+                     'diningtable',
+                     'dog',
+                     'horse',
+                     'motorbike',
+                     'person',
+                     'pottedplant',
+                     'sheep',
+                     'sofa',
+                     'train',
+                     'tvmonitor')
     self._num_classes = len(self._classes)
     self._class_to_ind = dict(zip(self._classes, range(self._num_classes)))
     self._image_ext = '.jpg'
@@ -69,8 +71,7 @@ class PascalBase(Dataset):
                    'rpn_file': None,
                    'min_size': 2}
 
-    assert os.path.exists(self._data_path), \
-      'Path does not exist: {}'.format(self._data_path)
+    assert os.path.exists(self._data_path), 'path does not exist: {}'.format(self._data_path)
     self.dataset_size = len(self._image_index)
 
   def size(self):
@@ -215,7 +216,6 @@ class Pascal2007(PascalBase):
     assert (self.train_or_test == 'train')
     assert (split_method == 'holdout')
     validation_pascal2007 = Pascal2007('val', self.dir)
-    validation_pascal2007.build()
 
     return self, validation_pascal2007
 
@@ -228,6 +228,5 @@ class Pascal2012(PascalBase):
     assert (self.train_or_test == 'train')
     assert (split_method == 'holdout')
     validation_pascal2012 = Pascal2012('val', self.dir)
-    validation_pascal2012.build()
 
     return self, validation_pascal2012

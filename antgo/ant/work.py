@@ -22,16 +22,22 @@ from antgo.utils.gpu import *
 
 
 class Training(BaseWork):
-  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+  def __init__(self, name, config_parameters, code_path, code_main_file,
+               port='',
+               ant_name=None,
+               ant_token=None):
     super(Training, self).__init__(name=name,
                                    code_path=code_path,
                                    code_main_file=code_main_file,
                                    config_parameters=config_parameters,
-                                   port=port)
+                                   port=port,
+                                   ant_name=ant_name,
+                                   ant_token=ant_token)
 
   def run(self, *args, **kwargs):
     # 0.step load context
-    ctx = self.load()
+    self.context = self.load_context()
+    self.stage = self.name
 
     # 1.step load config file
     loaded_training_config = self.load_config()
@@ -41,8 +47,8 @@ class Training(BaseWork):
     dataset_train_or_test = 'train'
     dataset_params = {}
     if 'dataset' in loaded_training_config:
-      dataset_name = loaded_training_config['dataset'].get('name', dataset_name)
-      dataset_params = loaded_training_config['dataset'].get('params', dataset_params)
+      dataset_name = loaded_training_config['dataset'].get('name', None)
+      dataset_params = loaded_training_config['dataset'].get('params', {})
 
       # how to split dataset as training dataset
       how_to_split = loaded_training_config['dataset'].get('split', {})
@@ -57,8 +63,8 @@ class Training(BaseWork):
             dataset_params['filter'] = how_to_split['train']
 
     model_parameters = copy.deepcopy(loaded_training_config)
-    if 'dataset' in model_parameters:
-      model_parameters.pop('dataset')
+    # if 'dataset' in model_parameters:
+    #   model_parameters.pop('dataset')
 
     if 'dataset' in self.config_parameters:
       dn = self.config_parameters['dataset'].get('name', None)
@@ -82,44 +88,51 @@ class Training(BaseWork):
 
     # update config file
     loaded_training_config.update(model_parameters)
-    loaded_training_config.update(
-        {'dataset': {'name': dataset_name, 'train_or_test': dataset_train_or_test, 'params': dataset_params}})
-    self.update_config(loaded_training_config)
+    # loaded_training_config.update(
+    #     {'dataset': {'name': dataset_name, 'train_or_test': dataset_train_or_test, 'params': dataset_params}})
+    self.save_config(loaded_training_config)
 
     # 2.step registry trigger
     if continue_condition is not None:
-      ctx.registry_trainer_callback(continue_condition['key'],
-                                    continue_condition['value'],
-                                    continue_condition['condition'],
-                                    self.notify_func)
+      self.context.registry_trainer_callback(continue_condition['key'],
+                                         continue_condition['value'],
+                                         continue_condition['condition'],
+                                         self.notify_func)
 
     # 3.step start running
-    ctx.params = model_parameters
+    self.context.params = model_parameters
     assert(dataset_name is not None)
-    dataset_cls = ctx.dataset_factory(dataset_name)
+    dataset_cls = self.context.dataset_factory(dataset_name)
     dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
-    ctx.call_training_process(dataset, self.dump_dir)
+    self.context.call_training_process(dataset, self.dump_dir)
+    dataset.close()
 
     # 4.step work is done
-    self.send(self.dump_dir, 'DONE')
-    ctx.wait_until_clear()
+    self.trigger(self.dump_dir, 'DONE')
+    self.context.wait_until_clear()
 
   def notify_func(self):
     # 1.step notify
-    self.send(self.dump_dir, 'CONTINUE')
+    self.trigger(self.dump_dir, 'CONTINUE')
 
 
 class Inference(BaseWork):
-  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+  def __init__(self, name, config_parameters, code_path, code_main_file,
+               port='',
+               ant_name=None,
+               ant_token=None):
     super(Inference, self).__init__(name=name,
                                     code_path=code_path,
                                     code_main_file=code_main_file,
                                     config_parameters=config_parameters,
-                                    port=port)
+                                    port=port,
+                                    ant_name=ant_name,
+                                    ant_token=ant_token)
 
   def run(self, *args, **kwargs):
     # 0.step load ctx
-    ctx = self.load()
+    self.context = self.load_context()
+    self.stage = self.name
 
     # 1.step load config file
     dataset_name = None
@@ -141,14 +154,14 @@ class Inference(BaseWork):
               # dataset flag (train)
               dataset_train_or_test = how_to_split['test']
             else:
-              assert (how_to_split['test'] == list)
+              assert (type(how_to_split['test']) == list)
               # id list
               dataset_params['filter'] = how_to_split['test']
-              dataset_train_or_test = loaded_infer_config['dataset']['train_or_test']
+              dataset_train_or_test = 'train'
 
       model_parameters = copy.deepcopy(loaded_infer_config)
-      if 'dataset' in model_parameters:
-        model_parameters.pop('dataset')
+      # if 'dataset' in model_parameters:
+      #   model_parameters.pop('dataset')
 
     # custom config
     if 'dataset' in self.config_parameters:
@@ -166,43 +179,53 @@ class Inference(BaseWork):
 
     # update config file
     loaded_infer_config.update(model_parameters)
-    loaded_infer_config.update(
-        {'dataset': {'name': dataset_name, 'train_or_test': dataset_train_or_test, 'params': dataset_params}})
+    # loaded_infer_config.update(
+    #     {'dataset': {'name': dataset_name, 'train_or_test': dataset_train_or_test, 'params': dataset_params}})
 
     assert(dataset_name is not None)
-    self.update_config(loaded_infer_config)
+    self.save_config(loaded_infer_config)
 
     # 2.step start running
-    ctx.params = model_parameters
-    dataset_cls = ctx.dataset_factory(dataset_name)
+    self.context.params = model_parameters
+    dataset_cls = self.context.dataset_factory(dataset_name)
     dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
 
     data_annotation_branch = DataAnnotationBranch(Node.inputs(dataset))
-    ctx.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-    ctx.call_infer_process(data_annotation_branch.output(0), self.dump_dir)
-    ctx.recorder.close()
+    self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+    self.context.call_infer_process(data_annotation_branch.output(0), self.dump_dir)
+    self.context.recorder.close()
+    dataset.close()
 
     # work is done
-    self.send(os.path.join(self.dump_dir), 'DONE')
-    ctx.wait_until_clear()
+    self.trigger(os.path.join(self.dump_dir), 'DONE')
+    self.context.wait_until_clear()
 
 
 class Evaluating(BaseWork):
-  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+  def __init__(self, name, config_parameters, code_path, code_main_file,
+               port='',
+               ant_name=None,
+               ant_token=None):
     super(Evaluating, self).__init__(name=name,
                                      code_path=code_path,
                                      code_main_file=code_main_file,
                                      config_parameters=config_parameters,
-                                     port=port)
+                                     port=port,
+                                     ant_name=ant_name,
+                                     ant_token=ant_token)
 
   def run(self, *args, **kwargs):
+    # 0.step load context
+    self.context = self.load_context()
+    self.stage = self.name
+
     assert('task' in self.config_parameters)
     assert('type' in self.config_parameters['task'])
     class_label = []
     if 'class_label' in self.config_parameters['task']:
       class_label = self.config_parameters['task']['class_label']
 
-    method = ''
+    method = 'repeated-holdout'
     if 'method' in self.config_parameters:
       method = self.config_parameters['method']
 
@@ -239,7 +262,7 @@ class Evaluating(BaseWork):
         task_running_statictic[self.name] = {}
 
         evaluation_measure_result = []
-        record_reader = RecordReader(self.dump_dir)
+        record_reader = RecordReader(experiment_folder)
         for measure in dummy_ant_task.evaluation_measures:
           if measure.name in self.config_parameters['measure']:
             record_generator = record_reader.iterate_read('predict', 'groundtruth')
@@ -252,16 +275,22 @@ class Evaluating(BaseWork):
       # evaluation report
       everything_to_html(evaluation_result, self.dump_dir)
 
-    self.send('', 'DONE')
+    self.trigger('', 'DONE')
+    self.context.wait_until_clear()
 
 
 class DataSplit(BaseWork):
-  def __init__(self, name, config_parameters, code_path, code_main_file, port=''):
+  def __init__(self, name, config_parameters, code_path, code_main_file,
+               port='',
+               ant_name=None,
+               ant_token=None):
     super(DataSplit, self).__init__(name=name,
                                     code_path=code_path,
                                     code_main_file=code_main_file,
                                     config_parameters=config_parameters,
-                                    port=port)
+                                    port=port,
+                                    ant_name=ant_name,
+                                    ant_token=ant_token)
 
     # custom experiment
     self.split_method = self.config_parameters['method']
@@ -283,16 +312,18 @@ class DataSplit(BaseWork):
     elif self.split_method == 'kfold':
       self.kfold = self.split_params['kfold']
 
-
   def run(self, *args, **kwargs):
+    if self.context is None:
+      self.context = self.load_context()
+      self.stage = self.name
+
     # 0.step load model
-    ctx = self.load()
     if self.split_method == 'holdout':
       if self.trials == 1:
-        self.send('', 'STOP')
+        self.trigger('', 'FEEDBACK-DONE')
         return
 
-      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset_cls = self.context.dataset_factory(self.dataset_name)
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
@@ -306,21 +337,19 @@ class DataSplit(BaseWork):
       with open(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'w') as fp:
         yaml.dump(dataset_config, fp)
 
-
       t.close()
       v.close()
       dataset.close()
 
       self.trials += 1
-
       # task is done
-      self.send(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'DONE')
+      self.trigger(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'DONE')
     elif self.split_method == 'repeated-holdout':
       if self.trials == self.repeated_times:
-        self.send('', 'STOP')
+        self.trigger('', 'FEEDBACK-DONE')
         return
 
-      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset_cls = self.context.dataset_factory(self.dataset_name)
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
@@ -339,15 +368,14 @@ class DataSplit(BaseWork):
       dataset.close()
 
       self.trials += 1
-
       # trigger next task
-      self.send(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml' % self.trials), 'DONE')
+      self.trigger(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml' % (self.trials - 1)), 'DONE')
     elif self.split_method == 'bootstrap':
       if self.trials == self.bootstrap_counts:
-        self.send('', 'STOP')
+        self.trigger('', 'FEEDBACK-DONE')
         return
 
-      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset_cls = self.context.dataset_factory(self.dataset_name)
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
@@ -365,14 +393,15 @@ class DataSplit(BaseWork):
       v.close()
       dataset.close()
 
+      self.trials += 1
       # trigger next task
-      self.send(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml' % self.trials), 'DONE')
+      self.trigger(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml' % (self.trials - 1)), 'DONE')
     elif self.split_method == 'kfold':
       if self.trials == self.kfold:
-        self.send('', 'STOP')
+        self.trigger('', 'FEEDBACK-DONE')
         return
 
-      dataset_cls = ctx.dataset_factory(self.dataset_name)
+      dataset_cls = self.context.dataset_factory(self.dataset_name)
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
@@ -392,7 +421,8 @@ class DataSplit(BaseWork):
       v.close()
       dataset.close()
 
+      self.trials += 1
       # trigger next task
-      self.send(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml' % self.trials), 'DONE')
+      self.trigger(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml' % (self.trials - 1)), 'DONE')
     else:
         raise NotImplementedError()

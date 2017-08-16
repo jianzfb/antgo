@@ -21,7 +21,7 @@ class AntRun(AntBase):
                  ant_dump_dir,
                  ant_token,
                  ant_task_config):
-        super(AntRun, self).__init__(ant_name, ant_context,ant_token)
+        super(AntRun, self).__init__(ant_name, ant_context, ant_token)
         self.ant_data_source = ant_data_folder
         self.ant_dump_dir = ant_dump_dir
         self.ant_context.ant = self
