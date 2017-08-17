@@ -122,7 +122,7 @@ Example
     # --task=yourtask.xml config your challenge task
 
 
-3. Custom Train Explore Task::
+3. Custom Explore Task::
 
     (1) like 'Train' or 'Challenge' task, build running main file
         ...
