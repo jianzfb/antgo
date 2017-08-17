@@ -1,7 +1,7 @@
 # encoding=utf-8
 # @Time    : 17-6-22
 # @File    : train.py
-# Author   : jian<jian@mltalker.com>
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 
