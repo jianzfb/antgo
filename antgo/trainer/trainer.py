@@ -13,13 +13,10 @@ from antgo.context import *
 trainer_default_context = {'progress_step': 10,
                            'batch_size': 256,
                            'max_epochs': 100,
-                           'decay_rate': 1,
-                           'decay_steps': 1,
-                           'staircase': False,
-                           'lr': 0.0001,
+                           'learning_rate': 0.01,
                            'iter': 0,
                            'pre_trained_model': None,
-                           'optimization': None,
+                           'optimizer': None,
                            'snapshot_prefix': 'alpha',
                            'snapshot_infix': 'train'}
 
@@ -99,7 +96,7 @@ class ModelDesc(object):
     return self.model_name
 
   @abstractmethod
-  def build(self, is_training=True):
+  def build(self, is_training=True, *args, **kwargs):
     '''
     :return: 
     '''

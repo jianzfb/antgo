@@ -118,6 +118,7 @@ class AntRun(AntBase):
             os.makedirs(dump_dir)
 
         # 2.step training model
+        self.stage = 'EVALUATION-HOLDOUTTRAIN'
         self.context.call_training_process(part_train_dataset, dump_dir)
 
         # 3.step evaluation measures
@@ -128,6 +129,7 @@ class AntRun(AntBase):
         # if not os.path.exists(infer_dump_dir):
         #     os.makedirs(infer_dump_dir)
 
+        self.stage = 'EVALUATION-HOLDOUTEVALUATION'
         with running_statistic(self.ant_name):
             self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
         self.context.recorder.close()
@@ -165,6 +167,7 @@ class AntRun(AntBase):
                 os.makedirs(dump_dir)
 
             # 2.step training model
+            self.stage = 'EVALUATION-REPEATEDHOLDOUTTRAIN-%d' % repeat
             self.context.call_training_process(part_train_dataset, dump_dir)
             if self.context.recorder:
                 self.context.recorder.close()
@@ -177,6 +180,7 @@ class AntRun(AntBase):
             # if not os.path.exists(infer_dump_dir):
             #     os.makedirs(infer_dump_dir)
 
+            self.stage = 'EVALUATION-REPEATEDHOLDOUTEVALUATION-%d' % repeat
             with running_statistic(self.ant_name):
                 self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
@@ -218,6 +222,7 @@ class AntRun(AntBase):
                 os.makedirs(dump_dir)
 
             # 2.step training model
+            self.stage = 'EVALUATION-BOOTSTRAPTRAIN-%d' % bootstrap_i
             self.context.call_training_process(part_train_dataset, dump_dir)
             if self.context.recorder:
                 self.context.recorder.close()
@@ -230,6 +235,7 @@ class AntRun(AntBase):
             # if not os.path.exists(infer_dump_dir):
             #     os.makedirs(infer_dump_dir)
 
+            self.stage = 'EVALUATION-BOOTSTRAPEVALUATION-%d' % bootstrap_i
             with running_statistic(self.ant_name):
                 self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
@@ -273,6 +279,7 @@ class AntRun(AntBase):
                 os.makedirs(dump_dir)
 
             # 2.step training model
+            self.stage = 'EVALUATION-KFOLDTRAIN-%d' % k
             self.context.call_training_process(part_train_dataset, dump_dir)
             if self.context.recorder:
                 self.context.recorder.close()
@@ -285,6 +292,7 @@ class AntRun(AntBase):
             # if not os.path.exists(infer_dump_dir):
             #     os.makedirs(infer_dump_dir)
 
+            self.stage = 'EVALUATION-KFOLDEVALUATION-%d' % k
             with running_statistic(self.ant_name):
                 self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 

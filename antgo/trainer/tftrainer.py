@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # Time: 8/15/17
-# File: generate.py
+# File: tftrainer.py
 # Author: jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -10,70 +10,11 @@ import os
 import re
 import functools
 from antgo.trainer.trainer import *
-from antgo.trainer import tf_model_deploy
+from antgo.trainer import tfmodel_deploy
 from antgo.utils import logger
 import numpy as np
 slim = tf.contrib.slim
 
-# def average_gradients(tower_grads):
-#     """Calculate the average gradient for each shared variable across all towers.
-#     Note that this function provides a synchronization point across all towers.
-#     Args:
-#     tower_grads: List of lists of (gradient, variable) tuples. The outer list
-#       is over individual gradients. The inner list is over the gradient
-#       calculation for each tower.
-#     Returns:
-#      List of pairs of (gradient, variable) where the gradient has been averaged
-#      across all towers.
-#     """
-#     average_grads = []
-#     for grad_and_vars in zip(*tower_grads):
-#         # Note that each grad_and_vars looks like the following:
-#         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
-#         grads = []
-#         for g, _ in grad_and_vars:
-#           # Add 0 dimension to the gradients to represent the tower.
-#           expanded_g = tf.expand_dims(g, 0)
-#
-#           # Append on a 'tower' dimension which we will average over below.
-#           grads.append(expanded_g)
-#
-#         # Average over the 'tower' dimension.
-#         grad = tf.concat(grads,0)
-#         grad = tf.reduce_mean(grad, 0)
-#
-#         # Keep in mind that the Variables are redundant because they are shared
-#         # across towers. So .. we will just return the first tower's pointer to
-#         # the Variable.
-#         v = grad_and_vars[0][1]
-#         grad_and_var = (grad, v)
-#         average_grads.append(grad_and_var)
-#     return average_grads
-
-
-# def _optimization_op(optimization_config,lr):
-#     optimization_method = optimization_config['method']
-#     if optimization_method == 'RMS':
-#         decay = optimization_config.get('decay',0.9)
-#         momentum = optimization_config.get('momentum',0.0)
-#         epsilon = optimization_config.get('epsilon',1e-10)
-#         optimizer = tf.train.RMSPropOptimizer(learning_rate=lr,decay=decay,momentum=momentum,epsilon=epsilon)
-#         return optimizer
-#     elif optimization_method == 'RSD':
-#         optimizer = tf.train.GradientDescentOptimizer(lr)
-#         return optimizer
-#     elif optimization_method == 'Adam':
-#         beta1 = optimization_config.get('beta1',0.9)
-#         beta2 = optimization_config.get('beta2',0.999)
-#         epsilon = optimization_config.get('epsilon',1e-8)
-#         optimizer = tf.train.AdamOptimizer(learning_rate=lr,beta1=beta1,beta2=beta2,epsilon=epsilon)
-#         return optimizer
-#     elif optimization_method == 'Momentum':
-#         momentum = optimization_config.get('momentum', 0.0)
-#         optimizer = tf.train.MomentumOptimizer(lr,momentum)
-#         return optimizer
-#     else:
-#         return tf.train.GradientDescentOptimizer(lr)
 
 def _configure_optimizer(optimization_config, learning_rate):
   """Configures the optimizer used for training.
@@ -303,21 +244,21 @@ class TFTrainer(Trainer):
 
   def training_deploy(self, model):
     with tf.Graph().as_default() as graph:
+      # Default graph
       self.graph = graph
-      # session
+      # Session
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
 
       #######################
-      # Config model_deploy #
+      # Config model deploy #
       #######################
-      deploy_config = tf_model_deploy.DeploymentConfig(
-        num_clones=getattr(self, 'num_clones', 1),
-        clone_on_cpu=getattr(self, 'clone_on_cpu', False),
-        replica_id=getattr(self, 'replica_id', 0),
-        num_replicas=getattr(self, 'worker_replicas', 1),
-        num_ps_tasks=getattr(self, 'num_ps_tasks', 0))
+      deploy_config = tfmodel_deploy.DeploymentConfig(num_clones=getattr(self, 'num_clones', 1),
+                                                      clone_on_cpu=getattr(self, 'clone_on_cpu', False),
+                                                      replica_id=getattr(self, 'replica_id', 0),
+                                                      num_replicas=getattr(self, 'worker_replicas', 1),
+                                                      num_ps_tasks=getattr(self, 'num_ps_tasks', 0))
 
       # Create global_step
       with tf.device(deploy_config.variables_device()):
@@ -329,13 +270,14 @@ class TFTrainer(Trainer):
         arg_scope = model.arg_scope()
         if arg_scope is not None:
           with slim.arg_scope(arg_scope):
-            return func(is_training=self.is_training)
+            return func(is_training=self.is_training, *args, **kwargs)
         else:
-          return func(is_training=self.is_training)
+          return func(is_training=self.is_training, *args, **kwargs)
 
-      # create clone
-      clones = tf_model_deploy.create_clones(deploy_config, network_fn)
-      self.clonse = clones
+      #######################
+      # Create model clones #
+      #######################
+      self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
       first_clone_scope = deploy_config.clone_scope(0)
       update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
 
@@ -349,12 +291,10 @@ class TFTrainer(Trainer):
 
       # Variables to train.
       variables_to_train = _get_variables_to_train(self)
-      # Training saver
-      self.saver = tf.train.Saver(var_list=variables_to_train, max_to_keep=2)
 
-      # train_tensor
-      total_loss, clones_gradients = tf_model_deploy.optimize_clones(
-        clones,
+      # Train_tensor
+      total_loss, clones_gradients = tfmodel_deploy.optimize_clones(
+        self.clones,
         optimizer,
         var_list=variables_to_train)
 
@@ -362,26 +302,31 @@ class TFTrainer(Trainer):
       grad_updates = optimizer.apply_gradients(clones_gradients,
         global_step=global_step)
 
+      # Value ops
       update_ops.append(grad_updates)
       update_op = tf.group(*update_ops)
       with tf.control_dependencies([update_op]):
         self.val_ops = tf.identity(total_loss, name='train_op')
 
-      if type(clones[0].outputs) == list:
-        self.val_ops.extend(clones[0].outputs)
+      if type(self.clones[0].outputs) == list:
+        self.val_ops.extend(self.clones[0].outputs)
       else:
-        self.val_ops.append(clones[0].outputs)
+        self.val_ops.append(self.clones[0].outputs)
 
-      # global initialization
+      # Training saver
+      self.saver = tf.train.Saver(var_list=variables_to_train, max_to_keep=2)
+
+      # Global initialization
       self.sess.run(tf.global_variables_initializer())
 
-      # restore from checkpoint
+      # Restore from checkpoint
       _get_init_fn(self, self.dump_dir)
 
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
+      # Default graph
       self.graph = graph
-      # session
+      # Session
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
@@ -389,26 +334,37 @@ class TFTrainer(Trainer):
       #######################
       # Config model_deploy #
       #######################
-      deploy_config = tf_model_deploy.DeploymentConfig(num_clones=1,
-                                                       clone_on_cpu=getattr(self, 'clone_on_cpu', False),
-                                                       replica_id=0,
-                                                       num_replicas=1,
-                                                       num_ps_tasks=0)
+      deploy_config = tfmodel_deploy.DeploymentConfig(num_clones=1,
+                                                      clone_on_cpu=getattr(self, 'clone_on_cpu', False),
+                                                      replica_id=0,
+                                                      num_replicas=1,
+                                                      num_ps_tasks=0)
 
-      # create clone
-      clones = tf_model_deploy.create_clones(deploy_config, model.build)
-      self.clones = clones
+      func = model.build
+      @functools.wraps(func)
+      def network_fn(*args, **kwargs):
+        arg_scope = model.arg_scope()
+        if arg_scope is not None:
+          with slim.arg_scope(arg_scope):
+            return func(is_training=self.is_training, *args, **kwargs)
+        else:
+          return func(is_training=self.is_training, *args, **kwargs)
+
+      #######################
+      # Create model clones #
+      #######################
+      self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
 
       # Variables to train.
       variables_to_train = _get_variables_to_train(self)
       # Training saver
-      self.saver = tf.train.Saver(var_list=variables_to_train, max_to_keep=2)
+      self.saver = tf.train.Saver(var_list=variables_to_train)
 
-      # restore from checkpoint
+      # Restore from checkpoint
       lastest_model_file = self.where_latest_model()
       self.saver.restore(self.sess, lastest_model_file)
 
-      self.val_ops = clones[0].outputs
+      self.val_ops = self.clones[0].outputs
       if type(self.val_ops) != list:
         self.val_ops = [self.val_ops]
 
