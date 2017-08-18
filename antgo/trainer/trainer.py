@@ -9,26 +9,63 @@ import tensorflow as tf
 import re
 from abc import ABCMeta, abstractmethod
 from antgo.context import *
+import collections
 
-trainer_default_context = {'progress_step': 10,
-                           'batch_size': 256,
-                           'max_epochs': 100,
-                           'learning_rate': 0.01,
-                           'iter': 0,
-                           'pre_trained_model': None,
-                           'optimizer': None,
-                           'snapshot_prefix': 'alpha',
-                           'snapshot_infix': 'train'}
+
+class DefaultParam(collections.namedtuple('Param', ['name', 'value', 'help'])):
+  '''
+  '''
+
+trainer_default_params = [
+  DefaultParam('batch_size', 1, 'The number of samples in each batch.'),
+  DefaultParam('max_epochs', 100, ''),
+  DefaultParam('num_samples', 1000, ''),
+  DefaultParam('snapshot_prefix', 'alpha', ''),
+  DefaultParam('snapshot_infix', 'train', ''),
+  DefaultParam('num_clones', 1, 'Number of model clones to deploy'),
+  DefaultParam('clone_on_cpu', False, 'Use CPUs to deploy clones'),
+  DefaultParam('worker_replicas', 1, 'Number of worker replicas'),
+  DefaultParam('num_ps_tasks', 0, 'The number of parameter servers. If the value is 0, then the parameters are handled locally by the worker.'),
+  DefaultParam('log_every_n_steps', 1, 'The frequency with which logs are print'),
+  DefaultParam('task', 0, 'Task id of the replica running the training.'),
+  DefaultParam('weight_decay', 0.00004, 'The weight decay on the model weights.'),
+  DefaultParam('optimizer', 'rmsprop', 'The name of the optimizer, one of "adadelta", "adagrad", "adam", "ftrl", "momentum", "sgd" or "rmsprop".'),
+  DefaultParam('adadelta_rho', 0.95, 'The decay rate for adadelta.'),
+  DefaultParam('adagrad_initial_accumulator_value', 0.1, 'Starting value for the AdaGrad accumulators'),
+  DefaultParam('adam_beta1', 0.9, 'The exponential decay rate for the 1st moment estimates.'),
+  DefaultParam('adam_beta2', 0.999, 'The exponential decay rate for the 2nd moment estimates'),
+  DefaultParam('opt_epsilon', 1.0, 'Epsilon term for the optimizer.'),
+  DefaultParam('ftrl_learning_rate_power', -0.5, 'The learning rate power.'),
+  DefaultParam('ftrl_initial_accumulator_value', 0.1, 'Starting value for the FTRL accumulators.'),
+  DefaultParam('ftrl_l1', 0.0, 'The FTRL l1 regularization strength'),
+  DefaultParam('ftrl_l2', 0.0, 'The FTRL l2 regularization strength.'),
+  DefaultParam('momentum', 0.9, 'The momentum for the MomentumOptimizer and RMSPropOptimizer.'),
+  DefaultParam('rmsprop_momentum', 0.9, 'Momentum'),
+  DefaultParam('rmsprop_decay', 0.9, 'Decay term for RMSProp.'),
+  DefaultParam('learning_rate_decay_type', 'polynomial', 'Specifies how the learning rate is decayed. One of "fixed", "exponential", or "polynomial"'),
+  DefaultParam('learning_rate', 0.01, 'Initial learning rate'),
+  DefaultParam('end_learning_rate', 0.0001, 'The minimal end learning rate used by a polynomial decay learning rate'),
+  DefaultParam('label_smoothing', 0.0, 'The amount of label smoothing'),
+  DefaultParam('learning_rate_decay_factor', 0.94, 'Learning rate decay factor'),
+  DefaultParam('num_epochs_per_decay', 20, 'Number of epochs after which learning rate decays.'),
+  DefaultParam('sync_replicas', False, 'Whether or not to synchronize the replicas during training.'),
+  DefaultParam('replicas_to_aggregate', 1, 'The Number of gradients to collect before updating params.'),
+  DefaultParam('moving_average_decay', None, 'The decay to use for the moving average.'),
+]
 
 
 class Trainer(object):
     def __init__(self, trainer_context=None, is_training=True):
         # 1.step config trainer context
-        for k, v in trainer_default_context.items():
-            if trainer_context is not None:
-                setattr(self, k, getattr(trainer_context, k, v))
-            else:
-                setattr(self, k, v)
+        for param in trainer_default_params:
+          k = param.name
+          v = param.value
+          if trainer_context is not None:
+              setattr(self, k, getattr(trainer_context, k, v))
+          else:
+              setattr(self, k, v)
+
+        self._trainer_context = trainer_context
 
         # 3.step other
         self.iter = 0
@@ -80,26 +117,33 @@ class Trainer(object):
 class ModelDesc(object):
   __metaclass__ = ABCMeta
 
-  def __init__(self, model_context=None, model_name=None):
+  def __init__(self, model_name=None):
     if model_name is not None:
       self.model_name = model_name
     else:
       self.model_name = self.__class__.__name__
 
-    if model_context is not None:
-      for k in dir(model_context):
-        if not k.startswith('__'):
-          setattr(self, k, getattr(model_context, k, None))
+    self._ctx = None
 
   @property
   def name(self):
     return self.model_name
 
+  @property
+  def ctx(self):
+    return self._ctx
+  @ctx.setter
+  def ctx(self, val):
+    self._ctx = val
+    for k in dir(self._ctx):
+      if not k.startswith('__'):
+        setattr(self, k, getattr(self._ctx, k, None))
+
   @abstractmethod
-  def build(self, is_training=True, *args, **kwargs):
+  def model_fn(self, is_training=True, *args, **kwargs):
     '''
     :return: 
     '''
 
-  def arg_scope(self):
+  def arg_scope_fn(self):
     return None

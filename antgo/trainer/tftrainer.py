@@ -16,7 +16,7 @@ import numpy as np
 slim = tf.contrib.slim
 
 
-def _configure_optimizer(optimization_config, learning_rate):
+def _configure_optimizer(trianer_obj, learning_rate):
   """Configures the optimizer used for training.
 
   Args:
@@ -28,43 +28,43 @@ def _configure_optimizer(optimization_config, learning_rate):
   Raises:
     ValueError: if optimizer is not recognized.
   """
-  if optimization_config['optimizer'] == 'adadelta':
+  if trianer_obj.optimizer == 'adadelta':
     optimizer = tf.train.AdadeltaOptimizer(
         learning_rate,
-        rho=optimization_config['adadelta_rho'],
-        epsilon=optimization_config['opt_epsilon'])
-  elif optimization_config['optimizer'] == 'adagrad':
+        rho=trianer_obj.adadelta_rho,
+        epsilon=trianer_obj.opt_epsilon)
+  elif trianer_obj.optimizer == 'adagrad':
     optimizer = tf.train.AdagradOptimizer(
         learning_rate,
-        initial_accumulator_value=optimization_config['adagrad_initial_accumulator_value'])
-  elif optimization_config['optimizer'] == 'adam':
+        initial_accumulator_value=trianer_obj.adagrad_initial_accumulator_value)
+  elif trianer_obj.optimizer == 'adam':
     optimizer = tf.train.AdamOptimizer(
         learning_rate,
-        beta1=optimization_config['adam_beta1'],
-        beta2=optimization_config['adam_beta2'],
-        epsilon=optimization_config['opt_epsilon'])
-  elif optimization_config['optimizer'] == 'ftrl':
+        beta1=trianer_obj.adam_beta1,
+        beta2=trianer_obj.adam_beta2,
+        epsilon=trianer_obj.opt_epsilon)
+  elif trianer_obj.optimizer == 'ftrl':
     optimizer = tf.train.FtrlOptimizer(
         learning_rate,
-        learning_rate_power=optimization_config['ftrl_learning_rate_power'],
-        initial_accumulator_value=optimization_config['ftrl_initial_accumulator_value'],
-        l1_regularization_strength=optimization_config['ftrl_l1'],
-        l2_regularization_strength=optimization_config['ftrl_l2'])
-  elif optimization_config['optimizer'] == 'momentum':
+        learning_rate_power=trianer_obj.ftrl_learning_rate_power,
+        initial_accumulator_value=trianer_obj.ftrl_initial_accumulator_value,
+        l1_regularization_strength=trianer_obj.ftrl_l1,
+        l2_regularization_strength=trianer_obj.ftrl_l2)
+  elif trianer_obj.optimizer == 'momentum':
     optimizer = tf.train.MomentumOptimizer(
         learning_rate,
-        momentum=optimization_config['momentum'],
+        momentum=trianer_obj.momentum,
         name='Momentum')
-  elif optimization_config['optimizer'] == 'rmsprop':
+  elif trianer_obj.optimizer == 'rmsprop':
     optimizer = tf.train.RMSPropOptimizer(
         learning_rate,
-        decay=optimization_config['rmsprop_decay'],
-        momentum=optimization_config['rmsprop_momentum'],
-        epsilon=optimization_config['opt_epsilon'])
-  elif optimization_config['optimizer'] == 'sgd':
+        decay=trianer_obj.rmsprop_decay,
+        momentum=trianer_obj.rmsprop_momentum,
+        epsilon=trianer_obj.opt_epsilon)
+  elif trianer_obj.optimizer == 'sgd':
     optimizer = tf.train.GradientDescentOptimizer(learning_rate)
   else:
-    raise ValueError('Optimizer [%s] was not recognized', optimization_config['optimizer'])
+    raise ValueError('Optimizer [%s] was not recognized', trianer_obj.optimizer)
   return optimizer
 
 
@@ -85,8 +85,8 @@ def _configure_learning_rate(trainer_obj, num_samples_per_epoch, global_step):
   num_epochs_per_decay = getattr(trainer_obj, 'num_epochs_per_decay', 10)
   decay_steps = int(num_samples_per_epoch / batch_size * num_epochs_per_decay)
 
-  sync_replicas = getattr(trainer_obj, 'sync_replicas', None)
-  if sync_replicas is not None:
+  sync_replicas = getattr(trainer_obj, 'sync_replicas', False)
+  if sync_replicas:
     replicas_to_aggregate = getattr(trainer_obj, 'replicas_to_aggregate', 1)
     decay_steps /= replicas_to_aggregate
 
@@ -189,6 +189,7 @@ class TFTrainer(Trainer):
     self.sess = None
     self.graph = None
     self.clones = None
+    self.lr = None
 
   # 2.step run model once
   def run(self, data_generator, binds):
@@ -200,15 +201,25 @@ class TFTrainer(Trainer):
         data = next(data_generator)
 
         for k, v in binds.items():
-          placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format(clone.scope.name, k))
+          placeholder_tensor = self.graph.get_tensor_by_name('{}{}:0'.format(clone.scope, k))
           feed_dict[placeholder_tensor] = data[v]
 
-      # modify running info
+      # increment
       self.iter_at += 1
 
       # father method
       super(TFTrainer, self).run(data_generator, binds)
-      return self.sess.run(self.val_ops, feed_dict)
+      result = self.sess.run(self.val_ops, feed_dict)
+
+      if self.is_training:
+        loss_val = 0.0
+        if type(result) == list:
+          loss_val = result[0]
+        else:
+          loss_val = result
+        logger.info('loss %f learning_rate %f at iterator %d'%(loss_val, self.sess.run(self.lr), self.iter_at))
+
+      return result
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0):
@@ -221,26 +232,6 @@ class TFTrainer(Trainer):
                                                                infix=self.snapshot_infix, d=self.iter_at)
       model_filepath = os.path.join(self.dump_dir, model_filename)
       self.saver.save(self.sess, model_filepath)
-
-  def where_latest_model(self):
-      latest_index = -1
-      pattern_str = "(?<={prefix}_{infix}_iter_)\d+(?=.ckpt)".format(prefix=self.snapshot_prefix,
-                                                                     infix=self.snapshot_infix)
-
-      if os.path.exists(self.dump_dir):
-          for file in os.listdir(self.dump_dir):
-              match_result = re.findall(pattern_str, file)
-              if len(match_result) > 0:
-                  if int(match_result[0]) > latest_index:
-                      latest_index = int(match_result[0])
-
-          if latest_index > 0:
-              self.iter_at = latest_index + 1
-              return os.path.join(self.dump_dir,
-                                  "{prefix}_{infix}_iter_{d}.ckpt".format(prefix=self.snapshot_prefix,
-                                                                          infix=self.snapshot_infix, d=latest_index))
-
-      return None
 
   def training_deploy(self, model):
     with tf.Graph().as_default() as graph:
@@ -264,10 +255,10 @@ class TFTrainer(Trainer):
       with tf.device(deploy_config.variables_device()):
         global_step = slim.create_global_step()
 
-      func = model.build
+      func = model.model_fn
       @functools.wraps(func)
       def network_fn(*args, **kwargs):
-        arg_scope = model.arg_scope()
+        arg_scope = model.arg_scope_fn()
         if arg_scope is not None:
           with slim.arg_scope(arg_scope):
             return func(is_training=self.is_training, *args, **kwargs)
@@ -286,8 +277,8 @@ class TFTrainer(Trainer):
       #########################################
       with tf.device(deploy_config.optimizer_device()):
         num_samples = getattr(self, 'num_samples', 10000)
-        learning_rate = _configure_learning_rate(self, num_samples, global_step)
-        optimizer = _configure_optimizer(self.optimization, learning_rate)
+        self.lr = _configure_learning_rate(self, num_samples, global_step)
+        optimizer = _configure_optimizer(self, self.lr)
 
       # Variables to train.
       variables_to_train = _get_variables_to_train(self)
@@ -311,7 +302,8 @@ class TFTrainer(Trainer):
       if type(self.clones[0].outputs) == list:
         self.val_ops.extend(self.clones[0].outputs)
       else:
-        self.val_ops.append(self.clones[0].outputs)
+        if self.clones[0].outputs is not None:
+          self.val_ops.append(self.clones[0].outputs)
 
       # Training saver
       self.saver = tf.train.Saver(var_list=variables_to_train, max_to_keep=2)
@@ -340,10 +332,10 @@ class TFTrainer(Trainer):
                                                       num_replicas=1,
                                                       num_ps_tasks=0)
 
-      func = model.build
+      func = model.model_fn
       @functools.wraps(func)
       def network_fn(*args, **kwargs):
-        arg_scope = model.arg_scope()
+        arg_scope = model.arg_scope_fn()
         if arg_scope is not None:
           with slim.arg_scope(arg_scope):
             return func(is_training=self.is_training, *args, **kwargs)
@@ -361,8 +353,8 @@ class TFTrainer(Trainer):
       self.saver = tf.train.Saver(var_list=variables_to_train)
 
       # Restore from checkpoint
-      lastest_model_file = self.where_latest_model()
-      self.saver.restore(self.sess, lastest_model_file)
+      checkpoint_path = tf.train.latest_checkpoint(self.dump_dir)
+      self.saver.restore(self.sess, checkpoint_path)
 
       self.val_ops = self.clones[0].outputs
       if type(self.val_ops) != list:
@@ -370,6 +362,10 @@ class TFTrainer(Trainer):
 
   # 1.step deploy model on hardwares
   def deploy(self, model):
+    # model context
+    model.ctx = self._trainer_context
+
+    # deploy model
     if self.is_training:
       self.training_deploy(model)
     else:
