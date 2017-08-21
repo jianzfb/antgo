@@ -104,27 +104,27 @@ def running_statistic(running_block):
     _RUNNING_STATISTIC[statistic_tree_block]['cpu']['cpu_max_usage'] = running_cpu_util_max
     _RUNNING_STATISTIC[statistic_tree_block]['cpu']['cpu_model'] = cpu_model[0][0]
 
-    if len(gpu_model) > 0:
-        # gpu memory util status
-        running_gpu_mem_usage_mean = np.mean(np.array(running_gpu_mem_usage[sta_tstart:sta_tstop]),axis=0)
-        running_gpu_mem_usage_median = np.median(running_gpu_mem_usage[sta_tstart:sta_tstop],axis=0)
-        running_gpu_mem_usage_max = np.max(running_gpu_mem_usage[sta_tstart:sta_tstop],axis=0)
-
-        # gpu util status
-        running_gpu_util_usage_mean = np.mean(np.array(running_gpu_util[sta_tstart:sta_tstop]),axis=0)
-        running_gpu_util_usage_median = np.median(running_gpu_util[sta_tstart:sta_tstop],axis=0)
-        running_gpu_util_usage_max = np.max(running_gpu_util[sta_tstart:sta_tstop],axis=0)
-
-        running_gpu_model = [gpu_model[0][index] for index in running_gpu_occupy]
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu'] = {}
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mem_mean_usage'] = running_gpu_mem_usage_mean
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mem_median_usage'] = running_gpu_mem_usage_median
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mem_max_usage'] = running_gpu_mem_usage_max
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mean_usage'] = running_gpu_util_usage_mean
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_median_usage'] = running_gpu_util_usage_median
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_max_usage'] = running_gpu_util_usage_max
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_model'] = running_gpu_model
-        _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_driver_version'] = gpu_driver_version[0]
+    # if len(gpu_model) > 0:
+    #     # gpu memory util status
+    #     running_gpu_mem_usage_mean = np.mean(np.array(running_gpu_mem_usage[sta_tstart:sta_tstop]),axis=0)
+    #     running_gpu_mem_usage_median = np.median(running_gpu_mem_usage[sta_tstart:sta_tstop],axis=0)
+    #     running_gpu_mem_usage_max = np.max(running_gpu_mem_usage[sta_tstart:sta_tstop],axis=0)
+    #
+    #     # gpu util status
+    #     running_gpu_util_usage_mean = np.mean(np.array(running_gpu_util[sta_tstart:sta_tstop]),axis=0)
+    #     running_gpu_util_usage_median = np.median(running_gpu_util[sta_tstart:sta_tstop],axis=0)
+    #     running_gpu_util_usage_max = np.max(running_gpu_util[sta_tstart:sta_tstop],axis=0)
+    #
+    #     running_gpu_model = [gpu_model[0][index] for index in running_gpu_occupy]
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu'] = {}
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mem_mean_usage'] = running_gpu_mem_usage_mean
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mem_median_usage'] = running_gpu_mem_usage_median
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mem_max_usage'] = running_gpu_mem_usage_max
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_mean_usage'] = running_gpu_util_usage_mean
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_median_usage'] = running_gpu_util_usage_median
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_max_usage'] = running_gpu_util_usage_max
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_model'] = running_gpu_model
+    #     _RUNNING_STATISTIC[statistic_tree_block]['gpu']['gpu_driver_version'] = gpu_driver_version[0]
 
     # waiting until stop
     timer_thread.join()

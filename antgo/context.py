@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 from __future__ import division
 from __future__ import print_function
+from contextlib import contextmanager
 from antgo.job import *
 from antgo.dataflow.dataset import *
 
@@ -15,12 +16,52 @@ class Params(object):
   def define(self, k, v=None):
     setattr(self, k, v)
 
+
 global_context = None
 
 
 def get_global_context():
   global global_context
   return global_context
+
+
+class _Ablation(object):
+  def __init__(self):
+    self._is_disable = False
+
+  def disable(self):
+    self._is_disable = True
+  def enable(self):
+    self._is_disable = False
+
+  @property
+  def is_ablation(self):
+    return self._is_disable
+
+@contextmanager
+def ablation(obj):
+  yield obj
+
+class _Ablations(object):
+  def __init__(self):
+    self._blocks = []
+    self._ablations = {}
+
+  @property
+  def blocks(self):
+    return self._blocks
+
+  def disable(self, block):
+    for k, _ in self._ablations.items():
+      k.enable()
+    self._ablations[block].disable()
+
+  def create(self, block):
+    if block not in self._blocks:
+      self._blocks.append(block)
+      self._ablations[block] = _Ablation()
+
+    return ablation(self._ablations[block])
 
 
 class Context(object):
@@ -45,6 +86,7 @@ class Context(object):
     self.clear_callbacks = []
   
     self.data_source = None
+    self._ablation = _Ablations()
 
   def wait_until_clear(self):
     if self.context_job is not None:
@@ -164,4 +206,7 @@ class Context(object):
   @data_source.setter
   def data_source(self, val):
     self._data_source = val
-    
+
+  @property
+  def ablation(self):
+    return self._ablation
