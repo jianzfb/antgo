@@ -101,7 +101,6 @@ from __future__ import print_function
 
 import collections
 import tensorflow as tf
-
 from tensorflow.python.ops import control_flow_ops
 
 slim = tf.contrib.slim
@@ -482,6 +481,7 @@ class DeploymentConfig(object):
 
   def __init__(self,
                num_clones=1,
+               devices=[],
                clone_on_cpu=False,
                replica_id=0,
                num_replicas=1,
@@ -531,10 +531,15 @@ class DeploymentConfig(object):
     self._num_ps_tasks = num_ps_tasks
     self._ps_device = '/job:' + ps_job_name if num_ps_tasks > 0 else ''
     self._worker_device = '/job:' + worker_job_name if num_ps_tasks > 0 else ''
+    self._devices = devices
 
   @property
   def num_clones(self):
     return self._num_clones
+
+  @property
+  def devices(self):
+    return self._devices
 
   @property
   def clone_on_cpu(self):
@@ -594,6 +599,7 @@ class DeploymentConfig(object):
       device += '/device:CPU:0'
     else:
       if self._num_clones >= 1:
+        clone_index = self._devices[clone_index] if len(self._devices) > 0 else clone_index
         device += '/device:GPU:%d' % clone_index
     return device
 

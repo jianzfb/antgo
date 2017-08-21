@@ -217,7 +217,8 @@ class Channel():
                                self.chart.x_axis,
                                self.chart.y_axis,
                                self.chart.channels_num,
-                               self.id,self.channel_type,
+                               self.id,
+                               self.channel_type,
                                self.channel_name,
                                x_copy,
                                y_copy]}}

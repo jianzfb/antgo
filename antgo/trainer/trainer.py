@@ -12,9 +12,8 @@ from antgo.context import *
 import collections
 
 
-class DefaultParam(collections.namedtuple('Param', ['name', 'value', 'help'])):
-  '''
-  '''
+DefaultParam = collections.namedtuple('DefaultParam', ['name', 'value', 'help'])
+
 
 trainer_default_params = [
   DefaultParam('batch_size', 1, 'The number of samples in each batch.'),
@@ -23,6 +22,7 @@ trainer_default_params = [
   DefaultParam('snapshot_prefix', 'alpha', ''),
   DefaultParam('snapshot_infix', 'train', ''),
   DefaultParam('num_clones', 1, 'Number of model clones to deploy'),
+  DefaultParam('devices', [], 'clone is deployed at devices'),
   DefaultParam('clone_on_cpu', False, 'Use CPUs to deploy clones'),
   DefaultParam('worker_replicas', 1, 'Number of worker replicas'),
   DefaultParam('num_ps_tasks', 0, 'The number of parameter servers. If the value is 0, then the parameters are handled locally by the worker.'),

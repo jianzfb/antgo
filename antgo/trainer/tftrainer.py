@@ -245,11 +245,12 @@ class TFTrainer(Trainer):
       #######################
       # Config model deploy #
       #######################
-      deploy_config = tfmodel_deploy.DeploymentConfig(num_clones=getattr(self, 'num_clones', 1),
-                                                      clone_on_cpu=getattr(self, 'clone_on_cpu', False),
-                                                      replica_id=getattr(self, 'replica_id', 0),
-                                                      num_replicas=getattr(self, 'worker_replicas', 1),
-                                                      num_ps_tasks=getattr(self, 'num_ps_tasks', 0))
+      deploy_config = tfmodel_deploy.DeploymentConfig(num_clones=self.num_clones,
+                                                      devices=self.devices,
+                                                      clone_on_cpu=self.clone_on_cpu,
+                                                      replica_id=self.replica_id,
+                                                      num_replicas=self.worker_replicas,
+                                                      num_ps_tasks=self.num_ps_tasks)
 
       # Create global_step
       with tf.device(deploy_config.variables_device()):
@@ -327,6 +328,7 @@ class TFTrainer(Trainer):
       # Config model_deploy #
       #######################
       deploy_config = tfmodel_deploy.DeploymentConfig(num_clones=1,
+                                                      devices=self.devices,
                                                       clone_on_cpu=getattr(self, 'clone_on_cpu', False),
                                                       replica_id=0,
                                                       num_replicas=1,
