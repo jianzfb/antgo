@@ -309,12 +309,12 @@ class icnet(ModelDesc):
 ##### 3.step define training process #############
 ##################################################
 def training_callback(data_source, dump_dir):
-  # 1.step reorganize as batch
-  batch_data = BatchData(Node.inputs(data_source), 1)
-
-  # 2.step deploy model
+  # 1.step deploy model
   tf_trainer = TFTrainer(ctx.params, dump_dir)
   tf_trainer.deploy(icnet())
+  
+  # 2.step reorganize as batch
+  batch_data = BatchData(Node.inputs(data_source), tf_trainer.batch_size)
 
   # 3.step start running
   for epoch in range(tf_trainer.max_epochs):
@@ -332,12 +332,12 @@ def training_callback(data_source, dump_dir):
 ###### 4.step define infer process ###############
 ##################################################
 def infer_callback(data_source, dump_dir):
-  # 1.step reorganize as batch
-  batch_data = BatchData(Node.inputs(data_source), 1)
-
-  # 2.step deploy model
+  # 1.step deploy model
   tf_trainer = TFTrainer(ctx.params, dump_dir, False)
   tf_trainer.deploy(icnet())
+  
+  # 2.step reorganize as batch
+  batch_data = BatchData(Node.inputs(data_source), tf_trainer.batch_size)
 
   # 3.step start running
   data_generator = batch_data.iterator_value()

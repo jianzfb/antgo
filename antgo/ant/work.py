@@ -104,6 +104,7 @@ class Training(BaseWork):
     assert(dataset_name is not None)
     dataset_cls = self.context.dataset_factory(dataset_name)
     dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
+    dataset.reset_state()
     self.context.call_training_process(dataset, self.dump_dir)
     dataset.close()
 

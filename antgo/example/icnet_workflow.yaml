@@ -10,3 +10,5 @@ TrainingIcnet:
   log_every_n_steps: 20
   learning_rate: 0.01
   learning_rate_decay_type: 'polynomial'
+  max_epochs: 500
+  num_epochs_per_decay: 50

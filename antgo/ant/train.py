@@ -105,12 +105,14 @@ class AntRun(AntBase):
         if not os.path.exists(os.path.join(self.ant_dump_dir, 'train')):
             os.makedirs(os.path.join(self.ant_dump_dir, 'train'))
         logger.info('start training process')
+        ant_train_dataset.reset_state()
         self.context.call_training_process(ant_train_dataset, os.path.join(self.ant_dump_dir, 'train'))
 
     def _holdout_validation(self, train_dataset, evaluation_measures):
         # 1.step split train set and validation set
         part_train_dataset, part_validation_dataset = train_dataset.split(split_method='holdout')
-
+        part_train_dataset.reset_state()
+        
         # dump_dir
         dump_dir = os.path.join(self.ant_dump_dir, 'holdout')
         # prepare dir
@@ -159,6 +161,7 @@ class AntRun(AntBase):
             part_train_dataset, part_validation_dataset = train_dataset.split(split_params={'ratio': split_ratio,
                                                                                             'is_stratified': is_stratified_sampling},
                                                                               split_method='repeated-holdout')
+            part_train_dataset.reset_state()
             # dump_dir
             dump_dir = os.path.join(self.ant_dump_dir, 'repeated-holdout-evaluation', 'repeat-%d'%repeat)
 
@@ -214,6 +217,7 @@ class AntRun(AntBase):
             # 1.step split train set and validation set
             part_train_dataset, part_validation_dataset = train_dataset.split(split_params={},
                                                                               split_method='bootstrap')
+            part_train_dataset.reset_state()
             # dump_dir
             dump_dir = os.path.join(self.ant_dump_dir, 'bootstrap-%d-evaluation' % bootstrap_i)
 
@@ -271,6 +275,7 @@ class AntRun(AntBase):
             part_train_dataset, part_validation_dataset = train_dataset.split(split_params={'kfold': kfolds,
                                                                                             'k': k},
                                                                               split_method='kfold')
+            part_train_dataset.reset_state()
             # dump_dir
             dump_dir = os.path.join(self.ant_dump_dir, 'fold-%d-evaluation' % k)
 
