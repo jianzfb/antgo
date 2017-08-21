@@ -13,11 +13,13 @@ from antgo.utils import get_rng
 
 
 class BatchData(Node):
-    def __init__(self, inputs, batch_size, remainder=False):
+    def __init__(self, inputs, batch_size, remainder=False, threads=0):
         super(BatchData, self).__init__(name=None, action=None, inputs=inputs)
         self.batch_size = batch_size
         self.remainder = remainder
         self.stop_iteration = False
+        # 0: no multi-threads
+        self.threads = threads
 
     def _evaluate(self):
         try:

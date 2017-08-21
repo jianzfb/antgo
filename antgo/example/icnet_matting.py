@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 17-8-17
-# @File    : train_icnet.py
+# @File    : icnet_matting.py
 # @Author  :
 from __future__ import division
 from __future__ import unicode_literals
@@ -16,13 +16,13 @@ slim = tf.contrib.slim
 
 
 ##################################################
-######### global interaction handle ##############
+######## 1.step global interaction handle ########
 ##################################################
 ctx = Context()
 
 
 ##################################################
-######### custom network framework################
+######## 2.step custom network framework #########
 ##################################################
 @slim.add_arg_scope
 def root_block(inputs, scope=None):
@@ -69,10 +69,8 @@ def bottleneck(inputs, depth, depth_bottleneck, stride, rate=1,
       shortcut = slim.conv2d(inputs, depth, [1, 1], stride=reduce(mul, stride),
                              activation_fn=None, scope='shortcut')
 
-    residual = slim.conv2d(inputs, depth_bottleneck, [1, 1], stride=stride[0],
-                           scope='conv1')
-    residual = conv2d_same(residual, depth_bottleneck, 3, stride[1],
-                                        rate=rate, scope='conv2')
+    residual = slim.conv2d(inputs, depth_bottleneck, [1, 1], stride=stride[0], scope='conv1')
+    residual = conv2d_same(residual, depth_bottleneck, 3, stride[1], rate=rate, scope='conv2')
     residual = slim.conv2d(residual, depth, [1, 1], stride=stride[2],
                            activation_fn=None, scope='conv3')
 
@@ -91,8 +89,8 @@ def pyramid_pooling(inputs, pool_size, depth,
     out_height, out_width = dims[1].value, dims[2].value
 
     pool1 = slim.avg_pool2d(inputs, pool_size, stride=pool_size, scope='pool1')
-    # conv1 = slim.conv2d(pool1, depth, [1, 1], stride=1, scope='conv1')
-    output = tf.image.resize_bilinear(pool1, [out_height, out_width])
+    conv1 = slim.conv2d(pool1, depth, [1, 1], stride=1, scope='conv1')
+    output = tf.image.resize_bilinear(conv1, [out_height, out_width])
 
     return slim.utils.collect_named_outputs(outputs_collections,
                                             sc.original_name_scope,
@@ -100,9 +98,7 @@ def pyramid_pooling(inputs, pool_size, depth,
 
 
 @slim.add_arg_scope
-def stack_blocks_dense(net, blocks, output_stride=None,
-                       outputs_collections=None):
-
+def stack_blocks_dense(net, blocks, output_stride=None, outputs_collections=None):
   block_id = 0
   net_branch = None
   for block in blocks:
@@ -122,7 +118,7 @@ def stack_blocks_dense(net, blocks, output_stride=None,
             net_branch = net
             dims = net.get_shape().dims
             out_height, out_width = dims[1].value, dims[2].value
-            net = tf.image.resize_bilinear(net,[int(out_height/2),int(out_width/2)])
+            net = tf.image.resize_bilinear(net, [int(out_height/2), int(out_width/2)])
 
       net = slim.utils.collect_named_outputs(outputs_collections, sc.name, net)
 
@@ -140,36 +136,36 @@ def pyramid_pooling_module(inputs, levels, outputs_collections=None):
         level_map = level.fn(inputs, level_size, level_depth)
         level_maps.append(level_map)
 
-    net = tf.add_n(level_maps)
+    # net = tf.add_n(level_maps)
+    net = tf.concat(level_maps, axis=3)
     net = slim.utils.collect_named_outputs(outputs_collections, sc.name, net)
 
   return net
 
 
 @slim.add_arg_scope
-def icnet_matting(inputs, blocks, levels, num_classes=None, is_training=True, reuse=None, scope=None):
+def icnet_matting(inputs, blocks, levels, num_classes=None, is_training=True, scope=None):
   direct_endpoints = {}
-  with tf.variable_scope(scope, 'icnet_v1', [inputs], reuse=reuse) as sc:
+  with tf.variable_scope(scope, 'icnet_v1', [inputs]) as sc:
     end_points_collection = sc.name + '_end_points'
     with slim.arg_scope([slim.conv2d,
-                            bottleneck,
-                            pyramid_pooling,
-                            stack_blocks_dense,
-                            pyramid_pooling_module],
-                             outputs_collections=end_points_collection):
+                         bottleneck,
+                         pyramid_pooling,
+                         stack_blocks_dense,
+                         pyramid_pooling_module], outputs_collections=end_points_collection):
       with slim.arg_scope([slim.batch_norm], is_training=is_training):
         branch_123_data = inputs
 
         # branch 23 (low-resolution and mid-resolution)
         dims = branch_123_data.get_shape().dims
-        branch_23_data = tf.image.resize_bilinear(branch_123_data,[int(dims[1].value / 2),int(dims[2].value / 2)])
+        branch_23_data = tf.image.resize_bilinear(branch_123_data, [int(dims[1].value / 2), int(dims[2].value / 2)])
 
         branch_23_net = root_block(branch_23_data)
         branch_3_net, branch_2_net = stack_blocks_dense(branch_23_net, blocks, None)
 
         # # branch 3
-        branch_3_net = pyramid_pooling_module(branch_3_net,levels)
-        branch_3_net = slim.conv2d(branch_3_net,256,[1,1],stride=1,padding='SAME')
+        branch_3_net = pyramid_pooling_module(branch_3_net, levels)
+        branch_3_net = slim.conv2d(branch_3_net, 256, [1, 1], stride=1, padding='SAME')
         ## branch 3 dropout
         branch_3_net = slim.dropout(branch_3_net, keep_prob=0.9, is_training=is_training)
         ##
@@ -210,8 +206,7 @@ def icnet_matting(inputs, blocks, levels, num_classes=None, is_training=True, re
         direct_endpoints['branch_123_2_classifier_guid'] = \
           slim.conv2d(branch_123_net, num_classes, [1, 1], padding='SAME', activation_fn=None)
 
-        # modifiy by jian (for guided filter matting)
-        # background, unknown, foreground
+        # only for test stage
         branch_123_net = slim.conv2d(branch_123_net, num_classes, [1, 1], stride=1, padding='SAME', activation_fn=None)
         branch_123_net = tf.image.resize_bilinear(branch_123_net, [out_height*8, out_width*8])
 
@@ -243,13 +238,6 @@ class icnet(ModelDesc):
     images = tf.placeholder(shape=(self.batch_size, None, None, 3), dtype=tf.uint8, name='icnet-image')
     images = tf.image.resize_bilinear(images, size=[480, 480])
 
-    labels = tf.placeholder(shape=(self.batch_size, None, None), dtype=tf.uint8, name='icnet-label')
-    labels = tf.expand_dims(labels, 3)
-    labels = tf.image.resize_nearest_neighbor(labels, size=[480, 480])
-    labels = tf.squeeze(labels, axis=3)
-    labels = tf.to_int32(labels / 255)
-    labels = slim.one_hot_encoding(labels, self.num_classes)
-
     # build model
     blocks = [
         Block('block1', bottleneck, [(128, 32, (1, 1, 1), 1)] * 3),
@@ -258,34 +246,39 @@ class icnet(ModelDesc):
         Block('block4', bottleneck, [(1024, 256, (1, 1, 1), 4)] * 3)
     ]
 
-    levels = [Level('level1', pyramid_pooling, ((15, 15), 512)),
-              Level('level2', pyramid_pooling, ((7, 7), 512)),
-              Level('level3', pyramid_pooling, ((4, 4), 512)),
-              Level('level4', pyramid_pooling, ((2, 2), 512)),
+    levels = [Level('level1', pyramid_pooling, ((15, 15), 256)),
+              Level('level2', pyramid_pooling, ((7, 7), 256)),
+              Level('level3', pyramid_pooling, ((4, 4), 256)),
+              Level('level4', pyramid_pooling, ((2, 2), 256)),
     ]
 
-    network = icnet_matting(images, blocks, levels, self.num_classes, is_training, scope=self.name)
+    branch_1, branch_1_4, branch_1_8, branch_1_16 = \
+      icnet_matting(images, blocks, levels, self.num_classes, is_training, scope=self.name)
 
     # loss
     if is_training:
-      tf.logging.info('images get_shape {}'.format(images.get_shape()))
-      branch_1, branch_1_4, branch_1_8, branch_1_16 = network
+      labels = tf.placeholder(shape=(self.batch_size, None, None), dtype=tf.uint8, name='icnet-label')
+      labels = tf.expand_dims(labels, 3)
+      labels = tf.image.resize_nearest_neighbor(labels, size=[480, 480])
+      labels = tf.squeeze(labels, axis=3)
+      labels = tf.to_int32(labels / 255.0)
+      labels = slim.one_hot_encoding(labels, self.num_classes)
 
       # segmentation task
-      # # 1/4
+      # 1/4
       dims = labels.get_shape().dims
       labels_1_4 = tf.image.resize_nearest_neighbor(labels, [int(dims[1].value / 4), int(dims[2].value / 4)])
-      branch_1_4_loss = tf.losses.softmax_cross_entropy(labels_1_4, branch_1_4, scope='branch_1_4_loss')
+      tf.losses.softmax_cross_entropy(labels_1_4, branch_1_4, scope='branch_1_4_loss')
       # 1/8
       labels_1_8 = tf.image.resize_nearest_neighbor(labels, [int(dims[1].value / 8), int(dims[2].value / 8)])
-      branch_1_8_loss = tf.losses.softmax_cross_entropy(labels_1_8, branch_1_8, weights=0.6, scope='branch_1_8_loss')
+      tf.losses.softmax_cross_entropy(labels_1_8, branch_1_8, weights=0.6, scope='branch_1_8_loss')
 
       # 1/16
       labels_1_16 = tf.image.resize_nearest_neighbor(labels, [int(dims[1].value / 16), int(dims[2].value / 16)])
-      branch_1_16_loss = tf.losses.softmax_cross_entropy(labels_1_16, branch_1_16, weights=0.4,
-        scope='branch_1_16_loss')
-
-    return None
+      tf.losses.softmax_cross_entropy(labels_1_16, branch_1_16, weights=0.4, scope='branch_1_16_loss')
+    else:
+      predictions = tf.squeeze(tf.argmax(branch_1, 3))
+      return predictions
 
   def arg_scope_fn(self):
     weight_decay = 0.0001
@@ -312,9 +305,9 @@ class icnet(ModelDesc):
           return arg_sc
 
 
-#########################################################################
-############ define training process ####################################
-#########################################################################
+##################################################
+##### 3.step define training process #############
+##################################################
 def training_callback(data_source, dump_dir):
   # 1.step reorganize as batch
   batch_data = BatchData(Node.inputs(data_source), 1)
@@ -335,15 +328,30 @@ def training_callback(data_source, dump_dir):
     tf_trainer.snapshot(epoch)
 
 
-##########################################################################
-############# define infer process #######################################
-##########################################################################
+##################################################
+###### 4.step define infer process ###############
+##################################################
 def infer_callback(data_source, dump_dir):
-  pass
+  # 1.step reorganize as batch
+  batch_data = BatchData(Node.inputs(data_source), 1)
+
+  # 2.step deploy model
+  tf_trainer = TFTrainer(ctx.params, dump_dir, False)
+  tf_trainer.deploy(icnet())
+
+  # 3.step start running
+  data_generator = batch_data.iterator_value()
+  while True:
+    try:
+      mask = tf_trainer.run(data_generator, {'icnet-image': 0})
+      ctx.recorder.record(mask)
+    except StopIteration:
+      break
 
 
-##########################################################################
-############# link training and infer process to context ################
-##########################################################################
+##################################################
+####### 5.step link training and infer ###########
+#######        process to context      ###########
+##################################################
 ctx.training_process = training_callback
 ctx.infer_process = infer_callback

@@ -1,0 +1,12 @@
+TrainingIcnet:
+ name: 'Training'
+ dataset:
+  name: 'portrait'
+ model:
+  batch_size: 1
+  num_classes: 2
+  clone_on_cpu: true
+  num_clones: 1
+  log_every_n_steps: 20
+  learning_rate: 0.01
+  learning_rate_decay_type: 'polynomial'

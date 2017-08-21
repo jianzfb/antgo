@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # File: pascal_voc.py
-# Author: jian(jian@mltalker.com)
+# Author: jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 

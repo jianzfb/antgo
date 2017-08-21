@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 import os
 import plyvel
+import scipy.misc
 from antgo.dataflow.basic import *
 from antgo.dataflow.dataset.pascal_voc import *
 
@@ -37,9 +38,52 @@ def generate_voc2007_standard_dataset(data_folder, target_folder):
   # val dataset
   pascal_val_2007 = Pascal2007('val', data_folder)
   generate_standard_dataset(pascal_val_2007.iterator_value(), 'val', target_folder, 'voc2007')
+  
+
+def generate_jiajiaya_standard_dataset(data_folder, target_folder):
+  # train dataset
+  train_list = os.listdir(os.path.join(data_folder, 'training'))
+  train_img_list = []
+  train_annotation_list = []
+  for f in train_list:
+    if '_matte' in f:
+      train_annotation_list.append(os.path.join(data_folder, 'training', f))
+      train_img_list.append(os.path.join(data_folder, 'training', f.replace('_matte','')))
+  
+  def build_data_generator(img_list, annotation_list):
+    for img_f, annotation_f in zip(img_list, annotation_list):
+      data = scipy.misc.imread(img_f)
+      label = scipy.misc.imread(annotation_f)
+      pos = np.where(label > 128)
+      label[:, :] = 0
+      label[pos] = 255
+
+      yield data, label
+  
+  generate_standard_dataset(build_data_generator(train_img_list, train_annotation_list),
+    'train',
+    target_folder,
+    'portrait')
+    
+  # test dataset
+  test_list = os.listdir(os.path.join(data_folder, 'testing'))
+  test_img_list = []
+  test_annotation_list = []
+  for f in test_list:
+    if '_matte' in f:
+      test_annotation_list.append(os.path.join(data_folder, 'testing', f))
+      test_img_list.append(os.path.join(data_folder, 'testing', f.replace('_matte', '')))
+
+  generate_standard_dataset(build_data_generator(test_img_list, test_annotation_list),
+    'test',
+    target_folder,
+    'portrait')
 
 
 if __name__ == '__main__':
   # transfer voc2007
   #generate_voc2007_standard_dataset('/home/mi/下载/dataset/voc','/home/mi/antgo/antgo-dataset')
+  
+  # transfer jiajiaya
+  generate_jiajiaya_standard_dataset('/home/mi/dataset/jiajiaya', '/home/mi/antgo/antgo-dataset')
   pass

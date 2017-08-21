@@ -217,7 +217,9 @@ class TFTrainer(Trainer):
           loss_val = result[0]
         else:
           loss_val = result
-        logger.info('loss %f learning_rate %f at iterator %d'%(loss_val, self.sess.run(self.lr), self.iter_at))
+        
+        if self.iter_at % self.log_every_n_steps == 0:
+          logger.info('loss %f lr %f at iterator %d'%(loss_val, self.sess.run(self.lr), self.iter_at))
 
       return result
 
@@ -277,7 +279,7 @@ class TFTrainer(Trainer):
       # Configure the optimization procedure. #
       #########################################
       with tf.device(deploy_config.optimizer_device()):
-        num_samples = getattr(self, 'num_samples', 10000)
+        num_samples = self.num_samples if self.num_samples > 0 else self.ctx.data_source.size
         self.lr = _configure_learning_rate(self, num_samples, global_step)
         optimizer = _configure_optimizer(self, self.lr)
 
