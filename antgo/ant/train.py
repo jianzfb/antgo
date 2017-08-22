@@ -101,7 +101,7 @@ class AntRun(AntBase):
             everything_to_html(evaluation_statistic, self.ant_dump_dir)
 
         # 3.step model training
-        self.stage = "TRAINING"
+        self.stage = "TRAIN"
         if not os.path.exists(os.path.join(self.ant_dump_dir, 'train')):
             os.makedirs(os.path.join(self.ant_dump_dir, 'train'))
         logger.info('start training process')
