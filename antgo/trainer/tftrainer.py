@@ -163,8 +163,6 @@ def _get_init_fn(trainer_obj, dump_dir):
   # TODO(sguada) variables.filter_variables()
   variables_to_restore = []
   for var in slim.get_model_variables():
-    print(var.name)
-
     excluded = False
     for exclusion in exclusions:
       if var.op.name.startswith(exclusion):
@@ -230,7 +228,7 @@ class TFTrainer(Trainer):
       if not os.path.exists(self.dump_dir):
           os.makedirs(self.dump_dir)
 
-      model_filename = "{prefix}_{infix}_iter_{d}.ckpt".format(prefix=self.snapshot_prefix,
+      model_filename = "{prefix}_{infix}_{d}.ckpt".format(prefix=self.snapshot_prefix,
                                                                infix=self.snapshot_infix, d=self.iter_at)
       model_filepath = os.path.join(self.dump_dir, model_filename)
       self.saver.save(self.sess, model_filepath)

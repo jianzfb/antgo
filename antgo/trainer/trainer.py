@@ -51,6 +51,8 @@ trainer_default_params = [
   DefaultParam('sync_replicas', False, 'Whether or not to synchronize the replicas during training.'),
   DefaultParam('replicas_to_aggregate', 1, 'The Number of gradients to collect before updating params.'),
   DefaultParam('moving_average_decay', None, 'The decay to use for the moving average.'),
+  DefaultParam('checkpoint_path', None, ''),
+  DefaultParam('checkpoint_exclude_scopes', None, ''),
 ]
 
 

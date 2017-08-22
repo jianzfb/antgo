@@ -12,3 +12,4 @@ TrainingIcnet:
   learning_rate_decay_type: 'polynomial'
   max_epochs: 500
   num_epochs_per_decay: 50
+  checkpoint_path: '/home/mi/model/dump/TrainingIcnet/2017-08-21-17-33-09/alpha_train_iter_255000'

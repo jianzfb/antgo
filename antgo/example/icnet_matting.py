@@ -257,7 +257,7 @@ class icnet(ModelDesc):
 
     # loss
     if is_training:
-      labels = tf.placeholder(shape=(self.batch_size, None, None), dtype=tf.uint8, name='icnet-label')
+      labels = tf.placeholder(shape=(self.batch_size, None, None), dtype=tf.float32, name='icnet-label')
       labels = tf.expand_dims(labels, 3)
       labels = tf.image.resize_nearest_neighbor(labels, size=[480, 480])
       labels = tf.squeeze(labels, axis=3)
