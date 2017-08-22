@@ -150,8 +150,7 @@ def _get_init_fn(trainer_obj, dump_dir):
   # Warn the user if a checkpoint exists in the train_dir. Then we'll be
   # ignoring the checkpoint anyway.
   if tf.train.latest_checkpoint(dump_dir):
-    tf.logging.info(
-        'Ignoring --checkpoint_path because a checkpoint already exists in %s'% dump_dir)
+    logger.info('Ignoring --checkpoint_path because a checkpoint already exists in %s'% dump_dir)
     return None
 
   exclusions = []
@@ -174,9 +173,9 @@ def _get_init_fn(trainer_obj, dump_dir):
   if tf.gfile.IsDirectory(checkpoint_path):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
 
-  tf.logging.info('Fine-tuning from %s' % checkpoint_path)
+  logger.info('Fine-tuning from %s' % checkpoint_path)
   return slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore)
-
+  
 
 class TFTrainer(Trainer):
   def __init__(self, trainer_context, dump_dir, is_training=True):
@@ -307,13 +306,15 @@ class TFTrainer(Trainer):
           self.val_ops.append(self.clones[0].outputs)
 
       # Training saver
-      self.saver = tf.train.Saver(var_list=variables_to_train, max_to_keep=2)
+      self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
 
       # Global initialization
       self.sess.run(tf.global_variables_initializer())
 
       # Restore from checkpoint
-      _get_init_fn(self, self.dump_dir)
+      restore_fn = _get_init_fn(self, self.dump_dir)
+      if restore_fn is not None:
+        restore_fn(self.sess)
 
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
@@ -349,15 +350,12 @@ class TFTrainer(Trainer):
       #######################
       self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
 
-      # Variables to train.
-      variables_to_train = _get_variables_to_train(self)
-      # Training saver
-      self.saver = tf.train.Saver(var_list=variables_to_train)
-
       # Restore from checkpoint
-      checkpoint_path = tf.train.latest_checkpoint(self.dump_dir)
-      self.saver.restore(self.sess, checkpoint_path)
-
+      restore_fn = _get_init_fn(self, self.dump_dir)
+      if restore_fn is not None:
+        restore_fn(self.sess)
+      
+      # Value ops
       self.val_ops = self.clones[0].outputs
       if type(self.val_ops) != list:
         self.val_ops = [self.val_ops]
