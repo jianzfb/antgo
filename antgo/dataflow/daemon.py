@@ -13,7 +13,7 @@ from signal import SIGTERM
 import psutil
 
 
-class Daemon:
+class Daemon(object):
   """
   A generic daemon class.
 
