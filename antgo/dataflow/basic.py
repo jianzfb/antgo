@@ -11,18 +11,8 @@ import os
 import yaml
 import plyvel
 from antgo.dataflow.dataflow_server import *
+from antgo import config
 
-# global_dbs = {}
-#
-#
-# def _global_db(db_path):
-#   global global_dbs
-#   if db_path in global_dbs:
-#     return global_dbs[db_path]
-#   else:
-#     global_dbs[db_path] = plyvel.DB(db_path)
-#
-#   return global_dbs[db_path]
 
 class Sample(object):
   def __init__(self, **kwargs):
@@ -78,7 +68,7 @@ class RecordReader(object):
   def __init__(self, record_path):
     # db
     self._record_path = record_path
-    self._db = DataflowClient()
+    self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
     self._db.open(record_path.encode('utf-8'))
 
     # db attributes

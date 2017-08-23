@@ -36,7 +36,7 @@ class BatchData(Node):
                 b = None
                 if type(data) == tuple or type(data) == list:
                     a = data[0]
-                    b = data[1:]
+                    b = data[1] if len(data) == 2 else data[1:]
                 else:
                     a = data
                     b = None

@@ -14,7 +14,7 @@ from antgo.ant.workflow import *
 from antgo.ant.challenge import *
 from antgo.utils import logger
 from antgo.ant import flags
-from antgo.config import *
+from antgo import config
 from antgo.dataflow.dataflow_server import *
 
 
@@ -32,7 +32,7 @@ def _main_context(main_file, source_paths):
 
 
 def _check_environment():
-  is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT','') != '' else False
+  is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
 _ant_support_commands = ["train", "challenge", "compose", "deploy"]
@@ -47,7 +47,7 @@ flags.DEFINE_string('name', None, 'app name')
 flags.DEFINE_string('config', 'config.xml', 'antgo config')
 
 FLAGS = flags.AntFLAGS
-
+Config = config.AntConfig
 
 def main():
   if len(sys.argv) == 1:
@@ -80,10 +80,10 @@ def main():
 
   # 3.step load antgo server config
   config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], FLAGS.config())
-  antgo_config = Config(config_xml)
+  Config.parse_xml(config_xml)
 
-  data_factory = getattr(antgo_config, 'data_factory', None)
-  task_factory = getattr(antgo_config, 'task_factory', '')
+  data_factory = getattr(Config, 'data_factory', None)
+  task_factory = getattr(Config, 'task_factory', '')
 
   if data_factory is None:
     logger.error('must set data factory')
@@ -98,8 +98,8 @@ def main():
     name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
   
   # 4.step dataflow server daemon
-  dataflow_server_host = getattr(antgo_config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
-  dataflow_server_threads = getattr(antgo_config, 'dataflow_server_threads', 1)
+  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
+  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
 
   dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
                                     dataflow_server_host,
