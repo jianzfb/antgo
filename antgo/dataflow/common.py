@@ -32,7 +32,14 @@ class BatchData(Node):
             for _ in range(self.batch_size):
                 input = self._positional_inputs[0]
                 data = input.get_value()
-                a, b = data
+                a = None
+                b = None
+                if type(data) == tuple or type(data) == list:
+                    a = data[0]
+                    b = data[1:]
+                else:
+                    a = data
+                    b = None
 
                 batch_list.append(a)
                 label_list.append(b)
@@ -70,11 +77,10 @@ class BatchData(Node):
         elif len(max_shape) == 2:
             batch = np.zeros((len(batch_list), max_shape[0], max_shape[1]), dtype=batch_list[0].dtype)
         elif len(max_shape) == 3:
-            batch = np.zeros((len(batch_list), max_shape[0], max_shape[1], max_shape[2]),
-                             dtype=batch_list[0].dtype)
+            batch = np.zeros((len(batch_list), max_shape[0], max_shape[1], max_shape[2]), dtype=batch_list[0].dtype)
         elif len(max_shape) == 4:
             batch = np.zeros((len(batch_list), max_shape[0], max_shape[1], max_shape[2], max_shape[3]),
-                             dtype=batch_list[0].dtype)
+                dtype=batch_list[0].dtype)
 
         assert (batch is not None)
 

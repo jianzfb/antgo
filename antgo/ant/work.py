@@ -138,7 +138,7 @@ class Inference(BaseWork):
     # 1.step load config file
     dataset_name = None
     dataset_train_or_test = 'test'
-    dataset_params = None
+    dataset_params = {}
     loaded_infer_config = self.load_config()
 
     model_parameters = {}

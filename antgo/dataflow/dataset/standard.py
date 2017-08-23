@@ -66,7 +66,7 @@ class Standard(Dataset):
 
     category_ids = copy.copy(self.ids)
     if 'is_stratified' in split_params and split_params['is_stratified'] and \
-        split_method == 'repeated-holdout':
+        (split_method == 'repeated-holdout' or split_method == 'holdout'):
 
       # traverse dataset
       for id in self.ids:
@@ -76,10 +76,9 @@ class Standard(Dataset):
         else:
           category_ids[id] = 0 if random.random() > 0.5 else 1
 
-    if split_method == 'holdout':
+    if split_method == 'holdout' and 'ratio' not in split_params:
       train_dataset = Standard(self.train_or_test, self.dir, self.ext_params)
       val_dataset = Standard('val', self.dir, self.ext_params)
-
       return train_dataset, val_dataset
 
     if split_method == 'kfold':

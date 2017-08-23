@@ -10,19 +10,19 @@ import numpy as np
 import os
 import yaml
 import plyvel
+from antgo.dataflow.dataflow_server import *
 
-global_dbs = {}
-
-
-def _global_db(db_path):
-  global global_dbs
-  if db_path in global_dbs:
-    return global_dbs[db_path]
-  else:
-    global_dbs[db_path] = plyvel.DB(db_path)
-
-  return global_dbs[db_path]
-
+# global_dbs = {}
+#
+#
+# def _global_db(db_path):
+#   global global_dbs
+#   if db_path in global_dbs:
+#     return global_dbs[db_path]
+#   else:
+#     global_dbs[db_path] = plyvel.DB(db_path)
+#
+#   return global_dbs[db_path]
 
 class Sample(object):
   def __init__(self, **kwargs):
@@ -78,7 +78,8 @@ class RecordReader(object):
   def __init__(self, record_path):
     # db
     self._record_path = record_path
-    self._db = _global_db(record_path)
+    self._db = DataflowClient()
+    self._db.open(record_path.encode('utf-8'))
 
     # db attributes
     self._db_attrs = {}
@@ -90,10 +91,7 @@ class RecordReader(object):
       setattr(self, attr_key, attr_value)
 
   def close(self):
-    global global_dbs
-    if self._record_path in global_dbs:
-      global_dbs.pop(self._record_path)
-    self._db.close()
+    self._db.close(self._record_path.encode('utf-8'))
 
   def record_attrs(self):
     return self._db_attrs
@@ -117,8 +115,8 @@ class RecordReader(object):
       return [None for _ in range(len(args))]
 
   def iterate_read(self, *args):
-    for _, v in self._db:
-      data = Sample.unserialize(v)
+    for k in range(self.count):
+      data = Sample.unserialize(self._db.get(bytes(k)))
       sample = []
       if len(args) == 0:
         for data_key, data_val in data.items():

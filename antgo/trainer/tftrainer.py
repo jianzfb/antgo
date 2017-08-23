@@ -173,7 +173,7 @@ def _get_init_fn(trainer_obj, dump_dir):
   if tf.gfile.IsDirectory(checkpoint_path):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
 
-  logger.info('Fine-tuning from %s' % checkpoint_path)
+  logger.info('Loading from %s' % checkpoint_path)
   return slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore)
   
 

@@ -15,6 +15,7 @@ from antgo.ant.challenge import *
 from antgo.utils import logger
 from antgo.ant import flags
 from antgo.config import *
+from antgo.dataflow.dataflow_server import *
 
 
 def _main_context(main_file, source_paths):
@@ -34,7 +35,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT','') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose","deploy"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -61,7 +62,7 @@ def main():
   if ant_cmd == "":
     logger.error('antgo cli only support( %s )command'%",".join(_ant_support_commands))
     sys.exit(-1)
-
+  
   main_folder = FLAGS.main_folder()
   if main_folder is None:
     main_folder = os.path.abspath(os.curdir)
@@ -73,13 +74,14 @@ def main():
 
   dump_dir = FLAGS.dump()
   if dump_dir is None:
-    dump_dir = os.path.join(os.curdir, 'dump')
+    dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
 
-  # load antgo server config
+  # 3.step load antgo server config
   config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], FLAGS.config())
   antgo_config = Config(config_xml)
+
   data_factory = getattr(antgo_config, 'data_factory', None)
   task_factory = getattr(antgo_config, 'task_factory', '')
 
@@ -87,14 +89,23 @@ def main():
     logger.error('must set data factory')
     sys.exit(-1)
 
-  # client token
+  # 3.1 step running token
   token = FLAGS.token()
 
-  # name
+  # 3.2 step running name
   name = FLAGS.name()
   if name is None:
     name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+  
+  # 4.step dataflow server daemon
+  dataflow_server_host = getattr(antgo_config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
+  dataflow_server_threads = getattr(antgo_config, 'dataflow_server_threads', 1)
 
+  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
+                                    dataflow_server_host,
+                                    os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
+  dfs_daemon.start()
+  
   # 5.0 step custom workflow
   if ant_cmd == 'compose':
     # user custom workflow
@@ -123,7 +134,7 @@ def main():
     main_config_path = os.path.join(main_folder, main_param)
     params = yaml.load(open(main_config_path, 'r'))
     ant_context.params = params
-
+  
   if ant_cmd == "train":
     running_process = AntRun(ant_context,
                              name,

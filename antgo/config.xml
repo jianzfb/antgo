@@ -1,4 +1,6 @@
 <antgo>
     <data_factory>/home/mi/antgo/antgo-dataset</data_factory>
     <task_factory>/home/mi/antgo/antgo-task</task_factory>
+    <dataflow_server_host>tcp://127.0.0.1:9999</dataflow_server_host>
+    <dataflow_server_threads>1</dataflow_server_threads>
 </antgo>

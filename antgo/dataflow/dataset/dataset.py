@@ -126,7 +126,7 @@ class Dataset(BaseNode):
         :return: 
         '''
         if split_method == 'holdout':
-            return self._split_holdout(idx)
+            return self._split_holdout(split_params['ratio'], split_params['is_stratified'], idx)
         elif split_method == 'repeated-holdout':
             return self._split_repeated_holdout(split_params['ratio'], split_params['is_stratified'], idx)
         elif split_method == 'bootstrap':
@@ -136,14 +136,18 @@ class Dataset(BaseNode):
 
         return None
 
-    def _split_custom_holdout(self, idx):
+    def _split_custom_holdout(self, split_ratio, is_stratified_sampling,idx):
         # implemented at child class
         # train/val
         raise NotImplementedError()
 
-    def _split_holdout(self, idx=[]):
+    def _split_holdout(self, split_ratio, is_stratified_sampling=True, idx=[]):
         assert(self.train_or_test == 'train')
-        return self._split_custom_holdout(idx)
+        try:
+            train_idx, val_idx = self._split_custom_holdout(split_ratio, is_stratified_sampling, idx)
+            return train_idx, val_idx
+        except:
+            return self._split_repeated_holdout(split_ratio, is_stratified_sampling, idx)
 
     def _split_repeated_holdout(self, split_ratio, is_stratified_sampling=True, idx=[]):
         assert(self.train_or_test == 'train')

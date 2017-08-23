@@ -108,4 +108,4 @@ class AntChallenge(AntBase):
         everything_to_html(task_running_statictic, self.ant_dump_dir)
 
         # notify
-        self.context.job.send({'STATISTIC': task_running_statictic})
+        self.context.job.send({'DATA': {'STATISTIC': task_running_statictic}})

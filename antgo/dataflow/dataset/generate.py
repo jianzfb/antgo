@@ -56,7 +56,7 @@ def generate_jiajiaya_standard_dataset(data_folder, target_folder):
       label = scipy.misc.imread(annotation_f)
       pos = np.where(label > 128)
       label[:, :] = 0
-      label[pos] = 255
+      label[pos] = 1
 
       yield data, label
   
