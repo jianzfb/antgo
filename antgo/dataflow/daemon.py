@@ -111,7 +111,7 @@ class Daemon(object):
     if id == 1:
       # daemon process
       self.run()
-      return
+      sys.exit(0)
     elif id == -1:
       # grandson process (ignore)
       sys.exit(0)

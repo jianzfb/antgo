@@ -10,7 +10,7 @@ import numpy as np
 import sys
 from antgo.dataflow.core import *
 from antgo.utils import get_rng
-
+import queue
 
 class BatchData(Node):
     def __init__(self, inputs, batch_size, remainder=False, threads=0):
@@ -257,15 +257,17 @@ class _TransparantNode(Node):
         super(_TransparantNode, self).__init__(name=name, inputs=upper_node)
         assert(len(self._positional_inputs) == 1)
         self.active_request = active_request
+        self._buffer = queue.LifoQueue()
 
     def set_value(self, new_value):
         self._set_value(new_value)
+        self._buffer.put(new_value)
 
     def get_value(self):
         if DIRTY == self._value:
             self._evaluate()
-
-        return self._value
+            
+        return self._buffer.get()
 
     def _evaluate(self):
         try:
@@ -284,8 +286,12 @@ class _TransparantNode(Node):
 
     def _force_inputs_dirty(self):
         if self.active_request:
+            if self._buffer.qsize() > 0:
+                return
+            
             if DIRTY == self._value:
                 return
+            
             for i in self._positional_inputs:
                 i._force_inputs_dirty()
             for name, i in items(self._keyword_inputs):
@@ -310,6 +316,26 @@ class DataAnnotationBranch(Node):
             return self.annotation_branch
 
 
+class AutoBranch(Node):
+    def __init__(self, inputs, branch_func):
+        super(AutoBranch, self).__init__(name=None, action=self.action, inputs=inputs)
+        self.auto_branch = _TransparantNode(upper_node=Node.inputs(self), name='auto_branch_transparant')
+        self.branch_func = branch_func
+        
+    def action(self, *args, **kwargs):
+        image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+        branch_data = self.branch_func(image, annotation)
+        self.auto_branch.set_value(branch_data)
+
+        return image, annotation
+    
+    def output(self, index=0):
+        if index == 0:
+            return self
+        else:
+            return self.auto_branch
+    
+    
 class SplitMultiBranches(Node):
     def __init__(self, inputs, branches_num=2):
         super(SplitMultiBranches, self).__init__(name=None, action=None, inputs=inputs)
