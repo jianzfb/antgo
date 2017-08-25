@@ -1,7 +1,7 @@
 # encoding=utf-8
 # @Time    : 17-6-13
 # @File    : recorder.py
-# @Author  : <jian@mltalker.com>
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -24,7 +24,8 @@ class RecorderNode(Node):
     def close(self):
         if self._record_writer is not None:
             self._record_writer.close()
-
+        self._record_writer = None
+        
     @property
     def dump_dir(self):
         return self._dump_dir
@@ -70,69 +71,3 @@ class RecorderNode(Node):
 
     def iterator_value(self):
         pass
-
-
-# def load_records(dump_dir):
-#     if os.path.exists(os.path.join(dump_dir, 'running-record.dat')):
-#         result_records = []
-#         annotation_records = []
-#         type_records = []
-#
-#         fp = open(os.path.join(dump_dir, 'running-record.dat'),'r')
-#         content = fp.readline()
-#         while content:
-#             json_obj = json.loads(content)
-#             task_type = json_obj['task-type']
-#             task_result = json_obj['task-result']
-#
-#             annotation = None
-#             if 'annotation' in json_obj:
-#                 annotation = json_obj['annotation']
-#
-#             result_records.append(task_result)
-#             annotation_records.append(annotation)
-#             type_records.append(task_type)
-#
-#             content = fp.readline()
-#         fp.close()
-#         return 'single', type_records, result_records, annotation_records
-#     else:
-#         multi_type_records = []
-#         multi_result_records = []
-#         multi_annotation_records = []
-#         # traverse all subfolder
-#         for ff in os.listdir(dump_dir):
-#             if ff[0] == '.':
-#                 continue
-#
-#             if os.path.isdir(os.path.join(dump_dir, ff)):
-#                 if os.path.exists(os.path.join(dump_dir,'running-record.dat')):
-#                     result_records = []
-#                     annotation_records = []
-#                     type_records = []
-#
-#                     fp = open(os.path.join(dump_dir, 'running-record.dat'), 'r')
-#                     content = fp.readline()
-#                     while content:
-#                         json_obj = json.loads(content)
-#                         task_type = json_obj['task-type']
-#                         task_result = json_obj['task-result']
-#
-#                         annotation = None
-#                         if 'annotation' in json_obj:
-#                             annotation = json_obj['annotation']
-#
-#                         result_records.append(task_result)
-#                         annotation_records.append(annotation)
-#                         type_records.append(task_type)
-#
-#                         content = fp.readline()
-#                     fp.close()
-#
-#                     multi_type_records.append(type_records)
-#                     multi_result_records.append(result_records)
-#                     multi_annotation_records.append(annotation_records)
-#
-#         return 'multi', multi_type_records, multi_result_records, multi_annotation_records
-#
-

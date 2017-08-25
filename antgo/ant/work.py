@@ -105,12 +105,12 @@ class Training(BaseWork):
     dataset_cls = self.context.dataset_factory(dataset_name)
     dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
     dataset.reset_state()
-    self.context.call_training_process(dataset, self.dump_dir)
-    dataset.close()
+    with safe_recorder_manager(dataset):
+      self.context.call_training_process(dataset, self.dump_dir)
 
-    # 4.step work is done
-    self.trigger(self.dump_dir, 'DONE')
-    self.context.wait_until_clear()
+      # 4.step work is done
+      self.trigger(self.dump_dir, 'DONE')
+      self.context.wait_until_clear()
 
   def notify_func(self):
     # 1.step notify
@@ -190,16 +190,16 @@ class Inference(BaseWork):
     self.context.params = model_parameters
     dataset_cls = self.context.dataset_factory(dataset_name)
     dataset = dataset_cls(dataset_train_or_test, os.path.join(self.data_factory, dataset_name), dataset_params)
-
-    data_annotation_branch = DataAnnotationBranch(Node.inputs(dataset))
-    self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-    self.context.call_infer_process(data_annotation_branch.output(0), self.dump_dir)
-    self.context.recorder.close()
-    dataset.close()
-
-    # work is done
-    self.trigger(os.path.join(self.dump_dir), 'DONE')
-    self.context.wait_until_clear()
+    
+    with safe_recorder_manager(dataset):
+      data_annotation_branch = DataAnnotationBranch(Node.inputs(dataset))
+      self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+      with safe_recorder_manager(self.context.recorder):
+        self.context.call_infer_process(data_annotation_branch.output(0), self.dump_dir)
+  
+      # work is done
+      self.trigger(os.path.join(self.dump_dir), 'DONE')
+      self.context.wait_until_clear()
 
 
 class Evaluating(BaseWork):
@@ -247,12 +247,13 @@ class Evaluating(BaseWork):
       task_running_statictic = {}
       task_running_statictic[self.name] = {}
       evaluation_measure_result = []
-      record_reader = RecordReader(self.dump_dir)
-      for measure in dummy_ant_task.evaluation_measures:
-        if measure.name in self.config_parameters['measure']:
-          record_generator = record_reader.iterate_read('predict', 'groundtruth')
-          result = measure.eva(record_generator, None)
-          evaluation_measure_result.append(result)
+      
+      with safe_recorder_manager(RecordReader(self.dump_dir)) as record_reader:
+        for measure in dummy_ant_task.evaluation_measures:
+          if measure.name in self.config_parameters['measure']:
+            record_generator = record_reader.iterate_read('predict', 'groundtruth')
+            result = measure.eva(record_generator, None)
+            evaluation_measure_result.append(result)
       task_running_statictic[self.name]['measure'] = evaluation_measure_result
       # evaluation report
       everything_to_html(task_running_statictic, self.dump_dir)
@@ -263,12 +264,12 @@ class Evaluating(BaseWork):
         task_running_statictic[self.name] = {}
 
         evaluation_measure_result = []
-        record_reader = RecordReader(experiment_folder)
-        for measure in dummy_ant_task.evaluation_measures:
-          if measure.name in self.config_parameters['measure']:
-            record_generator = record_reader.iterate_read('predict', 'groundtruth')
-            result = measure.eva(record_generator, None)
-            evaluation_measure_result.append(result)
+        with safe_recorder_manager(RecordReader(experiment_folder)) as record_reader:
+          for measure in dummy_ant_task.evaluation_measures:
+            if measure.name in self.config_parameters['measure']:
+              record_generator = record_reader.iterate_read('predict', 'groundtruth')
+              result = measure.eva(record_generator, None)
+              evaluation_measure_result.append(result)
         task_running_statictic[self.name]['measure'] = evaluation_measure_result
 
         multi_expriments.append(task_running_statictic)
@@ -328,19 +329,16 @@ class DataSplit(BaseWork):
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
-
-      t, v = dataset.split(self.split_params, self.split_method)
-      dataset_config = copy.deepcopy(self.config_parameters)
-      dataset_config['dataset']['split'] = {}
-      dataset_config['dataset']['split']['train'] = t.ids
-      dataset_config['dataset']['split']['test'] = v.ids
-
-      with open(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'w') as fp:
-        yaml.dump(dataset_config, fp)
-
-      t.close()
-      v.close()
-      dataset.close()
+      
+      with safe_recorder_manager(dataset):
+        t, v = dataset.split(self.split_params, self.split_method)
+        dataset_config = copy.deepcopy(self.config_parameters)
+        dataset_config['dataset']['split'] = {}
+        dataset_config['dataset']['split']['train'] = t.ids
+        dataset_config['dataset']['split']['test'] = v.ids
+  
+        with open(os.path.join(self.dump_dir, 'experiment-holdout-config.yaml'), 'w') as fp:
+          yaml.dump(dataset_config, fp)
 
       self.trials += 1
       # task is done
@@ -354,19 +352,16 @@ class DataSplit(BaseWork):
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
-
-      t, v = dataset.split(self.split_params, self.split_method)
-      dataset_config = copy.deepcopy(self.config_parameters)
-      dataset_config['dataset']['split'] = {}
-      dataset_config['dataset']['split']['train'] = t.ids
-      dataset_config['dataset']['split']['test'] = v.ids
-
-      with open(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml' % self.trials), 'w') as fp:
-        yaml.dump(dataset_config, fp)
-
-      t.close()
-      v.close()
-      dataset.close()
+      
+      with safe_recorder_manager(dataset):
+        t, v = dataset.split(self.split_params, self.split_method)
+        dataset_config = copy.deepcopy(self.config_parameters)
+        dataset_config['dataset']['split'] = {}
+        dataset_config['dataset']['split']['train'] = t.ids
+        dataset_config['dataset']['split']['test'] = v.ids
+  
+        with open(os.path.join(self.dump_dir, 'experiment-repeated-holdout-%d-config.yaml' % self.trials), 'w') as fp:
+          yaml.dump(dataset_config, fp)
 
       self.trials += 1
       # trigger next task
@@ -380,19 +375,16 @@ class DataSplit(BaseWork):
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
-
-      t, v = dataset.split(self.split_params, self.split_method)
-      dataset_config = copy.deepcopy(self.config_parameters)
-      dataset_config['dataset']['split'] = {}
-      dataset_config['dataset']['split']['train'] = t.ids
-      dataset_config['dataset']['split']['test'] = v.ids
-
-      with open(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml' % self.trials), 'w') as fp:
-        yaml.dump(dataset_config, fp)
-
-      t.close()
-      v.close()
-      dataset.close()
+      
+      with safe_recorder_manager(dataset):
+        t, v = dataset.split(self.split_params, self.split_method)
+        dataset_config = copy.deepcopy(self.config_parameters)
+        dataset_config['dataset']['split'] = {}
+        dataset_config['dataset']['split']['train'] = t.ids
+        dataset_config['dataset']['split']['test'] = v.ids
+  
+        with open(os.path.join(self.dump_dir, 'experiment-bootstrap-%d-config.yaml' % self.trials), 'w') as fp:
+          yaml.dump(dataset_config, fp)
 
       self.trials += 1
       # trigger next task
@@ -406,21 +398,18 @@ class DataSplit(BaseWork):
       dataset = dataset_cls(self.dataset_train_or_test,
                             os.path.join(self.data_factory, self.dataset_name),
                             self.dataset_params)
-
-      self.split_params['k'] = self.trials
-
-      t, v = dataset.split(self.split_params, self.split_method)
-      dataset_config = copy.deepcopy(self.config_parameters)
-      dataset_config['dataset']['split'] = {}
-      dataset_config['dataset']['split']['train'] = t.ids
-      dataset_config['dataset']['split']['test'] = v.ids
-
-      with open(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml' % self.trials), 'w') as fp:
-        yaml.dump(dataset_config, fp)
-
-      t.close()
-      v.close()
-      dataset.close()
+      
+      with safe_recorder_manager(dataset):
+        self.split_params['k'] = self.trials
+    
+        t, v = dataset.split(self.split_params, self.split_method)
+        dataset_config = copy.deepcopy(self.config_parameters)
+        dataset_config['dataset']['split'] = {}
+        dataset_config['dataset']['split']['train'] = t.ids
+        dataset_config['dataset']['split']['test'] = v.ids
+    
+        with open(os.path.join(self.dump_dir, 'experiment-kfold-%d-config.yaml' % self.trials), 'w') as fp:
+          yaml.dump(dataset_config, fp)
 
       self.trials += 1
       # trigger next task

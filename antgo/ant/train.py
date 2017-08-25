@@ -60,100 +60,105 @@ class AntRun(AntBase):
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
 
-    # 2.step model evaluation (optional)
-    if running_ant_task.estimation_procedure is not None:
-      self.stage = 'EVALUATION'
-      logger.info('start model evaluation')
-
-      estimation_procedure = running_ant_task.estimation_procedure
-      estimation_procedure_params = running_ant_task.estimation_procedure_params
-      evaluation_measures = running_ant_task.evaluation_measures
-
-      evaluation_statistic = None
-      if estimation_procedure == 'holdout':
-        evaluation_statistic = self._holdout_validation(ant_train_dataset, evaluation_measures)
-      elif estimation_procedure == "repeated-holdout":
-        number_repeats = 10             # default value
-        is_stratified_sampling = True   # default value
-        split_ratio = 0.6               # default value
-        if estimation_procedure_params is not None:
-          number_repeats = int(estimation_procedure_params.get('number_repeats', number_repeats))
-          is_stratified_sampling = int(estimation_procedure_params.get('stratified_sampling', is_stratified_sampling))
-          split_ratio = float(estimation_procedure_params.get('split_ratio', split_ratio))
-
-        # start model estimation procedure
-        evaluation_statistic = self._repeated_holdout_validation(number_repeats,
-                                                                 ant_train_dataset,
-                                                                 split_ratio,
-                                                                 is_stratified_sampling,
-                                                                 evaluation_measures)
-      elif estimation_procedure == "bootstrap":
-        bootstrap_counts = int(estimation_procedure_params.get('bootstrap_counts', 20))
-        evaluation_statistic = self._bootstrap_validation(bootstrap_counts,
-                                                          ant_train_dataset,
-                                                          evaluation_measures)
-      elif estimation_procedure == "kfold":
-        kfolds = int(estimation_procedure_params.get('kfold', 5))
-        evaluation_statistic = self._kfold_cross_validation(kfolds, ant_train_dataset, evaluation_measures)
-
-      logger.info('generate model evaluation report')
-      everything_to_html(evaluation_statistic, self.ant_dump_dir)
-    
-    # 3.step model training
-    self.stage = "TRAIN"
-    if not os.path.exists(os.path.join(self.ant_dump_dir, 'train')):
-        os.makedirs(os.path.join(self.ant_dump_dir, 'train'))
-    logger.info('start training process')
-    ant_train_dataset.reset_state()
-    self.context.call_training_process(ant_train_dataset, os.path.join(self.ant_dump_dir, 'train'))
-
-    # 4.step ablation experiment(optional)
-    if len(self.context.ablations) > 0:
-      part_train_dataset, part_validation_dataset = ant_train_dataset.split(split_method='holdout')
-      part_train_dataset.reset_state()
+    now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+    with safe_recorder_manager(ant_train_dataset):
+      # 2.step model evaluation (optional)
+      if running_ant_task.estimation_procedure is not None:
+        self.stage = 'EVALUATION'
+        logger.info('start model evaluation')
+  
+        estimation_procedure = running_ant_task.estimation_procedure
+        estimation_procedure_params = running_ant_task.estimation_procedure_params
+        evaluation_measures = running_ant_task.evaluation_measures
+  
+        evaluation_statistic = None
+        if estimation_procedure == 'holdout':
+          evaluation_statistic = self._holdout_validation(ant_train_dataset, evaluation_measures, now_time)
+        elif estimation_procedure == "repeated-holdout":
+          number_repeats = 10             # default value
+          is_stratified_sampling = True   # default value
+          split_ratio = 0.6               # default value
+          if estimation_procedure_params is not None:
+            number_repeats = int(estimation_procedure_params.get('number_repeats', number_repeats))
+            is_stratified_sampling = int(estimation_procedure_params.get('stratified_sampling', is_stratified_sampling))
+            split_ratio = float(estimation_procedure_params.get('split_ratio', split_ratio))
+  
+          # start model estimation procedure
+          evaluation_statistic = self._repeated_holdout_validation(number_repeats,
+                                                                   ant_train_dataset,
+                                                                   split_ratio,
+                                                                   is_stratified_sampling,
+                                                                   evaluation_measures,
+                                                                   now_time)
+        elif estimation_procedure == "bootstrap":
+          bootstrap_counts = int(estimation_procedure_params.get('bootstrap_counts', 20))
+          evaluation_statistic = self._bootstrap_validation(bootstrap_counts,
+                                                            ant_train_dataset,
+                                                            evaluation_measures,
+                                                            now_time)
+        elif estimation_procedure == "kfold":
+          kfolds = int(estimation_procedure_params.get('kfold', 5))
+          evaluation_statistic = self._kfold_cross_validation(kfolds, ant_train_dataset, evaluation_measures, now_time)
+  
+        logger.info('generate model evaluation report')
+        everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, now_time))
       
-      for block in self.context.ablation.blocks:
-        self.context.ablation.disable(block)
-        logger.info('start ablation experiment %s'%block)
+      # 3.step model training
+      self.stage = "TRAIN"
+      train_dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train')
+      if not os.path.exists(train_dump_dir):
+          os.makedirs(train_dump_dir)
 
-        # dump_dir
-        dump_dir = os.path.join(self.ant_dump_dir, 'ablation', block)
-        # prepare dir
-        if not os.path.exists(dump_dir):
-          os.makedirs(dump_dir)
+      logger.info('start training process')
+      ant_train_dataset.reset_state()
+      self.context.call_training_process(ant_train_dataset, train_dump_dir)
+  
+      # 4.step ablation experiment(optional)
+      if len(self.context.ablations) > 0:
+        part_train_dataset, part_validation_dataset = ant_train_dataset.split(split_method='holdout')
+        part_train_dataset.reset_state()
+        
+        for block in self.context.ablation.blocks:
+          self.context.ablation.disable(block)
+          logger.info('start ablation experiment %s'%block)
+  
+          # dump_dir for ablation experiment
+          ablation_dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train', 'ablation', block)
+          if not os.path.exists(ablation_dump_dir):
+            os.makedirs(ablation_dump_dir)
+  
+          # 2.step training model
+          self.stage = 'ABLATION(%s)-TRAIN'%block
+          self.context.call_training_process(part_train_dataset, ablation_dump_dir)
+  
+          # 3.step evaluation measures
+          # split data and label
+          data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
+          self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+  
+          self.stage = 'ABLATION(%s)-EVALUATION'%block
+          with safe_recorder_manager(self.context.recorder):
+            self.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
+  
+          ablation_running_statictic = {self.ant_name: {}}
+          ablation_evaluation_measure_result = []
+  
+          with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
+            for measure in running_ant_task.evaluation_measures:
+              record_generator = record_reader.iterate_read('predict', 'groundtruth')
+              result = measure.eva(record_generator, None)
+              ablation_evaluation_measure_result.append(result)
+              
+          ablation_running_statictic[self.ant_name]['measure'] = ablation_evaluation_measure_result
+          everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
 
-        # 2.step training model
-        self.stage = 'ABLATION(%s)-TRAIN'%block
-        self.context.call_training_process(part_train_dataset, dump_dir)
-
-        # 3.step evaluation measures
-        # split data and label
-        data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
-        self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-
-        self.stage = 'ABLATION(%s)-EVALUATION'%block
-        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-        self.context.recorder.close()
-
-        ablation_running_statictic = {self.ant_name: {}}
-        ablation_evaluation_measure_result = []
-
-        record_reader = RecordReader(dump_dir)
-        for measure in running_ant_task.evaluation_measures:
-          record_generator = record_reader.iterate_read('predict', 'groundtruth')
-          result = measure.eva(record_generator, None)
-          ablation_evaluation_measure_result.append(result)
-        ablation_running_statictic[self.ant_name]['measure'] = ablation_evaluation_measure_result
-        everything_to_html(ablation_evaluation_measure_result, dump_dir)
-
-  def _holdout_validation(self, train_dataset, evaluation_measures):
+  def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
     # 1.step split train set and validation set
     part_train_dataset, part_validation_dataset = train_dataset.split(split_method='holdout')
     part_train_dataset.reset_state()
 
     # dump_dir
-    dump_dir = os.path.join(self.ant_dump_dir, 'holdout')
-    # prepare dir
+    dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train', 'holdout-evaluation')
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
 
@@ -167,9 +172,9 @@ class AntRun(AntBase):
     self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
 
     self.stage = 'EVALUATION-HOLDOUT-EVALUATION'
-    with running_statistic(self.ant_name):
-      self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-    self.context.recorder.close()
+    with safe_recorder_manager(self.context.recorder):
+      with running_statistic(self.ant_name):
+        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
     task_running_statictic = get_running_statistic(self.ant_name)
     task_running_statictic = {self.ant_name: task_running_statictic}
@@ -180,16 +185,21 @@ class AntRun(AntBase):
     logger.info('start evaluation process')
     evaluation_measure_result = []
 
-    record_reader = RecordReader(dump_dir)
-    for measure in evaluation_measures:
-      record_generator = record_reader.iterate_read('predict', 'groundtruth')
-      result = measure.eva(record_generator, None)
-      evaluation_measure_result.append(result)
-    task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+    with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
+      for measure in evaluation_measures:
+        record_generator = record_reader.iterate_read('predict', 'groundtruth')
+        result = measure.eva(record_generator, None)
+        evaluation_measure_result.append(result)
+      task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
     return task_running_statictic
 
-  def _repeated_holdout_validation(self, repeats, train_dataset, split_ratio, is_stratified_sampling, evaluation_measures):
+  def _repeated_holdout_validation(self, repeats,
+                                   train_dataset,
+                                   split_ratio,
+                                   is_stratified_sampling,
+                                   evaluation_measures,
+                                   nowtime):
     repeated_running_statistic = []
     for repeat in range(repeats):
       # 1.step split train set and validation set
@@ -198,17 +208,13 @@ class AntRun(AntBase):
                                                                         split_method='repeated-holdout')
       part_train_dataset.reset_state()
       # dump_dir
-      dump_dir = os.path.join(self.ant_dump_dir, 'repeated-holdout-evaluation', 'repeat-%d'%repeat)
-
-      # prepare dir
+      dump_dir = os.path.join(self.ant_dump_dir, nowtime, 'train', 'repeated-holdout-evaluation', 'repeat-%d'%repeat)
       if not os.path.exists(dump_dir):
         os.makedirs(dump_dir)
 
       # 2.step training model
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-TRAIN-%d' % repeat
       self.context.call_training_process(part_train_dataset, dump_dir)
-      if self.context.recorder:
-        self.context.recorder.close()
 
       # 3.step evaluation measures
       # split data and label
@@ -219,11 +225,9 @@ class AntRun(AntBase):
       #     os.makedirs(infer_dump_dir)
 
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-EVALUATION-%d' % repeat
-      with running_statistic(self.ant_name):
-        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-
-      if self.context.recorder:
-        self.context.recorder.close()
+      with safe_recorder_manager(self.context.recorder):
+        with running_statistic(self.ant_name):
+          self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
       task_running_statictic = get_running_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
@@ -234,19 +238,19 @@ class AntRun(AntBase):
       logger.info('start evaluation process')
       evaluation_measure_result = []
 
-      record_reader = RecordReader(dump_dir)
-      for measure in evaluation_measures:
-        record_generator = record_reader.iterate_read('predict', 'groundtruth')
-        result = measure.eva(record_generator, None)
-        evaluation_measure_result.append(result)
-      task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+      with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
+        for measure in evaluation_measures:
+          record_generator = record_reader.iterate_read('predict', 'groundtruth')
+          result = measure.eva(record_generator, None)
+          evaluation_measure_result.append(result)
+        task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
       repeated_running_statistic.append(task_running_statictic)
 
     evaluation_result = multi_repeats_measures_statistic(repeated_running_statistic, method='repeated-holdout')
     return evaluation_result
 
-  def _bootstrap_validation(self, bootstrap_rounds, train_dataset, evaluation_measures):
+  def _bootstrap_validation(self, bootstrap_rounds, train_dataset, evaluation_measures, nowtime):
     bootstrap_running_statistic = []
     for bootstrap_i in range(bootstrap_rounds):
       # 1.step split train set and validation set
@@ -254,17 +258,17 @@ class AntRun(AntBase):
                                                                         split_method='bootstrap')
       part_train_dataset.reset_state()
       # dump_dir
-      dump_dir = os.path.join(self.ant_dump_dir, 'bootstrap-%d-evaluation' % bootstrap_i)
-
-      # prepare dir
+      dump_dir = os.path.join(self.ant_dump_dir,
+                              nowtime,
+                              'train',
+                              'bootstrap-evaluation',
+                              'bootstrap-%d-evaluation' % bootstrap_i)
       if not os.path.exists(dump_dir):
         os.makedirs(dump_dir)
 
       # 2.step training model
       self.stage = 'EVALUATION-BOOTSTRAP-TRAIN-%d' % bootstrap_i
       self.context.call_training_process(part_train_dataset, dump_dir)
-      if self.context.recorder:
-        self.context.recorder.close()
 
       # 3.step evaluation measures
       # split data and label
@@ -275,11 +279,9 @@ class AntRun(AntBase):
       #     os.makedirs(infer_dump_dir)
 
       self.stage = 'EVALUATION-BOOTSTRAP-EVALUATION-%d' % bootstrap_i
-      with running_statistic(self.ant_name):
-        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-
-      if self.context.recorder:
-        self.context.recorder.close()
+      with safe_recorder_manager(self.context.recorder):
+        with running_statistic(self.ant_name):
+          self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
       task_running_statictic = get_running_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
@@ -290,19 +292,19 @@ class AntRun(AntBase):
       logger.info('start evaluation process')
       evaluation_measure_result = []
 
-      record_reader = RecordReader(dump_dir)
-      for measure in evaluation_measures:
-        record_generator = record_reader.iterate_read('predict', 'groundtruth')
-        result = measure.eva(record_generator, None)
-        evaluation_measure_result.append(result)
-      task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+      with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
+        for measure in evaluation_measures:
+          record_generator = record_reader.iterate_read('predict', 'groundtruth')
+          result = measure.eva(record_generator, None)
+          evaluation_measure_result.append(result)
+        task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
       bootstrap_running_statistic.append(task_running_statictic)
 
     evaluation_result = multi_repeats_measures_statistic(bootstrap_running_statistic, method='bootstrap')
     return evaluation_result
 
-  def _kfold_cross_validation(self, kfolds, train_dataset, evaluation_measures):
+  def _kfold_cross_validation(self, kfolds, train_dataset, evaluation_measures, nowtime):
     assert (kfolds in [5, 10])
     kfolds_running_statistic = []
     for k in range(kfolds):
@@ -312,17 +314,13 @@ class AntRun(AntBase):
                                                                         split_method='kfold')
       part_train_dataset.reset_state()
       # dump_dir
-      dump_dir = os.path.join(self.ant_dump_dir, 'fold-%d-evaluation' % k)
-
-      # prepare dir
+      dump_dir = os.path.join(self.ant_dump_dir, nowtime, 'train', 'kfold-evaluation', 'fold-%d-evaluation' % k)
       if not os.path.exists(dump_dir):
         os.makedirs(dump_dir)
 
       # 2.step training model
       self.stage = 'EVALUATION-KFOLD-TRAIN-%d' % k
       self.context.call_training_process(part_train_dataset, dump_dir)
-      if self.context.recorder:
-        self.context.recorder.close()
 
       # 3.step evaluation measures
       # split data and label
@@ -333,11 +331,9 @@ class AntRun(AntBase):
       #     os.makedirs(infer_dump_dir)
 
       self.stage = 'EVALUATION-KFOLD-EVALUATION-%d' % k
-      with running_statistic(self.ant_name):
-        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-
-      if self.context.recorder:
-        self.context.recorder.close()
+      with safe_recorder_manager(self.context.recorder):
+        with running_statistic(self.ant_name):
+          self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
       task_running_statictic = get_running_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
@@ -349,11 +345,12 @@ class AntRun(AntBase):
       evaluation_measure_result = []
 
       record_reader = RecordReader(dump_dir)
-      for measure in evaluation_measures:
-        record_generator = record_reader.iterate_read('predict', 'groundtruth')
-        result = measure.eva(record_generator, None)
-        evaluation_measure_result.append(result)
-      task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+      with safe_recorder_manager(RecordReader(dump_dir)):
+        for measure in evaluation_measures:
+          record_generator = record_reader.iterate_read('predict', 'groundtruth')
+          result = measure.eva(record_generator, None)
+          evaluation_measure_result.append(result)
+        task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
       kfolds_running_statistic.append(task_running_statictic)
 

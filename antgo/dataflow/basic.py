@@ -12,6 +12,8 @@ import yaml
 import plyvel
 from antgo.dataflow.dataflow_server import *
 from antgo import config
+from contextlib import contextmanager
+from antgo.utils import logger
 
 
 class Sample(object):
@@ -62,6 +64,18 @@ class RecordWriter(object):
 
     with open(os.path.join(self._record_path, 'attrs.yaml'), 'w') as outfile:
       yaml.dump(db_attrs, outfile, default_flow_style=False)
+
+
+@contextmanager
+def safe_recorder_manager(recorder):
+  try:
+    yield recorder
+  except:
+    logger.error('failed in record IO')
+    recorder.close()
+    raise RuntimeError
+  
+  recorder.close()
 
 
 class RecordReader(object):

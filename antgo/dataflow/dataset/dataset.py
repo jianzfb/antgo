@@ -54,6 +54,9 @@ class Dataset(BaseNode):
 
         self._ids = []
 
+    def close(self):
+        pass
+    
     @property
     def ids(self):
         return self._ids
