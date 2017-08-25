@@ -10,7 +10,10 @@ import numpy as np
 import sys
 from antgo.dataflow.core import *
 from antgo.utils import get_rng
-import queue
+try:
+    import queue
+except:
+    import Queue as queue
 
 class BatchData(Node):
     def __init__(self, inputs, batch_size, remainder=False, threads=0):
@@ -266,8 +269,12 @@ class _TransparantNode(Node):
     def get_value(self):
         if DIRTY == self._value:
             self._evaluate()
-            
+
+        if self._buffer.qsize() == 0:
+            return self._value
+
         return self._buffer.get()
+
 
     def _evaluate(self):
         try:
