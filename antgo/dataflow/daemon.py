@@ -11,6 +11,7 @@ import time
 import atexit
 from signal import SIGTERM
 import psutil
+import signal
 
 
 class Daemon(object):
@@ -76,6 +77,8 @@ class Daemon(object):
     
     # register
     atexit.register(self.delpid)
+    signal.signal(signal.SIGTERM, self.delpid)
+    signal.signal(signal.SIGINT, self.delpid)
     # (child process return)
     return 1
   

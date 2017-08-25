@@ -158,22 +158,36 @@ def _get_init_fn(trainer_obj, dump_dir):
   if checkpoint_exclude_scopes is not None:
     exclusions = [scope.strip()
                   for scope in checkpoint_exclude_scopes.split(',')]
-
+  
+  transfers = {}
+  checkpoint_transfer_scopes = getattr(trainer_obj, 'checkpoint_transfer_scopes', None)
+  if checkpoint_transfer_scopes is not None:
+    for scope in checkpoint_transfer_scopes.split(','):
+      s_scope, t_scope = scope.split(':')
+      transfers[s_scope.strip()] = t_scope.strip()
+  
   # TODO(sguada) variables.filter_variables()
-  variables_to_restore = []
+  variables_to_restore = {}
   for var in slim.get_model_variables():
+    # transfer name
+    var_name = var.op.name
+    for k, v in transfers.items():
+      if var.op.name.startswith(k):
+        var_name = var_name.replace(k, v)
+    
+    # exclude name
     excluded = False
     for exclusion in exclusions:
-      if var.op.name.startswith(exclusion):
+      if var_name.startswith(exclusion):
         excluded = True
         break
     if not excluded:
-      variables_to_restore.append(var)
-
+      variables_to_restore[var_name] = var
+  
   if tf.gfile.IsDirectory(checkpoint_path):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
 
-  logger.info('Loading from %s' % checkpoint_path)
+  logger.info('fine-tune from %s' % checkpoint_path)
   return slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore)
   
 
