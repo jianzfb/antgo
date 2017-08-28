@@ -101,3 +101,7 @@ class AntBase(object):
   def context(self, val):
     self.ant_context = val
     self.ant_context.ant = self
+
+  @property
+  def now_time(self):
+    return self.ant_time

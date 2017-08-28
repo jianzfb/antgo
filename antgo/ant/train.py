@@ -60,7 +60,7 @@ class AntRun(AntBase):
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
 
-    now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+    now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.now_time))
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None:
