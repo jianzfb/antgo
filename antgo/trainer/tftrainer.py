@@ -167,6 +167,7 @@ def _get_init_fn(trainer_obj, dump_dir):
       transfers[s_scope.strip()] = t_scope.strip()
   
   # TODO(sguada) variables.filter_variables()
+  auxilary_variables_to_restore = []
   variables_to_restore = {}
   for var in slim.get_model_variables():
     # transfer name
@@ -181,14 +182,29 @@ def _get_init_fn(trainer_obj, dump_dir):
       if var_name.startswith(exclusion):
         excluded = True
         break
+    
+    # record
     if not excluded:
-      variables_to_restore[var_name] = var
+      if var_name not in variables_to_restore:
+        variables_to_restore[var_name] = var
+      else:
+        is_ok = False
+        for auxi_variables in auxilary_variables_to_restore:
+          if var_name not in auxi_variables:
+            auxi_variables[var_name] = var
+            is_ok = True
+        
+        if not is_ok:
+          auxilary_variables_to_restore.append({})
+          auxilary_variables_to_restore[-1][var_name] = var
+  
+  auxilary_variables_to_restore.append(variables_to_restore)
   
   if tf.gfile.IsDirectory(checkpoint_path):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
 
   logger.info('fine-tune from %s' % checkpoint_path)
-  return slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore)
+  return [slim.assign_from_checkpoint_fn(checkpoint_path, vr) for vr in auxilary_variables_to_restore]
   
 
 class TFTrainer(Trainer):
@@ -326,9 +342,10 @@ class TFTrainer(Trainer):
       self.sess.run(tf.global_variables_initializer())
 
       # Restore from checkpoint
-      restore_fn = _get_init_fn(self, self.dump_dir)
-      if restore_fn is not None:
-        restore_fn(self.sess)
+      restore_fns = _get_init_fn(self, self.dump_dir)
+      if restore_fns is not None:
+        for restore_fn in restore_fns:
+          restore_fn(self.sess)
 
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
@@ -365,9 +382,10 @@ class TFTrainer(Trainer):
       self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
 
       # Restore from checkpoint
-      restore_fn = _get_init_fn(self, self.dump_dir)
-      if restore_fn is not None:
-        restore_fn(self.sess)
+      restore_fns = _get_init_fn(self, self.dump_dir)
+      if restore_fns is not None:
+        for restore_fn in restore_fns:
+          restore_fn(self.sess)
       
       # Value ops
       self.val_ops = self.clones[0].outputs

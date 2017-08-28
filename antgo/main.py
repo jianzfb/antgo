@@ -35,7 +35,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy", 'server']
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -57,28 +57,24 @@ def main():
   # 1.step parse running params
   flags.cli_param_flags()
   ant_cmd = sys.argv[1]
-
-  # 2.step check parameters
+  
   if ant_cmd == "":
-    logger.error('antgo cli only support( %s )command'%",".join(_ant_support_commands))
+    logger.error('antgo cli only support( %s )command' % ",".join(_ant_support_commands))
     sys.exit(-1)
   
-  main_folder = FLAGS.main_folder()
-  if main_folder is None:
-    main_folder = os.path.abspath(os.curdir)
+  # 2.step antgo server daemon
+  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
+  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
 
-  main_file = FLAGS.main_file()
-  if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
-    logger.error('main executing file dont exist')
-    sys.exit(-1)
+  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
+                                    dataflow_server_host,
+                                    os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
+  dfs_daemon.start()
 
-  dump_dir = FLAGS.dump()
-  if dump_dir is None:
-    dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
-    if not os.path.exists(dump_dir):
-      os.makedirs(dump_dir)
+  if ant_cmd == 'server':
+    return
 
-  # 3.step load antgo server config
+  # 3.step load antgo config
   config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], FLAGS.config())
   Config.parse_xml(config_xml)
 
@@ -96,17 +92,24 @@ def main():
   name = FLAGS.name()
   if name is None:
     name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+
+  # 3.3 key parameters
+  main_folder = FLAGS.main_folder()
+  if main_folder is None:
+    main_folder = os.path.abspath(os.curdir)
+
+  main_file = FLAGS.main_file()
+  if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
+    logger.error('main executing file dont exist')
+    sys.exit(-1)
+
+  dump_dir = FLAGS.dump()
+  if dump_dir is None:
+    dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
+    if not os.path.exists(dump_dir):
+      os.makedirs(dump_dir)
   
-  # 4.step dataflow server daemon
-  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
-  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
-
-  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
-                                    dataflow_server_host,
-                                    os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
-  dfs_daemon.start()
-
-  # 5.0 step custom workflow
+  # 4.0 step custom workflow
   if ant_cmd == 'compose':
     # user custom workflow
     work_flow = WorkFlow(name,
@@ -119,16 +122,16 @@ def main():
     work_flow.start()
     return
 
-  # 5.1 step ant running
-  # 5.1.1 step what is task
+  # 5 step ant running
+  # 5.1 step what is task
   task = FLAGS.task()
   if task is not None:
     task = os.path.join(task_factory, task)
 
-  # 5.1.2 step load ant context
+  # 5.2 step load ant context
   ant_context = _main_context(main_file, main_folder)
 
-  # 5.1.3 step load model config
+  # 5.3 step load model config
   main_param = FLAGS.main_param()
   if main_param is not None:
     main_config_path = os.path.join(main_folder, main_param)

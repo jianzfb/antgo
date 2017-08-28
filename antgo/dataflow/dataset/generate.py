@@ -50,17 +50,21 @@ def generate_jiajiaya_standard_dataset(data_folder, target_folder):
       train_annotation_list.append(os.path.join(data_folder, 'training', f))
       train_img_list.append(os.path.join(data_folder, 'training', f.replace('_matte','')))
   
-  def build_data_generator(img_list, annotation_list):
+  def build_training_data_generator(img_list, annotation_list):
     for img_f, annotation_f in zip(img_list, annotation_list):
       data = scipy.misc.imread(img_f)
-      label = scipy.misc.imread(annotation_f)
+      matting = scipy.misc.imread(annotation_f)
+      label = matting.copy()
       pos = np.where(label > 128)
       label[:, :] = 0
       label[pos] = 1
+      
+      matting = matting / 255.0
+      matting = matting.astype(np.float32)
 
-      yield data, label
+      yield data, (label, matting)
   
-  generate_standard_dataset(build_data_generator(train_img_list, train_annotation_list),
+  generate_standard_dataset(build_training_data_generator(train_img_list, train_annotation_list),
     'train',
     target_folder,
     'portrait')
@@ -74,7 +78,18 @@ def generate_jiajiaya_standard_dataset(data_folder, target_folder):
       test_annotation_list.append(os.path.join(data_folder, 'testing', f))
       test_img_list.append(os.path.join(data_folder, 'testing', f.replace('_matte', '')))
 
-  generate_standard_dataset(build_data_generator(test_img_list, test_annotation_list),
+  def build_testing_data_generator(img_list, annotation_list):
+    for img_f, annotation_f in zip(img_list, annotation_list):
+      data = scipy.misc.imread(img_f)
+      matting = scipy.misc.imread(annotation_f)
+      label = matting.copy()
+      pos = np.where(label > 128)
+      label[:, :] = 0
+      label[pos] = 1
+
+      yield data, label
+
+  generate_standard_dataset(build_testing_data_generator(test_img_list, test_annotation_list),
     'test',
     target_folder,
     'portrait')
