@@ -13,6 +13,7 @@ from antgo.dataflow.daemon import *
 
 db_lock = threading.Lock()
 db_pool = {}
+db_reference_count = {}
 db_client = {}
 
 class DFServerThread(threading.Thread):
@@ -30,7 +31,9 @@ class DFServerThread(threading.Thread):
       if id not in db_client:
         if db_path not in db_pool:
           db_pool[db_path] = plyvel.DB(db_path)
-        
+          db_reference_count[db_path] = 0
+
+        db_reference_count[db_path] += 1
         db_client[id] = db_path
     finally:
       db_lock.release()
@@ -40,8 +43,13 @@ class DFServerThread(threading.Thread):
     db_lock.acquire()
     try:
       if id in db_client:
-        db_pool[db_client[id]].close()
-        db_pool.pop(db_client[id])
+        db_path = db_client[id]
+        db_reference_count[db_path] -= 1
+        if db_reference_count[db_path] == 0:
+          db_pool[db_path].close()
+          db_pool.pop(db_path)
+          db_reference_count.pop(db_path)
+          
         db_client.pop(id)
     finally:
       db_lock.release()
