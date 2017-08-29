@@ -22,6 +22,7 @@ global_context = None
 
 def get_global_context():
   global global_context
+  assert(global_context is not None)
   return global_context
 
 
@@ -41,6 +42,7 @@ class _Ablation(object):
 @contextmanager
 def ablation(obj):
   yield obj
+
 
 class _Ablations(object):
   def __init__(self):
@@ -87,12 +89,22 @@ class Context(object):
   
     self.data_source = None
     self._ablation = _Ablations()
+    
+    self._stoppable_threads = []
 
   def wait_until_clear(self):
     if self.context_job is not None:
       self.context_job.stop()
       self.context_job.join()
       self.context_job = None
+    
+    for stoppable_thread in self._stoppable_threads:
+      stoppable_thread.stop()
+      if stoppable_thread.stop_condition is not None:
+        with stoppable_thread.stop_condition:
+          stoppable_thread.stop_condition.notifyAll()
+      stoppable_thread.join()
+    self._stoppable_threads = []
 
     for clear_func in self.clear_callbacks:
       clear_func()
@@ -210,3 +222,6 @@ class Context(object):
   @property
   def ablation(self):
     return self._ablation
+  
+  def register_stoppable_thread(self, stoppable_thread):
+    self._stoppable_threads.append(stoppable_thread)
