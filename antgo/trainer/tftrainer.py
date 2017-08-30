@@ -202,8 +202,11 @@ def _get_init_fn(trainer_obj, dump_dir):
   
   if tf.gfile.IsDirectory(checkpoint_path):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
-
-  logger.info('fine-tune from %s' % checkpoint_path)
+  
+  if trainer_obj.is_training:
+    logger.info('fine-tune from %s' % checkpoint_path)
+  else:
+    logger.info('load from %s' % checkpoint_path)
   return [slim.assign_from_checkpoint_fn(checkpoint_path, vr) for vr in auxilary_variables_to_restore]
   
 
@@ -329,10 +332,11 @@ class TFTrainer(Trainer):
       with tf.control_dependencies([update_op]):
         self.val_ops = tf.identity(total_loss, name='train_op')
 
-      if type(self.clones[0].outputs) == list:
-        self.val_ops.extend(self.clones[0].outputs)
-      else:
-        if self.clones[0].outputs is not None:
+      if self.clones[0].outputs is not None:
+        self.val_ops = [self.val_ops]
+        if type(self.clones[0].outputs) == list:
+          self.val_ops.extend(self.clones[0].outputs)
+        else:
           self.val_ops.append(self.clones[0].outputs)
 
       # Training saver

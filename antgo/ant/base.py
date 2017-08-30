@@ -1,6 +1,10 @@
-#encoding=utf-8
+# encoding=utf-8
+# @Time    : 17-3-3
+# @File    : common.py
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
+from __future__ import print_function
 
 import os
 from ..utils.serialize import loads,dumps
@@ -22,8 +26,9 @@ class AntBase(object):
     self.zmq_context = zmq.Context()
     self.zmq_socket = self.zmq_context.socket(zmq.REQ)
     self.zmq_socket.connect(self.app_connect)
-
-    self.app_server = ''
+    
+    # server flag
+    self.app_server = self.__class__.__name__
 
     # core
     self.ant_context = None
@@ -32,13 +37,13 @@ class AntBase(object):
       self.ant_context.ant = self
 
     # time
-    self.ant_time = time.time()
+    self.ant_time_stamp = time.time()
 
   def send(self, data, stage):
     if self.app_token is not None:
       # 0.step add extra data
       data['APP_TOKEN'] = self.app_token
-      data['APP_TIME'] = str(self.ant_time)
+      data['APP_TIME'] = str(self.ant_time_stamp)
       if self.ant_context is not None:
         data['APP_HYPER_PARAMETER'] = json.dumps(self.ant_context.params)
       data['APP_RPC'] = "INFO"
@@ -58,7 +63,7 @@ class AntBase(object):
       # 0.step config data
       data = {}
       data['APP_TOKEN'] = self.app_token
-      data['APP_TIME'] = str(self.ant_time)
+      data['APP_TIME'] = str(self.ant_time_stamp)
       data['APP_RPC'] = cmd
       data['APP_STAGE'] = 'RPC'
       data['APP_NOW_TIME'] = str(time.time())
@@ -107,5 +112,5 @@ class AntBase(object):
     self.ant_context.ant = self
 
   @property
-  def now_time(self):
-    return self.ant_time
+  def time_stamp(self):
+    return self.ant_time_stamp

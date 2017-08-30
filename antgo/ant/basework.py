@@ -166,7 +166,7 @@ class BaseWork(AntBase):
   @property
   def workspace(self):
     if self._workspace is None:
-      now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.now_time))
+      now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
       self._workspace = os.path.join(self.workspace_base, self.name, now_time)
     return self._workspace
 

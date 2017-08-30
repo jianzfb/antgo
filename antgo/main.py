@@ -1,4 +1,7 @@
-#encoding=utf-8
+# encoding=utf-8
+# @Time    : 17-3-3
+# @File    : common.py
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -139,7 +142,7 @@ def main():
     ant_context.params = params
   
   if ant_cmd == "train":
-    running_process = AntRun(ant_context,
+    running_process = AntTrain(ant_context,
                              name,
                              data_factory,
                              dump_dir,

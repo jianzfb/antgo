@@ -32,6 +32,7 @@ class AntPixelAccuracySeg(AntMeasure):
         for predict, gt in data:
             gt_labels = set(gt.flatten())
             for l in gt_labels:
+                l = int(l)
                 if l == 0:
                     continue
 
@@ -67,6 +68,7 @@ class AntMeanAccuracySeg(AntMeasure):
         for predict, gt in data:
             gt_labels = set(gt.flatten())
             for l in gt_labels:
+                l = int(l)
                 if l == 0:
                     continue
 
@@ -104,6 +106,7 @@ class AntMeanIOUSeg(AntMeasure):
         for predict, gt in data:
             gt_labels = set(gt.flatten())
             for l in gt_labels:
+                l = int(l)
                 if l == 0:
                     continue
                 p = np.where(gt == l)
@@ -142,6 +145,7 @@ class AntFrequencyWeightedIOUSeg(AntMeasure):
         for predict, gt in data:
             gt_labels = set(gt.flatten())
             for l in gt_labels:
+                l = int(l)
                 if l == 0:
                     continue
                 p = np.where(gt == l)
@@ -200,6 +204,7 @@ class AntMeanIOUBoundary(AntMeasure):
                 predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
 
             for l in gt_labels:
+                l = int(l)
                 if l == 0:
                     continue
                 # generate trimap for object (gt)

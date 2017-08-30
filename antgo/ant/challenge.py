@@ -76,7 +76,7 @@ class AntChallenge(AntBase):
   
       self.stage = "INFERENCE"
       logger.info('start infer process')
-      now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.now_time))
+      now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
       infer_dump_dir = os.path.join(self.ant_dump_dir, now_time, 'inference')
       if not os.path.exists(infer_dump_dir):
         os.makedirs(infer_dump_dir)

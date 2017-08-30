@@ -1,15 +1,24 @@
-TrainingIcnet:
- name: 'Training'
+InferIcnet:
+ name: 'Inference'
  dataset:
   name: 'portrait'
  model:
+  clone_on_cpu: false
+  num_clones: 1
   batch_size: 1
   num_classes: 2
-  clone_on_cpu: true
-  num_clones: 1
-  log_every_n_steps: 20
-  learning_rate: 0.01
-  learning_rate_decay_type: 'polynomial'
-  max_epochs: 500
-  num_epochs_per_decay: 50
-  checkpoint_path: '/home/mi/model/dump/TrainingIcnet/2017-08-21-17-33-09/alpha_train_iter_255000'
+  checkpoint_path: '/home/mi/model/TrainingIcnet/2017-08-22-10-59-20/alpha_train_421600.ckpt'
+
+EvaluationIcnet:
+ name: 'Evaluating'
+ task:
+  type: 'SEGMENTATION'
+  class_label: [1]
+ measure:
+ - 'PixelAccuracy'
+ - 'MeanAccuracy'
+ - 'MeanIOU'
+ - 'FrequencyWeightedIOU'
+ - 'MeanIOUBoundary'
+ input-bind:
+ - 'InferIcnet'

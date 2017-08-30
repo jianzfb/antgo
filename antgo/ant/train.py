@@ -14,14 +14,14 @@ from ..utils import logger
 from ..dataflow.recorder import *
 
 
-class AntRun(AntBase):
+class AntTrain(AntBase):
   def __init__(self, ant_context,
                ant_name,
                ant_data_folder,
                ant_dump_dir,
                ant_token,
                ant_task_config):
-    super(AntRun, self).__init__(ant_name, ant_context, ant_token)
+    super(AntTrain, self).__init__(ant_name, ant_context, ant_token)
     self.ant_data_source = ant_data_folder
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
@@ -60,7 +60,7 @@ class AntRun(AntBase):
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
 
-    now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.now_time))
+    now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None:
