@@ -1,6 +1,10 @@
-#encoding=utf-8
-from __future__ import unicode_literals
+# encoding=utf-8
+# Time: 8/28/17
+# File: job.py
+# Author: jian<jian@mltalker.com>
 from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
 
 import uuid
 import threading

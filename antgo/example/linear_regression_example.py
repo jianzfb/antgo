@@ -26,12 +26,21 @@ regulation = ctx.job.create_channel("regulation","NUMERIC")
 # 模型权重分布
 histogram_w_channel = ctx.job.create_channel("model-w",'HISTOGRAM')
 
+# 图像数据
+image_channel = ctx.job.create_channel("sample", "IMAGE")
+
+# 文本数据
+text_channel = ctx.job.create_channel("record", "TEXT")
+
 # 构建图表
 # a_channel和b_channel绘制在同一图表中
 ctx.job.create_chart([regression_loss,regulation],"loss","step","value")
 # 模型权重直方图绘制在图表中
 ctx.job.create_chart([histogram_w_channel],"histogram-weight","weight","frequence")
-
+# 样本记录
+ctx.job.create_chart([image_channel], "sample")
+# 文本记录
+ctx.job.create_chart([text_channel], "record")
 
 ##################################################
 ######## 2.step define training process  #########
@@ -43,15 +52,21 @@ def training_callback(data_source, dump_dir):
 
     loss = np.random.random()
     l2_norm = np.random.random()
-    weight = [np.random.random() for _ in range(200)]
+    weight = np.random.random((200))
 
     # regression loss
     regression_loss.send(iter, loss)
-    # regulation
+    # regulation loss
     regulation.send(iter, l2_norm)
 
+    # weight histogram
     histogram_w_channel.send(iter, weight)
 
+    # currunt sample
+    image = np.random.random((100,100))
+    image_channel.send(image)
+
+    text_channel.send('loss %f %f'%(loss, l2_norm))
 
 ###################################################
 ######## 2.step define infer process     ##########

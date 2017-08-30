@@ -60,7 +60,7 @@ class AntTrain(AntBase):
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
 
-    now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
+    train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None:
@@ -72,7 +72,12 @@ class AntTrain(AntBase):
   
         evaluation_statistic = None
         if estimation_procedure == 'holdout':
-          evaluation_statistic = self._holdout_validation(ant_train_dataset, evaluation_measures, now_time)
+          evaluation_statistic = self._holdout_validation(ant_train_dataset, evaluation_measures, train_time_stamp)
+
+          logger.info('generate model evaluation report')
+          self.stage = 'EVALUATION-HOLDOUT-REPORT'
+          # TODO send statistic report
+          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 10             # default value
           is_stratified_sampling = True   # default value
@@ -88,23 +93,37 @@ class AntTrain(AntBase):
                                                                    split_ratio,
                                                                    is_stratified_sampling,
                                                                    evaluation_measures,
-                                                                   now_time)
+                                                                   train_time_stamp)
+          logger.info('generate model evaluation report')
+          self.stage = 'EVALUATION-REPEATEDHOLDOUT-REPORT'
+          # TODO send statistic report
+          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "bootstrap":
-          bootstrap_counts = int(estimation_procedure_params.get('bootstrap_counts', 20))
+          bootstrap_counts = 20
+          if estimation_procedure_params is not None:
+            bootstrap_counts = int(estimation_procedure_params.get('bootstrap_counts', bootstrap_counts))
           evaluation_statistic = self._bootstrap_validation(bootstrap_counts,
                                                             ant_train_dataset,
                                                             evaluation_measures,
-                                                            now_time)
+                                                            train_time_stamp)
+          logger.info('generate model evaluation report')
+          self.stage = 'EVALUATION-BOOTSTRAP-REPORT'
+          # TODO send statistic report
+          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "kfold":
-          kfolds = int(estimation_procedure_params.get('kfold', 5))
-          evaluation_statistic = self._kfold_cross_validation(kfolds, ant_train_dataset, evaluation_measures, now_time)
-  
-        logger.info('generate model evaluation report')
-        everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, now_time))
+          kfolds = 5
+          if estimation_procedure_params is not None:
+            kfolds = int(estimation_procedure_params.get('kfold', kfolds))
+          evaluation_statistic = self._kfold_cross_validation(kfolds, ant_train_dataset, evaluation_measures, train_time_stamp)
+
+          logger.info('generate model evaluation report')
+          self.stage = 'EVALUATION-KFOLD-REPORT'
+          # TODO send statistic report
+          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
       
       # 3.step model training
       self.stage = "TRAIN"
-      train_dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train')
+      train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
       if not os.path.exists(train_dump_dir):
           os.makedirs(train_dump_dir)
 
@@ -122,7 +141,7 @@ class AntTrain(AntBase):
           logger.info('start ablation experiment %s'%block)
   
           # dump_dir for ablation experiment
-          ablation_dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train', 'ablation', block)
+          ablation_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train', 'ablation', block)
           if not os.path.exists(ablation_dump_dir):
             os.makedirs(ablation_dump_dir)
   
@@ -149,6 +168,8 @@ class AntTrain(AntBase):
               ablation_evaluation_measure_result.append(result)
               
           ablation_running_statictic[self.ant_name]['measure'] = ablation_evaluation_measure_result
+          self.stage = 'ABLATION(%s)-REPORT'%block
+          # TODO send statistic report
           everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
 
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
@@ -219,9 +240,6 @@ class AntTrain(AntBase):
       # split data and label
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-      # infer_dump_dir = os.path.join(dump_dir, 'inference')
-      # if not os.path.exists(infer_dump_dir):
-      #     os.makedirs(infer_dump_dir)
 
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-EVALUATION-%d' % repeat
       with safe_recorder_manager(self.context.recorder):
@@ -273,9 +291,6 @@ class AntTrain(AntBase):
       # split data and label
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-      # infer_dump_dir = os.path.join(dump_dir, 'inference')
-      # if not os.path.exists(infer_dump_dir):
-      #     os.makedirs(infer_dump_dir)
 
       self.stage = 'EVALUATION-BOOTSTRAP-EVALUATION-%d' % bootstrap_i
       with safe_recorder_manager(self.context.recorder):
@@ -325,9 +340,6 @@ class AntTrain(AntBase):
       # split data and label
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-      # infer_dump_dir = os.path.join(dump_dir, 'inference')
-      # if not os.path.exists(infer_dump_dir):
-      #     os.makedirs(infer_dump_dir)
 
       self.stage = 'EVALUATION-KFOLD-EVALUATION-%d' % k
       with safe_recorder_manager(self.context.recorder):
