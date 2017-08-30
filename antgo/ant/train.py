@@ -64,7 +64,6 @@ class AntRun(AntBase):
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None:
-        self.stage = 'EVALUATION'
         logger.info('start model evaluation')
   
         estimation_procedure = running_ant_task.estimation_procedure

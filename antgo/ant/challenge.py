@@ -65,9 +65,9 @@ class AntChallenge(AntBase):
 
     # 1.step loading test dataset
     logger.info('loading test dataset %s'%running_ant_task.dataset_name)
-    ant_test_dataset = Standard('test',
-                                os.path.join(self.ant_data_source, running_ant_task.dataset_name),
-                                running_ant_task.dataset_params)
+    ant_test_dataset = running_ant_task.dataset('test',
+                                                 os.path.join(self.ant_data_source, running_ant_task.dataset_name),
+                                                 running_ant_task.dataset_params)
     
     with safe_recorder_manager(ant_test_dataset):
       # split data and label
@@ -104,12 +104,13 @@ class AntChallenge(AntBase):
           result = measure.eva(record_generator, None)
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-  
-      self.stage = 'COMPARISION'
-      logger.info('start compare process')
       
       logger.info('generate model evaluation report')
+      # performace statistic
       everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time))
-  
+
+      # compare statistic
+      logger.info('start compare process')
+
       # notify
       self.context.job.send({'DATA': {'STATISTIC': task_running_statictic}})

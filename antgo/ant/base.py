@@ -23,6 +23,8 @@ class AntBase(object):
     self.zmq_socket = self.zmq_context.socket(zmq.REQ)
     self.zmq_socket.connect(self.app_connect)
 
+    self.app_server = ''
+
     # core
     self.ant_context = None
     if ant_context is not None:
@@ -43,6 +45,7 @@ class AntBase(object):
       data['APP_STAGE'] = stage
       data['APP_NOW_TIME'] = str(time.time())
       data["APP_NAME"] = self.ant_name
+      data["APP_SERVER"] = self.app_server
 
       # 1.step send info
       self.zmq_socket.send(dumps(data))
@@ -60,6 +63,7 @@ class AntBase(object):
       data['APP_STAGE'] = 'RPC'
       data['APP_NOW_TIME'] = str(time.time())
       data["APP_NAME"] = self.ant_name
+      data['APP_SERVER'] = self.app_server
 
       # 1.step send rpc
       self.zmq_socket.send(dumps(data))

@@ -25,3 +25,15 @@ ctx = Context()
 #   print('epoch %d'%epoch)
 #
 # ctx.wait_until_clear()
+
+
+def train_callback(data_source, dump_dir):
+  pass
+
+
+def infer_callback(data_source, dump_dir):
+  pass
+
+
+ctx.training_process = train_callback
+ctx.infer_process = infer_callback
