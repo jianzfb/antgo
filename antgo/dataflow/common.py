@@ -317,7 +317,7 @@ class SerializedData(Node):
 
 
 class _TransparantNode(Node):
-  def __init__(self, upper_node, name,active_request=True):
+  def __init__(self, upper_node, name, active_request=True):
     super(_TransparantNode, self).__init__(name=name, inputs=upper_node)
     assert(len(self._positional_inputs) == 1)
     self.active_request = active_request
@@ -331,8 +331,8 @@ class _TransparantNode(Node):
     if DIRTY == self._value:
       self._evaluate()
 
-    # if self._buffer.qsize() == 0:
-    #   return self._value
+    if self._buffer.qsize() == 0:
+      return self._value
 
     return self._buffer.get()
 
@@ -386,7 +386,7 @@ class DataAnnotationBranch(Node):
 class AutoBranch(Node):
   def __init__(self, inputs, branch_func):
     super(AutoBranch, self).__init__(name=None, action=self.action, inputs=inputs)
-    self.auto_branch = _TransparantNode(upper_node=Node.inputs(self), name='auto_branch_transparant')
+    self.auto_branch = _TransparantNode(upper_node=Node.inputs(self), name='auto_branch_transparant',active_request=False)
     self.branch_func = branch_func
     
   def action(self, *args, **kwargs):
