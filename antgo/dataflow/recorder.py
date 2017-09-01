@@ -42,7 +42,7 @@ class RecorderNode(Node):
         value = copy.deepcopy(args[0])
         if type(value) == dict or type(value) == np.ndarray:
             value = [value]
-
+        
         for entry in value:
             cache = copy.deepcopy(entry)
             self._annotation_cache.append(cache)
@@ -64,7 +64,7 @@ class RecorderNode(Node):
         for anno, result in zip(annotation_cache_proxy, results):
             if result is None and anno is None:
                 continue
-
+            
             self._record_writer.write(Sample(groundtruth=anno, predict=result))
 
         self._annotation_cache[:] = []

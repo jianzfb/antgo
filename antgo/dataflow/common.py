@@ -324,15 +324,15 @@ class _TransparantNode(Node):
     self._buffer = queue.Queue()
 
   def set_value(self, new_value):
-    self._set_value(new_value)
     self._buffer.put(new_value)
+    self._set_value(new_value)
 
   def get_value(self):
     if DIRTY == self._value:
       self._evaluate()
 
-    if self._buffer.qsize() == 0:
-      return self._value
+    # if self._buffer.qsize() == 0:
+    #   return self._value
 
     return self._buffer.get()
 
