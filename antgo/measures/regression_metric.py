@@ -21,9 +21,9 @@ def mape(actual_s,predicated_s):
     error
     '''
     if type(actual_s) == list:
-        actual_s = np.array(actual_s)
+        actual_s = np.array(actual_s, dtype=np.float32)
     if type(predicated_s) == list:
-        predicated_s = np.array(predicated_s)
+        predicated_s = np.array(predicated_s, dtype=np.float32)
 
     if len(predicated_s.shape) > 1 and predicated_s.shape[1] > 1:
         predicated_s = predicated_s[:,0]
@@ -57,9 +57,9 @@ def almost_correct(actual_s,predicated_s,X):
 
     '''
     if type(actual_s) == list:
-        actual_s = np.array(actual_s)
+        actual_s = np.array(actual_s, dtype=np.float32)
     if type(predicated_s) == list:
-        predicated_s = np.array(predicated_s)
+        predicated_s = np.array(predicated_s, dtype=np.float32)
 
     #absorb some error
     if len(predicated_s.shape) > 1 and predicated_s.shape[1] > 1:

@@ -19,6 +19,10 @@ from antgo.utils import logger
 from antgo.ant import flags
 from antgo import config
 from antgo.dataflow.dataflow_server import *
+if sys.version > '3':
+    PY3 = True
+else:
+    PY3 = False
 
 
 def _main_context(main_file, source_paths):
@@ -65,7 +69,7 @@ def main():
     logger.error('antgo cli only support( %s )command' % ",".join(_ant_support_commands))
     sys.exit(-1)
   
-  # # 2.step antgo server daemon
+  # 2.step antgo server daemon
   # dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
   # dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
   #
@@ -90,11 +94,16 @@ def main():
 
   # 3.1 step running token
   token = FLAGS.token()
+  if not PY3:
+    token = unicode(token)
 
   # 3.2 step running name
   name = FLAGS.name()
   if name is None:
     name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+
+  if not PY3:
+    name = unicode(name)
 
   # 3.3 key parameters
   main_folder = FLAGS.main_folder()

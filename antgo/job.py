@@ -30,6 +30,8 @@ class Chart():
     self.chart_x_axis = x_axis
     self.chart_y_axis = y_axis
     self.chart_id = str(uuid.uuid1())
+    if PYTHON_VERSION == 2:
+      self.chart_id = unicode(self.chart_id)
     self.chart_channels = []
 
   @property

@@ -35,7 +35,6 @@ class AntTrain(AntBase):
       challenge_task_config = self.rpc("TASK-CHALLENGE")
       if challenge_task_config is None:
         logger.error('couldnt load challenge task')
-        exit(-1)
       elif challenge_task_config['status'] == 'OK':
         challenge_task = create_task_from_json(challenge_task_config)
         if challenge_task is None:
@@ -65,11 +64,11 @@ class AntTrain(AntBase):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None:
         logger.info('start model evaluation')
-  
+
         estimation_procedure = running_ant_task.estimation_procedure
         estimation_procedure_params = running_ant_task.estimation_procedure_params
         evaluation_measures = running_ant_task.evaluation_measures
-  
+
         evaluation_statistic = None
         if estimation_procedure == 'holdout':
           evaluation_statistic = self._holdout_validation(ant_train_dataset, evaluation_measures, train_time_stamp)
@@ -77,7 +76,7 @@ class AntTrain(AntBase):
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-HOLDOUT-REPORT'
           # send statistic report
-          self.context.job.send({'REPORT': evaluation_statistic})
+          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 10             # default value
@@ -87,7 +86,7 @@ class AntTrain(AntBase):
             number_repeats = int(estimation_procedure_params.get('number_repeats', number_repeats))
             is_stratified_sampling = int(estimation_procedure_params.get('stratified_sampling', is_stratified_sampling))
             split_ratio = float(estimation_procedure_params.get('split_ratio', split_ratio))
-  
+
           # start model estimation procedure
           evaluation_statistic = self._repeated_holdout_validation(number_repeats,
                                                                    ant_train_dataset,
@@ -98,7 +97,7 @@ class AntTrain(AntBase):
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-REPEATEDHOLDOUT-REPORT'
           # send statistic report
-          self.context.job.send({'REPORT': evaluation_statistic})
+          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "bootstrap":
           bootstrap_counts = 20
@@ -111,7 +110,7 @@ class AntTrain(AntBase):
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-BOOTSTRAP-REPORT'
           # send statistic report
-          self.context.job.send({'REPORT': evaluation_statistic})
+          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "kfold":
           kfolds = 5
@@ -122,9 +121,9 @@ class AntTrain(AntBase):
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-KFOLD-REPORT'
           # send statistic report
-          self.context.job.send({'REPORT': evaluation_statistic})
+          self.context.job.send({'DATA':{'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
-      
+
       # 3.step model training
       self.stage = "TRAIN"
       train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
@@ -134,47 +133,50 @@ class AntTrain(AntBase):
       logger.info('start training process')
       ant_train_dataset.reset_state()
       self.context.call_training_process(ant_train_dataset, train_dump_dir)
-  
+
       # 4.step ablation experiment(optional)
-      if len(self.context.ablations) > 0:
+      if len(self.context.ablation.blocks) > 0:
         part_train_dataset, part_validation_dataset = ant_train_dataset.split(split_method='holdout')
         part_train_dataset.reset_state()
-        
+
         for block in self.context.ablation.blocks:
           self.context.ablation.disable(block)
           logger.info('start ablation experiment %s'%block)
-  
+
           # dump_dir for ablation experiment
           ablation_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train', 'ablation', block)
           if not os.path.exists(ablation_dump_dir):
             os.makedirs(ablation_dump_dir)
-  
+
           # 2.step training model
           self.stage = 'ABLATION(%s)-TRAIN'%block
           self.context.call_training_process(part_train_dataset, ablation_dump_dir)
-  
+
           # 3.step evaluation measures
           # split data and label
           data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
           self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-  
+
           self.stage = 'ABLATION(%s)-EVALUATION'%block
           with safe_recorder_manager(self.context.recorder):
             self.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
-  
+
+          # clear
+          self.context.recorder = None
+
           ablation_running_statictic = {self.ant_name: {}}
           ablation_evaluation_measure_result = []
-  
+
           with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
             for measure in running_ant_task.evaluation_measures:
               record_generator = record_reader.iterate_read('predict', 'groundtruth')
               result = measure.eva(record_generator, None)
               ablation_evaluation_measure_result.append(result)
-              
+
           ablation_running_statictic[self.ant_name]['measure'] = ablation_evaluation_measure_result
           self.stage = 'ABLATION(%s)-REPORT'%block
           # send statistic report
-          self.context.job.send({'REPORT': ablation_running_statictic})
+          self.context.job.send({'DATA':{'REPORT': ablation_running_statictic}})
           everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
 
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
@@ -200,6 +202,9 @@ class AntTrain(AntBase):
     with safe_recorder_manager(self.context.recorder):
       with running_statistic(self.ant_name):
         self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
+
+    # clear
+    self.context.recorder = None
 
     task_running_statictic = get_running_statistic(self.ant_name)
     task_running_statictic = {self.ant_name: task_running_statictic}
@@ -250,6 +255,9 @@ class AntTrain(AntBase):
       with safe_recorder_manager(self.context.recorder):
         with running_statistic(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
+
+      # clear
+      self.context.recorder = None
 
       task_running_statictic = get_running_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
@@ -302,6 +310,9 @@ class AntTrain(AntBase):
         with running_statistic(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
+      # clear
+      self.context.recorder = None
+
       task_running_statictic = get_running_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
@@ -351,6 +362,9 @@ class AntTrain(AntBase):
         with running_statistic(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
+      # clear
+      self.context.recorder = None
+
       task_running_statictic = get_running_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
@@ -360,8 +374,7 @@ class AntTrain(AntBase):
       logger.info('start evaluation process')
       evaluation_measure_result = []
 
-      record_reader = RecordReader(dump_dir)
-      with safe_recorder_manager(RecordReader(dump_dir)):
+      with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
         for measure in evaluation_measures:
           record_generator = record_reader.iterate_read('predict', 'groundtruth')
           result = measure.eva(record_generator, None)

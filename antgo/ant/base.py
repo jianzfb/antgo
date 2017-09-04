@@ -14,6 +14,11 @@ import uuid
 import time
 import json
 import sys
+import sys
+if sys.version > '3':
+  PY3 = True
+else:
+  PY3 = False
 
 
 class AntBase(object):
@@ -29,6 +34,8 @@ class AntBase(object):
     
     # server flag
     self.app_server = self.__class__.__name__
+    if not PY3:
+      self.app_server = unicode(self.app_server)
 
     # core
     self.ant_context = None
@@ -43,12 +50,13 @@ class AntBase(object):
     if self.app_token is not None:
       # 0.step add extra data
       data['APP_TOKEN'] = self.app_token
-      data['APP_TIME'] = str(self.ant_time_stamp)
+      data['APP_TIME'] = self.ant_time_stamp
       if self.ant_context is not None:
-        data['APP_HYPER_PARAMETER'] = json.dumps(self.ant_context.params)
+        if self.ant_context.params is not None:
+          data['APP_HYPER_PARAMETER'] = json.dumps(self.ant_context.params)
       data['APP_RPC'] = "INFO"
       data['APP_STAGE'] = stage
-      data['APP_NOW_TIME'] = str(time.time())
+      data['APP_NOW_TIME'] = time.time()
       data["APP_NAME"] = self.ant_name
       data["APP_SERVER"] = self.app_server
 
@@ -63,10 +71,10 @@ class AntBase(object):
       # 0.step config data
       data = {}
       data['APP_TOKEN'] = self.app_token
-      data['APP_TIME'] = str(self.ant_time_stamp)
+      data['APP_TIME'] = self.ant_time_stamp
       data['APP_RPC'] = cmd
       data['APP_STAGE'] = 'RPC'
-      data['APP_NOW_TIME'] = str(time.time())
+      data['APP_NOW_TIME'] = time.time()
       data["APP_NAME"] = self.ant_name
       data['APP_SERVER'] = self.app_server
 

@@ -39,7 +39,7 @@ def png_encode(data):
 
     # reverse the vertical line order and add null bytes at the start
     width_byte_4 = width * 4
-    raw_data = b''.join(b'\x00' + buf[span:span + width_byte_4]
+    raw_data = b''.join(b'\x00' + str(buf[span:span + width_byte_4])
                         for span in range((height - 1) * width_byte_4, -1, - width_byte_4))
 
     def png_pack(png_tag, data):

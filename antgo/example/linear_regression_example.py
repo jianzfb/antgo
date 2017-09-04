@@ -81,12 +81,19 @@ ctx.job.create_chart([val_image_channel], "val-sample")
 
 def infer_callback(data_source, dump_dir):
   iter = 0
-  for data, label in data_source.iterator_value():
+  for data in data_source.iterator_value():
     # currunt sample
     image = np.random.random((100, 100,3))
     image_channel.send(iter, image)
 
     iter += 1
+
+    ctx.recorder.record(1)
+    time.sleep(2)
+    print(iter)
+
+    if iter >= 10:
+      break
 
 ###################################################
 ####### 5.step link training and infer ############

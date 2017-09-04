@@ -71,9 +71,11 @@ def safe_recorder_manager(recorder):
   try:
     yield recorder
   except:
-    logger.error('error in custom callback (training_process or infer_process)')
+    error_info = sys.exc_info()
+    logger.error(error_info)
     recorder.close()
-    raise RuntimeError
+
+    raise error_info[0]
   
   recorder.close()
 

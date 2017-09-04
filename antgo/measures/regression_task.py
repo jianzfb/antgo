@@ -11,59 +11,65 @@ from antgo.measures.regression_metric import *
 
 
 class AntMAPERegression(AntMeasure):
-    def __init__(self, task):
-        super(AntMAPERegression, self).__init__(task, 'MAPE')
-        assert(task.task_type == 'REGRESSION')
+  def __init__(self, task):
+    super(AntMAPERegression, self).__init__(task, 'MAPE')
+    assert(task.task_type == 'REGRESSION')
 
-        self.is_support_rank = True
+    self.is_support_rank = True
 
-    def eva(self, data, label):
-        '''
-        :param data: predicate value (N,)
-        :param label: ground truth value (N,)
-        :return: 
-        '''
-        # assert(data.shape[0] == label.shape[0])
-        if label is not None:
-            data = zip(data, label)
+  def eva(self, data, label):
+    '''
+    :param data: predicate value (N,)
+    :param label: ground truth value (N,)
+    :return:
+    '''
+    # assert(data.shape[0] == label.shape[0])
+    if label is not None:
+      data = zip(data, label)
 
-        acutal_s = []
-        predicated_s = []
-        for predict, gt in data:
-            predicated_s.append(predict)
-            acutal_s.append(gt)
+    acutal_s = []
+    predicated_s = []
+    for predict, gt in data:
+      predicated_s.append(predict)
+      if type(gt) == dict:
+        gt = float(gt['category_id'])
 
-        error = mape(actual_s=acutal_s, predicated_s=predicated_s)
+      acutal_s.append(gt)
 
-        return {'statistic': {'name': self.name,
-                              'value': [{'name':self.name, 'value': error}]}}
+    error = mape(actual_s=acutal_s, predicated_s=predicated_s)
+
+    return {'statistic': {'name': self.name,
+                          'value': [{'name':self.name, 'value': error, 'type': 'SCALAR'}]}}
 
 
 class AntAlmostCRegression(AntMeasure):
-    def __init__(self, task):
-        super(AntAlmostCRegression, self).__init__(task,'ALMOST-CORRECT')
-        assert(task.task_type == 'REGRESSION')
+  def __init__(self, task):
+    super(AntAlmostCRegression, self).__init__(task,'ALMOST-CORRECT')
+    assert(task.task_type == 'REGRESSION')
 
-        self.is_support_rank = True
+    self.is_support_rank = True
 
-    def eva(self, data, label):
-        '''
-        :param data: predicate value (N,)
-        :param label: ground truth value (N,)
-        :return: 
-        '''
-        # assert(data.shape[0] == label.shape[0])
-        if label is not None:
-            data = zip(data, label)
+  def eva(self, data, label):
+    '''
+    :param data: predicate value (N,)
+    :param label: ground truth value (N,)
+    :return:
+    '''
+    # assert(data.shape[0] == label.shape[0])
+    if label is not None:
+      data = zip(data, label)
 
-        acutal_s = []
-        predicated_s = []
-        for predict, gt in data:
-            predicated_s.append(predict)
-            acutal_s.append(gt)
+    acutal_s = []
+    predicated_s = []
+    for predict, gt in data:
+      predicated_s.append(predict)
+      if type(gt) == dict:
+        gt = float(gt['category_id'])
 
-        percentage = getattr(self.task, 'almost_correct', 1.0)
-        error = almost_correct(acutal_s, predicated_s, self.task.percent, percentage)
+      acutal_s.append(gt)
 
-        return {'statistic': {'name': self.name,
-                              'value': [{'name': self.name, 'value': error}]}}
+    percentage = getattr(self.task, 'almost_correct', 1.0)
+    error = almost_correct(acutal_s, predicated_s, percentage)
+
+    return {'statistic': {'name': self.name,
+                          'value': [{'name': self.name, 'value': error, 'type': 'SCALAR'}]}}
