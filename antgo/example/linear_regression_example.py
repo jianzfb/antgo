@@ -47,9 +47,8 @@ ctx.job.create_chart([text_channel], "record")
 ##################################################
 def training_callback(data_source, dump_dir):
   batch_data = BatchData(Node.inputs(data_source), batch_size=64)
-  for iter in range(100):
-    data, label = batch_data.iterator_value()
-
+  iter = 0
+  for data, label in batch_data.iterator_value():
     loss = np.random.random()
     l2_norm = np.random.random()
     weight = np.random.random((200))
@@ -63,17 +62,31 @@ def training_callback(data_source, dump_dir):
     histogram_w_channel.send(iter, weight)
 
     # currunt sample
-    image = np.random.random((100,100))
-    image_channel.send(image)
+    image = np.random.random((100,100,3))
+    image_channel.send(iter, image)
 
-    text_channel.send('loss %f %f'%(loss, l2_norm))
+    text_channel.send(iter, 'loss %f %f'%(loss, l2_norm))
+
+    iter += 1
+    print(iter)
+
+  print('stop')
 
 ###################################################
 ######## 2.step define infer process     ##########
 ###################################################
-def infer_callback(data_source, dump_dir):
-  pass
+# 图像数据
+val_image_channel = ctx.job.create_channel("val-sample", "IMAGE")
+ctx.job.create_chart([val_image_channel], "val-sample")
 
+def infer_callback(data_source, dump_dir):
+  iter = 0
+  for data, label in data_source.iterator_value():
+    # currunt sample
+    image = np.random.random((100, 100,3))
+    image_channel.send(iter, image)
+
+    iter += 1
 
 ###################################################
 ####### 5.step link training and infer ############

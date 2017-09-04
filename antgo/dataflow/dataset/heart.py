@@ -10,6 +10,7 @@ import numpy as np
 import copy
 import time
 
+__all__ = ['Heart']
 
 class Heart(Dataset):
   def __init__(self, train_or_test, dataset_dir=None, ext_params=None):

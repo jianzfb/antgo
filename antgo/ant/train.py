@@ -76,7 +76,8 @@ class AntTrain(AntBase):
 
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-HOLDOUT-REPORT'
-          # TODO send statistic report
+          # send statistic report
+          self.context.job.send({'REPORT': evaluation_statistic})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 10             # default value
@@ -96,7 +97,8 @@ class AntTrain(AntBase):
                                                                    train_time_stamp)
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-REPEATEDHOLDOUT-REPORT'
-          # TODO send statistic report
+          # send statistic report
+          self.context.job.send({'REPORT': evaluation_statistic})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "bootstrap":
           bootstrap_counts = 20
@@ -108,7 +110,8 @@ class AntTrain(AntBase):
                                                             train_time_stamp)
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-BOOTSTRAP-REPORT'
-          # TODO send statistic report
+          # send statistic report
+          self.context.job.send({'REPORT': evaluation_statistic})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "kfold":
           kfolds = 5
@@ -118,7 +121,8 @@ class AntTrain(AntBase):
 
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-KFOLD-REPORT'
-          # TODO send statistic report
+          # send statistic report
+          self.context.job.send({'REPORT': evaluation_statistic})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
       
       # 3.step model training
@@ -169,7 +173,8 @@ class AntTrain(AntBase):
               
           ablation_running_statictic[self.ant_name]['measure'] = ablation_evaluation_measure_result
           self.stage = 'ABLATION(%s)-REPORT'%block
-          # TODO send statistic report
+          # send statistic report
+          self.context.job.send({'REPORT': ablation_running_statictic})
           everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
 
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):

@@ -117,7 +117,7 @@ class Channel():
         logger.error("Channel Y Must be 2 or 3 Dimension")
         return None
       if len(data_y.shape) == 3:
-        if data_y[2] != 3:
+        if data_y.shape[2] != 3:
           logger.error("Channel Y Must Possess 3 or 1 Channels")
           return None
 
@@ -127,7 +127,7 @@ class Channel():
 
       new_height = int(height * min_scale)
       new_width = int(width * min_scale)
-      resized_img = scipy.misc.imresize(data,(new_height, new_width))
+      resized_img = scipy.misc.imresize(data_y,(new_height, new_width))
       if resized_img.dtype == np.uint8:
         return (data_x, base64.b64encode(png_encode(resized_img)))
 

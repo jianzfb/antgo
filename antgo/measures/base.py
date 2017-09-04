@@ -1,7 +1,7 @@
 # encoding=utf-8
 # @Time    : 17-5-3
 # @File    : base.py
-# @Author  : jian(jian@mltalker.com)
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function

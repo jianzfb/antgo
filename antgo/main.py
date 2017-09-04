@@ -65,14 +65,14 @@ def main():
     logger.error('antgo cli only support( %s )command' % ",".join(_ant_support_commands))
     sys.exit(-1)
   
-  # 2.step antgo server daemon
-  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
-  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
-
-  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
-                                    dataflow_server_host,
-                                    os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
-  dfs_daemon.start()
+  # # 2.step antgo server daemon
+  # dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
+  # dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
+  #
+  # dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
+  #                                   dataflow_server_host,
+  #                                   os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
+  # dfs_daemon.start()
 
   if ant_cmd == 'server':
     return
