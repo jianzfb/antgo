@@ -11,7 +11,6 @@ import six
 from six.moves import urllib, range
 import copy
 import logging
-import cv2
 import xml.etree.ElementTree as ET
 import scipy.sparse
 from ...utils.fs import download

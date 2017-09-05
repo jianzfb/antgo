@@ -1,7 +1,7 @@
 # encoding=utf-8
 # @Time    : 17-5-9
 # @File    : challenge.py
-# @Author  :
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals

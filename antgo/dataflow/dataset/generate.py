@@ -65,9 +65,9 @@ def generate_jiajiaya_standard_dataset(data_folder, target_folder):
       yield data, (label, matting)
   
   generate_standard_dataset(build_training_data_generator(train_img_list, train_annotation_list),
-    'train',
-    target_folder,
-    'portrait')
+                            'train',
+                            target_folder,
+                            'portrait')
     
   # test dataset
   test_list = os.listdir(os.path.join(data_folder, 'testing'))
@@ -90,9 +90,37 @@ def generate_jiajiaya_standard_dataset(data_folder, target_folder):
       yield data, label
 
   generate_standard_dataset(build_testing_data_generator(test_img_list, test_annotation_list),
-    'test',
-    target_folder,
-    'portrait')
+                            'test',
+                            target_folder,
+                            'portrait')
+
+
+def generate_coco_person_train_standard_dataset(data_folder, target_folder):
+  # train dataset
+  train_list = os.listdir(os.path.join(data_folder, ''))
+  train_img_list = []
+  train_annotation_list = []
+  for f in train_list:
+    if '_matte' in f:
+      train_annotation_list.append(os.path.join(data_folder, '', f))
+      train_img_list.append(os.path.join(data_folder, '', f.replace('_matte', '')))
+  
+  def build_training_data_generator(img_list, annotation_list):
+    for img_f, annotation_f in zip(img_list, annotation_list):
+      data = scipy.misc.imread(img_f)
+      label = scipy.misc.imread(annotation_f)
+      if len(label.shape) == 3:
+        label = label[:,:,0]
+      pos = np.where(label > 128)
+      label[:, :] = 0
+      label[pos] = 1
+      
+      yield data, label
+  
+  generate_standard_dataset(build_training_data_generator(train_img_list, train_annotation_list),
+                            'train',
+                            target_folder,
+                            'coco_person')
 
 
 if __name__ == '__main__':
@@ -100,5 +128,7 @@ if __name__ == '__main__':
   #generate_voc2007_standard_dataset('/home/mi/下载/dataset/voc','/home/mi/antgo/antgo-dataset')
   
   # transfer jiajiaya
-  generate_jiajiaya_standard_dataset('/home/mi/dataset/jiajiaya', '/home/mi/antgo/antgo-dataset')
+  # generate_jiajiaya_standard_dataset('/home/mi/dataset/jiajiaya', '/home/mi/antgo/antgo-dataset')
+  
+  generate_coco_person_train_standard_dataset('/home/mi/dataset/coco_person/','/home/mi/antgo/antgo-dataset/coco_person')
   pass

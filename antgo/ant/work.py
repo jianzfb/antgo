@@ -196,6 +196,8 @@ class Inference(BaseWork):
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
       with safe_recorder_manager(self.context.recorder):
         self.context.call_infer_process(data_annotation_branch.output(0), self.dump_dir)
+      
+      self.context.recorder = None
   
       # work is done
       self.trigger(os.path.join(self.dump_dir), 'DONE')
