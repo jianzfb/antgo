@@ -49,7 +49,7 @@ flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dump', None, 'dump dir')
-flags.DEFINE_string('token', None, 'id')
+flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('name', None, 'app name')
 flags.DEFINE_string('config', 'config.xml', 'antgo config')
 
@@ -70,13 +70,13 @@ def main():
     sys.exit(-1)
   
   # 2.step antgo server daemon
-  # dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
-  # dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
-  #
-  # dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
-  #                                   dataflow_server_host,
-  #                                   os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
-  # dfs_daemon.start()
+  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
+  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
+
+  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
+                                    dataflow_server_host,
+                                    os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
+  dfs_daemon.start()
 
   if ant_cmd == 'server':
     return
