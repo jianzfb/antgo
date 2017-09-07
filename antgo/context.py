@@ -161,6 +161,9 @@ class Context(object):
     self.data_source = data_source
     self.training_process(data_source, dump_dir)
 
+    # clone charts
+    self.job.clone_charts()
+
   @property
   def infer_process(self):
     return self.infer_process_callback
@@ -175,6 +178,9 @@ class Context(object):
       
     self.data_source = data_source
     self.infer_process(data_source, dump_dir)
+
+    # clone charts
+    self.job.clone_charts()
 
   @property
   def recorder(self):

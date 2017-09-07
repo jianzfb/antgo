@@ -25,7 +25,15 @@ class BatchData(Node):
       self.setDaemon(True)
       self._buffer = data_buffer
       self._host_node = host_node
-    
+      self._is_launched = False
+
+    @property
+    def is_launched(self):
+      return self._is_launched
+    @is_launched.setter
+    def is_launched(self, val):
+      self._is_launched = val
+
     def run(self):
       while True:
         try:
@@ -114,9 +122,17 @@ class BatchData(Node):
   
   def _evaluate(self):
     if self.buffer is not None:
-      if not self.fetch_data_thread._started.is_set():
+      if not self.fetch_data_thread.is_launched:
         self.fetch_data_thread.start()
-      
+        self.fetch_data_thread.is_launched = True
+
+      # if PYTHON_VERSION == 3:
+      #   if not self.fetch_data_thread._started.is_set():
+      #     self.fetch_data_thread.start()
+      # else:
+      #   if not self.fetch_data_thread.__started.is_set():
+      #     self.fetch_data_thread.start()
+
       if self.producer_wait:
         with self.producer_condition:
           self.producer_condition.notifyAll()

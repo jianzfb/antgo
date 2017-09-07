@@ -29,9 +29,7 @@ class Chart():
     self.chart_title = title
     self.chart_x_axis = x_axis
     self.chart_y_axis = y_axis
-    self.chart_id = str(uuid.uuid1())
-    if PYTHON_VERSION == 2:
-      self.chart_id = unicode(self.chart_id)
+    self.chart_id = unicode(uuid.uuid1()) if PYTHON_VERSION == 2 else str(uuid.uuid1())
     self.chart_channels = []
 
   @property
@@ -58,6 +56,9 @@ class Chart():
     channel.id = len(self.chart_channels)
     channel.chart = self
     self.chart_channels.append(channel)
+
+  def clone(self):
+    self.chart_id = unicode(uuid.uuid1()) if PYTHON_VERSION == 2 else str(uuid.uuid1())
 
 
 class Channel():
@@ -241,11 +242,14 @@ class Job(threading.Thread):
     self.job_context = context
     self.setDaemon(True)
 
+    self.charts = []
+
   def create_channel(self, channel_name, channel_type):
     return Channel(channel_name, channel_type, self)
 
   def create_chart(self, chart_channels, chart_title, chart_x_axis="x", chart_y_axis="y"):
     chart = Chart(chart_title, chart_x_axis, chart_y_axis)
+    self.charts.append(chart)
     for cc in chart_channels:
         chart.bind_channel(cc)
 
@@ -263,6 +267,10 @@ class Job(threading.Thread):
 
   def stop(self):
     self.data_queue.put(None)
+
+  def clone_charts(self):
+    for chart in self.charts:
+      chart.clone()
 
   def run(self):
     while True:
