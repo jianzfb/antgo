@@ -59,6 +59,8 @@ class Standard(Dataset):
             label = self.filter_by_condition(label)
             if label is None:
               continue
+          
+          label['id'] = id
         yield [data, label]
 
   def split(self, split_params={}, split_method='holdout'):
@@ -98,3 +100,7 @@ class Standard(Dataset):
   @property
   def size(self):
     return len(self.ids)
+  
+  def at(self, id):
+    data, label = self._record_reader.read(id, 'data', 'label')
+    return data, label

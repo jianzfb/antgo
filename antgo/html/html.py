@@ -1,7 +1,7 @@
 # encoding=utf-8
 # @Time    : 17-5-8
 # @File    : html.py
-# @Author  : jian(jian@mltalker.com)
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -11,7 +11,13 @@ import base64
 import copy
 from antgo.utils.encode import *
 from jinja2 import Environment, FileSystemLoader
-
+import sys
+if sys.version > '3':
+  PY3 = True
+else:
+  PY3 = False
+ 
+  
 PATH = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_ENVIRONMENT = Environment(
     autoescape=False,
@@ -83,8 +89,10 @@ def everything_to_html(data, dump_dir):
   if not os.path.exists(dump_dir):
     os.makedirs(dump_dir)
 
-  with open(os.path.join(dump_dir,'statistic-report.html'),'w') as f:
-    ss = render_template('statistic-report.html', context).encode('utf-8')
+  with open(os.path.join(dump_dir, 'statistic-report.html'), 'w') as f:
+    ss = render_template('statistic-report.html', context)
+    if not PY3:
+      ss = ss.encode('utf-8')
     f.write(ss)
 
 
@@ -103,8 +111,8 @@ def _transform_curve_svg_data(data):
     ylist = y.tolist()
 
     temp = []
-    for xv,yv in zip(xlist,ylist):
-      temp.append({'x':str(xv),'y':str(yv)})
+    for xv, yv in zip(xlist, ylist):
+      temp.append({'x': str(xv), 'y': str(yv)})
 
     reorganized_data.append(temp)
   return reorganized_data
@@ -124,10 +132,12 @@ def _transform_histogram_svg_data(data):
 
   return reorganized_data
 
+
 def _transform_image_data(data):
   ss = base64.b64encode(png_encode(data))
   ss = ss.decode('utf-8')
   return ss
+
 
 def _transform_statistic_to_visualization(statistic_info):
   visualization_statistic_info = []
@@ -180,6 +190,10 @@ def _transform_statistic_to_visualization(statistic_info):
 
   return visualization_statistic_info
 
+
+def _transform_analysis_to_visualization(analysis_info):
+  
+  pass
 
 if __name__ == '__main__':
   # experiment 1
