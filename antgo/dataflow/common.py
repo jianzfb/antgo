@@ -68,7 +68,6 @@ class BatchData(Node):
       self.buffer = queue.Queue(buffer_size)
       self.producer_wait = False
       self.fetch_data_thread = BatchData._FetchBatchDataThread(self, self.buffer)
-      self.fetch_data_thread.stop_condition = threading.Condition()
       self.producer_condition = self.fetch_data_thread.stop_condition
 
       # register at context

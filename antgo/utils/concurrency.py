@@ -19,7 +19,7 @@ from . import logger
 
 __all__ = ['StoppableThread', 'LoopThread','TimerThread', 'ensure_proc_terminate',
            'OrderedResultGatherProc', 'OrderedContainer', 'DIE',
-           'mask_sigint', 'start_proc_mask_signal']
+           'mask_sigint', 'start_proc_mask_signal', 'StoppableProcess']
 
 
 class StoppableThread(threading.Thread):
@@ -59,10 +59,10 @@ class StoppableThread(threading.Thread):
   
   @property
   def stop_condition(self):
+    if self._stop_condition is None:
+      self._stop_condition = threading.Condition()
     return self._stop_condition
-  @stop_condition.setter
-  def stop_condition(self, val):
-    self._stop_condition = val
+  
   
 class LoopThread(StoppableThread):
   """ A pausable thread that simply runs a loop"""
@@ -236,3 +236,28 @@ class OrderedResultGatherProc(multiprocessing.Process):
 
   def get(self):
     return self.result_queue.get()
+
+
+class StoppableProcess(multiprocessing.Process):
+  """
+  Gather indexed data from a data queue, and produce results with the
+  original index-based order.
+  """
+  def __init__(self):
+    super(StoppableProcess, self).__init__()
+    self._is_stop = False
+    self._stop_condition = None
+
+  def stop(self):
+    """ stop the thread"""
+    self._is_stop = True
+
+  def stopped(self):
+    """ check whether the thread is stopped or not"""
+    return self._is_stop
+  
+  @property
+  def stop_condition(self):
+    if self._stop_condition == None:
+      self._stop_condition = multiprocessing.Condition()
+    return self._stop_condition

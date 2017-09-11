@@ -141,6 +141,7 @@ def dataflow_server(threads_num=3, host='tcp://127.0.0.1:9999'):
         if sockets[backend] == zmq.POLLIN:
           msg = backend.recv_multipart()
           frontend.send_multipart(msg)
+
   except KeyboardInterrupt:
     for worker in workers:
       worker.close()
@@ -189,9 +190,8 @@ class DataflowServerDaemon(Daemon):
     dataflow_server(self._threads, self._host)
 
 
-# if __name__ == "__main__":
-#     # daemon = DataflowServerDaemon(1,'tcp://127.0.0.1:9999',"/home/mi/dataflow_demodaemon.pid")
-#     # daemon.start()
-#
-#     dataflow_server(1)
-#
+if __name__ == "__main__":
+    # daemon = DataflowServerDaemon(1,'tcp://127.0.0.1:9999',"/home/mi/dataflow_demodaemon.pid")
+    # daemon.start()
+
+    dataflow_server(1)

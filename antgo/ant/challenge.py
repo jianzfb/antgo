@@ -118,73 +118,73 @@ class AntChallenge(AntBase):
       # deep analysis
       logger.info('deep analysis')
       # finding all reltaed model result from server
-
-      for measure_result in task_running_statictic_mirror[self.ant_name]['measure']:
-        if 'info' in measure_result:
-          measure_name = measure_result['statistic']['name']
-          measure_data = measure_result['info']
-          
-          if 'analysis' not in task_running_statictic_mirror[self.ant_name]:
-            task_running_statictic_mirror[self.ant_name]['analysis'] = {}
-          task_running_statictic_mirror[self.ant_name]['analysis'][measure_name] = {}
-          
-          method_samples_matrix = []
-          if related_model_result is not None:
-            pass
-          else:
-            # simple process
-            dd = None
-            if 'is_correct' in measure_data[0]:
-              dd = sorted(measure_data, key=lambda x: x['is_correct'])
-            else:
-              dd = sorted(measure_data, key=lambda x: x['score'])
-            method_samples_matrix.append({'name': self.ant_name, 'data': dd})
-          
-          # reorganize data as method score matrix
-          method_num = len(method_samples_matrix)
-          samples_num = len(method_samples_matrix[0]['data'])
-          method_measure_mat = np.zeros((method_num, samples_num))
-          samples_id = np.zeros((samples_num), np.uint64)
-          is_binary_data = False
-          for method_id, method_measure_data in enumerate(method_samples_matrix):
-            if method_id == 0:
-              # record sample id
-              for sample_id, sample in enumerate(method_measure_data['data']):
-                samples_id[sample_id] = sample['id']
-  
-            for sample_id, sample in enumerate(method_measure_data['data']):
-              if 'is_correct' in sample:
-                is_binary_data = True
-              else:
-                method_measure_mat[method_id, sample_id] = sample['score']
-          
-          # record method score matrix
-          if is_binary_data:
-            method_measure_mat = method_measure_mat.astype(np.uint8)
-          task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['data'] = method_measure_mat.tolist()
-
-          # global group
-          abstract_group = _group_measure_data_by_tag(method_measure_mat,
-                                                      samples_id,
-                                                      is_binary_data,
-                                                      ant_test_dataset,
-                                                      filter_tag=None)
-          task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['group'] = abstract_group
-          
-          # group by tag
-          tags = getattr(ant_test_dataset, 'tag', None)
-          if tags is not None:
-            for tag in tags:
-              tag_group = _group_measure_data_by_tag(method_measure_mat,
-                                                     samples_id,
-                                                     is_binary_data,
-                                                     ant_test_dataset,
-                                                     filter_tag=tag)
-              if 'tag-group' not in task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]:
-                task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['tag-group'] = []
-
-              task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['tag-group'].append((tag, tag_group))
-          
+      #
+      # for measure_result in task_running_statictic_mirror[self.ant_name]['measure']:
+      #   if 'info' in measure_result:
+      #     measure_name = measure_result['statistic']['name']
+      #     measure_data = measure_result['info']
+      #
+      #     if 'analysis' not in task_running_statictic_mirror[self.ant_name]:
+      #       task_running_statictic_mirror[self.ant_name]['analysis'] = {}
+      #     task_running_statictic_mirror[self.ant_name]['analysis'][measure_name] = {}
+      #
+      #     method_samples_matrix = []
+      #     if related_model_result is not None:
+      #       pass
+      #     else:
+      #       # simple process
+      #       dd = None
+      #       if 'is_correct' in measure_data[0]:
+      #         dd = sorted(measure_data, key=lambda x: x['is_correct'])
+      #       else:
+      #         dd = sorted(measure_data, key=lambda x: x['score'])
+      #       method_samples_matrix.append({'name': self.ant_name, 'data': dd})
+      #
+      #     # reorganize data as method score matrix
+      #     method_num = len(method_samples_matrix)
+      #     samples_num = len(method_samples_matrix[0]['data'])
+      #     method_measure_mat = np.zeros((method_num, samples_num))
+      #     samples_id = np.zeros((samples_num), np.uint64)
+      #     is_binary_data = False
+      #     for method_id, method_measure_data in enumerate(method_samples_matrix):
+      #       if method_id == 0:
+      #         # record sample id
+      #         for sample_id, sample in enumerate(method_measure_data['data']):
+      #           samples_id[sample_id] = sample['id']
+      #
+      #       for sample_id, sample in enumerate(method_measure_data['data']):
+      #         if 'is_correct' in sample:
+      #           is_binary_data = True
+      #         else:
+      #           method_measure_mat[method_id, sample_id] = sample['score']
+      #
+      #     # record method score matrix
+      #     if is_binary_data:
+      #       method_measure_mat = method_measure_mat.astype(np.uint8)
+      #     task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['data'] = method_measure_mat.tolist()
+      #
+      #     # global group
+      #     abstract_group = _group_measure_data_by_tag(method_measure_mat,
+      #                                                 samples_id,
+      #                                                 is_binary_data,
+      #                                                 ant_test_dataset,
+      #                                                 filter_tag=None)
+      #     task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['group'] = abstract_group
+      #
+      #     # group by tag
+      #     tags = getattr(ant_test_dataset, 'tag', None)
+      #     if tags is not None:
+      #       for tag in tags:
+      #         tag_group = _group_measure_data_by_tag(method_measure_mat,
+      #                                                samples_id,
+      #                                                is_binary_data,
+      #                                                ant_test_dataset,
+      #                                                filter_tag=tag)
+      #         if 'tag-group' not in task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]:
+      #           task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['tag-group'] = []
+      #
+      #         task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['tag-group'].append((tag, tag_group))
+      #
       # performace statistic
       logger.info('generate model evaluation report')
       everything_to_html(task_running_statictic_mirror, os.path.join(self.ant_dump_dir, now_time))
