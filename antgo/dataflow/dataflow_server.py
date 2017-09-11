@@ -171,9 +171,10 @@ class DataflowClient(object):
     return data
   
   def close(self, db):
-    self.socket.send_multipart([b'close', db])
-    data =  self.socket.recv_multipart()[0]
-    return data
+    # self.socket.send_multipart([b'close', db])
+    # data =  self.socket.recv_multipart()[0]
+    # return data
+    pass
   
   def dataflow_close(self):
     self.socket.close()

@@ -19,10 +19,10 @@ except:
 
 
 class BatchData(Node):
-  class _FetchBatchDataThread(StoppableThread):
+  class _FetchBatchDataThread(StoppableProcess):
     def __init__(self, host_node, data_buffer):
       super(BatchData._FetchBatchDataThread, self).__init__()
-      self.setDaemon(True)
+      # self.setDaemon(True)
       self._buffer = data_buffer
       self._host_node = host_node
       self._is_launched = False
