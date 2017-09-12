@@ -27,14 +27,6 @@ def imresize(image,size):
   return scipy.misc.imresize(image,size)
 
 
-def safe_caller(func):
-  def wrapper(self):
-    with self._lock:
-      data = func(self)
-      return data
-
-  return wrapper
-
 class Dataset(BaseNode):
   __metaclass__ = ABCMeta
 
@@ -103,7 +95,6 @@ class Dataset(BaseNode):
   def set_value(self, new_value):
     pass
   
-  @safe_caller
   def get_value(self):
     try:
       if DIRTY == self._value:
@@ -116,7 +107,6 @@ class Dataset(BaseNode):
     except:
       raise StopIteration
   
-  @safe_caller
   def _force_inputs_dirty(self):
     self._value = DIRTY
   

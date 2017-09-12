@@ -194,8 +194,8 @@ class DataflowServerDaemon(Daemon):
     dataflow_server(self._threads, self._host)
 
 
-# if __name__ == "__main__":
-#     # daemon = DataflowServerDaemon(1,'tcp://127.0.0.1:9999',"/home/mi/dataflow_demodaemon.pid")
-#     # daemon.start()
-#
-#     dataflow_server(1)
+if __name__ == "__main__":
+    # daemon = DataflowServerDaemon(1,'tcp://127.0.0.1:9999',"/home/mi/dataflow_demodaemon.pid")
+    # daemon.start()
+
+    dataflow_server(1)

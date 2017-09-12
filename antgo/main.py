@@ -94,7 +94,7 @@ def main():
 
   # 3.1 step running token
   token = FLAGS.token()
-  if not PY3:
+  if not PY3 and token is not None:
     token = unicode(token)
 
   # 3.2 step running name
