@@ -243,10 +243,11 @@ class StoppableProcess(multiprocessing.Process):
   Gather indexed data from a data queue, and produce results with the
   original index-based order.
   """
-  def __init__(self):
+  def __init__(self, queue_size=-1):
     super(StoppableProcess, self).__init__()
     self._is_stop = False
-    self._stop_condition = None
+    self._condition = None
+    self._queue = multiprocessing.Queue(queue_size)
 
   def stop(self):
     """ stop the thread"""
@@ -257,7 +258,11 @@ class StoppableProcess(multiprocessing.Process):
     return self._is_stop
   
   @property
-  def stop_condition(self):
-    if self._stop_condition == None:
-      self._stop_condition = multiprocessing.Condition()
-    return self._stop_condition
+  def process_condition(self):
+    if self._condition == None:
+      self._condition = multiprocessing.Condition()
+    return self._condition
+  
+  @property
+  def process_queue(self):
+    return self._queue

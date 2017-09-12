@@ -19,11 +19,10 @@ except:
 
 
 class BatchData(Node):
-  class _FetchBatchDataThread(StoppableProcess):
-    def __init__(self, host_node, data_buffer):
-      super(BatchData._FetchBatchDataThread, self).__init__()
-      # self.setDaemon(True)
-      self._buffer = data_buffer
+  class _FetchDataThread(StoppableProcess):
+    def __init__(self, host_node, buffer_size):
+      super(BatchData._FetchDataThread, self).__init__(buffer_size)
+      self.daemon = True
       self._host_node = host_node
       self._is_launched = False
 
@@ -38,7 +37,7 @@ class BatchData(Node):
       while True:
         try:
           data = self._host_node._fetch_batch_data()
-          self._buffer.put(data)
+          self.process_queue.put(data)
           
           # force input update
           for i in self._host_node._positional_inputs:
@@ -47,10 +46,9 @@ class BatchData(Node):
             i._force_inputs_dirty()
             
         except StopIteration:
-          # transfer to main process
-          with self.stop_condition:
-            self._buffer.put(sys.exc_info())
-            self.stop_condition.wait()
+          with self.process_condition:
+            self.process_queue.put(DIE)
+            self.process_condition.wait()
           if self.stopped():
             break
         except:
@@ -65,10 +63,10 @@ class BatchData(Node):
     self.stop_iteration = False
     self.buffer = None
     if buffer_size > 0:
-      self.buffer = queue.Queue(buffer_size)
       self.producer_wait = False
-      self.fetch_data_thread = BatchData._FetchBatchDataThread(self, self.buffer)
-      self.producer_condition = self.fetch_data_thread.stop_condition
+      self.fetch_data_thread = BatchData._FetchDataThread(self, buffer_size)
+      self.producer_condition = self.fetch_data_thread.process_condition
+      self.buffer = self.fetch_data_thread.process_queue
 
       # register at context
       get_global_context().register_stoppable_thread(self.fetch_data_thread)
@@ -125,20 +123,13 @@ class BatchData(Node):
         self.fetch_data_thread.start()
         self.fetch_data_thread.is_launched = True
 
-      # if PYTHON_VERSION == 3:
-      #   if not self.fetch_data_thread._started.is_set():
-      #     self.fetch_data_thread.start()
-      # else:
-      #   if not self.fetch_data_thread.__started.is_set():
-      #     self.fetch_data_thread.start()
-
       if self.producer_wait:
         with self.producer_condition:
           self.producer_condition.notifyAll()
         self.producer_wait = False
       
       data = self.buffer.get()
-      if len(data) == 3:
+      if data == DIE:
         # no enough data as batch
         self.producer_wait = True
         raise StopIteration

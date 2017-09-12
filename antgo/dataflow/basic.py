@@ -106,7 +106,7 @@ class RecordReader(object):
 
   def read(self, index, *args):
     try:
-      if self._db is not None:
+      if self._db is None:
         self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
         self._db.open(self._record_path.encode('utf-8'))
 
@@ -127,7 +127,7 @@ class RecordReader(object):
       return [None for _ in range(len(args))]
 
   def iterate_read(self, *args):
-    if self._db is not None:
+    if self._db is None:
       self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
       self._db.open(self._record_path.encode('utf-8'))
 
@@ -147,7 +147,7 @@ class RecordReader(object):
         yield sample
 
   def iterate_sampling_read(self, index, *args):
-    if self._db is not None:
+    if self._db is None:
       self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
       self._db.open(self._record_path.encode('utf-8'))
 
