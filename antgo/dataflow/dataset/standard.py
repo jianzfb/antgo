@@ -35,12 +35,12 @@ class Standard(Dataset):
     self._record_reader = None
 
   def data_pool(self):
-    epoch = 0
+    self.epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
-      if epoch >= max_epoches:
+      if self.epoch >= max_epoches:
         break
-      epoch += 1
+      self.epoch += 1
 
       ids = copy.copy(self.ids)
       if self.rng:

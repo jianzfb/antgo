@@ -19,7 +19,7 @@ from . import logger
 
 __all__ = ['StoppableThread', 'LoopThread','TimerThread', 'ensure_proc_terminate',
            'OrderedResultGatherProc', 'OrderedContainer', 'DIE',
-           'mask_sigint', 'start_proc_mask_signal', 'StoppableProcess']
+           'mask_sigint', 'start_proc_mask_signal', 'StoppableProcess', 'GatherMultiProcs']
 
 
 class StoppableThread(threading.Thread):
@@ -239,10 +239,6 @@ class OrderedResultGatherProc(multiprocessing.Process):
 
 
 class StoppableProcess(multiprocessing.Process):
-  """
-  Gather indexed data from a data queue, and produce results with the
-  original index-based order.
-  """
   def __init__(self, queue_size=-1):
     super(StoppableProcess, self).__init__()
     self._is_stop = False
@@ -266,3 +262,59 @@ class StoppableProcess(multiprocessing.Process):
   @property
   def process_queue(self):
     return self._queue
+  
+  
+class GatherMultiProcs(object):
+  @staticmethod
+  def process_func(datasource, flow_generator, data_pipe, condition):
+    # 1.step generate data flow
+    data_flow = flow_generator(datasource)
+    
+    while True:
+      # 2.step put in queue
+      for data in data_flow.iterator_value():
+        data_pipe.put(data)
+      
+      # 3.step add DIE flag
+      with condition:
+        data_pipe.put(DIE)
+        condition.wait()
+
+  def __init__(self, datasource, flow_generator, nr=2, cache=2):
+    self._is_running = False
+    self._nr = nr
+    self._queue = multiprocessing.Queue(nr * cache)
+    self._condition = multiprocessing.Condition()
+    self._processes = [multiprocessing.Process(target=GatherMultiProcs.process_func,
+                       args=(datasource, flow_generator, self._queue, self._condition)) for _ in range(nr)]
+
+    for p in self._processes:
+      p.daemon = True
+  
+  def iterator_value(self):
+    assert(self._queue.empty())
+    
+    # launch all processes
+    if not self._is_running:
+      for p in self._processes:
+        p.start()
+      self._is_running = True
+    
+    # notify all waiting processes
+    with self._condition:
+      self._condition.notify_all()
+
+    while True:
+      data = self._queue.get()
+      if data == DIE:
+        DIE_nr = 1
+        # waiting until nr DIE
+        while DIE_nr < self._nr:
+          temp = self._queue.get()
+          if temp == DIE:
+            DIE_nr += 1
+          else:
+            yield temp
+          
+        raise StopIteration
+      yield data

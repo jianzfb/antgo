@@ -125,7 +125,7 @@ class BatchData(Node):
 
       if self.producer_wait:
         with self.producer_condition:
-          self.producer_condition.notifyAll()
+          self.producer_condition.notify_all()
         self.producer_wait = False
       
       data = self.buffer.get()
