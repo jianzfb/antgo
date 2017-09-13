@@ -45,7 +45,7 @@ class Standard(Dataset):
       ids = copy.copy(self.ids)
       if self.rng:
         self.rng.shuffle(ids)
-
+      
       # filter by ids
       filter_ids = getattr(self, 'filter', None)
       if filter_ids is not None:

@@ -57,6 +57,8 @@ class Dataset(BaseNode):
     self.data_generator = None
     self._lock = multiprocessing.Lock()
     self._ids = []
+    # data rng flag
+    self._is_data_rng = True
 
   def close(self):
     pass
@@ -123,6 +125,8 @@ class Dataset(BaseNode):
   
   @property
   def rng(self):
+    if self._is_data_rng:
+      self.data_rng = get_rng(self)
     return self.data_rng
 
   def reset_state(self):
@@ -132,7 +136,7 @@ class Dataset(BaseNode):
     Otherwise it may not work well with prefetching, because different
     processes will have the same RNG state.
     """
-    self.data_rng = get_rng(self)
+    self._is_data_rng = True
 
   def split(self, split_params, split_method):
     pass

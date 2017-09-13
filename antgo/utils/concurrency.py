@@ -266,10 +266,8 @@ class StoppableProcess(multiprocessing.Process):
   
 class GatherMultiProcs(object):
   @staticmethod
-  def process_func(datasource, flow_generator, data_pipe, condition):
+  def process_func(data_flow, data_pipe, condition):
     # 1.step generate data flow
-    data_flow = flow_generator(datasource)
-    
     while True:
       # 2.step put in queue
       for data in data_flow.iterator_value():
@@ -280,13 +278,13 @@ class GatherMultiProcs(object):
         data_pipe.put(DIE)
         condition.wait()
 
-  def __init__(self, datasource, flow_generator, nr=2, cache=2):
+  def __init__(self, data_flow, nr=2, cache=2):
     self._is_running = False
     self._nr = nr
     self._queue = multiprocessing.Queue(nr * cache)
     self._condition = multiprocessing.Condition()
     self._processes = [multiprocessing.Process(target=GatherMultiProcs.process_func,
-                       args=(datasource, flow_generator, self._queue, self._condition)) for _ in range(nr)]
+                       args=(data_flow, self._queue, self._condition)) for _ in range(nr)]
 
     for p in self._processes:
       p.daemon = True
