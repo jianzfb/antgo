@@ -62,6 +62,9 @@ class AntChallenge(AntBase):
       running_ant_task = custom_task
 
     assert(running_ant_task is not None)
+    # 0.step warp model (main_file and main_param)
+    self.stage = 'MODEL'
+    self.context.job.send({'DATA': {'MODEL': self.model}})
 
     # 1.step loading test dataset
     logger.info('loading test dataset %s'%running_ant_task.dataset_name)

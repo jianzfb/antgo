@@ -69,7 +69,7 @@ class Channel():
     self.channel_chart = None
     self.channel_job = channel_job
     self.channel_params = channel_params
-    assert(self.channel_type in ["IMAGE", "NUMERIC", "TEXT", "HISTOGRAM", "TABLE"])
+    assert(self.channel_type in ["IMAGE", "NUMERIC", "TEXT", "HISTOGRAM"])
 
   @property
   def params(self):
@@ -102,8 +102,6 @@ class Channel():
       return self.reorganize_text_data(data)
     elif data_type == "HISTOGRAM":
       return self.reorganize_histogram_data(data)
-    elif data_type == "TABLE":
-      return self.reorganize_table_data(data)
     else:
       return data
 
@@ -189,29 +187,6 @@ class Channel():
       data_y = np.histogram(data_y, bins)
     except:
       logger.error("Channel Y Must be Numpy Array")
-    return (data_x, data_y)
-
-  def reorganize_table_data(self, data):
-    data_x, data_y = data
-    try:
-      data_x = float(data_x)
-    except:
-      logger.error("Channel X Must be Scalar Data")
-
-    try:
-      if len(data_y.shape) != 2:
-        logger.error("Channel Y Shape Must be 2 Dimension")
-
-      # transform to string
-      height, width = data_y.shape[:2]
-      yy = [[] for i in range(height)]
-      for y in range(height):
-          for x in range(width):
-              yy[y].append(str(int(data_y[y,x] * 100) / 100))
-      data_y = yy
-    except:
-        logger.error("Channel Y Must be Numpy Array")
-
     return (data_x, data_y)
 
   def send(self, x=0, y=0):

@@ -53,6 +53,10 @@ class AntTrain(AntBase):
 
     assert(running_ant_task is not None)
 
+    # 0.step warp model (main_file and main_param)
+    self.stage = 'MODEL'
+    self.context.job.send({'DATA': {'MODEL': self.model}})
+
     # 1.step loading training dataset
     logger.info('loading train dataset %s'%running_ant_task.dataset_name)
     ant_train_dataset = running_ant_task.dataset('train',

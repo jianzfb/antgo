@@ -15,10 +15,13 @@ import time
 import json
 import sys
 import sys
+from antgo.ant import flags
 if sys.version > '3':
   PY3 = True
 else:
   PY3 = False
+
+FLAGS = flags.AntFLAGS
 
 
 class AntBase(object):
@@ -122,3 +125,14 @@ class AntBase(object):
   @property
   def time_stamp(self):
     return self.ant_time_stamp
+
+  @property
+  def model(self):
+    main_folder = FLAGS.main_folder()
+    main_param = FLAGS.main_param()
+    main_file = FLAGS.main_file()
+
+    # package main file and its param
+
+
+    return None
