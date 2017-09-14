@@ -58,7 +58,7 @@ class Dataset(BaseNode):
     self._lock = multiprocessing.Lock()
     self._ids = []
     # data rng flag
-    self._is_data_rng = True
+    self._is_data_rng = False
 
   def close(self):
     pass
