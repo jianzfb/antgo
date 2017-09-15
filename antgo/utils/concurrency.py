@@ -12,6 +12,10 @@ from contextlib import contextmanager
 import signal
 import weakref
 import six
+from datetime import datetime
+import time
+import random
+import os, sys
 import subprocess
 from six.moves import queue
 import time
@@ -267,7 +271,11 @@ class StoppableProcess(multiprocessing.Process):
 class GatherMultiProcs(object):
   @staticmethod
   def process_func(data_flow, data_pipe, condition):
-    # 1.step generate data flow
+    # 1.step prepare random seed for current pid
+    seed = (os.getpid() +
+            int(datetime.now().strftime("%Y%m%d%H%M%S%f"))) % 4294967295
+    random.seed(seed)
+    
     while True:
       # 2.step put in queue
       for data in data_flow.iterator_value():

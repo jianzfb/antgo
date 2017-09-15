@@ -123,12 +123,12 @@ def generate_coco_person_train_standard_dataset(data_folder, target_folder):
                             'coco_person')
 
 
-if __name__ == '__main__':
-  # transfer voc2007
-  #generate_voc2007_standard_dataset('/home/mi/下载/dataset/voc','/home/mi/antgo/antgo-dataset')
-  
-  # transfer jiajiaya
-  # generate_jiajiaya_standard_dataset('/home/mi/dataset/jiajiaya', '/home/mi/antgo/antgo-dataset')
-  
-  generate_coco_person_train_standard_dataset('/home/mi/dataset/coco_person/','/home/mi/antgo/antgo-dataset/coco_person')
-  pass
+# if __name__ == '__main__':
+#   # transfer voc2007
+#   #generate_voc2007_standard_dataset('/home/mi/下载/dataset/voc','/home/mi/antgo/antgo-dataset')
+#
+#   # transfer jiajiaya
+#   # generate_jiajiaya_standard_dataset('/home/mi/dataset/jiajiaya', '/home/mi/antgo/antgo-dataset')
+#
+#   generate_coco_person_train_standard_dataset('/home/mi/dataset/coco_person/','/home/mi/antgo/antgo-dataset/coco_person')
+#   pass

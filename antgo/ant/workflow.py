@@ -12,7 +12,9 @@ from multiprocessing import Process, Lock
 from antgo.utils.cpu import *
 from antgo.utils.gpu import *
 from antgo.ant.work import *
-
+import tarfile
+from antgo.ant import flags
+FLAGS = flags.AntFLAGS
 
 WorkNodes = {'Training': Training,
              'Inference': Inference,
@@ -200,6 +202,26 @@ class WorkFlow(object):
         self.work_acquired_locks[work_i] = locks_pool[resource_id]
 
   def start(self):
+    # warp model (main_file and main_param)
+    # - backup in dump_dir
+    main_folder = FLAGS.main_folder()
+    main_param = FLAGS.main_param()
+    main_file = FLAGS.main_file()
+    goldcoin = os.path.join(self._dump_dir, '%s-goldcoin.tar.gz'%self._ant_name)
+
+    if os.path.exists(goldcoin):
+      os.remove(goldcoin)
+      
+    tar = tarfile.open(goldcoin, 'w:gz')
+    tar.add(os.path.join(main_folder, main_file), arcname=main_file)
+    if main_param is not None:
+      tar.add(os.path.join(main_folder, main_param), arcname=main_param)
+    tar.close()
+    
+    # - backup in cloud
+    
+    
+    # go and enjoy fun
     processes = [Process(target=lambda x, y: x.start(y),
                          args=(self.work_nodes[i], self.work_acquired_locks[i]))
                  for i in range(len(self.work_nodes))]

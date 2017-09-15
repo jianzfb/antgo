@@ -12,7 +12,9 @@ from ..measures.statistic import *
 from ..task.task import *
 from ..utils import logger
 from ..dataflow.recorder import *
-
+import tarfile
+from antgo.ant import flags
+FLAGS = flags.AntFLAGS
 
 class AntTrain(AntBase):
   def __init__(self, ant_context,
@@ -52,18 +54,38 @@ class AntTrain(AntBase):
         running_ant_task = custom_task
 
     assert(running_ant_task is not None)
+    
+    # now time stamp
+    train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
 
     # 0.step warp model (main_file and main_param)
     self.stage = 'MODEL'
-    self.context.job.send({'DATA': {'MODEL': self.model}})
+    # - backup in dump_dir
+    main_folder = FLAGS.main_folder()
+    main_param = FLAGS.main_param()
+    main_file = FLAGS.main_file()
+    goldcoin = os.path.join(self.ant_dump_dir, train_time_stamp, '%s-goldcoin.tar.gz'%self.ant_name)
+    
+    if os.path.exists(goldcoin):
+      os.remove(goldcoin)
+      
+    tar = tarfile.open(goldcoin, 'w:gz')
+    tar.add(os.path.join(main_folder, main_file), arcname=main_file)
+    if main_param is not None:
+      tar.add(os.path.join(main_folder, main_param), arcname=main_param)
+    tar.close()
 
+    # - backup in cloud
+    if os.path.exists(goldcoin):
+      # self.context.job.send({'DATA': {'MODEL': self.model}})
+      pass
+    
     # 1.step loading training dataset
     logger.info('loading train dataset %s'%running_ant_task.dataset_name)
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
-
-    train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
+    
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None:

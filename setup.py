@@ -2,6 +2,13 @@ from setuptools import setup
 from Cython.Build import cythonize
 from distutils.extension import Extension
 import numpy as np
+import os
+import subprocess
+
+try:
+    import xml.etree.cElementTree as ET
+except ImportError:
+    import xml.etree.ElementTree as ET
 
 # To compile and install locally run "python setup.py build_ext --inplace"
 # Install: pip install . -r requirements.txt (from pip)
@@ -55,3 +62,34 @@ setup(name='antgo',
       long_description=readme(),
       include_package_data=True,
       zip_safe=False,)
+
+# config key folder
+# 1.step config data_factory and task_factory
+config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0],'antgo','config.xml')
+tree = ET.ElementTree(file=config_xml)
+root = tree.getroot()
+
+data_factory = None
+task_factory = None
+for child in root:
+  if child.tag == 'data_factory':
+    data_factory = child.text.strip()
+  elif child.tag == 'task_factory':
+    task_factory = child.text.strip()
+
+assert(data_factory is not None)
+assert(task_factory is not None)
+
+# make data_factory folder
+print('construct data and task factory')
+if not os.path.exists(data_factory):
+  os.makedirs(data_factory)
+  
+# make task_factory folder
+if not os.path.exists(task_factory):
+  os.makedirs(task_factory)
+
+
+
+# 2.step example data
+# 2.1 step heart_scale

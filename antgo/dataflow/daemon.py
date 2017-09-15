@@ -12,6 +12,7 @@ import atexit
 from signal import SIGTERM
 import psutil
 import signal
+import tempfile
 
 
 class Daemon(object):
@@ -69,12 +70,14 @@ class Daemon(object):
     so.close()
     os.dup2(se.fileno(), sys.stderr.fileno())
     se.close()
-    
+  
     # write pidfile
-    pid = str(os.getpid())
-    with open(self.pidfile, 'w+') as fp:
-      fp.write("%s\n" % pid)
-    
+    pidfile = os.path.normpath(tempfile.gettempdir() + '/' + self.pidfile)
+    with open(pidfile, 'w+') as fp:
+      daemon_pid = os.getpid() # pid
+      p = psutil.Process(daemon_pid)
+      fp.write('%d %f\n' % (daemon_pid, p._create_time))
+
     # register
     atexit.register(self.delpid)
     signal.signal(signal.SIGTERM, self.delpid)
@@ -83,7 +86,9 @@ class Daemon(object):
     return 1
   
   def delpid(self):
-    os.remove(self.pidfile)
+    pidfile = os.path.normpath(tempfile.gettempdir() + '/' + self.pidfile)
+    if os.path.exists(pidfile):
+      os.remove(pidfile)
   
   def start(self):
     """
@@ -92,22 +97,25 @@ class Daemon(object):
     # Check for a pidfile to see if the daemon already runs
     pid = None
     try:
-      with open(self.pidfile, 'r') as fp:
-        pid = int(fp.read().strip())
-        #TODO check whether pid is running
-        daemon_p = psutil.Process(pid)
-        if daemon_p.name != 'antgo':
-          pid = None
+      pidfile = os.path.normpath(tempfile.gettempdir() + '/' + self.pidfile)
+      with open(pidfile, 'r') as fp:
+        pid, pid_create_time = fp.read().split(' ')
+        pid = int(pid.strip())
+        pid_create_time = float(pid_create_time)
+        
+        daemon_p = psutil.Process(pid)  # maybe this process not exist
+        if daemon_p._create_time != pid_create_time:
+          # there exists process, but it's not the same
+          raise RuntimeError
     except:
       pid = None
 
-    if pid:
+    if pid is not None:
       # if the daemon already runs, leave saliently
       return
     else:
-      # remove pidfile
-      if os.path.exists(self.pidfile):
-        os.remove(self.pidfile)
+      # clear record
+      self.delpid()
     
     # Start the daemon
     id = self.daemonize()
@@ -127,13 +135,14 @@ class Daemon(object):
     """
     # Get the pid from the pidfile
     try:
-      pf = open(self.pidfile, 'r')
-      pid = int(pf.read().strip())
-      pf.close()
+      pidfile = os.path.normpath(tempfile.gettempdir() + '/' + self.pidfile)
+      with open(pidfile, 'r') as fp:
+        pid, pid_create_time = fp.read().split(' ')
+        pid = int(pid.strip())
     except IOError:
       pid = None
     
-    if not pid:
+    if pid is None:
       message = "Daemon not running?\n"
       sys.stderr.write(message % self.pidfile)
       return  # not an error in a restart
@@ -146,8 +155,7 @@ class Daemon(object):
     except OSError as err:
       err = str(err)
       if err.find("No such process") > 0:
-        if os.path.exists(self.pidfile):
-          os.remove(self.pidfile)
+        self.delpid()
   
   def restart(self):
     """

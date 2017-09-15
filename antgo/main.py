@@ -51,7 +51,6 @@ flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('name', None, 'app name')
-flags.DEFINE_string('config', 'config.xml', 'antgo config')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -70,21 +69,18 @@ def main():
     sys.exit(-1)
   
   # 2.step antgo server daemon
+  config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'config.xml')
+  Config.parse_xml(config_xml)
   dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
   dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
 
-  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads),
-                                    dataflow_server_host,
-                                    os.path.join(os.path.split(os.path.realpath(__file__))[0], 'dfserver.pid'))
+  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads), dataflow_server_host, 'antgo-data-server.pid')
   dfs_daemon.start()
 
   if ant_cmd == 'server':
     return
 
   # 3.step load antgo config
-  config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], FLAGS.config())
-  Config.parse_xml(config_xml)
-
   data_factory = getattr(Config, 'data_factory', None)
   task_factory = getattr(Config, 'task_factory', '')
 
@@ -152,11 +148,11 @@ def main():
   
   if ant_cmd == "train":
     running_process = AntTrain(ant_context,
-                             name,
-                             data_factory,
-                             dump_dir,
-                             token,
-                             task)
+                               name,
+                               data_factory,
+                               dump_dir,
+                               token,
+                               task)
     running_process.start()
   elif ant_cmd == 'challenge':
     running_process = AntChallenge(ant_context,
