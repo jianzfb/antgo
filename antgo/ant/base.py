@@ -14,7 +14,6 @@ import uuid
 import time
 import json
 import sys
-import sys
 from antgo.ant import flags
 if sys.version > '3':
   PY3 = True
@@ -54,9 +53,9 @@ class AntBase(object):
       # 0.step add extra data
       data['APP_TOKEN'] = self.app_token
       data['APP_TIME'] = self.ant_time_stamp
-      if self.ant_context is not None:
-        if self.ant_context.params is not None:
-          data['APP_HYPER_PARAMETER'] = json.dumps(self.ant_context.params)
+      if self.context is not None:
+        if self.context.params is not None:
+          data['APP_HYPER_PARAMETER'] = json.dumps(self.context.params)
       data['APP_RPC'] = "INFO"
       data['APP_STAGE'] = stage
       data['APP_NOW_TIME'] = time.time()
@@ -97,10 +96,10 @@ class AntBase(object):
 
   @property
   def stage(self):
-    return self.ant_context.stage
+    return self.context.stage
   @stage.setter
   def stage(self, val):
-    self.ant_context.stage = val
+    self.context.stage = val
 
   @property
   def token(self):
@@ -125,14 +124,3 @@ class AntBase(object):
   @property
   def time_stamp(self):
     return self.ant_time_stamp
-
-  @property
-  def model(self):
-    main_folder = FLAGS.main_folder()
-    main_param = FLAGS.main_param()
-    main_file = FLAGS.main_file()
-
-    # package main file and its param
-
-
-    return None

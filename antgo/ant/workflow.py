@@ -22,7 +22,7 @@ WorkNodes = {'Training': Training,
              'DataSplit': DataSplit}
 
 
-class WorkFlow(object):
+class WorkFlow(AntBase):
   def __init__(self, ant_name,
                ant_token,
                ant_workflow_config,
@@ -30,6 +30,8 @@ class WorkFlow(object):
                main_folder,
                dump_dir,
                data_factory):
+    super(WorkFlow, self).__init__(ant_name, None, ant_token)
+
     self.config_content = ant_workflow_config
     self.work_nodes = []
     self.work_acquired_locks = []
@@ -209,6 +211,9 @@ class WorkFlow(object):
     main_file = FLAGS.main_file()
     goldcoin = os.path.join(self._dump_dir, '%s-goldcoin.tar.gz'%self._ant_name)
 
+    if not os.path.exists(self._dump_dir):
+      os.makedirs(self._dump_dir)
+
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
       
@@ -219,8 +224,16 @@ class WorkFlow(object):
     tar.close()
     
     # - backup in cloud
-    
-    
+    if os.path.exists(goldcoin):
+      file_size = os.path.getsize(goldcoin) / 1024.0
+      if file_size < 500:
+        if sys.getdefaultencoding() != 'utf8':
+          reload(sys)
+          sys.setdefaultencoding('utf8')
+        # model file shouldn't too large (500KB)
+        with open(goldcoin, 'r') as fp:
+          self.send({'MODEL': fp.read()}, 'MODEL')
+
     # go and enjoy fun
     processes = [Process(target=lambda x, y: x.start(y),
                          args=(self.work_nodes[i], self.work_acquired_locks[i]))

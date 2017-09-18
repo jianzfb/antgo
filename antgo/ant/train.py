@@ -13,6 +13,7 @@ from ..task.task import *
 from ..utils import logger
 from ..dataflow.recorder import *
 import tarfile
+import sys
 from antgo.ant import flags
 FLAGS = flags.AntFLAGS
 
@@ -64,11 +65,15 @@ class AntTrain(AntBase):
     main_folder = FLAGS.main_folder()
     main_param = FLAGS.main_param()
     main_file = FLAGS.main_file()
+
+    if not os.path.exists(os.path.join(self.ant_dump_dir, train_time_stamp)):
+      os.makedirs(os.path.join(self.ant_dump_dir, train_time_stamp))
+
     goldcoin = os.path.join(self.ant_dump_dir, train_time_stamp, '%s-goldcoin.tar.gz'%self.ant_name)
     
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
-      
+
     tar = tarfile.open(goldcoin, 'w:gz')
     tar.add(os.path.join(main_folder, main_file), arcname=main_file)
     if main_param is not None:
@@ -77,9 +82,15 @@ class AntTrain(AntBase):
 
     # - backup in cloud
     if os.path.exists(goldcoin):
-      # self.context.job.send({'DATA': {'MODEL': self.model}})
-      pass
-    
+      file_size = os.path.getsize(goldcoin) / 1024.0
+      if file_size < 500:
+        if sys.getdefaultencoding() != 'utf8':
+          reload(sys)
+          sys.setdefaultencoding('utf8')
+        # model file shouldn't too large (500KB)
+        with open(goldcoin, 'r') as fp:
+          self.context.job.send({'DATA': {'MODEL': fp.read()}})
+
     # 1.step loading training dataset
     logger.info('loading train dataset %s'%running_ant_task.dataset_name)
     ant_train_dataset = running_ant_task.dataset('train',

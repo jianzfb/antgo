@@ -1,6 +1,9 @@
 # -*- coding: UTF-8 -*-
 # File: utils.py
 # Author: jian <jian@mltalker.com>
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
 
 import os, sys
 from contextlib import contextmanager
@@ -16,7 +19,6 @@ import tarfile
 __all__ = ['change_env',
         'map_arg',
         'get_rng', 'memoized',
-        'get_dataset_path',
         'get_tqdm_kwargs',
         'targz'
         ]
@@ -107,17 +109,6 @@ def get_rng(obj=None, seed=None):
     seed = (id(obj) + os.getpid() +
             int(datetime.now().strftime("%Y%m%d%H%M%S%f"))) % 4294967295
   return np.random.RandomState(seed)
-
-
-def get_dataset_path(*args):
-  from . import logger
-  d = os.environ.get('ANT_DATASET', None)
-  if d is None:
-    d = os.path.abspath(os.path.join(
-                os.path.dirname(__file__), '..', 'dataflow', 'dataset'))
-    logger.info("ANT_DATASET not set, using {} for dataset.".format(d))
-  assert os.path.isdir(d), d
-  return os.path.join(d, *args)
 
 
 def get_tqdm_kwargs(**kwargs):
