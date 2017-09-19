@@ -15,7 +15,12 @@ from antgo.ant.work import *
 import tarfile
 from antgo.ant import flags
 FLAGS = flags.AntFLAGS
-
+import sys
+if sys.version > '3':
+    PY3 = True
+else:
+    PY3 = False
+    
 WorkNodes = {'Training': Training,
              'Inference': Inference,
              'Evaluating': Evaluating,
@@ -227,11 +232,11 @@ class WorkFlow(AntBase):
     if os.path.exists(goldcoin):
       file_size = os.path.getsize(goldcoin) / 1024.0
       if file_size < 500:
-        if sys.getdefaultencoding() != 'utf8':
+        if not PY3 and sys.getdefaultencoding() != 'utf8':
           reload(sys)
           sys.setdefaultencoding('utf8')
         # model file shouldn't too large (500KB)
-        with open(goldcoin, 'r') as fp:
+        with open(goldcoin, 'rb') as fp:
           self.send({'MODEL': fp.read()}, 'MODEL')
 
     # go and enjoy fun

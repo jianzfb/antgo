@@ -7,13 +7,14 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from antgo.html.html import *
-from .base import *
-from ..dataflow.common import *
-from ..measures.statistic import *
-from ..task.task import *
-from ..utils import logger
-from ..dataflow.recorder import *
+from antgo.ant.base import *
+from antgo.dataflow.common import *
+from antgo.measures.statistic import *
+from antgo.task.task import *
+from antgo.utils import logger
+from antgo.dataflow.recorder import *
 import shutil
+import tarfile
 
 
 class AntChallenge(AntBase):
@@ -62,9 +63,41 @@ class AntChallenge(AntBase):
       running_ant_task = custom_task
 
     assert(running_ant_task is not None)
+    
+    # now time stamp
+    now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
+    
     # 0.step warp model (main_file and main_param)
     self.stage = 'MODEL'
-    self.context.job.send({'DATA': {'MODEL': self.model}})
+    # - backup in dump_dir
+    main_folder = FLAGS.main_folder()
+    main_param = FLAGS.main_param()
+    main_file = FLAGS.main_file()
+
+    if not os.path.exists(os.path.join(self.ant_dump_dir, now_time_stamp)):
+      os.makedirs(os.path.join(self.ant_dump_dir, now_time_stamp))
+
+    goldcoin = os.path.join(self.ant_dump_dir, now_time_stamp, '%s-goldcoin.tar.gz' % self.ant_name)
+
+    if os.path.exists(goldcoin):
+      os.remove(goldcoin)
+
+    tar = tarfile.open(goldcoin, 'w:gz')
+    tar.add(os.path.join(main_folder, main_file), arcname=main_file)
+    if main_param is not None:
+      tar.add(os.path.join(main_folder, main_param), arcname=main_param)
+    tar.close()
+
+    # - backup in cloud
+    if os.path.exists(goldcoin):
+      file_size = os.path.getsize(goldcoin) / 1024.0
+      if file_size < 500:
+        if not PY3 and sys.getdefaultencoding() != 'utf8':
+          reload(sys)
+          sys.setdefaultencoding('utf8')
+        # model file shouldn't too large (500KB)
+        with open(goldcoin, 'rb') as fp:
+          self.context.job.send({'DATA': {'MODEL': fp.read()}})
 
     # 1.step loading test dataset
     logger.info('loading test dataset %s'%running_ant_task.dataset_name)
@@ -79,8 +112,7 @@ class AntChallenge(AntBase):
   
       self.stage = "INFERENCE"
       logger.info('start infer process')
-      now_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
-      infer_dump_dir = os.path.join(self.ant_dump_dir, now_time, 'inference')
+      infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')
       if not os.path.exists(infer_dump_dir):
         os.makedirs(infer_dump_dir)
       else:
@@ -190,7 +222,7 @@ class AntChallenge(AntBase):
       #
       # performace statistic
       logger.info('generate model evaluation report')
-      everything_to_html(task_running_statictic_mirror, os.path.join(self.ant_dump_dir, now_time))
+      everything_to_html(task_running_statictic_mirror, os.path.join(self.ant_dump_dir, now_time_stamp))
 
 
 def _group_measure_data_by_tag(method_score_mat, samples_id, is_binary, data_source, filter_tag=None):

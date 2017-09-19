@@ -6,15 +6,20 @@ from __future__ import division
 from __future__ import unicode_literals
 
 from antgo.html.html import *
-from .base import *
-from ..dataflow.common import *
-from ..measures.statistic import *
-from ..task.task import *
-from ..utils import logger
-from ..dataflow.recorder import *
+from antgo.ant.base import *
+from antgo.dataflow.common import *
+from antgo.measures.statistic import *
+from antgo.task.task import *
+from antgo.utils import logger
+from antgo.dataflow.recorder import *
 import tarfile
 import sys
 from antgo.ant import flags
+if sys.version > '3':
+    PY3 = True
+else:
+    PY3 = False
+
 FLAGS = flags.AntFLAGS
 
 class AntTrain(AntBase):
@@ -84,11 +89,11 @@ class AntTrain(AntBase):
     if os.path.exists(goldcoin):
       file_size = os.path.getsize(goldcoin) / 1024.0
       if file_size < 500:
-        if sys.getdefaultencoding() != 'utf8':
+        if not PY3 and sys.getdefaultencoding() != 'utf8':
           reload(sys)
           sys.setdefaultencoding('utf8')
         # model file shouldn't too large (500KB)
-        with open(goldcoin, 'r') as fp:
+        with open(goldcoin, 'rb') as fp:
           self.context.job.send({'DATA': {'MODEL': fp.read()}})
 
     # 1.step loading training dataset
