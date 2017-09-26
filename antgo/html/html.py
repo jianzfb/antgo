@@ -29,9 +29,11 @@ def render_template(template_filename, context):
   return TEMPLATE_ENVIRONMENT.get_template(template_filename).render(context)
 
 
-def everything_to_html(data, dump_dir):
+def everything_to_html(data, dump_dir, data_source=None):
+  assert(len(data) == 1)
   # list all statistics
   everything_statistics = []
+  model_deep_analysis = []
   for ant_name, ant_info in data.items():
     # 0.step cpu statistic
     if 'cpu' in ant_info:
@@ -79,10 +81,26 @@ def everything_to_html(data, dump_dir):
       for ms in ant_info['measure']:
         everything_statistics.append(ms)
 
-  #
+    # 4.step model analysis
+    if 'analysis' in ant_info:
+      model_analysis = ant_info['analysis']
+      for measure_name, analysis_data in model_analysis.items():
+        if 'group' in analysis_data:
+          for tag, tag_data in analysis_data['group']:
+            model_deep_analysis.append({'analysis_name':measure_name,
+                                        'analysis_tag':tag,
+                                        'analysis_data':tag_data})
+        if 'global' in analysis_data:
+          global_analysis = analysis_data['global']
+          model_deep_analysis.append({'analysis_name':measure_name,
+                                      'analysis_tag':'global',
+                                      'analysis_data':global_analysis})
+
   statistic_visualization = _transform_statistic_to_visualization(everything_statistics)
+  analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis, data_source)
   context = {
-    'measures': statistic_visualization
+    'measures': statistic_visualization,
+    'analysis': analysis_visualization
   }
 
   # to html
@@ -191,9 +209,48 @@ def _transform_statistic_to_visualization(statistic_info):
   return visualization_statistic_info
 
 
-def _transform_analysis_to_visualization(analysis_info):
-  
-  pass
+def _transform_analysis_to_visualization(analysis_info, data_source):
+  if data_source is not None:
+    return []
+
+  analysis_vis_data = []
+  # analysis-name, analysis-tag, analysis_data
+  for data in analysis_info:
+    analysis_name = data['analysis_name']
+    analysis_tag = data['analysis_tag']
+    analysis_data = data['analysis_data']
+    item = {}
+    item['name'] = '%s-%s'%(analysis_name, analysis_tag)
+    item['value'] = analysis_data['value'].tolist()
+    item['x'] = analysis_data['x'].tolist()
+    item['y'] = analysis_data['y'].tolist()
+
+    region_samplings = analysis_data['sampling']
+    region_samplings_vis = []
+    for sampling in region_samplings:
+      name = sampling['name']
+      sampling_index = sampling['data']
+      sampling_data = []
+      for index in sampling_index:
+        d = data_source.at(index)
+        if type(d) == str:
+          # text
+          sampling_data.append({'type':'TEXT','data':d})
+        elif type(d) == np.ndarray and len(d.shape) == 3:
+          # image
+          ss = base64.b64encode(png_encode(d))
+          ss = ss.decode('utf-8')
+          sampling_data.append({'type':'IMAGE','data':ss})
+        elif type(d) == np.ndarray and len(d.shape) == 1:
+          # sound / feature data
+          sampling_data.append({'type':'CURVE','data':d})
+
+      region_samplings_vis.append({'name':name,'data':sampling_data})
+
+    item['region_samplings'] = region_samplings_vis
+    analysis_vis_data.append(item)
+
+  return analysis_vis_data
 
 if __name__ == '__main__':
   # experiment 1

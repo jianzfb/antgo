@@ -857,6 +857,12 @@ image_data = [
 ]
 
 
+model_analysis = [
+    {%for analysis_data in analysis%}
+      {'name':"{{analysis_data.name}}", 'data':{{analysis_data.value}},'x-name':{{analysis_data.x}},'y-name':{{analysis_data.y}}},
+    {%endfor%}
+]
+
 $(document).ready( function () {
     for(var index in curve_data){
         var measure_name = curve_data[index]['name'];
@@ -901,6 +907,18 @@ $(document).ready( function () {
       var measure_name = image_data[index]['name'];
       var data = image_data[index]['data'];
       draw_image(measure_name+'-dashboard', data)
+    }
+
+    for(var index in model_analysis){
+      var meansure_name = model_analysis[index]['name'];
+      var data = model_analysis[index]['data'];
+      var x_name = model_analysis[index]['x-name'];
+      var y_name = model_analysis[index]['y-name'];
+
+      var mc = matrix_chart(measure_name+'-matrix-table');
+      mc.addLegends({'x':x_name, 'y':y_name});
+      mc.addSeries(data);
+      mc.render();
     }
 } );
 </script>
@@ -1396,6 +1414,56 @@ button {
             </tbody>
             </table>
         </div>
+    </div>
+</div>
+<div class="container">
+    <div class="cardtable">
+      <div class="table-responsive">
+        <table class="table" style="table-layout:fixed">
+            <tbody>
+            {%for analysis_data in analysis%}
+            <tr class="cardrow">
+                <td>
+                    <div class="col-md-3 evaltitle">
+                        <b>{{analysis_data.name}}</b>
+                    </div>
+                    <div class="col-md-9">
+                      <div class="list-group">
+                          <div class="list-group-item">
+                            <div id="{{analysis_data.name}}-matrix-table"></div>
+                          </div>
+                          <div class="list-group-separator-full"></div>
+                          <div class="list-group-item">
+                            {%for region_sampling in analysis_data.region_samplings%}
+                            <div class="panel panel-default">
+                                <div class="panel-heading">
+                                    <h3 class="panel-title">
+                                        {{region_sampling.name}}
+                                    </h3>
+                                </div>
+                                <div class="panel-body">
+                                  {%for sampling in region_sampling.data%}
+                                  {%if sampling.type=='IMAGE'%}
+                                  <img src="data:image/png;base64,'+{{sampling.data}}+'" class="img-rounded">
+                                  {%endif%}
+                                  {%if sampling.type=='TEXT'%}
+                                  <p>{{sampling.data}}</p>
+                                  {%endif%}
+                                  {%if sampling.type=='CURVE'%}
+                                  {%endif%}
+                                  {%endfor%}
+                                </div>
+                            </div>
+                            {%endfor%}
+                          </div>
+                      </div>
+                    </div>
+                </td>
+              </tr>
+            {%endfor%}
+            </tbody>
+        </table>
+      </div>
     </div>
 </div>
 </body>

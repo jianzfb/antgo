@@ -14,7 +14,9 @@ __all__ = ['Heart']
 
 class Heart(Dataset):
   def __init__(self, train_or_test, dataset_dir=None, ext_params=None):
-    assert(train_or_test in ['train', 'val'])
+    assert(train_or_test in ['train', 'val', 'test'])
+    if train_or_test == 'test':
+      train_or_test = 'val'
     super(Heart, self).__init__(train_or_test, dataset_dir, ext_params, 'heart')
     assert(os.path.exists(os.path.join(dataset_dir, 'train', 'heart_scale')))
     

@@ -13,6 +13,7 @@ from antgo.measures.statistic import *
 from antgo.task.task import *
 from antgo.utils import logger
 from antgo.dataflow.recorder import *
+from antgo.measures.deep_analysis import *
 import shutil
 import tarfile
 
@@ -108,121 +109,181 @@ class AntChallenge(AntBase):
     with safe_recorder_manager(ant_test_dataset):
       # split data and label
       data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
-      self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-  
-      self.stage = "INFERENCE"
-      logger.info('start infer process')
-      infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')
-      if not os.path.exists(infer_dump_dir):
-        os.makedirs(infer_dump_dir)
-      else:
-        shutil.rmtree(infer_dump_dir)
-        os.makedirs(infer_dump_dir)
-      
-      with safe_recorder_manager(self.context.recorder):
-        with running_statistic(self.ant_name):
-          self.context.call_infer_process(data_annotation_branch.output(0), infer_dump_dir)
+      # self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+      #
+      # self.stage = "INFERENCE"
+      # logger.info('start infer process')
+      # infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')
+      # if not os.path.exists(infer_dump_dir):
+      #   os.makedirs(infer_dump_dir)
+      # else:
+      #   shutil.rmtree(infer_dump_dir)
+      #   os.makedirs(infer_dump_dir)
+      #
+      # with safe_recorder_manager(self.context.recorder):
+      #   with running_statistic(self.ant_name):
+      #     self.context.call_infer_process(data_annotation_branch.output(0), infer_dump_dir)
+      #
+      # task_running_statictic = get_running_statistic(self.ant_name)
+      # task_running_statictic = {self.ant_name: task_running_statictic}
+      # task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
+      # task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
+      #     task_running_elapsed_time / float(ant_test_dataset.size)
+      #
+      # self.stage = 'EVALUATION'
+      # logger.info('start evaluation process')
+      # evaluation_measure_result = []
+      #
+      # with safe_recorder_manager(RecordReader(infer_dump_dir)) as record_reader:
+      #   for measure in running_ant_task.evaluation_measures:
+      #     record_generator = record_reader.iterate_read('predict', 'groundtruth')
+      #     result = measure.eva(record_generator, None)
+      #     evaluation_measure_result.append(result)
+      #   task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
-      task_running_statictic = get_running_statistic(self.ant_name)
-      task_running_statictic = {self.ant_name: task_running_statictic}
-      task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
-      task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
-          task_running_elapsed_time / float(ant_test_dataset.size)
-  
-      self.stage = 'EVALUATION'
-      logger.info('start evaluation process')
-      evaluation_measure_result = []
-  
-      with safe_recorder_manager(RecordReader(infer_dump_dir)) as record_reader:
-        for measure in running_ant_task.evaluation_measures:
-          record_generator = record_reader.iterate_read('predict', 'groundtruth')
-          result = measure.eva(record_generator, None)
-          evaluation_measure_result.append(result)
-        task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-      
-      # notify
-      self.context.job.send({'DATA': {'REPORT': task_running_statictic}})
-      
-      # Challenge Analysis
-      task_running_statictic_mirror = copy.deepcopy(task_running_statictic)
       # compare statistic
       logger.info('start compare process')
       related_model_result = None
       # finding all related model result from server
       
       # deep analysis
-      logger.info('deep analysis')
+      logger.info('start deep analysis')
       # finding all reltaed model result from server
-      #
-      # for measure_result in task_running_statictic_mirror[self.ant_name]['measure']:
-      #   if 'info' in measure_result:
-      #     measure_name = measure_result['statistic']['name']
-      #     measure_data = measure_result['info']
-      #
-      #     if 'analysis' not in task_running_statictic_mirror[self.ant_name]:
-      #       task_running_statictic_mirror[self.ant_name]['analysis'] = {}
-      #     task_running_statictic_mirror[self.ant_name]['analysis'][measure_name] = {}
-      #
-      #     method_samples_matrix = []
-      #     if related_model_result is not None:
-      #       pass
-      #     else:
-      #       # simple process
-      #       dd = None
-      #       if 'is_correct' in measure_data[0]:
-      #         dd = sorted(measure_data, key=lambda x: x['is_correct'])
-      #       else:
-      #         dd = sorted(measure_data, key=lambda x: x['score'])
-      #       method_samples_matrix.append({'name': self.ant_name, 'data': dd})
-      #
-      #     # reorganize data as method score matrix
-      #     method_num = len(method_samples_matrix)
-      #     samples_num = len(method_samples_matrix[0]['data'])
-      #     method_measure_mat = np.zeros((method_num, samples_num))
-      #     samples_id = np.zeros((samples_num), np.uint64)
-      #     is_binary_data = False
-      #     for method_id, method_measure_data in enumerate(method_samples_matrix):
-      #       if method_id == 0:
-      #         # record sample id
-      #         for sample_id, sample in enumerate(method_measure_data['data']):
-      #           samples_id[sample_id] = sample['id']
-      #
-      #       for sample_id, sample in enumerate(method_measure_data['data']):
-      #         if 'is_correct' in sample:
-      #           is_binary_data = True
-      #         else:
-      #           method_measure_mat[method_id, sample_id] = sample['score']
-      #
-      #     # record method score matrix
-      #     if is_binary_data:
-      #       method_measure_mat = method_measure_mat.astype(np.uint8)
-      #     task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['data'] = method_measure_mat.tolist()
-      #
-      #     # global group
-      #     abstract_group = _group_measure_data_by_tag(method_measure_mat,
-      #                                                 samples_id,
-      #                                                 is_binary_data,
-      #                                                 ant_test_dataset,
-      #                                                 filter_tag=None)
-      #     task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['group'] = abstract_group
-      #
-      #     # group by tag
-      #     tags = getattr(ant_test_dataset, 'tag', None)
-      #     if tags is not None:
-      #       for tag in tags:
-      #         tag_group = _group_measure_data_by_tag(method_measure_mat,
-      #                                                samples_id,
-      #                                                is_binary_data,
-      #                                                ant_test_dataset,
-      #                                                filter_tag=tag)
-      #         if 'tag-group' not in task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]:
-      #           task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['tag-group'] = []
-      #
-      #         task_running_statictic_mirror[self.ant_name]['analysis'][measure_name]['tag-group'].append((tag, tag_group))
-      #
-      # performace statistic
+
+      task_running_statictic={'ML':
+                                {'measure':[
+                                  {'statistic': {'name': 'MESR',
+                                                 'value': [{'name': 'MESR', 'value': 0.4, 'type':'SCALAR'}]},
+                                                 'info': [{'id':0,'score':0.8,'category':1},
+                                                          {'id':1,'score':0.3,'category':1},
+                                                          {'id':2,'score':0.9,'category':1},
+                                                          {'id':3,'score':0.5,'category':1},
+                                                          {'id':4,'score':1.0,'category':1}]},
+                                  {'statistic': {'name': "SE",
+                                                 'value': [{'name': 'SE', 'value': 0.5, 'type': 'SCALAR'}]},
+                                                 'info': [{'id':0,'score':0.4,'category':1},
+                                                          {'id':1,'score':0.2,'category':1},
+                                                          {'id':2,'score':0.1,'category':1},
+                                                          {'id':3,'score':0.5,'category':1},
+                                                          {'id':4,'score':0.23,'category':1}]}]}}
+
+
+      for measure_result in task_running_statictic[self.ant_name]['measure']:
+        if 'info' in measure_result:
+          measure_name = measure_result['statistic']['name']
+          measure_data = measure_result['info']
+
+          if 'analysis' not in task_running_statictic[self.ant_name]:
+            task_running_statictic[self.ant_name]['analysis'] = {}
+          task_running_statictic[self.ant_name]['analysis'][measure_name] = {}
+
+          # reorganize as list
+          method_samples_list = [{'name': self.ant_name, 'data': measure_data}]
+          if related_model_result is not None:
+            method_samples_list.extend(related_model_result)
+
+          # reorganize data as score matrix
+          method_num = len(method_samples_list)
+          samples_num = len(method_samples_list[0]['data'])
+          method_measure_mat = np.zeros((method_num, samples_num))
+          samples_id = np.zeros((samples_num), np.uint64)
+
+          for method_id, method_measure_data in enumerate(method_samples_list):
+            if method_id == 0:
+              # record sample id
+              for sample_id, sample in enumerate(method_measure_data['data']):
+                samples_id[sample_id] = sample['id']
+
+            for sample_id, sample in enumerate(method_measure_data['data']):
+                method_measure_mat[method_id, sample_id] = sample['score']
+
+          # check method_measure_mat is binary (0 or 1)
+          is_binary = False
+          one_data = method_samples_list[0]['data'][0]['score']
+          if type(one_data) == int:
+            is_binary = True
+
+          # score matrix analysis
+          if not is_binary:
+            s, ri, ci, lr_samples, mr_samples ,hr_samples = \
+              continuous_multi_model_measure_analysis(method_measure_mat, samples_id.tolist(), ant_test_dataset)
+
+            task_running_statictic[self.ant_name]['analysis'][measure_name]['global'] = {'value': s,
+                                                                                         'type': 'MATRIX',
+                                                                                         'x': ci,
+                                                                                         'y': ri,
+                                                                                         'sampling': [{'name':'low', 'data': lr_samples},
+                                                                                                      {'name':'middle','data': mr_samples},
+                                                                                                      {'name':'high', 'data': hr_samples}]}
+
+            # group by tag
+            tags = getattr(ant_test_dataset, 'tag', None)
+            if tags is not None:
+              for tag in tags:
+                g_s, g_ri, g_ci, g_lr_samples, g_mr_samples, g_hr_samples = \
+                  continuous_multi_model_measure_analysis(method_measure_mat,
+                                                          samples_id.tolist(),
+                                                          ant_test_dataset,
+                                                          filter_tag=tag)
+                if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                  task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
+
+                tag_data = {'value': g_s,
+                            'type': 'MATRIX',
+                            'x': g_ci,
+                            'y': g_ri,
+                            'sampling': [{'name':'low','data':g_lr_samples},
+                                         {'name':'middle','data':g_mr_samples},
+                                         {'name':'high','data':g_hr_samples}]}
+
+                task_running_statictic[self.ant_name]['analysis'][measure_name]['group'].append((tag, tag_data))
+          else:
+            s, ri, ci, region_95, region_52, region_42, region_13, region_one, region_zero = \
+              discrete_multi_model_measure_analysis(method_measure_mat,
+                                                    samples_id.tolist(),
+                                                    ant_test_dataset)
+            task_running_statictic[self.ant_name]['analysis'][measure_name]['global'] = {'value': s,
+                                                                                         'type': 'MATRIX',
+                                                                                         'x': ci,
+                                                                                         'y': ri,
+                                                                                         'sampling': [{'name':'95%','data':region_95},
+                                                                                                      {'name':'52%','data':region_52},
+                                                                                                      {'name':'42%','data':region_42},
+                                                                                                      {'name':'13%','data':region_13},
+                                                                                                      {'name':'best','data':region_one},
+                                                                                                      {'name':'zero','data':region_zero}]}
+
+            # group by tag
+            tags = getattr(ant_test_dataset, 'tag', None)
+            if tags is not None:
+              for tag in tags:
+                g_s, g_ri, g_ci, g_region_95, g_region_52, g_region_42, g_region_13, g_region_one, g_region_zero = \
+                  discrete_multi_model_measure_analysis(method_measure_mat,
+                                                          samples_id.tolist(),
+                                                          ant_test_dataset,
+                                                          filter_tag=tag)
+                if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                  task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
+
+                tag_data = {'value': g_s,
+                            'type': 'MATRIX',
+                            'x': g_ci,
+                            'y': g_ri,
+                            'sampling': [{'name':'95%','data':region_95},
+                                         {'name':'52%','data':region_52},
+                                         {'name':'42%','data':region_42},
+                                         {'name':'13%','data':region_13},
+                                         {'name':'best','data':region_one},
+                                         {'name':'zero','data':region_zero}]}
+
+                task_running_statictic[self.ant_name]['analysis'][measure_name]['group'].append((tag, tag_data))
+
+      # notify
+      self.context.job.send({'DATA': {'REPORT': task_running_statictic}})
+
+      # generate report html
       logger.info('generate model evaluation report')
-      everything_to_html(task_running_statictic_mirror, os.path.join(self.ant_dump_dir, now_time_stamp))
+      everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp), data_annotation_branch)
 
 
 def _group_measure_data_by_tag(method_score_mat, samples_id, is_binary, data_source, filter_tag=None):
