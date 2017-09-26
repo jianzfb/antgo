@@ -11,6 +11,7 @@ import base64
 import copy
 from antgo.utils.encode import *
 from jinja2 import Environment, FileSystemLoader
+import scipy.misc
 import sys
 if sys.version > '3':
   PY3 = True
@@ -93,7 +94,7 @@ def everything_to_html(data, dump_dir, data_source=None):
         if 'global' in analysis_data:
           global_analysis = analysis_data['global']
           model_deep_analysis.append({'analysis_name':measure_name,
-                                      'analysis_tag':'global',
+                                      'analysis_tag':'Global',
                                       'analysis_data':global_analysis})
 
   statistic_visualization = _transform_statistic_to_visualization(everything_statistics)
@@ -210,7 +211,7 @@ def _transform_statistic_to_visualization(statistic_info):
 
 
 def _transform_analysis_to_visualization(analysis_info, data_source):
-  if data_source is not None:
+  if data_source is None:
     return []
 
   analysis_vis_data = []
@@ -233,19 +234,24 @@ def _transform_analysis_to_visualization(analysis_info, data_source):
       sampling_data = []
       for index in sampling_index:
         d = data_source.at(index)
+        if type(d) == tuple:
+          d = d[0]
+        
         if type(d) == str:
           # text
-          sampling_data.append({'type':'TEXT','data':d})
+          sampling_data.append({'type': 'TEXT', 'data': d})
         elif type(d) == np.ndarray and len(d.shape) == 3:
           # image
-          ss = base64.b64encode(png_encode(d))
+          standard_d = scipy.misc.imresize(d, (100, 100))
+          standard_d = np.flipud(standard_d)
+          ss = base64.b64encode(png_encode(standard_d))
           ss = ss.decode('utf-8')
-          sampling_data.append({'type':'IMAGE','data':ss})
+          sampling_data.append({'type': 'IMAGE', 'data': ss})
         elif type(d) == np.ndarray and len(d.shape) == 1:
           # sound / feature data
-          sampling_data.append({'type':'CURVE','data':d})
+          sampling_data.append({'type': 'CURVE', 'data': d})
 
-      region_samplings_vis.append({'name':name,'data':sampling_data})
+      region_samplings_vis.append({'name': name, 'data': sampling_data})
 
     item['region_samplings'] = region_samplings_vis
     analysis_vis_data.append(item)

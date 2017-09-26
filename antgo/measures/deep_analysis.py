@@ -89,7 +89,7 @@ def discrete_multi_model_measure_analysis(samples_score, data_id, data_source, f
          region_zero
 
 
-def continuous_multi_model_measure_analysis(samples_score, data_id, data_source, filter_tag=None, random_sampling=5):
+def continuous_multi_model_measure_analysis(samples_score, data_id, data_source, filter_tag=None, random_sampling=10):
   # filter by tag
   remained_id = []
   if filter_tag is not None:
@@ -120,21 +120,24 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
 
   # low region (0 ~ 2/10)
   region_start = 0
-  region_end = np.minimum(region_start+samples_num / 10 * 2, samples_num)
-  low_region_sampling = remained_id[region_start:region_end]
-  low_region_sampling = np.random.choice(low_region_sampling, random_sampling, False)
+  region_end = int(np.minimum(samples_num / 10 * 2, samples_num))
+  low_region_sampling = reorganized_sample_id[region_start:region_end]
+  low_region_random_sampling = np.minimum(len(low_region_sampling), random_sampling)
+  low_region_sampling = np.random.choice(low_region_sampling, low_region_random_sampling, False)
   
   # middle region (4/10 ~ 6/10)
-  region_start = np.maximum(samples_num / 10 * 4, 0)
-  region_end = np.minimum(region_start+samples_num / 10 * 6, samples_num)
-  middle_region_sampling = remained_id[region_start: region_end]
-  middle_region_sampling = np.random.choice(middle_region_sampling, random_sampling, False)
+  region_start = int(np.maximum(samples_num / 10 * 4, 0))
+  region_end = int(np.minimum(samples_num / 10 * 6, samples_num))
+  middle_region_sampling = reorganized_sample_id[region_start: region_end]
+  middle_region_random_sampling = np.minimum(len(middle_region_sampling), random_sampling)
+  middle_region_sampling = np.random.choice(middle_region_sampling, middle_region_random_sampling, False)
   
   # high region (8/10 ~ 10/10)
-  region_start = np.maximum(samples_num / 10 * 8, 0)
-  region_end = np.minimum(region_start+samples_num / 10 * 10, samples_num)
-  high_region_sampling = remained_id[region_start: region_end]
-  high_region_sampling = np.random.choice(high_region_sampling, random_sampling, False)
+  region_start = int(np.maximum(samples_num / 10 * 8, 0))
+  region_end = int(np.minimum(samples_num / 10 * 10, samples_num))
+  high_region_sampling = reorganized_sample_id[region_start: region_end]
+  high_region_random_sampling = np.minimum(len(high_region_sampling), random_sampling)
+  high_region_sampling = np.random.choice(high_region_sampling, high_region_random_sampling, False)
 
   # samples score, [], []
   return reorganized_samples_score, \

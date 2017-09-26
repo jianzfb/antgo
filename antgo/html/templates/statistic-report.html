@@ -11,7 +11,7 @@
 
 function matrix_chart(canvas_id){
     var _chart = {}
-    var _width = 300, _height = 300,
+    var _width = 600, _height = 300,
         _margins = {top: 30, left: 30, right: 30, bottom: 30},
         _data = [], _x_keys=[], _y_keys=[],
         _svg,
@@ -910,7 +910,7 @@ $(document).ready( function () {
     }
 
     for(var index in model_analysis){
-      var meansure_name = model_analysis[index]['name'];
+      var measure_name = model_analysis[index]['name'];
       var data = model_analysis[index]['data'];
       var x_name = model_analysis[index]['x-name'];
       var y_name = model_analysis[index]['y-name'];
@@ -989,8 +989,6 @@ h1, h2, h3 {
 }
 h3 {
     font-size: 20px;
-    padding-top: 30px;
-    padding-bottom: 5px;
     clear: both;
     color: gray;
 }
@@ -1429,22 +1427,20 @@ button {
                     </div>
                     <div class="col-md-9">
                       <div class="list-group">
-                          <div class="list-group-item">
+                          <div class="list-group-item" style="text-align:center">
                             <div id="{{analysis_data.name}}-matrix-table"></div>
                           </div>
                           <div class="list-group-separator-full"></div>
                           <div class="list-group-item">
                             {%for region_sampling in analysis_data.region_samplings%}
                             <div class="panel panel-default">
-                                <div class="panel-heading">
-                                    <h3 class="panel-title">
-                                        {{region_sampling.name}}
-                                    </h3>
+                                <div class="panel-heading" style="height:50px">
+                                    <h3 class="panel-title">{{region_sampling.name}}</h3>
                                 </div>
                                 <div class="panel-body">
                                   {%for sampling in region_sampling.data%}
                                   {%if sampling.type=='IMAGE'%}
-                                  <img src="data:image/png;base64,'+{{sampling.data}}+'" class="img-rounded">
+                                  <img src="data:image/png;base64,{{sampling.data}}" class="img-rounded">
                                   {%endif%}
                                   {%if sampling.type=='TEXT'%}
                                   <p>{{sampling.data}}</p>

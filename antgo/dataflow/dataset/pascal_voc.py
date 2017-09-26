@@ -72,7 +72,7 @@ class PascalBase(Dataset):
 
     assert os.path.exists(self._data_path), 'path does not exist: {}'.format(self._data_path)
     self.dataset_size = len(self._image_index)
-
+  
   def size(self):
     return self.dataset_size
 
@@ -98,12 +98,27 @@ class PascalBase(Dataset):
         if gt_roidb is None:
           continue
 
-        image = cv2.imread(self.image_path_from_index(index))
+        image = imread(self.image_path_from_index(index))
         gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
 
         # [img,label]
         yield [image, gt_roidb]
-
+  
+  def at(self, id):
+    index = self._image_index[id]
+    gt_roidb = self._load_roidb(index)
+  
+    # label info
+    gt_roidb = self.filter_by_condition(gt_roidb, ['segmentation'])
+    if gt_roidb is None:
+      return [None, None]
+  
+    image = imread(self.image_path_from_index(index))
+    gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
+  
+    # [img,label]
+    return [image, gt_roidb]
+  
   def image_path_from_index(self, index):
     """
     Construct an image path from the image's "index" identifier.
