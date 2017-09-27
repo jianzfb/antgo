@@ -85,17 +85,24 @@ def everything_to_html(data, dump_dir, data_source=None):
     # 4.step model analysis
     if 'analysis' in ant_info:
       model_analysis = ant_info['analysis']
-      for measure_name, analysis_data in model_analysis.items():
-        if 'group' in analysis_data:
-          for tag, tag_data in analysis_data['group']:
-            model_deep_analysis.append({'analysis_name':measure_name,
-                                        'analysis_tag':tag,
-                                        'analysis_data':tag_data})
-        if 'global' in analysis_data:
-          global_analysis = analysis_data['global']
-          model_deep_analysis.append({'analysis_name':measure_name,
-                                      'analysis_tag':'Global',
-                                      'analysis_data':global_analysis})
+      for measure_name, measure_data in model_analysis.items():
+        for analysis_title, analysis_data in measure_data.items():
+          if type(analysis_data) == list:
+            # for group
+            for tag, tag_data in analysis_data:
+              
+              model_deep_analysis.append({'analysis_name': measure_name,
+                                          'analysis_tag': analysis_title+'-'+tag,
+                                          'analysis_data': tag_data})
+          else:
+            # for global
+            model_deep_analysis.append({'analysis_name': measure_name,
+                                        'analysis_tag': analysis_title,
+                                        'analysis_data': analysis_data})
+    
+    # 5.step model significant difference
+    if 'significant_diff' in ant_info:
+      pass
 
   statistic_visualization = _transform_statistic_to_visualization(everything_statistics)
   analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis, data_source)
@@ -223,8 +230,15 @@ def _transform_analysis_to_visualization(analysis_info, data_source):
     item = {}
     item['name'] = '%s-%s'%(analysis_name, analysis_tag)
     item['value'] = analysis_data['value'].tolist()
-    item['x'] = analysis_data['x'].tolist()
-    item['y'] = analysis_data['y'].tolist()
+    if type(analysis_data['x']) == list:
+      item['x'] = analysis_data['x']
+    else:
+      item['x'] = analysis_data['x'].tolist()
+    
+    if type(analysis_data['y']) == list:
+      item['y'] = analysis_data['y']
+    else:
+      item['y'] = analysis_data['y'].tolist()
 
     region_samplings = analysis_data['sampling']
     region_samplings_vis = []

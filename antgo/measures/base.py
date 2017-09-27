@@ -9,7 +9,7 @@ from antgo.task.task import *
 
 
 class AntMeasure(object):
-    def __init__(self,task,name=None):
+    def __init__(self, task,name=None):
         self.task = task
         if name != None:
             self.name = name

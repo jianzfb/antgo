@@ -68,7 +68,7 @@ class AntBase(object):
       # 2.step ignore any receive info
       self.zmq_socket.recv(copy=False)
 
-  def rpc(self, cmd=""):
+  def rpc(self, cmd="", dump_dir=None):
     if self.app_token is not None:
       # 0.step config data
       data = {}

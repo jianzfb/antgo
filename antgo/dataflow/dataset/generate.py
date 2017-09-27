@@ -12,7 +12,7 @@ from antgo.dataflow.basic import *
 from antgo.dataflow.dataset.pascal_voc import *
 
 
-def generate_standard_dataset(data_label_generator, train_or_test, data_folder, dataset_name, extra_attrs={}):
+def generate_standard_dataset(data_label_generator, train_or_test, data_folder, dataset_name, **kwargs):
   # build db
   if not os.path.exists(os.path.join(data_folder, dataset_name, train_or_test)):
     os.makedirs(os.path.join(data_folder, dataset_name, train_or_test))
@@ -23,8 +23,8 @@ def generate_standard_dataset(data_label_generator, train_or_test, data_folder, 
     dataset_record.write(Sample(data=data, label=label))
 
   # bind attributes
-  if len(extra_attrs) > 0:
-    dataset_record.bind_attrs()
+  if len(kwargs) > 0:
+    dataset_record.bind_attrs(**kwargs)
 
   # close dataset
   dataset_record.close()

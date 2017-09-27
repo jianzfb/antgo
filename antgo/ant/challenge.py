@@ -120,7 +120,9 @@ class AntChallenge(AntBase):
         shutil.rmtree(infer_dump_dir)
         os.makedirs(infer_dump_dir)
 
+      intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'intermediate')
       with safe_recorder_manager(self.context.recorder):
+        self.context.recorder.dump_dir = intermediate_dump_dir
         with running_statistic(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), infer_dump_dir)
 
@@ -134,22 +136,42 @@ class AntChallenge(AntBase):
       logger.info('start evaluation process')
       evaluation_measure_result = []
 
-      with safe_recorder_manager(RecordReader(infer_dump_dir)) as record_reader:
+      with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
         for measure in running_ant_task.evaluation_measures:
           record_generator = record_reader.iterate_read('predict', 'groundtruth')
           result = measure.eva(record_generator, None)
+          if measure.is_support_rank:
+            # compute confidence interval
+            confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 50)
+            result['statistic']['value'][0]['interval'] = confidence_interval
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-
+        
       # compare statistic
-      logger.info('start compare process')
-      related_model_result = None
-      # finding all related model result from server
+      logger.info('start checking significance difference')
+      # finding benchmark model from server
+      benchmark_model_data = self.rpc("BENCHMARK", infer_dump_dir)
+      if benchmark_model_data is not None:
+        benchmark_model_intermediate = benchmark_model_data['record']
+        
+        task_running_statictic[self.ant_name]['significant_diff'] = {}
+        for measure in running_ant_task.evaluation_measures:
+          if measure.is_support_rank:
+            significant_diff_score = []
+            for benchmark_model_name, benchmark_model_address in benchmark_model_intermediate.items():
+              with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
+                with safe_recorder_manager(benchmark_model_address) as benchmark_record_reader:
+                  s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure)
+                  significant_diff_score.append((benchmark_model_name, s))
+            task_running_statictic[self.ant_name]['significant_diff'][measure.name] = significant_diff_score
       
       # deep analysis
       logger.info('start deep analysis')
       # finding all reltaed model result from server
-
+      benchmark_model_statistic = None
+      if benchmark_model_data is not None:
+        benchmark_model_statistic = benchmark_model_data['report']
+      
       # task_running_statictic={self.ant_name:
       #                           {'measure':[
       #                             {'statistic': {'name': 'MESR',
@@ -166,120 +188,163 @@ class AntChallenge(AntBase):
       #                                                     {'id':2,'score':0.1,'category':1},
       #                                                     {'id':3,'score':0.5,'category':1},
       #                                                     {'id':4,'score':0.23,'category':1}]}]}}
-
+      
       for measure_result in task_running_statictic[self.ant_name]['measure']:
         if 'info' in measure_result and len(measure_result) > 0:
           measure_name = measure_result['statistic']['name']
           measure_data = measure_result['info']
-
-          if 'analysis' not in task_running_statictic[self.ant_name]:
-            task_running_statictic[self.ant_name]['analysis'] = {}
-          task_running_statictic[self.ant_name]['analysis'][measure_name] = {}
-
-          # reorganize as list
-          method_samples_list = [{'name': self.ant_name, 'data': measure_data}]
-          if related_model_result is not None:
-            method_samples_list.extend(related_model_result)
-
-          # reorganize data as score matrix
-          method_num = len(method_samples_list)
-          samples_num = len(method_samples_list[0]['data'])
-          method_measure_mat = np.zeros((method_num, samples_num))
-          samples_id = np.zeros((samples_num), np.uint64)
-
-          for method_id, method_measure_data in enumerate(method_samples_list):
-            if method_id == 0:
-              # record sample id
+          
+          # independent analysis per category for classification problem
+          measure_data_list = []
+          if running_ant_task.class_label is not None and len(running_ant_task.class_label) > 1:
+            for cl in running_ant_task.class_label:
+              measure_data_list.append([md for md in measure_data if md['category'] == cl])
+          
+          if len(measure_data_list) == 0:
+            measure_data_list.append(measure_data)
+          
+          for category_id, category_measure_data in enumerate(measure_data_list):
+            if 'analysis' not in task_running_statictic[self.ant_name]:
+              task_running_statictic[self.ant_name]['analysis'] = {}
+            
+            if measure_name not in task_running_statictic[self.ant_name]['analysis']:
+              task_running_statictic[self.ant_name]['analysis'][measure_name] = {}
+  
+            # reorganize as list
+            method_samples_list = [{'name': self.ant_name, 'data': category_measure_data}]
+            if benchmark_model_statistic is not None:
+              # extract statistic data from benchmark
+              for benchmark_model_data in benchmark_model_statistic:
+                for benchmark_name, benchmark_statistic_data in benchmark_model_data.items():
+                  # finding corresponding measure
+                  for benchmark_measure_result in benchmark_statistic_data['measure']:
+                    if benchmark_measure_result['statistic']['name'] == measure_name:
+                      benchmark_measure_data = benchmark_measure_result['info']
+                      
+                      # finding corresponding category
+                      sub_benchmark_measure_data = None
+                      if running_ant_task.class_label is not None and len(running_ant_task.class_label) > 1:
+                        sub_benchmark_measure_data = \
+                          [md for md in benchmark_measure_data if md['category'] == running_ant_task.class_label[category_id]]
+                      if sub_benchmark_measure_data is None:
+                        sub_benchmark_measure_data = benchmark_measure_data
+                      
+                      method_samples_list.append({'name': benchmark_name, 'data': sub_benchmark_measure_data})
+                      
+                      break
+                  break
+  
+            # reorganize data as score matrix
+            method_num = len(method_samples_list)
+            samples_num = len(method_samples_list[0]['data'])
+            method_measure_mat = np.zeros((method_num, samples_num))
+            samples_id = np.zeros((samples_num), np.uint64)
+  
+            for method_id, method_measure_data in enumerate(method_samples_list):
+              if method_id == 0:
+                # record sample id
+                for sample_id, sample in enumerate(method_measure_data['data']):
+                  samples_id[sample_id] = sample['id']
+  
               for sample_id, sample in enumerate(method_measure_data['data']):
-                samples_id[sample_id] = sample['id']
+                  method_measure_mat[method_id, sample_id] = sample['score']
+  
+            # check method_measure_mat is binary (0 or 1)
+            is_binary = False
+            check_data = method_samples_list[0]['data'][0]['score']
+            if type(check_data) == int:
+              is_binary = True
+  
+            # score matrix analysis
+            if not is_binary:
+              s, ri, ci, lr_samples, mr_samples, hr_samples = \
+                continuous_multi_model_measure_analysis(method_measure_mat, samples_id.tolist(), ant_test_dataset)
+              
+              analysis_tag = 'Global'
+              if len(measure_data_list) > 1:
+                analysis_tag = 'Global-Category ('+str(running_ant_task.class_label[category_id]) + ')'
+              
+              model_name_ri = [method_samples_list[r]['name'] for r in ri]
+              task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
+                            {'value': s,
+                             'type': 'MATRIX',
+                             'x': ci,
+                             'y': model_name_ri,
+                             'sampling': [{'name': 'High Score Region', 'data': hr_samples},
+                                          {'name': 'Middle Score Region', 'data': mr_samples},
+                                          {'name': 'Low Score Region', 'data': lr_samples}]}
+  
+              # group by tag
+              tags = getattr(ant_test_dataset, 'tag', None)
+              if tags is not None:
+                for tag in tags:
+                  g_s, g_ri, g_ci, g_lr_samples, g_mr_samples, g_hr_samples = \
+                    continuous_multi_model_measure_analysis(method_measure_mat,
+                                                            samples_id.tolist(),
+                                                            ant_test_dataset,
+                                                            filter_tag=tag)
+                  
+                  analysis_tag = 'Group'
+                  if len(measure_data_list) > 1:
+                    analysis_tag = 'Group-Category (' + str(running_ant_task.class_label[category_id]) + ')'
 
-            for sample_id, sample in enumerate(method_measure_data['data']):
-                method_measure_mat[method_id, sample_id] = sample['score']
+                  if analysis_tag not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                    task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
 
-          # check method_measure_mat is binary (0 or 1)
-          is_binary = False
-          one_data = method_samples_list[0]['data'][0]['score']
-          if type(one_data) == int:
-            is_binary = True
-
-          # score matrix analysis
-          if not is_binary:
-            s, ri, ci, lr_samples, mr_samples ,hr_samples = \
-              continuous_multi_model_measure_analysis(method_measure_mat, samples_id.tolist(), ant_test_dataset)
-
-            task_running_statictic[self.ant_name]['analysis'][measure_name]['global'] = \
-                          {'value': s,
-                           'type': 'MATRIX',
-                           'x': ci,
-                           'y': ri,
-                           'sampling': [{'name': 'low score region', 'data': lr_samples},
-                                        {'name': 'middle score region', 'data': mr_samples},
-                                        {'name': 'high score region', 'data': hr_samples}]}
-
-            # group by tag
-            tags = getattr(ant_test_dataset, 'tag', None)
-            if tags is not None:
-              for tag in tags:
-                g_s, g_ri, g_ci, g_lr_samples, g_mr_samples, g_hr_samples = \
-                  continuous_multi_model_measure_analysis(method_measure_mat,
-                                                          samples_id.tolist(),
-                                                          ant_test_dataset,
-                                                          filter_tag=tag)
-                if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
-                  task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
-
-                tag_data = {'value': g_s,
-                            'type': 'MATRIX',
-                            'x': g_ci,
-                            'y': g_ri,
-                            'sampling': [{'name': 'low score region', 'data': g_lr_samples},
-                                         {'name': 'middle score region', 'data': g_mr_samples},
-                                         {'name': 'high score region', 'data': g_hr_samples}]}
-
-                task_running_statictic[self.ant_name]['analysis'][measure_name]['group'].append((tag, tag_data))
-          else:
-            s, ri, ci, region_95, region_52, region_42, region_13, region_one, region_zero = \
-              discrete_multi_model_measure_analysis(method_measure_mat,
-                                                    samples_id.tolist(),
-                                                    ant_test_dataset)
-            task_running_statictic[self.ant_name]['analysis'][measure_name]['global'] = {'value': s,
-                                                                                         'type': 'MATRIX',
-                                                                                         'x': ci,
-                                                                                         'y': ri,
-                                                                                         'sampling': [{'name':'95%','data':region_95},
-                                                                                                      {'name':'52%','data':region_52},
-                                                                                                      {'name':'42%','data':region_42},
-                                                                                                      {'name':'13%','data':region_13},
-                                                                                                      {'name':'best','data':region_one},
-                                                                                                      {'name':'zero','data':region_zero}]}
-
-            # group by tag
-            tags = getattr(ant_test_dataset, 'tag', None)
-            if tags is not None:
-              for tag in tags:
-                g_s, g_ri, g_ci, g_region_95, g_region_52, g_region_42, g_region_13, g_region_one, g_region_zero = \
-                  discrete_multi_model_measure_analysis(method_measure_mat,
-                                                          samples_id.tolist(),
-                                                          ant_test_dataset,
-                                                          filter_tag=tag)
-                if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
-                  task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
-
-                tag_data = {'value': g_s,
-                            'type': 'MATRIX',
-                            'x': g_ci,
-                            'y': g_ri,
-                            'sampling': [{'name': '95%', 'data': region_95},
-                                         {'name': '52%', 'data': region_52},
-                                         {'name': '42%', 'data': region_42},
-                                         {'name': '13%', 'data': region_13},
-                                         {'name': 'best', 'data': region_one},
-                                         {'name': 'zero', 'data': region_zero}]}
-
-                task_running_statictic[self.ant_name]['analysis'][measure_name]['group'].append((tag, tag_data))
+                  model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
+                  tag_data = {'value': g_s,
+                              'type': 'MATRIX',
+                              'x': g_ci,
+                              'y': model_name_ri,
+                              'sampling': [{'name': 'High Score Region', 'data': g_hr_samples},
+                                           {'name': 'Middle Score Region', 'data': g_mr_samples},
+                                           {'name': 'Low Score Region', 'data': g_lr_samples}]}
+  
+                  task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
+            else:
+              s, ri, ci, region_95, region_52, region_42, region_13, region_one, region_zero = \
+                discrete_multi_model_measure_analysis(method_measure_mat,
+                                                      samples_id.tolist(),
+                                                      ant_test_dataset)
+              task_running_statictic[self.ant_name]['analysis'][measure_name]['global'] = \
+                              {'value': s,
+                               'type': 'MATRIX',
+                               'x': ci,
+                               'y': ri,
+                               'sampling': [{'name': '95%', 'data': region_95},
+                                            {'name': '52%', 'data': region_52},
+                                            {'name': '42%', 'data': region_42},
+                                            {'name': '13%', 'data': region_13},
+                                            {'name': 'best', 'data': region_one},
+                                            {'name': 'zero', 'data': region_zero}]}
+  
+              # group by tag
+              tags = getattr(ant_test_dataset, 'tag', None)
+              if tags is not None:
+                for tag in tags:
+                  g_s, g_ri, g_ci, g_region_95, g_region_52, g_region_42, g_region_13, g_region_one, g_region_zero = \
+                    discrete_multi_model_measure_analysis(method_measure_mat,
+                                                            samples_id.tolist(),
+                                                            ant_test_dataset,
+                                                            filter_tag=tag)
+                  if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                    task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
+  
+                  tag_data = {'value': g_s,
+                              'type': 'MATRIX',
+                              'x': g_ci,
+                              'y': g_ri,
+                              'sampling': [{'name': '95%', 'data': region_95},
+                                           {'name': '52%', 'data': region_52},
+                                           {'name': '42%', 'data': region_42},
+                                           {'name': '13%', 'data': region_13},
+                                           {'name': 'best', 'data': region_one},
+                                           {'name': 'zero', 'data': region_zero}]}
+  
+                  task_running_statictic[self.ant_name]['analysis'][measure_name]['group'].append((tag, tag_data))
 
       # notify
-      self.context.job.send({'DATA': {'REPORT': task_running_statictic}})
+      self.context.job.send({'DATA': {'REPORT': task_running_statictic, 'RECORD': intermediate_dump_dir}})
 
       # generate report html
       logger.info('generate model evaluation report')

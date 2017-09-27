@@ -15,7 +15,7 @@ def bootstrap_confidence_interval(data_source, seed, measure, replicas=50):
   random.seed(seed)
   bootstrap_samples = [[random.randint(0, num-1) for _ in range(num)] for _ in range(replicas)]
 
-  result = measure.eva(data_source.iterate_read('predict', 'groundtruth'))
+  result = measure.eva(data_source.iterate_read('predict', 'groundtruth'), None)
   estimated_measure = result['statistic']['value'][0]['value']
 
   bootstrap_estimated_measures = []
@@ -33,9 +33,8 @@ def bootstrap_confidence_interval(data_source, seed, measure, replicas=50):
   # confidence interval 95% (alpha = 0.05)
   delta_025 = int(replicas * 0.025)
   delta_975 = int(replicas * 0.975)
-
-  return (estimated_measure - sorted_delta_measure[delta_975],
-          estimated_measure - sorted_delta_measure[delta_025])
+  
+  return (estimated_measure - sorted_delta_measure[delta_975], estimated_measure - sorted_delta_measure[delta_025])
 
 
 def bootstrap_direct_confidence_interval(bootstrap_estimated_measures):

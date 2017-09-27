@@ -1101,10 +1101,6 @@ button {
     margin: 10px;
 }
 
-.table {
-    width: 70%;
-}
-
 .table td, th {
     padding: 5px;
 }
@@ -1241,6 +1237,9 @@ button {
   </div><!-- /.container-fluid -->
 </nav>
 <div class="container">
+    <div class="evaltitle">
+        <b>Key Measures</b>
+    </div>
     <div class="cardtable">
         <div class="table-responsive">
             <table class="table" style="table-layout:fixed">
@@ -1248,10 +1247,10 @@ button {
             {% if time %}
             <tr class="cardrow">
                 <td>
-                    <div class="col-md-3 evaltitle">
+                    <div class="col-md-2 evaltitle">
                         <b>elpased time</b>
                     </div>
-                    <div class="col-md-9">
+                    <div class="col-md-10">
                         <div class="list-group">
                             <div class="list-group-item">
                                 <span class="mainvalue">{{time.elapsed_time}}</span>s
@@ -1270,10 +1269,10 @@ button {
             {% if cpu %}
             <tr class="cardrow">
                 <td>
-                    <div class="col-md-3 evaltitle">
+                    <div class="col-md-2 evaltitle">
                         <b>cpu model</b>
                     </div>
-                    <div class="col-md-9">
+                    <div class="col-md-10">
                         <div class="list-group">
                             <div class="list-group-item">
                                 <span class="mainvalue">{{cpu.cpu_model}}</span>
@@ -1291,10 +1290,10 @@ button {
             </tr>
             <tr class="cardrow">
                 <td>
-                    <div class="col-md-3 evaltitle">
+                    <div class="col-md-2 evaltitle">
                         <b>memory staus</b>
                     </div>
-                    <div class="col-md-9">
+                    <div class="col-md-10">
                         <div class="list-group">
                             <div class="list-group-item">
                                 <span class="mainvalue">statistic</span>
@@ -1314,10 +1313,10 @@ button {
             {% if gpu%}
             <tr class="cardrow">
                 <td>
-                    <div class="col-md-3 evaltitle">
+                    <div class="col-md-2 evaltitle">
                         <b>gpu model</b>
                     </div>
-                    <div class="col-md-9">
+                    <div class="col-md-10">
                         <div class="list-group">
                             <div class="list-group-item">
                                 <span class="mainvalue">{{gpu.gpu_model}}</span>
@@ -1334,15 +1333,15 @@ button {
             {% for measure in measures %}
             <tr class="cardrow">
                 <td>
-                    <div class="col-md-3 evaltitle">
+                    <div class="col-md-2 evaltitle">
                         <b>{{measure.statistic.name}}</b>
                     </div>
-                    <div class="col-md-9">
+                    <div class="col-md-10">
                         {% for model_statistic_val in measure.statistic.value %}
                             {% if model_statistic_val.type == 'SCALAR' %}
                             <div class="list-group">
                                 <div class="list-group-item">
-                                    <span class="mainvalue">{{model_statistic_val.value}}</span>{% if model_statistic_val.interval %}±{{model_statistic_val.interval}}{% endif %}
+                                    <span class="mainvalue">{{model_statistic_val.value}}</span>{% if model_statistic_val.interval %}{{model_statistic_val.interval}}{% endif %}
                                 </div>
                                 <div class="list-group-separator-full"></div>
                                 <div class="list-group-item">
@@ -1415,6 +1414,9 @@ button {
     </div>
 </div>
 <div class="container">
+    <div class="evaltitle">
+        <b>Deep Analysis</b>
+    </div>
     <div class="cardtable">
       <div class="table-responsive">
         <table class="table" style="table-layout:fixed">
@@ -1422,10 +1424,10 @@ button {
             {%for analysis_data in analysis%}
             <tr class="cardrow">
                 <td>
-                    <div class="col-md-3 evaltitle">
+                    <div class="col-md-2 evaltitle">
                         <b>{{analysis_data.name}}</b>
                     </div>
-                    <div class="col-md-9">
+                    <div class="col-md-10">
                       <div class="list-group">
                           <div class="list-group-item" style="text-align:center">
                             <div id="{{analysis_data.name}}-matrix-table"></div>
