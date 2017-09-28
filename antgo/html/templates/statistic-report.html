@@ -14,6 +14,7 @@ function matrix_chart(canvas_id){
     var _width = 600, _height = 300,
         _margins = {top: 30, left: 30, right: 30, bottom: 30},
         _data = [], _x_keys=[], _y_keys=[],
+        _color_bound=['#72aeda','#18405e'],
         _svg,
         _canvasG,
         _x,
@@ -108,9 +109,18 @@ function matrix_chart(canvas_id){
           .domain(y_domain)
           .rangeRoundBands([0,quadrantHeight()],0.01)
 
-      color_scale = d3.scale.linear()
-          .domain([d3.min(_data),d3.max(_data)])
-          .range(['#72aeda','#18405e'])
+      var min_value = d3.min(_data);
+      var color_scale = null;
+      if(min_value < 0.0){
+        color_scale = d3.scale.linear()
+          .domain([d3.min(_data), 0, d3.max(_data)])
+          .range(_color_bound)
+      }
+      else{
+        color_scale = d3.scale.linear()
+          .domain([d3.min(_data), d3.max(_data)])
+          .range(_color_bound)
+      }
 
       _canvasG.selectAll('rect')
           .data(_data)
@@ -196,13 +206,25 @@ function matrix_chart(canvas_id){
         return _chart
     };
 
-      _chart.addLegends = function(legends){
-          _x_keys = legends['x']
-          _y_keys = legends['y']
-        return _chart;
-    }
+  _chart.addLegends = function(legends){
+    _x_keys = legends['x']
+    _y_keys = legends['y']
+    return _chart;
+  };
+  _chart.setWidth = function(w){
+    _width = w;
+    return _chart;
+  };
+  _chart.setHeight = function(h){
+    _height = h;
+    return _chart;
+  };
+  _chart.setColorBound = function(bound){
+    _color_bound = bound;
+    return _chart;
+  };
 
-      return _chart;
+    return _chart;
   }
 function line_chart(canvas_id) { // <-1A
     var _chart = {};
@@ -785,7 +807,6 @@ function draw_table(data,div_id,title) {
 
     dvTable.appendChild(table);
 }
-
 function draw_image(canvas_id, data){
     $('#'+canvas_id).append('<img src="data:image/png;base64,'+data+'">')
 }
@@ -863,6 +884,12 @@ model_analysis = [
     {%endfor%}
 ]
 
+pair_sig_compare= [
+  {%for data in compare%}
+    {'data':{{data.score}}, 'x-name': {{data.benchmark}}, 'y-name': {{data.measure}}}
+  {%endfor%}
+]
+
 $(document).ready( function () {
     for(var index in curve_data){
         var measure_name = curve_data[index]['name'];
@@ -898,6 +925,19 @@ $(document).ready( function () {
         var y_name = matrix_data[index]['y-name'];
 
         var mc = matrix_chart(measure_name+'-dashboard');
+        var rows = data.length;
+        var cols = data[0].length;
+
+        var min_size = rows;
+        if(rows > cols){
+          min_size = cols;
+        }
+        var cell_size = 300 / min_size;
+        if(cell_size < 5){
+          cell_size = 5;
+        }
+        mc.setWidth(cell_size * cols);
+        mc.setHeight(cell_size * rows);
         mc.addLegends({'x':x_name, 'y':y_name});
         mc.addSeries(data);
         mc.render();
@@ -916,10 +956,50 @@ $(document).ready( function () {
       var y_name = model_analysis[index]['y-name'];
 
       var mc = matrix_chart(measure_name+'-matrix-table');
+      var rows = data.length;
+      var cols = data[0].length;
+
+      var min_size = rows;
+      if(rows > cols){
+        min_size = cols;
+      }
+      var cell_size = 300 / min_size;
+      if(cell_size < 5){
+        cell_size = 5;
+      }
+      mc.setWidth(cell_size * cols);
+      mc.setHeight(cell_size * rows);
+
       mc.addLegends({'x':x_name, 'y':y_name});
       mc.addSeries(data);
       mc.render();
     }
+
+    for(var index in pair_sig_compare){
+      var x_name = pair_sig_compare[index]['x-name'];
+      var y_name = pair_sig_compare[index]['y-name'];
+
+      var data = pair_sig_compare[index]['data'];
+      var mc = matrix_chart('significant-diff-compare');
+            var rows = data.length;
+      var cols = data[0].length;
+
+      var min_size = rows;
+      if(rows > cols){
+        min_size = cols;
+      }
+      var cell_size = 300 / min_size;
+      if(cell_size < 5){
+        cell_size = 5;
+      }
+      mc.setWidth(cell_size * cols);
+      mc.setHeight(cell_size * rows);
+      mc.setColorBound(['#0098ff','#eeeeee','#ee3e32']);
+      mc.addLegends({'x':x_name, 'y':y_name});
+      mc.addSeries(data);
+      mc.render();
+    }
+
 } );
 </script>
 <style>
@@ -1413,6 +1493,40 @@ button {
         </div>
     </div>
 </div>
+<div class="container">
+  <div class="evaltitle">
+        <b>Significant Difference Analysis</b>
+  </div>
+  <div class="cardtable">
+    <div class="cardtable">
+      <div class="table-responsive">
+        <table class="table" style="table-layout:fixed">
+          <tbody>
+          <tr class="cardrow">
+            <td>
+              <div class="col-md-2 evaltitle">
+                <b> Model VS Benchmark</b>
+              </div>
+              <div class="col-md-10">
+                 <div class="list-group">
+                    <div class="list-group-item" style="text-align:center">
+                      <span class="mainvalue">Performance Signicant Difference</span>
+                    </div>
+                   <div class="list-group-separator-full"></div>
+                   <div class="list-group-item">
+                     <div id="significant-diff-compare"></div>
+                   </div>
+                 </div>
+              </div>
+            </td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="container">
     <div class="evaltitle">
         <b>Deep Analysis</b>
