@@ -82,18 +82,18 @@ def bootstrap_ab_significance_compare(ab_data_source, seed, measure, replicas=50
   if sorted_diff_scores[pos_025] > 0.0:
     if getattr(measure, 'larger', 0) == 1:
       # a is better
-      return -1
+      return 1
     else:
       # b is better
-      return 1
+      return -1
 
   if sorted_diff_scores[pos_975] < 0.0:
     if getattr(measure, 'larger', 0) == 1:
       # b is better
-      return 1
+      return -1
     else:
       # a is better
-      return -1
+      return 1
 
   # a,b has no significant difference
   return 0

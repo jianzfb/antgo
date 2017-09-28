@@ -35,6 +35,7 @@ def everything_to_html(data, dump_dir, data_source=None):
   # list all statistics
   everything_statistics = []
   model_deep_analysis = []
+  model_sig_diffs = []
   for ant_name, ant_info in data.items():
     # 0.step cpu statistic
     if 'cpu' in ant_info:
@@ -102,13 +103,20 @@ def everything_to_html(data, dump_dir, data_source=None):
     
     # 5.step model significant difference
     if 'significant_diff' in ant_info:
-      pass
-
+      sig_diff_dict = ant_info['significant_diff']
+      for measure_name, sig_diff in sig_diff_dict.items():
+        model_sig_diffs.append({'measure': measure_name,
+                                'name': sig_diff['name'],
+                                'score': sig_diff['score']})
+        
   statistic_visualization = _transform_statistic_to_visualization(everything_statistics)
   analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis, data_source)
+  model_sig_diffs_visualization = _transform_significant_to_visualization(model_sig_diffs)
+  
   context = {
     'measures': statistic_visualization,
-    'analysis': analysis_visualization
+    'analysis': analysis_visualization,
+    'compare': model_sig_diffs_visualization
   }
 
   # to html
@@ -271,6 +279,11 @@ def _transform_analysis_to_visualization(analysis_info, data_source):
     analysis_vis_data.append(item)
 
   return analysis_vis_data
+
+
+def _transform_significant_to_visualization(sig_diffs):
+  return sig_diffs
+
 
 if __name__ == '__main__':
   # experiment 1
