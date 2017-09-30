@@ -39,7 +39,6 @@ class AntChallenge(AntBase):
       challenge_task_config = self.rpc("TASK-CHALLENGE")
       if challenge_task_config is None:
         logger.error('couldnt load challenge task')
-        exit(0)
       elif challenge_task_config['status'] == 'SUSPEND':
         # prohibit submit challenge task frequently
         logger.error('prohibit submit challenge task frequently')
@@ -64,6 +63,26 @@ class AntChallenge(AntBase):
       running_ant_task = custom_task
 
     assert(running_ant_task is not None)
+
+    task_running_statictic={self.ant_name:
+                              {'measure':[
+                                {'statistic': {'name': 'MESR',
+                                               'value': [{'name': 'MESR', 'value': 0.4, 'type':'SCALAR'}]},
+                                               'info': [{'id':0,'score':0.8,'category':1},
+                                                        {'id':1,'score':0.3,'category':1},
+                                                        {'id':2,'score':0.9,'category':1},
+                                                        {'id':3,'score':0.5,'category':1},
+                                                        {'id':4,'score':1.0,'category':1}]},
+                                {'statistic': {'name': "SE",
+                                               'value': [{'name': 'SE', 'value': 0.5, 'type': 'SCALAR'}]},
+                                               'info': [{'id':0,'score':0.4,'category':1},
+                                                        {'id':1,'score':0.2,'category':1},
+                                                        {'id':2,'score':0.1,'category':1},
+                                                        {'id':3,'score':0.5,'category':1},
+                                                        {'id':4,'score':0.23,'category':1}]}]}}
+
+    self.context.job.send({'DATA': {'REPORT': task_running_statictic, 'RECORD': '/home/mi/test-record'}})
+    return
     
     # now time stamp
     now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
@@ -120,7 +139,7 @@ class AntChallenge(AntBase):
         shutil.rmtree(infer_dump_dir)
         os.makedirs(infer_dump_dir)
 
-      intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'intermediate')
+      intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'record')
       with safe_recorder_manager(self.context.recorder):
         self.context.recorder.dump_dir = intermediate_dump_dir
         with running_statistic(self.ant_name):
@@ -144,32 +163,33 @@ class AntChallenge(AntBase):
             # compute confidence interval
             confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 50)
             result['statistic']['value'][0]['interval'] = confidence_interval
+
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
         
       # compare statistic
       logger.info('start checking significance difference')
       # finding benchmark model from server
-      benchmark_model_data = self.rpc("BENCHMARK", infer_dump_dir)
-      if benchmark_model_data is not None:
+      benchmark_model_data = self.rpc("TASK-BENCHMARK", infer_dump_dir)
+      if benchmark_model_data is not None and 'record' in benchmark_model_data:
         benchmark_model_intermediate = benchmark_model_data['record']
-        
+
         task_running_statictic[self.ant_name]['significant_diff'] = {}
         for measure in running_ant_task.evaluation_measures:
           if measure.is_support_rank:
             significant_diff_score = []
             for benchmark_model_name, benchmark_model_address in benchmark_model_intermediate.items():
               with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
-                with safe_recorder_manager(benchmark_model_address) as benchmark_record_reader:
-                  s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure)
+                with safe_recorder_manager(RecordReader(benchmark_model_address)) as benchmark_record_reader:
+                  s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 50)
                   significant_diff_score.append({'name': benchmark_model_name, 'score': s})
             task_running_statictic[self.ant_name]['significant_diff'][measure.name] = significant_diff_score
-      
+
       # deep analysis
       logger.info('start deep analysis')
       # finding all reltaed model result from server
       benchmark_model_statistic = None
-      if benchmark_model_data is not None:
+      if benchmark_model_data is not None and 'report' in benchmark_model_data:
         benchmark_model_statistic = benchmark_model_data['report']
       
       # task_running_statictic={self.ant_name:

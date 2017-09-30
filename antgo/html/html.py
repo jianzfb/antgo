@@ -104,10 +104,26 @@ def everything_to_html(data, dump_dir, data_source=None):
     # 5.step model significant difference
     if 'significant_diff' in ant_info:
       sig_diff_dict = ant_info['significant_diff']
+      # x in significant diff matrix
+      benchmark_model_names = []
+      # y in significant diff matrix
+      measure_names = []
+      # score matrix
+      benchmark_model_sig_diff = []
+
       for measure_name, sig_diff in sig_diff_dict.items():
-        model_sig_diffs.append({'measure': measure_name,
-                                'name': sig_diff['name'],
-                                'score': sig_diff['score']})
+        # y
+        measure_names.append(measure_name)
+        if len(benchmark_model_names) == 0:
+          # x
+          benchmark_model_names = [bn['name'] for bn in sig_diff]
+        
+        # score (-1, 0, +1) matrix
+        benchmark_model_sig_diff.append([bn['score'] for bn in sig_diff])
+
+      model_sig_diffs.append({'score': benchmark_model_sig_diff,
+                              'benchmark': benchmark_model_names,
+                              'measure': measure_names})
         
   statistic_visualization = _transform_statistic_to_visualization(everything_statistics)
   analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis, data_source)

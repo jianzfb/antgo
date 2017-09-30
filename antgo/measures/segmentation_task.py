@@ -209,7 +209,15 @@ class AntMeanIOUBoundary(AntMeasure):
     sum_ji = np.zeros((1, classes_num))
 
     trimap_width = int(getattr(self.task, 'trimap_width', 3))
-
+    resized_same_size = getattr(self.task, 'resized_same_size', '0,0')
+    resized_same_size = resized_same_size.split(',')
+    resized_height = int(resized_same_size[0])
+    resized_width = int(resized_same_size[1])
+    
+    is_need_resized = False
+    if resized_width != 0 and resized_height != 0:
+      is_need_resized = True
+    
     offset_x, offset_y = np.meshgrid(np.arange(-trimap_width, trimap_width + 1),
                                      np.arange(-trimap_width, trimap_width + 1))
     offset = np.column_stack((offset_x.flatten(), offset_y.flatten()))

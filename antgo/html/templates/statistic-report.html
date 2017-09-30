@@ -933,8 +933,8 @@ $(document).ready( function () {
           min_size = cols;
         }
         var cell_size = 300 / min_size;
-        if(cell_size < 5){
-          cell_size = 5;
+        if(cell_size < 10){
+          cell_size = 10;
         }
         mc.setWidth(cell_size * cols);
         mc.setHeight(cell_size * rows);
@@ -959,11 +959,11 @@ $(document).ready( function () {
       var rows = data.length;
       var cols = data[0].length;
 
-      var min_size = rows;
-      if(rows > cols){
-        min_size = cols;
+      var max_size = rows;
+      if(rows < cols){
+        max_size = cols;
       }
-      var cell_size = 300 / min_size;
+      var cell_size = 300 / max_size;
       if(cell_size < 5){
         cell_size = 5;
       }
@@ -984,13 +984,13 @@ $(document).ready( function () {
             var rows = data.length;
       var cols = data[0].length;
 
-      var min_size = rows;
-      if(rows > cols){
-        min_size = cols;
+      var max_size = rows;
+      if(rows < cols){
+        max_size = cols;
       }
-      var cell_size = 300 / min_size;
-      if(cell_size < 5){
-        cell_size = 5;
+      var cell_size = 300 / max_size;
+      if(cell_size < 10){
+        cell_size = 10;
       }
       mc.setWidth(cell_size * cols);
       mc.setHeight(cell_size * rows);
@@ -1509,7 +1509,7 @@ button {
               </div>
               <div class="col-md-10">
                  <div class="list-group">
-                    <div class="list-group-item" style="text-align:center">
+                    <div class="list-group-item">
                       <span class="mainvalue">Performance Signicant Difference</span>
                     </div>
                    <div class="list-group-separator-full"></div>
