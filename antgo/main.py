@@ -15,6 +15,7 @@ from antgo.ant.train import *
 from antgo.ant.deploy import *
 from antgo.ant.workflow import *
 from antgo.ant.challenge import *
+from antgo.ant.cmd import *
 from antgo.utils import logger
 from antgo.ant import flags
 from antgo import config
@@ -42,7 +43,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", 'server', 'convert']
+_ant_support_commands = ["train", "challenge", "compose", "deploy", 'server', 'convert', "command"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -67,7 +68,7 @@ def main():
   if ant_cmd == "":
     logger.error('antgo cli only support( %s )command' % ",".join(_ant_support_commands))
     sys.exit(-1)
-  
+
   # 2.step antgo server daemon
   config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'config.xml')
   Config.parse_xml(config_xml)
@@ -92,6 +93,10 @@ def main():
   token = FLAGS.token()
   if not PY3 and token is not None:
     token = unicode(token)
+
+  if ant_cmd == 'command':
+    cmd_process = AntCmd(token)
+    cmd_process.start()
 
   # 3.2 step running name
   name = FLAGS.name()
