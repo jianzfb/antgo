@@ -107,7 +107,7 @@ class AntTrain(AntBase):
       if running_ant_task.estimation_procedure is not None:
         logger.info('start model evaluation')
 
-        estimation_procedure = running_ant_task.estimation_procedure
+        estimation_procedure = running_ant_task.estimation_procedure.lower()
         estimation_procedure_params = running_ant_task.estimation_procedure_params
         evaluation_measures = running_ant_task.evaluation_measures
 

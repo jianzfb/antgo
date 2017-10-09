@@ -131,11 +131,17 @@ def DEFINE_boolean(name, default, var_help):
   AntFLAGS.add(_BooleanFlag(name, default, var_help))
 
 
-def cli_param_flags():
+def cli_param_flags(cmd_str=None):
   global _options
   global AntFLAGS
-  kv_args, args = getopt.getopt(sys.argv[2:], AntFLAGS.shortopts, AntFLAGS.longopts)
+
+  if cmd_str is None:
+    cmd_str = sys.argv[2:]
+
+  kv_args, args = getopt.getopt(cmd_str, AntFLAGS.shortopts, AntFLAGS.longopts)
   for k, v in kv_args:
     _options[k] = v
 
-
+def clear_cli_param_flags():
+  global _options
+  _options = {}

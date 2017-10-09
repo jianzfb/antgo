@@ -64,31 +64,11 @@ class AntChallenge(AntBase):
 
     assert(running_ant_task is not None)
 
-    task_running_statictic={self.ant_name:
-                              {'measure':[
-                                {'statistic': {'name': 'MESR',
-                                               'value': [{'name': 'MESR', 'value': 0.4, 'type':'SCALAR'}]},
-                                               'info': [{'id':0,'score':0.8,'category':1},
-                                                        {'id':1,'score':0.3,'category':1},
-                                                        {'id':2,'score':0.9,'category':1},
-                                                        {'id':3,'score':0.5,'category':1},
-                                                        {'id':4,'score':1.0,'category':1}]},
-                                {'statistic': {'name': "SE",
-                                               'value': [{'name': 'SE', 'value': 0.5, 'type': 'SCALAR'}]},
-                                               'info': [{'id':0,'score':0.4,'category':1},
-                                                        {'id':1,'score':0.2,'category':1},
-                                                        {'id':2,'score':0.1,'category':1},
-                                                        {'id':3,'score':0.5,'category':1},
-                                                        {'id':4,'score':0.23,'category':1}]}]}}
-
-    self.context.job.send({'DATA': {'REPORT': task_running_statictic, 'RECORD': '/home/mi/test-record'}})
-    return
-    
     # now time stamp
     now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
     
     # 0.step warp model (main_file and main_param)
-    self.stage = 'MODEL'
+    self.stage = 'CHALLENGE-MODEL'
     # - backup in dump_dir
     main_folder = FLAGS.main_folder()
     main_param = FLAGS.main_param()
@@ -130,7 +110,7 @@ class AntChallenge(AntBase):
       data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
 
-      self.stage = "INFERENCE"
+      self.stage = "CHALLENGE"
       logger.info('start infer process')
       infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')
       if not os.path.exists(infer_dump_dir):
@@ -151,7 +131,6 @@ class AntChallenge(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(ant_test_dataset.size)
 
-      self.stage = 'EVALUATION'
       logger.info('start evaluation process')
       evaluation_measure_result = []
 
@@ -166,19 +145,40 @@ class AntChallenge(AntBase):
 
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-        
+
       # compare statistic
       logger.info('start checking significance difference')
       # finding benchmark model from server
-      benchmark_model_data = self.rpc("TASK-BENCHMARK", infer_dump_dir)
+      benchmark_info = self.rpc("TASK-BENCHMARK")
+      benchmark_model_data = {}
+      if benchmark_info is not None:
+        for bmd in benchmark_info:
+          benchmark_name = bmd['benchmark_name']
+          benchmark_record = bmd['benchmark_record']
+          benchmark_report = bmd['benchmark_report']
+
+          # download benchmark record from url
+          benchmark_record = self.download(benchmark_record,
+                                           target_path=os.path.join(self.ant_dump_dir, now_time_stamp, 'benchmark'),
+                                           target_name='%s.tar.gz'%benchmark_name,
+                                           archive=benchmark_name)
+
+          if 'record' not in benchmark_model_data:
+            benchmark_model_data['record'] = {}
+            benchmark_model_data['record'][benchmark_name] = benchmark_record
+
+          if 'report' not in benchmark_model_data:
+            benchmark_model_data['report'] = {}
+            benchmark_model_data['report'][benchmark_name] = benchmark_report
+
       if benchmark_model_data is not None and 'record' in benchmark_model_data:
-        benchmark_model_intermediate = benchmark_model_data['record']
+        benchmark_model_record = benchmark_model_data['record']
 
         task_running_statictic[self.ant_name]['significant_diff'] = {}
         for measure in running_ant_task.evaluation_measures:
           if measure.is_support_rank:
             significant_diff_score = []
-            for benchmark_model_name, benchmark_model_address in benchmark_model_intermediate.items():
+            for benchmark_model_name, benchmark_model_address in benchmark_model_record.items():
               with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
                 with safe_recorder_manager(RecordReader(benchmark_model_address)) as benchmark_record_reader:
                   s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 50)

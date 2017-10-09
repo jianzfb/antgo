@@ -16,7 +16,10 @@ import json
 import sys
 import tarfile
 import tempfile
+import re
+import requests
 from antgo.ant import flags
+from antgo.utils.fs import *
 if sys.version > '3':
   PY3 = True
 else:
@@ -27,10 +30,13 @@ FLAGS = flags.AntFLAGS
 
 class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None):
+    self.root_ip = '127.0.0.1'
+    self.http_port = '8999'
+    self.http_prefix = 'http'
     self.ant_name = ant_name
     self.app_token = os.environ.get('APP_TOKEN', ant_token)
-    self.app_connect = os.environ.get('APP_CONNECT', 'tcp://10.231.96.130:2345')
-    self.app_file_connect = os.environ.get('APP_FILE_CONNECT', 'tcp://10.231.96.130:2346')
+    self.app_connect = os.environ.get('APP_CONNECT', 'tcp://127.0.0.1:2345')
+    self.app_file_connect = os.environ.get('APP_FILE_CONNECT', 'tcp://127.0.0.1:2346')
 
     # config zmq connect
     self.zmq_context = zmq.Context()
@@ -71,6 +77,12 @@ class AntBase(object):
       data["APP_NAME"] = self.ant_name
       data["APP_SERVER"] = self.app_server
 
+      # exclude 'RECORD'
+      record_data = None
+      if 'RECORD' in data:
+        record_data = data['RECORD']
+        data.pop('RECORD')
+
       # 1.step send info
       self.zmq_socket.send(dumps(data))
 
@@ -78,8 +90,8 @@ class AntBase(object):
       self.zmq_socket.recv(copy=False)
       
       # 3.step upload record files
-      if 'RECORD' in data and os.path.exists(data['RECORD']):
-        self.send_record(data['RECORD'], stage)
+      if record_data is not None and os.path.exists(record_data):
+        self.send_record(record_data, stage)
   
   def send_record(self, data, stage):
     if self.app_token is not None:
@@ -137,7 +149,7 @@ class AntBase(object):
       if os.path.exists(temp_tar_file_path):
         os.remove(temp_tar_file_path)
   
-  def rpc(self, cmd="", dump_dir=None):
+  def rpc(self, cmd=""):
     if self.app_token is not None:
       # 0.step config data
       data = {}
@@ -162,6 +174,54 @@ class AntBase(object):
         return None
 
     return None
+
+  def download(self, source_path, target_path=None, target_name=None, archive=None, data=None):
+    if target_path is None:
+      target_path = os.curdir
+
+    is_that = re.match('^((https|http|ftp|rtsp|mms)?://)', source_path)
+    if is_that is not None:
+      download(source_path, target_path, fname=target_name, data=data)
+
+      is_gz = re.match('.*\.gz', target_name)
+      if is_gz is not None:
+        if archive is not None:
+          extracted_path = os.path.join(target_path, archive)
+        else:
+          extracted_path = target_path
+
+        if not os.path.exists(extracted_path):
+          os.makedirs(extracted_path)
+
+        tar = tarfile.open(os.path.join(target_path, target_name))
+        tar.extractall(extracted_path)
+        tar.close()
+        target_path = extracted_path
+
+    return target_path
+
+  def remote_api_request(self, cmd, data=None, action='get'):
+    url = '%s://%s:%s/%s'%(self.http_prefix,self.root_ip,self.http_port, cmd)
+    user_authorization = {'Authorization': "token " + self.app_token}
+    try:
+        response = None
+        if action == 'get':
+          # get resource at server
+          response = requests.get(url, data=data, headers=user_authorization)
+        elif action == 'post':
+          # build a resource at server
+          response = requests.post(url, data=data, headers=user_authorization)
+        elif action == 'patch':
+          # update part resource at server
+          response = requests.patch(url, data=data, headers=user_authorization)
+
+        if response is None:
+          return None
+
+        response_js = json.loads(response.content)
+        return response_js
+    except:
+        return None
 
   @property
   def stage(self):
