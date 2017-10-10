@@ -12,7 +12,9 @@ import scipy.misc
 import numpy as np
 from antgo.utils import get_rng
 from antgo.dataflow.core import *
+from antgo.utils.fs import *
 from functools import reduce
+import re
 import multiprocessing
 
 
@@ -493,3 +495,20 @@ class Dataset(BaseNode):
           label['category_id'][obj_index] = transform_cls[obj]
 
     return label
+
+  def download(self, target_path, file_names=[]):
+    dataset_url = getattr(self, 'dataset_url', None)
+    if dataset_url is not None:
+      # dataset dont locate local
+      # validate http address
+      is_http = re.match('^((https|http|ftp|rtsp|mms)?://)', dataset_url)
+      if is_http is not None:
+        # 3rdpart dataset
+        if not os.path.exists(target_path):
+          os.makedirs(target_path)
+
+        for file_name in file_names:
+          if maybe_here(target_path, file_name) is None:
+            download(os.path.join(dataset_url,file_name), target_path)
+
+      # validate ipfs address

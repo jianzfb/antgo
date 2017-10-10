@@ -104,7 +104,8 @@ class AntTrain(AntBase):
     
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
-      if running_ant_task.estimation_procedure is not None:
+      if running_ant_task.estimation_procedure is not None and \
+              running_ant_task.estimation_procedure.lower() in ["holdout","repeated-holdout","bootstrap","kfold"]:
         logger.info('start model evaluation')
 
         estimation_procedure = running_ant_task.estimation_procedure.lower()

@@ -19,7 +19,7 @@ def mkdir_p(dirname):
     if e.errno != 17:
       raise e
 
-def download(url, dir, fname=None, data=None):
+def download(url, dir, fname=None):
   mkdir_p(dir)
   if fname is None:
     fname = url.split('/')[-1]
@@ -32,7 +32,7 @@ def download(url, dir, fname=None, data=None):
                              1.0) * 100.0))
     sys.stdout.flush()
   try:
-    fpath, _ = urllib.request.urlretrieve(url, fpath, data=data, reporthook=_progress)
+    fpath, _ = urllib.request.urlretrieve(url, fpath, reporthook=_progress)
     statinfo = os.stat(fpath)
     size = statinfo.st_size
   except:
@@ -61,6 +61,8 @@ def maybe_here(dest_dir,target_file):
         maybe_dest_dir = None
       else:
         break
+    else:
+      break
 
   return maybe_dest_dir
 

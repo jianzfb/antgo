@@ -19,6 +19,7 @@ from antgo.ant.cmd import *
 from antgo.utils import logger
 from antgo.ant import flags
 from antgo import config
+from antgo.ant.utils import *
 from antgo.dataflow.dataflow_server import *
 if sys.version > '3':
     PY3 = True
@@ -26,24 +27,11 @@ else:
     PY3 = False
 
 
-def _main_context(main_file, source_paths):
-  # filter .py
-  key_model = main_file
-  dot_pos = key_model.rfind(".")
-  if dot_pos != -1:
-    key_model = key_model[0:dot_pos]
-
-  sys.path.append(source_paths)
-  f, p, d = imp.find_module(key_model, [source_paths])
-  module = imp.load_module('mm', f, p, d)
-  return module.get_global_context()
-
-
 def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", 'server', 'convert', "command"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy", "server"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -52,36 +40,22 @@ flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('name', None, 'app name')
+flags.DEFINE_string('platform', 'local', 'local or cloud')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
+
 
 def main():
   if len(sys.argv) == 1:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
     sys.exit(-1)
 
-  # 1.step parse running params
-  flags.cli_param_flags()
-  ant_cmd = sys.argv[1]
-  
-  if ant_cmd == "":
-    logger.error('antgo cli only support( %s )command' % ",".join(_ant_support_commands))
-    sys.exit(-1)
-
-  # 2.step antgo server daemon
+  # 0.step antgo global config
   config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'config.xml')
   Config.parse_xml(config_xml)
-  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
-  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
 
-  dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads), dataflow_server_host, 'antgo-data-server.pid')
-  dfs_daemon.start()
-
-  if ant_cmd == 'server':
-    return
-
-  # 3.step load antgo config
+  # check data_factory and task_factory config
   data_factory = getattr(Config, 'data_factory', None)
   task_factory = getattr(Config, 'task_factory', '')
 
@@ -89,16 +63,44 @@ def main():
     logger.error('must set data factory')
     sys.exit(-1)
 
-  # 3.1 step running token
+  # 1.step parse running params
+  if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
+    flags.cli_param_flags(sys.argv[1:])
+  else:
+    flags.cli_param_flags(sys.argv[2:])
+
+  # 2.step
+  # 2.1 step key 1: antgo token (secret)
   token = FLAGS.token()
   if not PY3 and token is not None:
     token = unicode(token)
 
-  if ant_cmd == 'command':
+  # 2.2 step key 2: antgo daemon (data server)
+  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
+  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
+
+  # dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads), dataflow_server_host, 'antgo-data-server.pid')
+  # dfs_daemon.start()
+
+  # 3.step parse execute command
+  if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
+    # interactive control
     cmd_process = AntCmd(token)
     cmd_process.start()
+    return
 
-  # 3.2 step running name
+  # other command (train, challenge, compose, deploy, server)
+  ant_cmd = sys.argv[1]
+  if ant_cmd not in _ant_support_commands:
+    logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
+    return
+
+  if ant_cmd == 'server':
+    # directly return
+    return
+
+  # 4.step check related params
+  # 4.1 step check name, if None, set it as current time automatically
   name = FLAGS.name()
   if name is None:
     name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
@@ -106,7 +108,7 @@ def main():
   if not PY3:
     name = unicode(name)
 
-  # 3.3 key parameters
+  # 4.2 check main folder (all related model code, includes main_file and main_param)
   main_folder = FLAGS.main_folder()
   if main_folder is None:
     main_folder = os.path.abspath(os.curdir)
@@ -116,13 +118,14 @@ def main():
     logger.error('main executing file dont exist')
     sys.exit(-1)
 
+  # 4.3 check dump dir (all running data is stored here)
   dump_dir = FLAGS.dump()
   if dump_dir is None:
     dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
   
-  # 4.0 step custom workflow
+  # 5. step custom workflow
   if ant_cmd == 'compose':
     # user custom workflow
     work_flow = WorkFlow(name,
@@ -135,16 +138,16 @@ def main():
     work_flow.start()
     return
 
-  # 5 step ant running
-  # 5.1 step what is task
+  # 6 step ant running
+  # 6.1 step what is task
   task = FLAGS.task()
   if task is not None:
     task = os.path.join(task_factory, task)
 
-  # 5.2 step load ant context
-  ant_context = _main_context(main_file, main_folder)
+  # 6.2 step load ant context
+  ant_context = main_context(main_file, main_folder)
 
-  # 5.3 step load model config
+  # 6.3 step load model config
   main_param = FLAGS.main_param()
   if main_param is not None:
     main_config_path = os.path.join(main_folder, main_param)
@@ -170,7 +173,7 @@ def main():
   elif ant_cmd == "deploy":
     pass
 
-  # 6.step clear context
+  # 7.step clear context
   ant_context.wait_until_clear()
 
 if __name__ == '__main__':

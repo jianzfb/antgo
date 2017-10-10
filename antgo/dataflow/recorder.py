@@ -40,7 +40,7 @@ class RecorderNode(Node):
         assert(len(self._positional_inputs) == 1)
 
         value = copy.deepcopy(args[0])
-        if type(value) == dict or type(value) == np.ndarray:
+        if type(value) != list:
             value = [value]
         
         for entry in value:

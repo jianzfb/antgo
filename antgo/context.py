@@ -8,7 +8,7 @@ from antgo.dataflow.dataset import *
 
 class Params(object):
   def __init__(self, params=None):
-    if params:
+    if params is not None:
       for k, v in params.items():
         if k != 'self':
           setattr(self, k, v)

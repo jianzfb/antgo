@@ -175,13 +175,13 @@ class AntBase(object):
 
     return None
 
-  def download(self, source_path, target_path=None, target_name=None, archive=None, data=None):
+  def download(self, source_path, target_path=None, target_name=None, archive=None):
     if target_path is None:
       target_path = os.curdir
 
     is_that = re.match('^((https|http|ftp|rtsp|mms)?://)', source_path)
     if is_that is not None:
-      download(source_path, target_path, fname=target_name, data=data)
+      download(source_path, target_path, fname=target_name)
 
       is_gz = re.match('.*\.gz', target_name)
       if is_gz is not None:
@@ -206,7 +206,7 @@ class AntBase(object):
     try:
         response = None
         if action == 'get':
-          # get resource at server
+          # get a resource at server
           response = requests.get(url, data=data, headers=user_authorization)
         elif action == 'post':
           # build a resource at server
@@ -214,11 +214,17 @@ class AntBase(object):
         elif action == 'patch':
           # update part resource at server
           response = requests.patch(url, data=data, headers=user_authorization)
+        elif action == 'delete':
+          # delete resource at server
+          response = requests.delete(url, data=data, headers=user_authorization)
 
         if response is None:
           return None
 
         response_js = json.loads(response.content)
+        if 'status' in response_js and response_js['status'] in [404,500]:
+          return None
+
         return response_js
     except:
         return None

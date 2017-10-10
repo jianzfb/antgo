@@ -13,10 +13,13 @@ except ImportError:
 
 class AntTask(object):
   def __init__(self, task_id, task_name, task_type_id, task_type,
-             dataset_id, dataset_name, dataset_params,
-             estimation_procedure_type, estimation_procedure_params,
-             evaluation_measure, cost_matrix,
-             class_label=None, ext_params=None, ant_context=None):
+               dataset_id, dataset_name, dataset_params,
+               estimation_procedure_type, estimation_procedure_params,
+               evaluation_measure, cost_matrix,
+               dataset_url=None,
+               class_label=None,
+               ext_params=None,
+               ant_context=None):
     self._task_id = task_id
     self._task_name = task_name
     self._task_type_id = task_type_id
@@ -24,11 +27,17 @@ class AntTask(object):
     self._dataset_id = dataset_id
     self._dataset_name = dataset_name
     self._dataset_params = dataset_params
+    self._dataset_url = dataset_url
     self._estimation_procedure_type = estimation_procedure_type
     self._estimation_procedure_params = estimation_procedure_params
     self._evaluation_measure = evaluation_measure
     self._cost_matrix = cost_matrix
     self._ant_context = ant_context
+
+    if self._dataset_params is None:
+      self._dataset_params = {}
+    if self._dataset_url is not None and len(self._dataset_url) > 0:
+      self._dataset_params['dataset_url'] = self._dataset_url
 
     # dataset class
     if self._dataset_name is not None:
@@ -36,11 +45,11 @@ class AntTask(object):
                       self._ant_context is not None and \
                       self._ant_context.dataset_factory is not None:
           # get dataset IO from custom dataset factory
-          logger.info('dataset io from custom dataset factory')
+          # logger.info('dataset io from custom dataset factory')
           self._ant_dataset = self._ant_context.dataset_factory(self._dataset_name)
       else:
           # get dataset IO
-          logger.info('dataset io from mltalker')
+          # logger.info('dataset io from mltalker')
           self._ant_dataset = AntDataset(self._dataset_name)
 
     # related evaluation measures
@@ -140,6 +149,20 @@ class AntTask(object):
     return ['OBJECT-DETECTION', 'SEGMENTATION', 'CLASSIFICATION', 'REGRESSION', 'INSTANCE-SEGMENTATION', 'MATTING']
 
 
+def create_dummy_task(task_type):
+  return AntTask(task_id=-1,
+                 task_name=None,
+                 task_type_id=-1,
+                 task_type=task_type,
+                 dataset_id=-1,
+                 dataset_name='',
+                 dataset_params=None,
+                 estimation_procedure_type='',
+                 estimation_procedure_params=None,
+                 evaluation_measure=None,
+                 cost_matrix=None)
+
+
 def create_task_from_json(task_config_json, ant_context=None):
   try:
     # 1.step about task basic
@@ -153,7 +176,7 @@ def create_task_from_json(task_config_json, ant_context=None):
     dataset_id = -1
     dataset_name = ""
     target_feature = ""
-    dataset_params = None
+    dataset_params = {}
     dataset_url = ""
     estimation_procedure_type = ""
     inputs = task['input']
@@ -199,6 +222,7 @@ def create_task_from_json(task_config_json, ant_context=None):
                    task_type=task_type,
                    dataset_id=dataset_id,
                    dataset_name=dataset_name,
+                   dataset_url=dataset_url,
                    dataset_params=dataset_params,
                    estimation_procedure_type=estimation_procedure_type,
                    estimation_procedure_params=estimation_procedure_params,
