@@ -14,6 +14,7 @@ from antgo.utils import logger
 from antgo.dataflow.recorder import *
 import tarfile
 import sys
+from datetime import datetime
 from antgo.ant import flags
 if sys.version > '3':
     PY3 = True
@@ -62,7 +63,8 @@ class AntTrain(AntBase):
     assert(running_ant_task is not None)
     
     # now time stamp
-    train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
+    # train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
+    train_time_stamp = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
 
     # 0.step warp model (main_file and main_param)
     self.stage = 'MODEL'

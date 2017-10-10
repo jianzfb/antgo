@@ -16,6 +16,7 @@ from antgo.dataflow.recorder import *
 from antgo.measures.deep_analysis import *
 import shutil
 import tarfile
+from datetime import datetime
 
 
 class AntChallenge(AntBase):
@@ -65,7 +66,9 @@ class AntChallenge(AntBase):
     assert(running_ant_task is not None)
 
     # now time stamp
-    now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
+    # now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
+    now_time_stamp = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
+
     
     # 0.step warp model (main_file and main_param)
     self.stage = 'CHALLENGE-MODEL'

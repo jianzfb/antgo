@@ -21,6 +21,7 @@ from antgo.ant import flags
 from antgo import config
 from antgo.ant.utils import *
 from antgo.dataflow.dataflow_server import *
+from datetime import datetime
 if sys.version > '3':
     PY3 = True
 else:
@@ -103,7 +104,7 @@ def main():
   # 4.1 step check name, if None, set it as current time automatically
   name = FLAGS.name()
   if name is None:
-    name = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
+    name = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
 
   if not PY3:
     name = unicode(name)
