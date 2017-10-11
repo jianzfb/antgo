@@ -43,13 +43,22 @@ class AntTrain(AntBase):
       # 0.step load challenge task
       challenge_task_config = self.rpc("TASK-CHALLENGE")
       if challenge_task_config is None:
+        # invalid token
         logger.error('couldnt load challenge task')
-      elif challenge_task_config['status'] == 'OK':
-        challenge_task = create_task_from_json(challenge_task_config)
-        if challenge_task is None:
-          logger.error('couldnt load challenge task')
-          exit(-1)
-        running_ant_task = challenge_task
+        self.token = None
+      elif challenge_task_config['status'] in ['OK', 'SUSPEND']:
+        # maybe user token or task token
+        if 'task' in challenge_task_config:
+          # task token
+          challenge_task = create_task_from_json(challenge_task_config)
+          if challenge_task is None:
+            logger.error('couldnt load challenge task')
+            exit(-1)
+          running_ant_task = challenge_task
+      else:
+        # unknow error
+        logger.error('unknow error')
+        exit(-1)
 
     if running_ant_task is None:
       # 0.step load custom task
@@ -124,7 +133,7 @@ class AntTrain(AntBase):
           self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "repeated-holdout":
-          number_repeats = 10             # default value
+          number_repeats = 2              # default value
           is_stratified_sampling = True   # default value
           split_ratio = 0.6               # default value
           if estimation_procedure_params is not None:
@@ -145,7 +154,7 @@ class AntTrain(AntBase):
           self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
         elif estimation_procedure == "bootstrap":
-          bootstrap_counts = 20
+          bootstrap_counts = 5
           if estimation_procedure_params is not None:
             bootstrap_counts = int(estimation_procedure_params.get('bootstrap_counts', bootstrap_counts))
           evaluation_statistic = self._bootstrap_validation(bootstrap_counts,

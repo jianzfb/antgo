@@ -18,7 +18,6 @@ class AntMeasures():
         if self.task.task_type is not None:
             if self.task.task_type == 'CLASSIFICATION':
                 return [AntAccuracyMultiC(self.task),
-                        AntPerAccuracyMultiC(self.task),
                         AntConfusionMatrixMultiC(self.task)]
             elif self.task.task_type == 'OBJECT-DETECTION':
                 return [AntVOCDet(self.task),

@@ -39,21 +39,25 @@ class AntChallenge(AntBase):
       # 0.step load challenge task
       challenge_task_config = self.rpc("TASK-CHALLENGE")
       if challenge_task_config is None:
+        # invalid token
         logger.error('couldnt load challenge task')
+        self.token = None
       elif challenge_task_config['status'] == 'SUSPEND':
         # prohibit submit challenge task frequently
         logger.error('prohibit submit challenge task frequently')
-        exit(0)
-      elif challenge_task_config['status'] == 'UNAUTHORIZED':
-        # unauthorized submit challenge task
-        logger.error('unauthorized submit challenge task')
-        exit(0)
+        exit(-1)
       elif challenge_task_config['status'] == 'OK':
-        challenge_task = create_task_from_json(challenge_task_config)
-        if challenge_task is None:
-          logger.error('couldnt load challenge task')
-          exit(0)
-        running_ant_task = challenge_task
+        # maybe user token or task token
+        if 'task' in challenge_task_config:
+          challenge_task = create_task_from_json(challenge_task_config)
+          if challenge_task is None:
+            logger.error('couldnt load challenge task')
+            exit(-1)
+          running_ant_task = challenge_task
+      else:
+        # unknow error
+        logger.error('unknow error')
+        exit(-1)
 
     if running_ant_task is None:
       # 0.step load custom task

@@ -15,7 +15,8 @@ import time
 import copy
 
 __all__ = ['Mnist']
-# MINIST URL: 'http://yann.lecun.com/exdb/mnist/'
+MINIST_URL = 'http://yann.lecun.com/exdb/mnist/'
+
 def _read32(bytestream):
   dt = np.dtype(np.uint32).newbyteorder('>')
   return np.frombuffer(bytestream.read(4), dtype=dt)[0]
@@ -100,7 +101,7 @@ class Mnist(Dataset):
     self.seed = time.time()
 
     if self.train_or_test == "train":
-      self.download(self.dir, file_names=['train-images-idx3-ubyte.gz'])
+      self.download(self.dir, file_names=['train-images-idx3-ubyte.gz'], default_url=MINIST_URL)
       self.train_images = extract_images(os.path.join(self.dir, 'train-images-idx3-ubyte.gz'))
 
       self.download(self.dir, file_names=['train-labels-idx1-ubyte.gz'])
@@ -109,7 +110,7 @@ class Mnist(Dataset):
 
       self.ids = [i for i in range(self.train.num_examples)]
     else:
-      self.download(self.dir, file_names=['t10k-images-idx3-ubyte.gz'])
+      self.download(self.dir, file_names=['t10k-images-idx3-ubyte.gz'], default_url=MINIST_URL)
       test_images = extract_images(os.path.join(self.dir,'t10k-images-idx3-ubyte.gz'))
 
       self.download(self.dir, file_names=['t10k-labels-idx1-ubyte.gz'])
@@ -122,11 +123,13 @@ class Mnist(Dataset):
       assert(self.train_or_test == 'train')
       assert(split_method in ['repeated-holdout','bootstrap','kfold'])
 
-      category_ids = [self.train.labels[i] for i in range(len(self.ids))]
-
+      category_ids = None
       if split_method == 'kfold':
         np.random.seed(np.int64(self.seed))
+        category_ids = [i for i in range(len(self.ids))]
         np.random.shuffle(category_ids)
+      else:
+        category_ids = [self.train.labels[i] for i in range(len(self.ids))]
 
       train_ids, val_ids = self._split(category_ids, split_params, split_method)
       train_dataset = Mnist(self.train_or_test, self.dir, self.ext_params)

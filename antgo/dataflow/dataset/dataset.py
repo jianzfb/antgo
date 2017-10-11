@@ -152,6 +152,11 @@ class Dataset(BaseNode):
     :return:
     '''
     if split_method == 'holdout':
+      if 'ratio' not in split_params:
+        split_params['ratio'] = None
+      if 'is_stratified' not in split_params:
+        split_params['is_stratified'] = True
+
       return self._split_holdout(split_params['ratio'], split_params['is_stratified'], idx)
     elif split_method == 'repeated-holdout':
       return self._split_repeated_holdout(split_params['ratio'], split_params['is_stratified'], idx)
@@ -214,7 +219,7 @@ class Dataset(BaseNode):
     train_idx = []
     validation_idx = []
     while not is_ok:
-      selected_idx = get_rng().randint(low=0, high=len(idx), size=len(idx)).tolist()
+      selected_idx = get_rng().randint(low=0, high=len(idx)-1, size=len(idx)).tolist()
       train_idx = selected_idx
       validation_idx = [i for i in range(len(idx)) if i not in selected_idx]
 
@@ -233,7 +238,7 @@ class Dataset(BaseNode):
     k_end = (k+1) * fold_size if k < k_fold - 1 else len(idx)
 
     validation_idx = [idx[i] for i in np.arange(k_start, k_end, dtype=np.uint64)]
-    train_idx = [idx[i] for i in range(len(idx)) if i not in validation_idx]
+    train_idx = [i for i in range(len(idx)) if i not in validation_idx]
 
     return train_idx, validation_idx
 
@@ -496,8 +501,11 @@ class Dataset(BaseNode):
 
     return label
 
-  def download(self, target_path, file_names=[]):
+  def download(self, target_path, file_names=[], default_url=None):
     dataset_url = getattr(self, 'dataset_url', None)
+    if dataset_url is None or len(dataset_url) == 0:
+      dataset_url = default_url
+
     if dataset_url is not None:
       # dataset dont locate local
       # validate http address

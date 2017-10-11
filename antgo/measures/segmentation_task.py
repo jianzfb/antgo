@@ -53,7 +53,8 @@ class AntPixelAccuracySeg(AntMeasure):
           sample_scores.append({'id': id, 'score': float(nii) / float(len(p[0])), 'category': l})
 
     val = np.sum(sum_nii) / np.sum(sum_ti)
-    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]},
+    return {'statistic': {'name': self.name,
+                          'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]},
             'info': sample_scores}
 
 

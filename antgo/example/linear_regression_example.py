@@ -74,7 +74,7 @@ def training_callback(data_source, dump_dir):
   print('stop')
 
 ###################################################
-######## 2.step define infer process     ##########
+######## 3.step define infer process     ##########
 ###################################################
 # 图像数据
 val_image_channel = ctx.job.create_channel("val-sample", "IMAGE")
@@ -97,7 +97,7 @@ def infer_callback(data_source, dump_dir):
       break
 
 ###################################################
-####### 5.step link training and infer ############
+####### 4.step link training and infer ############
 #######        process to context      ############
 ###################################################
 ctx.training_process = training_callback

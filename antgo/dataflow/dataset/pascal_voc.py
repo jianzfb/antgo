@@ -20,19 +20,25 @@ from .dataset import *
 
 __all__ = ['Pascal2007', 'Pascal2012']
 
-
+PASCAL2007_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2007"
+PASCAL2012_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2012"
 class PascalBase(Dataset):
   def __init__(self, year, image_set, dir=None, ext_params=None):
     super(PascalBase, self).__init__(image_set, dir, ext_params)
     self._year = year
     self._image_set = image_set
     self._devkit_path = dir
-
     self.build()
 
   def build(self):
-    maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
     # todo: download automatically
+    if self._year == '2007':
+      self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar'],default_url=PASCAL2007_URL)
+    else:
+      self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
+    # auto untar
+
+    maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
     assert maybe_data_path is not None
     self._data_path = os.path.join(maybe_data_path, 'VOC' + self._year)
 

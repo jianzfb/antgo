@@ -58,11 +58,21 @@ def main():
 
   # check data_factory and task_factory config
   data_factory = getattr(Config, 'data_factory', None)
-  task_factory = getattr(Config, 'task_factory', '')
+  task_factory = getattr(Config, 'task_factory', None)
 
   if data_factory is None:
-    logger.error('must set data factory')
+    logger.error('must set data factory in config.xml')
     sys.exit(-1)
+
+  if task_factory is None:
+    logger.error('must set task factory in config.xml')
+    sys.exit(-1)
+
+  if not os.path.exist(data_factory):
+    os.makedirs(data_factory)
+
+  if not os.path.exist(task_factory):
+    os.makedirs(task_factory)
 
   # 1.step parse running params
   if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
