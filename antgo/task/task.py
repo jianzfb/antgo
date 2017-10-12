@@ -171,6 +171,7 @@ def create_task_from_json(task_config_json, ant_context=None):
     task_name = task['task_name']
     task_type_id = task['task_type_id']
     task_type = task['task_type']
+    task_params = task['task_params']
 
     # 2.step about task input
     dataset_id = -1
@@ -184,7 +185,7 @@ def create_task_from_json(task_config_json, ant_context=None):
     task_cost_matrix = []
     task_evaluation_measures = []
     class_label = None
-    task_ext_params = {}
+    task_ext_params = task_params
     for term in inputs:
       if term['name'] == 'source_data':
         dataset_id = term['data_set']['data_set_id']
@@ -205,10 +206,12 @@ def create_task_from_json(task_config_json, ant_context=None):
         for measure_name, measure_param in term['evaluation_measures']['evaluation_measure']:
           task_evaluation_measures.append(measure_name)
           if measure_param is not None and len(measure_param) > 0:
-            params = {}
+            # params = {}
             for k, v in measure_param.items():
-              params[measure_name + '_' + k.strip()] = v
-            task_ext_params.update(params)
+              # params[k.strip()] = v
+              if k.strip() not in task_ext_params:
+                task_ext_params[k.strip()] = v
+            # task_ext_params.update(params)
       elif term['name'] == 'info':
         if 'class_label' in term:
           class_label = term['class_label']

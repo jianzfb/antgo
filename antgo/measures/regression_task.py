@@ -14,7 +14,6 @@ class AntMAPERegression(AntMeasure):
   def __init__(self, task):
     super(AntMAPERegression, self).__init__(task, 'MAPE')
     assert(task.task_type == 'REGRESSION')
-
     self.is_support_rank = True
 
   def eva(self, data, label):
@@ -29,24 +28,30 @@ class AntMAPERegression(AntMeasure):
 
     acutal_s = []
     predicated_s = []
+    sample_scores = []
     for predict, gt in data:
       predicated_s.append(predict)
-      if type(gt) == dict:
-        gt = float(gt['category_id'])
 
-      acutal_s.append(gt)
+      id = None
+      gt_label = gt
+      if type(gt) == dict:
+        gt_label = float(gt['data'])
+        id = gt['id']
+
+      if id is not None:
+        sample_scores.append({'id': id, 'score': abs(gt_label - predict), 'category': gt_label})
+      acutal_s.append(gt_label)
 
     error = mape(actual_s=acutal_s, predicated_s=predicated_s)
-
     return {'statistic': {'name': self.name,
-                          'value': [{'name':self.name, 'value': error, 'type': 'SCALAR'}]}}
+                          'value': [{'name':self.name, 'value': error, 'type': 'SCALAR'}]},
+            'info': sample_scores}
 
 
 class AntAlmostCRegression(AntMeasure):
   def __init__(self, task):
     super(AntAlmostCRegression, self).__init__(task,'ALMOST-CORRECT')
     assert(task.task_type == 'REGRESSION')
-
     self.is_support_rank = True
 
   def eva(self, data, label):
@@ -59,17 +64,28 @@ class AntAlmostCRegression(AntMeasure):
     if label is not None:
       data = zip(data, label)
 
+    almost_degree = int(getattr(self.task, 'almost_correct', 1.0))
+
     acutal_s = []
     predicated_s = []
+    sample_scores = []
     for predict, gt in data:
       predicated_s.append(predict)
+
+      id = None
+      gt_label = gt
       if type(gt) == dict:
-        gt = float(gt['category_id'])
+        gt_label = float(gt['data'])
+        id = gt['id']
+
+      if id is not None:
+        sample_scores.append({'id': id,
+                              'score': 1 if abs(gt_label - predict) < almost_degree else 0,
+                              'category': gt_label})
 
       acutal_s.append(gt)
 
-    percentage = getattr(self.task, 'almost_correct', 1.0)
-    error = almost_correct(acutal_s, predicated_s, percentage)
-
+    error = almost_correct(acutal_s, predicated_s, almost_degree)
     return {'statistic': {'name': self.name,
-                          'value': [{'name': self.name, 'value': error, 'type': 'SCALAR'}]}}
+                          'value': [{'name': self.name, 'value': error, 'type': 'SCALAR'}]},
+            'info': sample_scores}

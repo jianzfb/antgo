@@ -45,6 +45,7 @@ class AntCmd(AntBase):
     flags.DEFINE_string('task_measure',None, 'task measure')
     flags.DEFINE_string('task_est',None,'task estimation procedure')
     flags.DEFINE_string('task_est_params',None,'task estimation procedure params')
+    flags.DEFINE_string('task_params', None, 'task extent parameter')
     flags.DEFINE_string('task_class_label',None, 'classification task label')
     flags.DEFINE_string('experiment_name', None, 'experiment name')
     flags.DEFINE_string('new_experiment_name',None, 'new experiment name')
@@ -286,6 +287,22 @@ class AntCmd(AntBase):
           task_est_params_dict['params'][param_key_value[0]] = param_key_value[1]
     task_est_params = json.dumps(task_est_params_dict)
 
+    # check task extent parameters(some closed measures different parameters)
+    task_params = FLAGS.task_params()
+    task_params_dict = {}
+    if task_params is not None:
+      task_params_splits = task_params.split(',')
+      for param in task_params_splits:
+        param_key_value = param.split(':')
+        if len(param_key_value) != 2:
+          logger.error('task extent params must be format like "key:value,key:value,..."')
+          return
+        else:
+          task_params_dict[param_key_value[0]] = param_key_value[1]
+      task_params = json.dumps(task_params_dict)
+    else:
+      task_params = {}
+
     # check task class label
     task_class_label = FLAGS.task_class_label()
     if task_class_label is not None:
@@ -392,6 +409,7 @@ class AntCmd(AntBase):
                                              'task-measures': task_measures,
                                              'task-estimation-procedure':task_est,
                                              'task-estimation-procedure-params':task_est_params,
+                                             'task-params':task_params,
                                              'task-class-label':task_class_label,
                                              'task-is-public':int(is_public)})
 
@@ -508,6 +526,22 @@ class AntCmd(AntBase):
             task_est_params_dict['params'][param_key_value[0]] = param_key_value[1]
       task_est_params = json.dumps(task_est_params_dict)
 
+      # check task extent parameters(some closed measures different parameters)
+      task_params = FLAGS.task_params()
+      task_params_dict = {}
+      if task_params is not None:
+        task_params_splits = task_params.split(',')
+        for param in task_params_splits:
+          param_key_value = param.split(':')
+          if len(param_key_value) != 2:
+            logger.error('task extent params must be format like "key:value,key:value,..."')
+            return
+          else:
+            task_params_dict[param_key_value[0]] = param_key_value[1]
+        task_params = json.dumps(task_params_dict)
+      else:
+        task_params = {}
+
       # check task class label
       task_class_label = FLAGS.task_class_label()
       if task_class_label is not None:
@@ -519,6 +553,7 @@ class AntCmd(AntBase):
                                          data={'task-name': task_name,
                                                'task-type': task_type,
                                                'task-measures': task_measures,
+                                               'task-params': task_params,
                                                'task-estimation-procedure': task_est,
                                                'task-estimation-procedure-params': task_est_params,
                                                'task-class-label': task_class_label})

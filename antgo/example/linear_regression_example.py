@@ -71,30 +71,21 @@ def training_callback(data_source, dump_dir):
     iter += 1
     print(iter)
 
-  print('stop')
+  print('stop training process')
 
 ###################################################
 ######## 3.step define infer process     ##########
 ###################################################
-# 图像数据
-val_image_channel = ctx.job.create_channel("val-sample", "IMAGE")
-ctx.job.create_chart([val_image_channel], "val-sample")
-
 def infer_callback(data_source, dump_dir):
   iter = 0
   for data in data_source.iterator_value():
-    # currunt sample
-    image = np.random.random((100, 100,3))
-    image_channel.send(iter, image)
-
     iter += 1
 
-    ctx.recorder.record(1)
-    time.sleep(2)
-    print(iter)
+    ctx.recorder.record(random.random())
+    # time.sleep(2)
+    print('iterator %d'%iter)
 
-    if iter >= 10:
-      break
+  print('stop inference process')
 
 ###################################################
 ####### 4.step link training and infer ############

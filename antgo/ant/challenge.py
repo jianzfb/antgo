@@ -147,7 +147,7 @@ class AntChallenge(AntBase):
           result = measure.eva(record_generator, None)
           if measure.is_support_rank:
             # compute confidence interval
-            confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 50)
+            confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 2)
             result['statistic']['value'][0]['interval'] = confidence_interval
 
           evaluation_measure_result.append(result)
@@ -217,7 +217,7 @@ class AntChallenge(AntBase):
       #                                                     {'id':4,'score':0.23,'category':1}]}]}}
       
       for measure_result in task_running_statictic[self.ant_name]['measure']:
-        if 'info' in measure_result and len(measure_result) > 0:
+        if 'info' in measure_result and len(measure_result['info']) > 0:
           measure_name = measure_result['statistic']['name']
           measure_data = measure_result['info']
           

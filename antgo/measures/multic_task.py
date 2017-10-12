@@ -35,11 +35,12 @@ class AntAccuracyMultiC(AntMeasure):
       id = None
       gt_label = gt
       if type(gt) == dict:
-        gt_label = gt['data']
+        gt_label = int(gt['data'])
+        id = gt['id']
 
       if id is not None:
         s = 1 if int(predict) == int(gt_label) else 0
-        sample_scores.append({'id':id, 'score':s, 'category': gt_label})
+        sample_scores.append({'id': id, 'score': int(s), 'category': gt_label})
       acutal_label.append(gt_label)
 
     accuracy = multi_accuracy(acutal_label, predicated_label)
