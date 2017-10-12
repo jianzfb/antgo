@@ -67,11 +67,11 @@ def main():
   if task_factory is None:
     logger.error('must set task factory in config.xml')
     sys.exit(-1)
-
-  if not os.path.exist(data_factory):
+  
+  if not os.path.exists(data_factory):
     os.makedirs(data_factory)
 
-  if not os.path.exist(task_factory):
+  if not os.path.exists(task_factory):
     os.makedirs(task_factory)
 
   # 1.step parse running params
