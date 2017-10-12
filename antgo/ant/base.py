@@ -87,8 +87,15 @@ class AntBase(object):
       self.zmq_socket.send(dumps(data))
 
       # 2.step ignore any receive info
-      self.zmq_socket.recv(copy=False)
-      
+      response = self.zmq_socket.recv(copy=False)
+      response = loads(response)
+      if 'status' in response:
+        if response['status'] != 'OK':
+          logger.error('error in uploading, maybe token isnot valid..')
+          if self.app_server not in ['AntTrain','AntChallenge']:
+            logger.error('perhaps you are using task token')
+          return
+
       # 3.step upload record files
       if record_data is not None and os.path.exists(record_data):
         self.send_record(record_data, stage)

@@ -79,8 +79,7 @@ class Standard(Dataset):
           category_ids[id] = 0 if random.random() > 0.5 else 1
 
     if split_method == 'holdout':
-      if ('ratio' in split_params and int(split_params['ratio']) <= 0.0) or\
-              'ratio' not in split_params:
+      if 'ratio' not in split_params:
         train_dataset = Standard(self.train_or_test, self.dir, self.ext_params)
         val_dataset = Standard('val', self.dir, self.ext_params)
         return train_dataset, val_dataset

@@ -79,4 +79,4 @@ class AntConfusionMatrixMultiC(AntMeasure):
     cm = compute_confusion_matrix(acutal_label, predicated_label, class_num)
     return {'statistic': {'name': self.name,
                           'value': [{'name': self.name, 'value': cm.tolist(),
-                                     'type': 'MATRIX', 'x': 'class', 'y': 'class'}]}}
+                                     'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label}]}}

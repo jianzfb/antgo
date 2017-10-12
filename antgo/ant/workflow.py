@@ -241,7 +241,8 @@ class WorkFlow(AntBase):
 
     # go and enjoy fun
     processes = [Process(target=lambda x, y: x.start(y),
-                         args=(self.work_nodes[i], self.work_acquired_locks[i]))
+                         args=(self.work_nodes[i], self.work_acquired_locks[i]),
+                         name=self.work_nodes[i].name)
                  for i in range(len(self.work_nodes))]
     for p in processes:
       p.start()

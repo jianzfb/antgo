@@ -11,6 +11,7 @@ import six
 from six.moves import urllib, range
 import copy
 import logging
+import tarfile
 import xml.etree.ElementTree as ET
 import scipy.sparse
 from ...utils.fs import download
@@ -22,26 +23,36 @@ __all__ = ['Pascal2007', 'Pascal2012']
 
 PASCAL2007_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2007"
 PASCAL2012_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2012"
+
 class PascalBase(Dataset):
   def __init__(self, year, image_set, dir=None, ext_params=None):
     super(PascalBase, self).__init__(image_set, dir, ext_params)
     self._year = year
     self._image_set = image_set
     self._devkit_path = dir
-    self.build()
 
-  def build(self):
-    # todo: download automatically
     if self._year == '2007':
-      self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar'],default_url=PASCAL2007_URL)
+      self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'],default_url=PASCAL2007_URL)
+      maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
+      if maybe_data_path is None:
+        # auto untar
+        tar = tarfile.open(os.path.join(self.dir,'VOCtrainval_06-Nov-2007.tar'), 'r')
+        tar.extractall(self.dir)
+        tar.close()
+
+        tar = tarfile.open(os.path.join(self.dir, 'VOCtest_06-Nov-2007.tar'), 'r')
+        tar.extractall(self.dir)
+        tar.close()
     else:
       self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
-    # auto untar
+      maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
+      if maybe_data_path is None:
+        # auto untar
+        tar = tarfile.open(os.path.join(self.dir, 'VOCtrainval_11-May-2012.tar'), 'r')
+        tar.extractall(self.dir)
+        tar.close()
 
-    maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
-    assert maybe_data_path is not None
-    self._data_path = os.path.join(maybe_data_path, 'VOC' + self._year)
-
+    self._data_path = os.path.join(self.dir,'VOCdevkit', 'VOC' + self._year)
     self._classes = ('background',
                      'aeroplane',
                      'bicycle',
@@ -78,7 +89,8 @@ class PascalBase(Dataset):
 
     assert os.path.exists(self._data_path), 'path does not exist: {}'.format(self._data_path)
     self.dataset_size = len(self._image_index)
-  
+
+  @property
   def size(self):
     return self.dataset_size
 
@@ -96,7 +108,9 @@ class PascalBase(Dataset):
         self.rng.shuffle(idxs)
 
       for k in idxs:
+        # real index
         index = self._image_index[k]
+        # annotation
         gt_roidb = self._load_roidb(index)
 
         # label info
@@ -104,10 +118,13 @@ class PascalBase(Dataset):
         if gt_roidb is None:
           continue
 
+        # image
         image = imread(self.image_path_from_index(index))
+        # image original size
         gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
+        gt_roidb['id'] = k
 
-        # [img,label]
+        # [img, groundtruth]
         yield [image, gt_roidb]
   
   def at(self, id):
@@ -121,8 +138,9 @@ class PascalBase(Dataset):
   
     image = imread(self.image_path_from_index(index))
     gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
-  
-    # [img,label]
+    gt_roidb['id'] = id
+
+    # [img,groundtruth]
     return [image, gt_roidb]
   
   def image_path_from_index(self, index):

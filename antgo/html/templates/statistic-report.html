@@ -851,7 +851,7 @@ matrix_data = [
     {% for measure in measures%}
         {% for model_statistic_val in measure.statistic.value %}
             {% if model_statistic_val.type == 'MATRIX' %}
-                {'name':"{{model_statistic_val.name}}",'x-name':"{{model_statistic_val.x}}",'y-name':"{{model_statistic_val.y}}", 'data':{{model_statistic_val.value }}},
+                {'name':"{{model_statistic_val.name}}",'x-name':{{model_statistic_val.x}},'y-name':{{model_statistic_val.y}}, 'data':{{model_statistic_val.value }}},
             {%endif%}
         {% endfor%}
     {% endfor%}

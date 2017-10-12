@@ -1,4 +1,0 @@
-batch_size: 1
-num_classes: 2
-clone_on_cpu: false
-num_clones: 2
