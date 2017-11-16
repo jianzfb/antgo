@@ -331,7 +331,11 @@ class AntCmd(AntBase):
     # check task class label
     task_class_label = FLAGS.task_class_label()
     if task_class_label is not None:
-      task_class_label = json.dumps(task_class_label.split(','))
+      if ',' in task_class_label:
+        task_class_label = json.dumps(task_class_label.split(','))
+      else:
+        task_class_label = [i for i in range(int(task_class_label))]
+        task_class_label = json.dumps(task_class_label)
 
     # create task binded with dataset
     task_name = '-' if FLAGS.task_name() is None else FLAGS.task_name()
@@ -480,7 +484,11 @@ class AntCmd(AntBase):
       # check task class label
       task_class_label = FLAGS.task_class_label()
       if task_class_label is not None:
-        task_class_label = json.dumps(task_class_label.split(','))
+        if ',' in task_class_label:
+          task_class_label = json.dumps(task_class_label.split(','))
+        else:
+          task_class_label = [i for i in range(int(task_class_label))]
+          task_class_label = json.dumps(task_class_label)
 
       is_public = FLAGS.is_public()
 
@@ -782,7 +790,12 @@ class AntCmd(AntBase):
       logger.error('error response from server')
 
   def start(self):
-    cmd = input('antgo > ')
+    cmd = ''
+    if PY3:
+      cmd = input('antgo > ')
+    else:
+      cmd = raw_input('antgo > ')
+
     while cmd != 'quit':
       try:
         command = cmd.split(' ')
@@ -797,4 +810,8 @@ class AntCmd(AntBase):
         flags.clear_cli_param_flags()
       except:
         logger.error('error antgo command\n')
-      cmd = input('antgo > ')
+
+      if PY3:
+        cmd = input('antgo > ')
+      else:
+        cmd = raw_input('antgo > ')
