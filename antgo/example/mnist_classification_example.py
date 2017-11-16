@@ -20,7 +20,30 @@ ctx = Context()
 ##################################################
 ######## 1.1 step define chart channel ###########
 ##################################################
+# channel 1
+loss_1_channel = ctx.job.create_channel('loss-1', 'NUMERIC')
 
+# channel 2
+loss_2_channel = ctx.job.create_channel('loss-2', 'NUMERIC')
+
+# channel 3
+image_channel = ctx.job.create_channel('image-sampling', 'IMAGE')
+
+# channel 4
+hist_channel = ctx.job.create_channel('hist-dis', 'HISTOGRAM')
+
+# channel 5
+hist_2_channel = ctx.job.create_channel('hist-dis-2', 'HISTOGRAM')
+
+
+# chart 1
+ctx.job.create_chart([loss_1_channel, loss_2_channel], 'loss', 'step', 'value')
+
+# chart 2
+ctx.job.create_chart([hist_channel], 'hist-dis', 'weight', 'ff')
+
+# chart 3
+ctx.job.create_chart([image_channel], 'sampling')
 
 ##################################################
 ######## 2.step define training process  #########
@@ -32,11 +55,19 @@ def training_callback(data_source, dump_dir):
   # print('training: set batch size %d'%ctx.params.batch_size)
 
   iter = 0
-  for data, label in data_source.iterator_value():
-    print('iterator %d - batch-size: %d'%(iter, data.shape[0]))
-    print(data.shape)
-    print('id %d label'%(label['id']))
+  for data in data_source.iterator_value():
+    # print('iterator %d - batch-size: %d'%(iter, data.shape[0]))
+    # print(data.shape)
+    # print('id %d label'%(label))
     iter += 1
+    print('iterator %d'%iter)
+    print(data)
+
+    if iter % 100 == 0:
+      loss_1_channel.send(iter, np.random.random())
+      loss_2_channel.send(iter, np.random.random())
+      hist_channel.send(iter, np.random.random((200)))
+      image_channel.send(iter, np.random.random((100,100,3)))
 
   print('stop training process')
 

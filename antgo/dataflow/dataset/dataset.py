@@ -16,7 +16,10 @@ from antgo.utils.fs import *
 from functools import reduce
 import re
 import multiprocessing
+import tarfile
+from antgo import config
 
+Config = config.AntConfig
 
 def imread(file):
   img = scipy.misc.imread(file)
@@ -34,7 +37,7 @@ class Dataset(BaseNode):
 
   def __init__(self, train_or_test="train", dir=None, ext_params=None, name=None):
     super(Dataset, self).__init__(name)
-    assert(train_or_test in ["train", "val", "test"])
+    assert(train_or_test in ["train", "val", "test", "sample"])
 
     # for random episodes
     self.nb_samples = 0
@@ -173,7 +176,7 @@ class Dataset(BaseNode):
     raise NotImplementedError()
 
   def _split_holdout(self, split_ratio, is_stratified_sampling=True, idx=[]):
-    assert(self.train_or_test == 'train')
+    assert(self.train_or_test in ['train','sample'])
     try:
       train_idx, val_idx = self._split_custom_holdout(split_ratio, is_stratified_sampling, idx)
       return train_idx, val_idx
@@ -181,7 +184,7 @@ class Dataset(BaseNode):
       return self._split_repeated_holdout(split_ratio, is_stratified_sampling, idx)
 
   def _split_repeated_holdout(self, split_ratio, is_stratified_sampling=True, idx=[]):
-    assert(self.train_or_test == 'train')
+    assert(self.train_or_test in ['train','sample'])
 
     # split by t/v
     if is_stratified_sampling:
@@ -213,7 +216,7 @@ class Dataset(BaseNode):
       return train_idx, validation_idx
 
   def _split_bootstrap(self, idx):
-    assert(self.train_or_test == 'train')
+    assert(self.train_or_test in ['train','sample'])
 
     is_ok = False
     train_idx = []
@@ -229,7 +232,7 @@ class Dataset(BaseNode):
     return train_idx, validation_idx
 
   def _split_kfold(self, k_fold, k, idx):
-    assert(self.train_or_test == 'train')
+    assert(self.train_or_test in ['train','sample'])
     assert(k < k_fold)
 
     size = len(idx)
@@ -501,13 +504,22 @@ class Dataset(BaseNode):
 
     return label
 
-  def download(self, target_path, file_names=[], default_url=None):
+  def download(self, target_path, file_names=[], default_url=None, auto_untar=False, is_gz=False):
     dataset_url = getattr(self, 'dataset_url', None)
     if dataset_url is None or len(dataset_url) == 0:
       dataset_url = default_url
 
     if dataset_url is not None:
       # dataset dont locate local
+      mltalker_root = getattr(Config, 'server_ip', None)
+      is_mltalker = False
+
+      if mltalker_root is not None and mltalker_root in dataset_url:
+        terms = dataset_url.split('/')
+        dataset_url = '/'.join(terms[0:-2])
+        dataset_url = os.path.join(dataset_url, self.train_or_test)
+        is_mltalker = True
+
       # validate http address
       is_http = re.match('^((https|http|ftp|rtsp|mms)?://)', dataset_url)
       if is_http is not None:
@@ -515,8 +527,26 @@ class Dataset(BaseNode):
         if not os.path.exists(target_path):
           os.makedirs(target_path)
 
-        for file_name in file_names:
-          if maybe_here(target_path, file_name) is None:
-            download(os.path.join(dataset_url,file_name), target_path)
+        if len(file_names) > 0:
+          for file_name in file_names:
+            if maybe_here(target_path, file_name) is None:
+              download(os.path.join(dataset_url,file_name), target_path)
+        else:
+          if not is_mltalker:
+            download_path = os.path.join(target_path, dataset_url.split('/')[-1])
+            if not os.path.exists(download_path):
+              download(dataset_url, target_path)
+
+            if auto_untar:
+              with tarfile.open(download_path, 'r:gz' if is_gz else 'r') as tar:
+                tar.extractall(target_path)
+          else:
+            download_path = os.path.join(target_path, 'data.tar')
+            if not os.path.exists(download_path):
+              download(dataset_url, target_path, 'data.tar')
+
+              if auto_untar:
+                with tarfile.open(download_path, 'r:gz' if is_gz else 'r') as tar:
+                  tar.extractall(target_path)
 
       # validate ipfs address

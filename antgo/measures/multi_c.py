@@ -86,6 +86,39 @@ def multi_accuracy(actual,predicated_score):
     index = np.where(max_index == actual)
     return len(index[0]) / float(actual.shape[0])
 
+
+def multi_accuracy_labels(actual, predicated_label):
+    '''
+    compute classification accuracy(for multi-classification task and binary-classification task)
+    Parameters
+    ----------
+    actual: list or ndarray
+            ground truth list
+    predicated_score: list or ndarray
+            predicted label list
+    Returns
+    -------
+    '''
+    # type consistent
+    if type(actual) == list:
+        actual = np.array(actual, dtype=np.int32)
+    if type(predicated_label) == list:
+        predicated_label = np.array(predicated_label)
+
+    if actual.shape[0] == 0 or predicated_label.shape[0] == 0:
+        return None
+
+    if actual.dtype != np.int32:
+        actual = actual.astype(dtype=np.int32)
+
+    # shape consistent
+    assert (len(actual.shape) == 1)
+    assert (len(predicated_label.shape) == 1)
+
+    # predicated label
+    index = np.where(predicated_label == actual)
+    return len(index[0]) / float(actual.shape[0])
+
 def per_class_accuracy(actual,predicated_score):
     '''
     compute mean per-class classification accuracy(for multi-classification and binary-classification task)

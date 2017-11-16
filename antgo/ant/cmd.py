@@ -23,6 +23,11 @@ import subprocess
 import getopt
 import json
 import shutil
+import sys
+if sys.version > '3':
+  PY3 = True
+else:
+  PY3 = False
 
 
 FLAGS = flags.AntFLAGS
@@ -40,6 +45,7 @@ class AntCmd(AntBase):
     flags.DEFINE_string('dataset_name',None, 'dataset name')
     flags.DEFINE_string('dataset_path',None, 'dataset path')
     flags.DEFINE_string('dataset_url', None, 'dataset url')
+    flags.DEFINE_string('dataset_train_or_test', 'train', 'dataset train or test')
     flags.DEFINE_string('task_name',None,'task name')
     flags.DEFINE_string('task_type',None, 'task type')
     flags.DEFINE_string('task_measure',None, 'task measure')
@@ -135,7 +141,7 @@ class AntCmd(AntBase):
     if experiment_download_model is not None:
       # download experiment model request
       remote_api = 'hub/api/terminal/download/%s/experiment/%d/model' %(self.app_token, experiment_id)
-      url = '%s://%s:%s/%s' % (self.http_prefix, self.root_ip, self.http_port, remote_api)
+      url = '%s://%s:%s/%s' % (self.http_prefix, self.server_ip, self.http_port, remote_api)
 
       target_path = os.path.join(os.curdir,'experiment', experiment_name)
       if not os.path.exists(target_path):
@@ -150,7 +156,7 @@ class AntCmd(AntBase):
       # experiment report at every stage of experiment
       # download experiment model request
       remote_api = 'hub/api/terminal/download/%s/experiment/%d/report' % (self.app_token, experiment_id)
-      url = '%s://%s:%s/%s' % (self.http_prefix, self.root_ip, self.http_port, remote_api)
+      url = '%s://%s:%s/%s' % (self.http_prefix, self.server_ip, self.http_port, remote_api)
 
       target_path = os.path.join(os.curdir, 'experiment', experiment_name)
       if not os.path.exists(target_path):
@@ -240,6 +246,25 @@ class AntCmd(AntBase):
         logger.error('if set "public" attribute, dataset couldnt be stored local')
         return
 
+    ########################## stage 1 - dataset create #############################
+    # create dataset record at cloud
+    create_dataset_remote_api = 'hub/api/terminal/create/dataset'
+    response = self.remote_api_request(create_dataset_remote_api,
+                                       action='post',
+                                       data={'dataset-name': dataset_name,
+                                             'dataset-is-local': int(is_local),
+                                             'dataset-is-public': int(is_public)})
+
+    if response['status'] != 'OK':
+      logger.error('dataset name has been existed at cloud, please reset')
+      return
+
+    # dataset valid name (dataset name maybe added prefix automatically)
+    dataset_name = response['dataset-name']
+    ########################## stage 2 - stask create #############################
+    if FLAGS.task_name() is None:
+      return
+
     # check task type
     task_type = FLAGS.task_type()
     if task_type is None:
@@ -308,97 +333,7 @@ class AntCmd(AntBase):
     if task_class_label is not None:
       task_class_label = json.dumps(task_class_label.split(','))
 
-    # 1.step create dataset
-    # create dataset record at cloud
-    create_dataset_remote_api = 'hub/api/terminal/create/dataset'
-    response = self.remote_api_request(create_dataset_remote_api,
-                                       action='post',
-                                       data={'dataset-name': dataset_name,
-                                             'dataset-is-local': int(is_local),
-                                             'dataset-is-public': int(is_public)})
-
-    if response['status'] != 'OK':
-      logger.error('dataset name has been existed at cloud, please reset')
-      return
-
-    # dataset valid name
-    dataset_name = response['dataset-name']
-    # dataset create flag (yes or no)
-    # only public or self created dataset is allowed
-    dataset_create = response['dataset-create']
-
-    if dataset_create == 'yes':
-      if is_local:
-        # copy dataset to local datafactory
-        data_factory = getattr(Config, 'data_factory', None)
-        dataset_path = FLAGS.dataset_path()
-        dataset_url = FLAGS.dataset_url()
-        if dataset_path is None and dataset_url is None:
-          logger.error('dataset_path or dataset_url must be set')
-          return
-
-        if dataset_path is not None:
-          if not os.path.exists(dataset_path):
-            logger.error('dataset path dont exist')
-            return
-
-          if not os.path.isdir(dataset_path):
-            logger.error('dataset path must be folder')
-            return
-
-        if os.path.exists(os.path.join(data_factory, dataset_name)):
-          shutil.rmtree(os.path.join(data_factory, dataset_name))
-
-        if dataset_path is not None:
-          # move dataset to datafactory
-          shutil.copytree(dataset_path, os.path.join(data_factory, dataset_name))
-        else:
-          # build dataset local path
-          os.makedirs(os.path.join(data_factory, dataset_name))
-
-          # update dataset url
-          update_remote_api = 'hub/api/terminal/update/dataset'
-          response = self.remote_api_request(update_remote_api,
-                                             action='patch',
-                                             data={'dataset-name': dataset_name,
-                                                   'dataset-url': dataset_url})
-
-          if response['status'] == 'OK':
-            logger.info('dataset address has been config successfully')
-          else:
-            logger.error('dataset address upload error')
-            return
-      else:
-        # upload dataset to cloud
-        dataset_path = FLAGS.dataset_path()
-        dataset_url = FLAGS.dataset_url()
-
-        if dataset_url is None and dataset_path is None:
-          logger.error('must set dataset url or dataset local path')
-          return
-
-        if dataset_url is not None:
-          # dataset is provided by 3rdpart
-          # check dataset url address is valid
-          create_dataset_remote_api = 'hub/api/terminal/update/dataset'
-          response = self.remote_api_request(create_dataset_remote_api,
-                                             action='patch',
-                                             data={'dataset-name': dataset_name,
-                                                   'dataset-url': dataset_url})
-
-          if response['status'] == 'OK':
-            logger.info('dataset address has been config successfully')
-          else:
-            logger.error('dataset address upload error')
-            return
-        else:
-          # dataset is provided by mltalker
-          logger.error('comming soon')
-          return
-
-      logger.info('dataset has been created successfully')
-
-    # 2.step create task binded with dataset
+    # create task binded with dataset
     task_name = '-' if FLAGS.task_name() is None else FLAGS.task_name()
     remote_api = 'hub/api/terminal/create/task'
     response = self.remote_api_request(remote_api,
@@ -547,6 +482,8 @@ class AntCmd(AntBase):
       if task_class_label is not None:
         task_class_label = json.dumps(task_class_label.split(','))
 
+      is_public = FLAGS.is_public()
+
       remote_api = 'hub/api/terminal/update/task'
       response = self.remote_api_request(remote_api,
                                          action='patch',
@@ -556,7 +493,8 @@ class AntCmd(AntBase):
                                                'task-params': task_params,
                                                'task-estimation-procedure': task_est,
                                                'task-estimation-procedure-params': task_est_params,
-                                               'task-class-label': task_class_label})
+                                               'task-class-label': task_class_label,
+                                                'task-is-public': 1 if is_public else 0})
 
       if response is None:
         logger.error('update error')
@@ -580,6 +518,112 @@ class AntCmd(AntBase):
         if response is None:
           logger.error('update error')
           return
+
+  def process_upload_command(self):
+    # dataset name
+    dataset_name = FLAGS.dataset_name()   # must be unique at cloud
+    if dataset_name is None:
+      logger.error('dataset name must be set')
+      return
+
+    ########################## stage 1 - lookup dataset #############################
+    # lookup dataset record at cloud
+    create_dataset_remote_api = 'hub/api/terminal/dataset/name/%s'%dataset_name
+    response = self.remote_api_request(create_dataset_remote_api, action='get')
+
+    if 'dataset-name' not in response:
+      logger.error('dataset name has been existed at cloud, please reset')
+      return
+
+    # dataset valid name (dataset name maybe added prefix automatically)
+    dataset_name = response['dataset-name']
+    dataset_is_local = response['dataset-is-local']
+    dataset_is_public = response['dataset-is-public']
+
+    ########################## stage 2 - upload dataset #############################
+    # only public or self created dataset is allowed
+    if dataset_is_local:
+      # copy dataset to local datafactory
+      data_factory = getattr(Config, 'data_factory', None)
+      dataset_path = FLAGS.dataset_path()
+      dataset_url = FLAGS.dataset_url()
+      if dataset_path is None and dataset_url is None:
+        logger.error('dataset_path or dataset_url must be set')
+        return
+
+      if dataset_path is not None:
+        if not os.path.exists(dataset_path):
+          logger.error('dataset path dont exist')
+          return
+
+        if not os.path.isdir(dataset_path):
+          logger.error('dataset path must be folder')
+          return
+
+      if os.path.exists(os.path.join(data_factory, dataset_name)):
+        shutil.rmtree(os.path.join(data_factory, dataset_name))
+
+      if dataset_path is not None:
+        # move dataset to datafactory
+        shutil.copytree(dataset_path, os.path.join(data_factory, dataset_name))
+      else:
+        # build dataset local path
+        os.makedirs(os.path.join(data_factory, dataset_name))
+
+        # update dataset url
+        update_remote_api = 'hub/api/terminal/update/dataset'
+        response = self.remote_api_request(update_remote_api,
+                                           action='patch',
+                                           data={'dataset-name': dataset_name,
+                                                 'dataset-url': dataset_url,})
+
+        if response['status'] == 'OK':
+          logger.info('dataset address has been config successfully')
+        else:
+          logger.error('dataset address upload error')
+          return
+    else:
+      # upload dataset to cloud
+      dataset_path = FLAGS.dataset_path()
+      dataset_url = FLAGS.dataset_url()
+
+      if dataset_url is None and dataset_path is None:
+        logger.error('must set dataset url or dataset local path')
+        return
+
+      # dataset train or test ('train, test, val or sample)
+      dataset_train_or_test = FLAGS.dataset_train_or_test()
+      if not PY3:
+        dataset_train_or_test = unicode(dataset_train_or_test)
+      if dataset_train_or_test not in ['train', 'test', 'val', 'sample']:
+        logger.error('dataset_train_or_test must be in "%s"'%",".join(['train', 'test', 'val', 'sample']))
+        return
+
+      if dataset_url is not None:
+        # dataset is provided by 3rdpart
+        # check dataset url address is valid
+        create_dataset_remote_api = 'hub/api/terminal/update/dataset'
+        response = self.remote_api_request(create_dataset_remote_api,
+                                           action='patch',
+                                           data={'dataset-name': dataset_name,
+                                                 'dataset-url': dataset_url})
+        if response['status'] == 'OK':
+          logger.info('dataset address has been config successfully')
+        else:
+          logger.error('dataset address upload error')
+      else:
+        # dataset is uploaded
+        dataset_path = dataset_path.replace('\\','/')
+        file_name = dataset_path.split('/')[-1]
+        if not PY3:
+          dataset_path = unicode(dataset_path)
+          file_name = unicode(file_name)
+
+        flag = self.send_file(dataset_path, dataset_name, dataset_train_or_test, 'DATASET-FILE', file_name)
+        if flag:
+          logger.info('dataset uploaded successfully')
+        else:
+          logger.error('dataset uploaded error')
 
   def _key_params(self):
     # related parameters
@@ -726,6 +770,8 @@ class AntCmd(AntBase):
         self.process_del_command()
       elif command == 'update':
         self.process_update_command()
+      elif command == 'upload':
+        self.process_upload_command()
       elif command == 'challenge':
         self.process_challenge_command()
       elif command == 'train':
@@ -736,11 +782,11 @@ class AntCmd(AntBase):
       logger.error('error response from server')
 
   def start(self):
-    cmd = raw_input('antgo > ')
+    cmd = input('antgo > ')
     while cmd != 'quit':
       try:
         command = cmd.split(' ')
-        assert(command[0] in ['task', 'dataset', 'experiment', 'apply', 'create', 'del','update','challenge', 'train', 'compose'])
+        assert(command[0] in ['task', 'dataset', 'experiment', 'apply', 'create', 'del','update','upload','challenge', 'train', 'compose'])
 
         flags.cli_param_flags(command[1:])
 
@@ -751,4 +797,4 @@ class AntCmd(AntBase):
         flags.clear_cli_param_flags()
       except:
         logger.error('error antgo command\n')
-      cmd = raw_input('antgo > ')
+      cmd = input('antgo > ')

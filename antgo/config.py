@@ -6,9 +6,9 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 try:
-    import xml.etree.cElementTree as ET
+  import xml.etree.cElementTree as ET
 except ImportError:
-    import xml.etree.ElementTree as ET
+  import xml.etree.ElementTree as ET
 
 
 class _Config(object):

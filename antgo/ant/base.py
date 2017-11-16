@@ -20,23 +20,24 @@ import re
 import requests
 from antgo.ant import flags
 from antgo.utils.fs import *
+from antgo import config
 if sys.version > '3':
   PY3 = True
 else:
   PY3 = False
 
 FLAGS = flags.AntFLAGS
-
+Config = config.AntConfig
 
 class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None):
-    self.root_ip = '127.0.0.1'
-    self.http_port = '8999'
+    self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
+    self.http_port = '9999'
     self.http_prefix = 'http'
     self.ant_name = ant_name
     self.app_token = os.environ.get('APP_TOKEN', ant_token)
-    self.app_connect = os.environ.get('APP_CONNECT', 'tcp://127.0.0.1:2345')
-    self.app_file_connect = os.environ.get('APP_FILE_CONNECT', 'tcp://127.0.0.1:2346')
+    self.app_connect = os.environ.get('APP_CONNECT', 'tcp://%s:%s' % (self.server_ip, '2345'))
+    self.app_file_connect = os.environ.get('APP_FILE_CONNECT', 'tcp://%s:%s' % (self.server_ip, '2346'))
 
     # config zmq connect
     self.zmq_context = zmq.Context()
@@ -155,7 +156,44 @@ class AntBase(object):
       # 4.step clear
       if os.path.exists(temp_tar_file_path):
         os.remove(temp_tar_file_path)
-  
+
+  def send_file(self, file_path, name, stage, mode, target_name):
+    # 1.step whether file_path exist
+    if not os.path.isfile(file_path):
+      return False
+
+    # 2.step split data pieces
+    with open(file_path, 'rb') as fp:
+      BLOCK_SIZE = 8 * 1024
+      block_data = fp.read(BLOCK_SIZE)
+
+      # send data blocks
+      while block_data != b"":
+        self.zmq_file_socket.send(dumps((self.app_token,
+                                         name,
+                                         stage,
+                                         self.ant_time_stamp,
+                                         mode,
+                                         target_name,
+                                         BLOCK_SIZE,
+                                         len(block_data),
+                                         block_data)))
+        block_data = fp.read(BLOCK_SIZE)
+
+      # send data EOF
+      self.zmq_file_socket.send(dumps((self.app_token,
+                                       name,
+                                       stage,
+                                       self.ant_time_stamp,
+                                       mode,
+                                       target_name,
+                                       BLOCK_SIZE,
+                                       0,
+                                       b'')))
+      # waiting until server tells us it's done
+      flag = self.zmq_file_socket.recv()
+      return True
+
   def rpc(self, cmd=""):
     if self.app_token is not None:
       # 0.step config data
@@ -208,7 +246,7 @@ class AntBase(object):
     return target_path
 
   def remote_api_request(self, cmd, data=None, action='get'):
-    url = '%s://%s:%s/%s'%(self.http_prefix,self.root_ip,self.http_port, cmd)
+    url = '%s://%s:%s/%s'%(self.http_prefix, self.server_ip, self.http_port, cmd)
     user_authorization = {'Authorization': "token " + self.app_token}
     try:
         response = None

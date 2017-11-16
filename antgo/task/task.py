@@ -39,18 +39,22 @@ class AntTask(object):
     if self._dataset_url is not None and len(self._dataset_url) > 0:
       self._dataset_params['dataset_url'] = self._dataset_url
 
+    self._dataset_params['dataset_name'] = self._dataset_name
+
     # dataset class
     if self._dataset_name is not None:
       if self._task_id == -1 and \
                       self._ant_context is not None and \
                       self._ant_context.dataset_factory is not None:
-          # get dataset IO from custom dataset factory
-          # logger.info('dataset io from custom dataset factory')
-          self._ant_dataset = self._ant_context.dataset_factory(self._dataset_name)
+        # get dataset IO from custom dataset factory
+        # logger.info('dataset io from custom dataset factory')
+        self._ant_dataset = self._ant_context.dataset_factory(self._dataset_name)
       else:
-          # get dataset IO
-          # logger.info('dataset io from mltalker')
-          self._ant_dataset = AntDataset(self._dataset_name)
+        # get dataset IO
+        # logger.info('dataset io from mltalker')
+        if self._dataset_url is not None:
+          parse_flag = self._dataset_url.split('/')[-2]
+          self._ant_dataset = AntDataset(self._dataset_name, parse_flag)
 
     # related evaluation measures
     self._ant_measures = AntMeasures(self)
