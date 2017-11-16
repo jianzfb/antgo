@@ -175,7 +175,7 @@ class AntTrain(AntBase):
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-KFOLD-REPORT'
           # send statistic report
-          self.context.job.send({'DATA':{'REPORT': evaluation_statistic}})
+          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
 
       # 3.step model training

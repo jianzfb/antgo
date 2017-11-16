@@ -69,7 +69,7 @@ class Channel():
     self.channel_chart = None
     self.channel_job = channel_job
     self.channel_params = channel_params
-    assert(self.channel_type in ["IMAGE", "NUMERIC", "TEXT", "HISTOGRAM"])
+    assert(self.channel_type in ["IMAGE", "NUMERIC", "HISTOGRAM"])
 
   @property
   def params(self):
@@ -98,8 +98,6 @@ class Channel():
       return self.reorganize_image_data(data)
     elif data_type == "NUMERIC":
       return self.reorganize_numeric_data(data)
-    elif data_type == "TEXT":
-      return self.reorganize_text_data(data)
     elif data_type == "HISTOGRAM":
       return self.reorganize_histogram_data(data)
     else:
@@ -156,19 +154,6 @@ class Channel():
       data_y = float(data_y)
     except:
       logger.error("Channel Y Must be Scalar Data")
-    return (data_x, data_y)
-
-  def reorganize_text_data(self, data):
-    data_x, data_y = data
-    try:
-      data_x = float(data_x)
-    except:
-      logger.error("Channel X Must be Scalar Data")
-
-    try:
-      data_y = str(data_y)
-    except:
-      logger.error("Channel Y Must Could Transfer to String")
     return (data_x, data_y)
 
   def reorganize_histogram_data(self, data):

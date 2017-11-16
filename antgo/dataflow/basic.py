@@ -81,12 +81,14 @@ def safe_recorder_manager(recorder):
 
 
 class RecordReader(object):
-  def __init__(self, record_path):
-    # db
-    self._record_path = record_path
-
+  def __init__(self, record_path, daemon=False):
     # db
     self._db = None
+    # daemon
+    self._daemon = daemon
+
+    # db path
+    self._record_path = record_path
 
     # db attributes
     self._db_attrs = {}
@@ -99,7 +101,7 @@ class RecordReader(object):
 
   def close(self):
     if self._db is not None:
-      self._db.close(self._record_path.encode('utf-8'))
+      self._db.close()
 
   def record_attrs(self):
     return self._db_attrs
@@ -107,8 +109,11 @@ class RecordReader(object):
   def read(self, index, *args):
     try:
       if self._db is None:
-        self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
-        self._db.open(self._record_path.encode('utf-8'))
+        if self._daemon:
+          self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
+          self._db.open(self._record_path.encode('utf-8'))
+        else:
+          self._db = plyvel.DB(self._record_path.encode('utf-8'))
 
       data = Sample.unserialize(self._db.get(bytes(index)))
       sample = []
@@ -128,8 +133,11 @@ class RecordReader(object):
 
   def iterate_read(self, *args):
     if self._db is None:
-      self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
-      self._db.open(self._record_path.encode('utf-8'))
+      if self._daemon:
+        self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
+        self._db.open(self._record_path.encode('utf-8'))
+      else:
+        self._db = plyvel.DB(self._record_path.encode('utf-8'))
 
     for k in range(self.count):
       data = Sample.unserialize(self._db.get(bytes(k)))
@@ -148,8 +156,11 @@ class RecordReader(object):
 
   def iterate_sampling_read(self, index, *args):
     if self._db is None:
-      self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
-      self._db.open(self._record_path.encode('utf-8'))
+      if self._daemon:
+        self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
+        self._db.open(self._record_path.encode('utf-8'))
+      else:
+        self._db = plyvel.DB(self._record_path.encode('utf-8'))
 
     for i in index:
       data = Sample.unserialize(self._db.get(bytes(i)))
