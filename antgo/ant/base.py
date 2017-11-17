@@ -266,8 +266,8 @@ class AntBase(object):
         if response is None:
           return None
 
-        response_js = json.loads(response.content)
-        if 'status' in response_js and response_js['status'] in [404,500]:
+        response_js = json.loads(response.content.decode())
+        if 'status' in response_js and response_js['status'] in [404, 500]:
           return None
 
         return response_js

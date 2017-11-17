@@ -80,22 +80,6 @@ class AntConfusionMatrixMultiC(AntMeasure):
     class_num = len(self.task.class_label)
     cm = compute_confusion_matrix(acutal_label, predicated_label, class_num)
 
-    # test-1 (histgram data)
-    histgram_data = {'name': 'test-hist', 'value':[5,15,2,15], 'type': 'SCALAR', 'x': 'x', 'y':'y'}
-
-    # test-2 (curve data)
-    curve_data = {'name': 'test-curve', 'value':[[[0,0],[1,5],[2,15]]], 'type':'CURVE', 'x':'X-TT', 'y':'Y-HH', 'z': ['category-1']}
-
-    # test-3 (image data)
-    random_img = np.random.random((50,50,3))
-    random_img = random_img * 255
-    random_img = random_img.astype(np.uint8)
-    image_data = {'name': 'test-image', 'value':random_img, 'type':'IMAGE'}
-
-    # test-4 (Table data)
-    table_data = {'name': 'test-table', 'value':[['-','hello','world'],[0,1,2]], 'type':'TABLE'}
-
     return {'statistic': {'name': self.name,
                           'value': [{'name': self.name, 'value': cm.tolist(),
-                                     'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label},
-                                    histgram_data, curve_data,image_data,table_data]}}
+                                     'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label}]}}

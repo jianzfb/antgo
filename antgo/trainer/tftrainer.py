@@ -336,6 +336,8 @@ class TFTrainer(Trainer):
         self.val_ops = [self.val_ops]
         if type(self.clones[0].outputs) == list:
           self.val_ops.extend(self.clones[0].outputs)
+        elif type(self.clones[0].outputs) == tuple:
+          self.val_ops.extend(list(self.clones[0].outputs))
         else:
           self.val_ops.append(self.clones[0].outputs)
 

@@ -62,7 +62,6 @@ def compute_confusion_matrix(actual, predict_label, class_num):
 
     cm[c_i, :] = cm[c_i, :] / float(c_i_pos_num)
 
-  cm = cm / float(len(actual))
   return cm
 
 #unit test

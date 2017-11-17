@@ -32,7 +32,7 @@ class PascalBase(Dataset):
     self._devkit_path = dir
 
     if self._year == '2007':
-      self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'],default_url=PASCAL2007_URL)
+      self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
       maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
       if maybe_data_path is None:
         # auto untar
@@ -241,7 +241,9 @@ class PascalBase(Dataset):
                   'area': area}
 
     if has_seg:
-      annotation.update({'segmentation': segmentation})
+      segmentation_map = seg_img[:, :, 0]
+      segmentation_map[np.where(segmentation_map == 255)] = 0
+      annotation.update({'segmentation': segmentation, 'segmentation_map': segmentation_map})
 
     return annotation
 

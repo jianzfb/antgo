@@ -76,7 +76,7 @@ def running_statistic(running_block):
   start = time.time()
 
   # 2.step cpu and gpu statistic periodically
-  timer_thread = TimerThread([lambda:_cpu_info_func(pid), lambda:_gpu_info_func(pid)], periodic=300)
+  timer_thread = TimerThread([lambda:_cpu_info_func(pid), lambda:_gpu_info_func(pid)], periodic=10)
   timer_thread.start()
 
   yield

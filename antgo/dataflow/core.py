@@ -1,4 +1,4 @@
-# encoding=utf-8
+# -*- coding: UTF-8 -*-
 # @Time    : 17-6-6
 # @File    : core.py
 # @Author  :

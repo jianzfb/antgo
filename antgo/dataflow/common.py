@@ -596,3 +596,17 @@ class Zip(Node):
       info = sys.exc_info()
       logger.error('%s:%s' % (info[0], info[1]))
       exit(-1)
+
+
+class FilterNode(Node):
+  def __init__(self, inputs, filter_condition):
+    super(FilterNode, self).__init__(name=None, action=None, inputs=inputs)
+    self._filter_condition = filter_condition
+  
+  def _evaluate(self):
+    data = self._positional_inputs[0].get_value()
+    while not self._filter_condition(data):
+      self._positional_inputs[0]._force_inputs_dirty()
+      data = self._positional_inputs[0].get_value()
+
+    return data

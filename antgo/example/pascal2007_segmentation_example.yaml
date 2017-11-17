@@ -1,0 +1,10 @@
+batch_size: 1
+num_classes: 21
+num_clones: 1
+max_epochs: 400
+learning_rate_decay_type: 'exponential'
+num_epochs_per_decay: 100
+learning_rate: 0.001
+end_learning_rate: 0.00001
+checkpoint_path: '/home/mi/model/tf-densenet121.ckpt'
+checkpoint_exclude_scopes: 'GCN'
