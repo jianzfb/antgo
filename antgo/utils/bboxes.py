@@ -1,7 +1,7 @@
-# encoding=utf-8
+# -*- coding: UTF-8 -*-
 # @Time    : 17-5-26
 # @File    : bboxes.py
-# @Author  :
+# @Author  : Jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function

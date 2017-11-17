@@ -10,9 +10,7 @@ try:
 except ImportError:
     import xml.etree.ElementTree as ET
 
-# To compile and install locally run "python setup.py build_ext --inplace"
-# Install: pip install . -r requirements.txt (from pip)
-# Install: python setup.py build_ext sdist install -r requirements.txt (from github)
+# install: python setup.py build_ext install -r requirements.txt (from github)
 ext_modules = [
     Extension(
         'antgo.utils._mask',
@@ -23,7 +21,7 @@ ext_modules = [
     Extension('antgo.utils._bbox',
               ["antgo/utils/_bbox.pyx"],
               include_dirs=[np.get_include()],
-              extra_compile_args=["-Wno-cpp", "-Wno-unused-function",'-std=c99']
+              extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
     ),
     Extension('antgo.utils._nms',
               ["antgo/utils/_nms.pyx"],
@@ -38,10 +36,11 @@ def readme():
 
 setup(name='antgo',
       version='0.0.1',
-      description='machine learning community',
+      description='machine learning experiment platform',
+      __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',
       author='jian',
-      author_email='jian.fbehind@gmail.com',
+      author_email='jian@mltalker.com',
       packages=['antgo',
                 'antgo.ant',
                 'antgo.utils',
@@ -58,7 +57,7 @@ setup(name='antgo',
                 'antgo.example',
                 'antgo.annotation'],
       ext_modules=cythonize(ext_modules),
-      entry_points={'console_scripts':['antgo=antgo.main:main'],},
+      entry_points={'console_scripts': ['antgo=antgo.main:main'], },
       long_description=readme(),
       include_package_data=True,
       zip_safe=False,)
