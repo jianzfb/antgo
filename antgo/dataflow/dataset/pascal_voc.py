@@ -117,13 +117,13 @@ class PascalBase(Dataset):
         gt_roidb = self.filter_by_condition(gt_roidb, ['segmentation'])
         if gt_roidb is None:
           continue
-
+        
         # image
         image = imread(self.image_path_from_index(index))
         # image original size
         gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
         gt_roidb['id'] = k
-
+        
         # [img, groundtruth]
         yield [image, gt_roidb]
   

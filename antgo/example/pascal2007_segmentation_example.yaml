@@ -6,5 +6,4 @@ learning_rate_decay_type: 'exponential'
 num_epochs_per_decay: 100
 learning_rate: 0.001
 end_learning_rate: 0.00001
-checkpoint_path: '/home/mi/model/tf-densenet121.ckpt'
-checkpoint_exclude_scopes: 'GCN'
+checkpoint_path: '/home/mi/PycharmProjects/antgo/antgo/dump/20171120.112557.784624/train/alpha_train_1.ckpt'

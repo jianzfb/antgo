@@ -47,8 +47,8 @@ class AntVOCDet(AntMeasure):
         continue
 
       det_bbox = predict['det-bbox']
-      det_score = predict['det-score']
-      det_label = predict['det-label']
+      det_score = predict['det-score'].flatten()
+      det_label = predict['det-label'].flatten()
 
       # ground truth bbox and categories
       gt_bbox = np.array(gt['bbox'])
@@ -124,6 +124,8 @@ class AntVOCDet(AntMeasure):
     # 2.step compute mean average precision
     voc_mean_map = []
     for predict, gt in zip(detection_label, detection_score):
+      # skip 0
+      
       result = vmap(predict, gt)
       if result is None:
         result = 0.0
@@ -152,7 +154,7 @@ class AntROCandAUCDet(AntMeasure):
 
         # assert(len(data) == len(label))
         #
-        overlap_thre = float(getattr(self.task, 'ROC_AUC_overlap', 0.5))
+        overlap_thre = float(getattr(self.task, 'overlap', 0.5))
 
         # 1.step positive sample is overlap > overlap_thre
         predict_box_total = 0
@@ -229,6 +231,8 @@ class AntROCandAUCDet(AntMeasure):
         category_roc_curves = []
         category_auc_scroes = []
         for predict, gt in zip(detection_label, detection_score):
+            # skip 0
+          
             roc_curve = roc(predict, gt)
             if roc_curve is None:
                 roc_curve = np.array(())
@@ -259,7 +263,7 @@ class AntPRDet(AntMeasure):
         # assert(len(data) == len(label))
 
         #
-        overlap_thre = float(getattr(self.task,'PR_F1_overlap',0.5))
+        overlap_thre = float(getattr(self.task,'overlap',0.5))
 
         # 1.step positive sample is overlap > overlap_thre
         predict_box_total = 0
@@ -335,6 +339,8 @@ class AntPRDet(AntMeasure):
         # 2.step compute Precicion Recall curve
         category_pr_curves = []
         for predict, gt in zip(detection_label, detection_score):
+            # skip 0
+          
             pr_curve = pr(predict, gt)
             if pr_curve is None:
                 pr_curve = np.array(())
@@ -439,6 +445,8 @@ class AntAPRFDet(AntMeasure):
         category_recall = []
         category_F1 = []
         for category_detection_label, category_detection_score in zip(detection_label, detection_score):
+            # skip 0
+          
             predicated_label = [1 if s > -float("inf") else 0 for s in category_detection_score]
 
             res = binary_c_stats2(actual=category_detection_label, predicated=predicated_label)
@@ -554,6 +562,7 @@ class AntTFTFDet(AntMeasure):
         category_TN = []
         category_FP = []
         for category_detection_label,category_detection_score in zip(detection_label,detection_score):
+            # skip 0
             predicated_label = [1 if s > -float("inf") else 0 for s in category_detection_score]
 
             res = binary_c_stats(actual=category_detection_label, predicated=predicated_label)

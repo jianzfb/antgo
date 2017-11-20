@@ -272,7 +272,7 @@ def _transform_analysis_to_visualization(analysis_info, data_source):
       sampling_data = []
       for index in sampling_index:
         d = data_source.at(index)
-        if type(d) == tuple:
+        if type(d) == tuple or type(d) == list:
           d = d[0]
         
         if type(d) == str:

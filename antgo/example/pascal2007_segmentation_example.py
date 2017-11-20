@@ -155,14 +155,16 @@ class GCNSegModel(ModelDesc):
         num_classes=21,
         is_training=True,
         reuse=None)
+
+    if is_training:
+      # label y
+      y_input = tf.placeholder(tf.uint8, [1, None, None, 1], name='y')
+
     # gcn net
     with tf.variable_scope(None, 'GCN', [each_layer_output], reuse=None):
       logits = gcn_net(each_layer_output, num_classes=21)
 
       if is_training:
-        # label y
-        y_input = tf.placeholder(tf.uint8, [1, None, None, 1], name='y')
-
         # resize y
         y = tf.image.resize_nearest_neighbor(y_input, [512, 512], align_corners=True)
         y = tf.squeeze(y, axis=3)
@@ -219,10 +221,11 @@ def training_callback(data_source, dump_dir):
         _, loss_val, accuracy_val = tf_trainer.run(data_generator, {'x': 0, 'y': 1})
         # record loss value
         if iter % 50 == 0:
-          loss_channel.send(loss_val)
-          accuracy_channel.send(accuracy_val)
-
+          loss_channel.send(iter, loss_val)
+          accuracy_channel.send(iter, accuracy_val)
         iter += 1
+        
+        break
       except StopIteration:
         break
 
@@ -243,18 +246,23 @@ def infer_callback(data_source, dump_dir):
 
   ##########  3.step start inference ##############
   data_generator = batch_data_source.iterator_value()
+  count = 0
   while True:
     try:
       logits, feed_data = tf_trainer.run(data_generator, {'x': 0}, whats=True)
-      logits = np.squeeze(logits, axis=0)
-      height, width = feed_data[0][0].shape[0:2]
+      logits = np.squeeze(logits[0], axis=0)
+      _, height, width = feed_data[0][0].shape[0:3]
 
       # resize to original size
       resized_logits = resize(logits, (height, width))
-      mask = np.argmax(resized_logits, axis=3)
+      mask = np.argmax(resized_logits, axis=2)
 
       # record
       ctx.recorder.record(mask)
+      if count == 10:
+        break
+      count += 1
+      
     except StopIteration:
       break
 

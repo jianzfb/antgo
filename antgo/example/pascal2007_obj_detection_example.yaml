@@ -1,0 +1,13 @@
+batch_size: 1
+num_classes: 20
+num_clones: 1
+max_epochs: 400
+learning_rate_decay_type: 'exponential'
+num_epochs_per_decay: 100
+learning_rate: 0.001
+end_learning_rate: 0.00001
+select_threshold: 0.8
+nms_threshold: 0.1
+select_top_k: 400
+keep_top_k: 5
+checkpoint_path: '/home/mi/PycharmProjects/antgo/antgo/dump/20171120.172857.145926/train/alpha_train_19.ckpt'

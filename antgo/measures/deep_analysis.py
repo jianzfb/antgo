@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 import numpy as np
 
+#bug here#
 def discrete_multi_model_measure_analysis(samples_score, data_id, data_source, filter_tag=None, random_sampling=5):
   # 95%, 52%, 42%, 13%, only best, 0%
   # correct is 1; error is 0
@@ -94,12 +95,14 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   remained_id = []
   if filter_tag is not None:
     for data_index in data_id:
+      if data_index == -1:
+        continue
       _, label = data_source.at(data_index)
       if filter_tag == label['tag']:
         remained_id.append(data_index)
   
   if len(remained_id) == 0:
-    remained_id = data_id
+    remained_id = [index for index in data_id if index != -1]
   
   samples_score = samples_score[:, remained_id]
   
@@ -121,6 +124,8 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   # high score region (0 ~ 1/10) - good
   region_start = 0
   region_end = int(np.minimum(samples_num / 10 * 1, samples_num))
+  if region_end == 0:
+    region_end = 1
   high_region_sampling = reorganized_sample_id[region_start:region_end]
   high_region_random_sampling = np.minimum(len(high_region_sampling), random_sampling)
   high_region_sampling = np.random.choice(high_region_sampling, high_region_random_sampling, False)
@@ -129,6 +134,8 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   # middle score region (4/10 ~ 6/10) - just so so
   region_start = int(np.maximum(samples_num / 10 * 4, 0))
   region_end = int(np.minimum(samples_num / 10 * 6, samples_num))
+  if region_end == 0:
+    region_end = 1
   middle_region_sampling = reorganized_sample_id[region_start: region_end]
   middle_region_random_sampling = np.minimum(len(middle_region_sampling), random_sampling)
   middle_region_sampling = np.random.choice(middle_region_sampling, middle_region_random_sampling, False)
@@ -137,6 +144,9 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   # low score region (9/10 ~ 10/10) - bad
   region_start = int(np.maximum(samples_num / 10 * 9, 0))
   region_end = int(np.minimum(samples_num / 10 * 10, samples_num))
+  if region_end == 0:
+    region_end = 1
+  
   low_region_sampling = reorganized_sample_id[region_start: region_end]
   low_region_random_sampling = np.minimum(len(low_region_sampling), random_sampling)
   low_region_sampling = np.random.choice(low_region_sampling, low_region_random_sampling, False)

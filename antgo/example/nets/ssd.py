@@ -11,13 +11,12 @@ from tensorflow.contrib.layers.python.layers import utils
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import init_ops
 from tensorflow.python.ops import variable_scope
-from layers.util import *
 import tf_extended as tfe
 from nets import ssd_common
+from nets import custom_layers
 from antgo.utils.helper import *
 from collections import namedtuple
 import math
-from nets import custom_layers
 def tf_bbox_transform_inv(boxes, deltas, name):
   return tf.py_func(bbox_transform_inv, [boxes, deltas], [tf.float32], name=name)
 

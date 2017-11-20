@@ -151,6 +151,8 @@ class AntChallenge(AntBase):
             result['statistic']['value'][0]['interval'] = confidence_interval
 
           evaluation_measure_result.append(result)
+          
+          break
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
       # compare statistic
@@ -231,6 +233,9 @@ class AntChallenge(AntBase):
             measure_data_list.append(measure_data)
           
           for category_id, category_measure_data in enumerate(measure_data_list):
+            if len(category_measure_data) == 0:
+              continue
+              
             if 'analysis' not in task_running_statictic[self.ant_name]:
               task_running_statictic[self.ant_name]['analysis'] = {}
             
@@ -263,9 +268,10 @@ class AntChallenge(AntBase):
   
             # reorganize data as score matrix
             method_num = len(method_samples_list)
-            samples_num = len(method_samples_list[0]['data'])
+            # samples_num = len(method_samples_list[0]['data'])
+            samples_num = ant_test_dataset.size
             method_measure_mat = np.zeros((method_num, samples_num))
-            samples_id = np.zeros((samples_num), np.uint64)
+            samples_id = -1 * np.ones((samples_num), np.int64)
   
             for method_id, method_measure_data in enumerate(method_samples_list):
               if method_id == 0:
@@ -274,7 +280,7 @@ class AntChallenge(AntBase):
                   samples_id[sample_id] = sample['id']
   
               for sample_id, sample in enumerate(method_measure_data['data']):
-                  method_measure_mat[method_id, sample_id] = sample['score']
+                  method_measure_mat[method_id, samples_id[sample_id]] = sample['score']
   
             # check method_measure_mat is binary (0 or 1)
             is_binary = False
