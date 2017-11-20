@@ -1,4 +1,4 @@
-# encoding=utf-8
+# -*- coding: UTF-8 -*-
 # @Time    : 17-5-9
 # @File    : challenge.py
 # @Author  : jian<jian@mltalker.com>

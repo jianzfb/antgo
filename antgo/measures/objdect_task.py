@@ -1,4 +1,4 @@
-# encoding=utf-8
+# -*- coding: UTF-8 -*-
 # @Time    : 17-5-3
 # @File    : objdect_task.py
 # @Author  : jian<jian@mltalker.com>
@@ -17,107 +17,124 @@ import antgo.utils._mask as _mask
 
 
 class AntVOCDet(AntMeasure):
-    def __init__(self, task):
-        super(AntVOCDet, self).__init__(task, 'VOC')
-        assert(task.task_type == 'OBJECT-DETECTION')
+  def __init__(self, task):
+    super(AntVOCDet, self).__init__(task, 'VOC')
+    assert(task.task_type == 'OBJECT-DETECTION')
 
-        self.is_support_rank = True
+    self.is_support_rank = True
 
-    def eva(self, data, label):
-        category_num = len(self.task.class_label)
-        detection_score = [[] for _ in range(category_num)]
-        detection_label = [[] for _ in range(category_num)]
+  def eva(self, data, label):
+    category_num = len(self.task.class_label)
+    detection_score = [[] for _ in range(category_num)]
+    detection_label = [[] for _ in range(category_num)]
 
-        if label is not None:
-            data = zip(data, label)
+    if label is not None:
+      data = zip(data, label)
 
-        # assert(len(data) == len(label))
-        predict_box_total = 0
-        # 1.step positive sample is overlap > 0.5
-        for predict, gt in data:
-            if predict is None:
-                for missed_gt_bi in range(len(gt['bbox'])):
-                    detection_label[gt['category_id'][missed_gt_bi]].append(1)
-                    detection_score[gt['category_id'][missed_gt_bi]].append(-float("inf"))
-                continue
+    # assert(len(data) == len(label))
+    predict_box_total = 0
 
-            det_bbox = predict['det-bbox']
-            det_score = predict['det-score']
-            det_label = predict['det-label']
+    samples_scores = []
+    # 1.step positive sample is overlap > 0.5
+    for predict, gt in data:
+      # sample id
+      sample_id = gt['id']
 
-            # ground truth bbox and categories
-            gt_bbox = np.array(gt['bbox'])
-            gt_category = np.array(gt['category_id']).astype(dtype=np.int32)
-            gt_bbox_num = gt_bbox.shape[0]
+      if predict is None:
+        for missed_gt_bi in range(len(gt['bbox'])):
+          detection_label[gt['category_id'][missed_gt_bi]].append(1)
+          detection_score[gt['category_id'][missed_gt_bi]].append(-float("inf"))
+        continue
 
-            # predict position, category, and score
-            predict_box = np.array(det_bbox)
-            predict_category = np.array(det_label).astype(dtype=np.int32)
-            predict_score = np.array(det_score)
-            predict_box_total += predict_score.shape[0]
+      det_bbox = predict['det-bbox']
+      det_score = predict['det-score']
+      det_label = predict['det-label']
 
-            overlaps = bbox_overlaps(
-                np.ascontiguousarray(predict_box, dtype=np.float),
-                np.ascontiguousarray(gt_bbox, dtype=np.float))
-            #overlaps = _mask.iou(predict_box.tolist(), gt_bbox.tolist(), [0 for _ in range(gt_bbox_num)])
+      # ground truth bbox and categories
+      gt_bbox = np.array(gt['bbox'])
+      gt_category = np.array(gt['category_id']).astype(dtype=np.int32)
+      gt_bbox_num = gt_bbox.shape[0]
 
-            # distinguish positive and negative samples and scores (overlap > 0.5)
-            gtm = np.ones((gt_bbox_num)) * (-1)
-            for dind, d in enumerate(predict_box.tolist()):
-                # information about best match so far (m=-1 -> unmatched)
-                m = -1
-                iou = 0.5
-                for gind, g in enumerate(gt_bbox.tolist()):
-                    if gt_category[gind] != predict_category[dind]:
-                        continue
+      # predict position, category, and score
+      predict_box = np.array(det_bbox)
+      predict_category = np.array(det_label).astype(dtype=np.int32)
+      predict_score = np.array(det_score)
+      predict_box_total += predict_score.shape[0]
 
-                    # if this gt already matched  continue
-                    if gtm[gind] >= 0:
-                        continue
+      overlaps = bbox_overlaps(
+          np.ascontiguousarray(predict_box, dtype=np.float),
+          np.ascontiguousarray(gt_bbox, dtype=np.float))
+      #overlaps = _mask.iou(predict_box.tolist(), gt_bbox.tolist(), [0 for _ in range(gt_bbox_num)])
 
-                    # continue to next gt unless better match made
-                    if overlaps[dind, gind] < iou:
-                        continue
-                    # if match successful and best so far, store appropriately
-                    iou = overlaps[dind, gind]
-                    m = gind
+      # distinguish positive and negative samples and scores (overlap > 0.5)
+      gtm = np.ones((gt_bbox_num)) * (-1)
+      for dind, d in enumerate(predict_box.tolist()):
+        # information about best match so far (m=-1 -> unmatched)
+        m = -1
+        iou = 0.5
+        for gind, g in enumerate(gt_bbox.tolist()):
+          if gt_category[gind] != predict_category[dind]:
+            continue
 
-                # if match made store id of match for both dt and gt
-                if m > -1:
-                    gtm[m] = dind
+          # if this gt already matched continue
+          if gtm[gind] >= 0:
+            continue
 
-                    # success to match
-                    detection_score[gt_category[m]].append(predict_score[dind])
-                    detection_label[gt_category[m]].append(1)
+          # continue to next gt unless better match made
+          if overlaps[dind, gind] < iou:
+            continue
+          # if match successful and best so far, store appropriately
+          iou = overlaps[dind, gind]
+          m = gind
 
-            # process none matched det
-            for dind, d in enumerate(predict_box.tolist()):
-                if dind not in gtm:
-                    detection_score[predict_category[dind]].append(predict_score[dind])
-                    detection_label[predict_category[dind]].append(0)
+        # if match made store id of match for both dt and gt
+        if m > -1:
+          gtm[m] = dind
 
-            # process missed gt bbox
-            missed_gt_bbox = [_ for _ in range(gt_bbox_num) if gtm[_] == -1]
-            for missed_gt_bi in missed_gt_bbox:
-                detection_label[gt_category[missed_gt_bi]].append(1)
-                detection_score[gt_category[missed_gt_bi]].append(-float("inf"))
+          # success to match
+          detection_score[gt_category[m]].append(predict_score[dind])
+          detection_label[gt_category[m]].append(1)
 
-            #########################################################################
+          # record sample
+          samples_scores.append({'id': sample_id,
+                                 'score': predict_score[dind],
+                                 'category': gt_category[m],
+                                 'box': gt_bbox[m].tolist()})
 
-        # 2.step compute mean average precision
-        voc_mean_map = []
-        for predict, gt in zip(detection_label, detection_score):
-            result = vmap(predict, gt)
-            if result is None:
-                result = 0.0
-            voc_mean_map.append(result)
+      # process none matched det
+      for dind, d in enumerate(predict_box.tolist()):
+        if dind not in gtm:
+          detection_score[predict_category[dind]].append(predict_score[dind])
+          detection_label[predict_category[dind]].append(0)
 
-        # 3.step make json
-        voc_map = np.mean(np.array(voc_mean_map))
-        return {'statistic': {'name': self.name,
-                              'value': [{'name': 'MAP', 'value': voc_mean_map, 'type': 'SCALAR', 'x': 'class', 'y': 'Mean Average Precision'},
-                                        {'name': 'Mean-MAP', 'value': voc_map, 'type': 'SCALAR'}]},
-                'info':{'label': self.task.class_label, 'N': predict_box_total}}
+      # process missed gt bbox
+      missed_gt_bbox = [_ for _ in range(gt_bbox_num) if gtm[_] == -1]
+      for missed_gt_bi in missed_gt_bbox:
+        detection_label[gt_category[missed_gt_bi]].append(1)
+        detection_score[gt_category[missed_gt_bi]].append(-float("inf"))
+
+        # record sample
+        samples_scores.append({'id': sample_id,
+                               'score': -float("inf"),
+                               'category': gt_category[missed_gt_bi],
+                               'box': gt_bbox[missed_gt_bi].tolist()})
+
+      #########################################################################
+
+    # 2.step compute mean average precision
+    voc_mean_map = []
+    for predict, gt in zip(detection_label, detection_score):
+      result = vmap(predict, gt)
+      if result is None:
+        result = 0.0
+      voc_mean_map.append(result)
+
+    # 3.step make json
+    voc_map = float(np.mean(voc_mean_map))
+    return {'statistic': {'name': self.name,
+                          'value': [{'name': 'Mean-MAP', 'value': voc_map, 'type': 'SCALAR'},
+                                    {'name': 'MAP', 'value': voc_mean_map, 'type': 'SCALAR', 'x': 'class', 'y': 'Mean Average Precision'}]},
+            'info': samples_scores}
 
 
 class AntROCandAUCDet(AntMeasure):
@@ -223,13 +240,12 @@ class AntROCandAUCDet(AntMeasure):
 
         return {'statistic': {'name': self.name,
                               'value': [{'name': 'ROC', 'value': category_roc_curves, 'type': 'CURVE', 'x': 'FP', 'y': 'TP'},
-                                        {'name': 'AUC', 'value': category_auc_scroes, 'type': 'SCALAR', 'x': 'class', 'y': 'AUC'}]},
-                'info': {'label': self.task.class_label, 'N': predict_box_total}}
+                                        {'name': 'AUC', 'value': category_auc_scroes, 'type': 'SCALAR', 'x': 'class', 'y': 'AUC'}]},}
 
 
 class AntPRDet(AntMeasure):
     def __init__(self, task):
-        super(AntPRDet, self).__init__(task,'PR')
+        super(AntPRDet, self).__init__(task, 'PR')
         assert(task.task_type == 'OBJECT-DETECTION')
 
     def eva(self, data, label):
@@ -325,8 +341,7 @@ class AntPRDet(AntMeasure):
             category_pr_curves.append(pr_curve.tolist())
 
         return {'statistic': {'name': self.name,
-                              'value': [{'name': 'Precision-Recall', 'value': category_pr_curves, 'type': 'CURVE', 'x': 'recall', 'y': 'precision'}]},
-                'info': {'label': self.task.class_label, 'N': predict_box_total}}
+                              'value': [{'name': 'Precision-Recall', 'value': category_pr_curves, 'type': 'CURVE', 'x': 'recall', 'y': 'precision'}]},}
 
 
 class AntAPRFDet(AntMeasure):
@@ -442,8 +457,7 @@ class AntAPRFDet(AntMeasure):
                                         {'name': 'Recall', 'value': category_recall,
                                          'type': 'SCALAR', 'x': 'class', 'y': 'recall'},
                                         {'name': 'F1', 'value': category_F1,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'F1'}]},
-                'info': {'label': self.task.class_label, 'N': predict_box_total}}
+                                         'type': 'SCALAR', 'x': 'class', 'y': 'F1'}]}}
 
 
 class AntTFTFDet(AntMeasure):
@@ -558,8 +572,7 @@ class AntTFTFDet(AntMeasure):
                                         {'name': 'true-negative', 'value': category_TN,
                                          'type': 'SCALAR', 'x': 'class', 'y': 'TN'},
                                         {'name': 'false-positive', 'value': category_FP,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'FP'}]},
-                'info': {'label': self.task.class_label,'N': predict_box_total}}
+                                         'type': 'SCALAR', 'x': 'class', 'y': 'FP'}]},}
 
 
 class AntCOCODet(AntMeasure):
@@ -960,5 +973,4 @@ class AntCOCODet(AntMeasure):
                                       {'name':'max-det-100','value':coco_maxdets100,'type':'SCALAR','x':coco_maxdets100_str},
                                       {'name':'area-small','value':coco_small_maxdets100_nap,'type':'SCALAR','x':coco_small_maxdets100_nap_str},
                                       {'name':'area-medium','value':coco_medium_maxdets100_nap,'type':'SCALAR','x':coco_medium_maxdets100_nap_str},
-                                      {'name':'area-large','value':coco_large_maxdets100_nap,'type':'SCALAR','x':coco_large_maxdets100_nap_str}]},
-                'info': {'label': self.task.class_label}}
+                                      {'name':'area-large','value':coco_large_maxdets100_nap,'type':'SCALAR','x':coco_large_maxdets100_nap_str}]},}

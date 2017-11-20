@@ -1,4 +1,4 @@
-"""Tools for visualizing a lusmu graph
+d"""Tools for visualizing a lusmu graph
 
 Copyright 2013 Eniram Ltd. See the LICENSE file at the top-level directory of
 this distribution and at https://github.com/akaihola/lusmu/blob/master/LICENSE

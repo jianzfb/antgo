@@ -12,11 +12,10 @@ except ImportError:
 
 # install: python setup.py build_ext install -r requirements.txt (from github)
 ext_modules = [
-    Extension(
-        'antgo.utils._mask',
-        sources=['antgo/cutils/maskApi.c', 'antgo/utils/_mask.pyx'],
-        include_dirs = [np.get_include(), 'antgo/cutils'],
-        extra_compile_args=['-Wno-cpp', '-Wno-unused-function', '-std=c99'],
+    Extension('antgo.utils._mask',
+              sources=['antgo/cutils/maskApi.c', 'antgo/utils/_mask.pyx'],
+              include_dirs = [np.get_include(), 'antgo/cutils'],
+              extra_compile_args=['-Wno-cpp', '-Wno-unused-function', '-std=c99'],
     ),
     Extension('antgo.utils._bbox',
               ["antgo/utils/_bbox.pyx"],
@@ -25,6 +24,11 @@ ext_modules = [
     ),
     Extension('antgo.utils._nms',
               ["antgo/utils/_nms.pyx"],
+              include_dirs=[np.get_include()],
+              extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
+              ),
+    Extension('antgo.utils._resize',
+              ["antgo/utils/_resize.pyx"],
               include_dirs=[np.get_include()],
               extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
               ),

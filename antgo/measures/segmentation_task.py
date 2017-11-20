@@ -33,8 +33,11 @@ class AntPixelAccuracySeg(AntMeasure):
     for predict, gt in data:
       id = None
       if type(gt) == dict:
+        if 'segmentation_map' not in gt:
+          continue
+
         id = gt['id']
-        gt = gt['data']
+        gt = gt['segmentation_map']
       
       gt_labels = set(gt.flatten())
       for l in gt_labels:
@@ -80,8 +83,11 @@ class AntMeanAccuracySeg(AntMeasure):
     for predict, gt in data:
       id = None
       if type(gt) == dict:
+        if 'segmentation_map' not in gt:
+          continue
+
         id = gt['id']
-        gt = gt['data']
+        gt = gt['segmentation_map']
         
       gt_labels = set(gt.flatten())
       for l in gt_labels:
@@ -127,8 +133,11 @@ class AntMeanIOUSeg(AntMeasure):
     for predict, gt in data:
       id = None
       if type(gt) == dict:
+        if 'segmentation_map' not in gt:
+          continue
+
         id = gt['id']
-        gt = gt['data']
+        gt = gt['segmentation_map']
   
       gt_labels = set(gt.flatten())
       for l in gt_labels:
@@ -171,8 +180,11 @@ class AntFrequencyWeightedIOUSeg(AntMeasure):
     for predict, gt in data:
       id = None
       if type(gt) == dict:
+        if 'segmentation_map' not in gt:
+          continue
+
         id = gt['id']
-        gt = gt['data']
+        gt = gt['segmentation_map']
   
       gt_labels = set(gt.flatten())
       for l in gt_labels:
@@ -221,8 +233,11 @@ class AntMeanIOUBoundary(AntMeasure):
     for predict, gt in data:
       id = None
       if type(gt) == dict:
+        if 'segmentation_map' not in gt:
+          continue
+
         id = gt['id']
-        gt = gt['data']
+        gt = gt['segmentation_map']
       
       gt_labels = set(gt.flatten())
       rows, cols = gt.shape[:2]

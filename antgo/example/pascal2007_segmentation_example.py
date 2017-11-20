@@ -13,6 +13,7 @@ import numpy as np
 import tensorflow.contrib.slim as slim
 import densenet
 from antgo.trainer.tftrainer import *
+from antgo.utils._resize import *
 
 
 ##################################################
@@ -145,18 +146,10 @@ class GCNSegModel(ModelDesc):
   def model_fn(self, is_training=True, *args, **kwargs):
     # image x
     x_input = tf.placeholder(tf.float32, [1, None, None, 3], name='x')
-  
-    # label y
-    y_input = tf.placeholder(tf.uint8, [1, None, None, 1], name='y')
-
     # resize x
     x = tf.image.resize_bilinear(x_input, [512, 512], align_corners=True)
-    
-    # resize y
-    y = tf.image.resize_nearest_neighbor(y_input, [512, 512], align_corners=True)
-    y = tf.squeeze(y, axis=3)
 
-    # dense net root
+    # dense net
     with slim.arg_scope(densenet.densenet_arg_scope()):
       _, each_layer_output = densenet.densenet121(inputs=x,
         num_classes=21,
@@ -165,29 +158,40 @@ class GCNSegModel(ModelDesc):
     # gcn net
     with tf.variable_scope(None, 'GCN', [each_layer_output], reuse=None):
       logits = gcn_net(each_layer_output, num_classes=21)
-  
-      # cross entropy loss
-      labels = tf.one_hot(y, depth=21)
-      ce_loss = tf.losses.softmax_cross_entropy(labels, logits)
-  
-      # regularization loss
-      regularization_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-  
-      # gather all loss
-      sum_loss = regularization_loss
-      sum_loss.append(ce_loss)
-      sum_loss = tf.add_n(sum_loss)
-      
-      # pixel accuracy
-      predict_y = tf.argmax(logits, axis=3)
-      accuracy = tf.reduce_mean(tf.abs(tf.cast(predict_y, tf.float32) - tf.cast(y, tf.float32)))
-      
-    return sum_loss, accuracy
-    
+
+      if is_training:
+        # label y
+        y_input = tf.placeholder(tf.uint8, [1, None, None, 1], name='y')
+
+        # resize y
+        y = tf.image.resize_nearest_neighbor(y_input, [512, 512], align_corners=True)
+        y = tf.squeeze(y, axis=3)
+
+        # cross entropy loss
+        labels = tf.one_hot(y, depth=21)
+        ce_loss = tf.losses.softmax_cross_entropy(labels, logits)
+
+        # regularization loss
+        regularization_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
+        # gather all loss
+        sum_loss = regularization_loss
+        sum_loss.append(ce_loss)
+        sum_loss = tf.add_n(sum_loss)
+
+        # pixel accuracy
+        predict_y = tf.argmax(logits, axis=3)
+        accuracy = tf.reduce_mean(tf.abs(tf.cast(predict_y, tf.float32) - tf.cast(y, tf.float32)))
+
+        return sum_loss, accuracy
+      else:
+        return logits
+
+
 ##################################################
 ######## 4.step define training process  #########
 ##################################################
-def custom_organize_data(*args, **kwargs):
+def custom_train_data(*args, **kwargs):
   image, label = args[0]
   image = np.expand_dims(image, 0)
   seg_label = label['segmentation_map']
@@ -200,7 +204,7 @@ def custom_organize_data(*args, **kwargs):
 def training_callback(data_source, dump_dir):
   ##########  1.step reorganized as batch ########
   seg_data_source = FilterNode(Node.inputs(data_source), lambda x: 'segmentation' in x[1])
-  seg_data_source = Node(name='custom_organize', action=custom_organize_data, inputs=Node.inputs(seg_data_source))
+  seg_data_source = Node(name='custom_organize', action=custom_train_data, inputs=Node.inputs(seg_data_source))
   
   ##########  2.step building model ##############
   tf_trainer = TFTrainer(ctx.params, dump_dir)
@@ -208,61 +212,51 @@ def training_callback(data_source, dump_dir):
   
   ##########  3.step start training ##############
   iter = 0
-  with tf.Session() as sess:
-    for epoch in range(tf_trainer.max_epochs):
-      data_generator = seg_data_source.iterator_value()
-      while True:
-        try:
-          _, loss_val, accuracy_val = tf_trainer.run(data_generator, {'x': 0, 'y': 1})
-          # record loss value
-          if iter % 50 == 0:
-            loss_channel.send(loss_val)
-            accuracy_channel.send(accuracy_val)
-            
-          iter += 1
-        except StopIteration:
-          break
-      
-      # save
-      tf_trainer.snapshot(epoch)
-    
-# import cv2
+  for epoch in range(tf_trainer.max_epochs):
+    data_generator = seg_data_source.iterator_value()
+    while True:
+      try:
+        _, loss_val, accuracy_val = tf_trainer.run(data_generator, {'x': 0, 'y': 1})
+        # record loss value
+        if iter % 50 == 0:
+          loss_channel.send(loss_val)
+          accuracy_channel.send(accuracy_val)
+
+        iter += 1
+      except StopIteration:
+        break
+
+    # save
+    tf_trainer.snapshot(epoch)
+
+
 ###################################################
 ######## 5.step define infer process     ##########
 ###################################################
 def infer_callback(data_source, dump_dir):
-  ##########  1.step reorganized as batch ########
-  seg_data_source = FilterNode(Node.inputs(data_source), lambda x: 'segmentation' in x[1])
-  
-  ##########  2.step building model ##############
-  # image x
-  x_input = tf.placeholder(tf.float32, [1, None, None, 3])
-  x = tf.image.resize_bilinear(x_input, [512, 512], align_corners=True)
-  
-  # dense net root
-  with slim.arg_scope(densenet.densenet_arg_scope()):
-    _, each_layer_output = densenet.densenet121(inputs=x,
-                                                num_classes=21,
-                                                is_training=True,
-                                                reuse=None)
-  # gcn net
-  with tf.variable_scope(None, 'GCN', [each_layer_output], reuse=None):
-    logits = gcn_net(each_layer_output, num_classes=21)
-  
-  ##########  3.step start training ##############
-  with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
+  ##########  1.step reorganized as batch #########
+  batch_data_source = BatchData(Node.inputs(data_source), batch_size=1)
 
-    for data in seg_data_source.iterator_value():
-      image = data[0]
-      height, width = image.shape[0:2]
-      image = np.expand_dims(image, 0)
-      
-      logits_val = sess.run(logits, feed_dict={x_input: image})
-      logits_val = cv2.resize(logits_val, [width, height])
-      predict_y = np.argmax(logits_val, axis=3)
-      
-      ctx.recorder.record(predict_y)
+  ##########  2.step building model ###############
+  tf_trainer = TFTrainer(ctx.params, dump_dir, is_training=False)
+  tf_trainer.deploy(GCNSegModel())
+
+  ##########  3.step start inference ##############
+  data_generator = batch_data_source.iterator_value()
+  while True:
+    try:
+      logits, feed_data = tf_trainer.run(data_generator, {'x': 0}, whats=True)
+      logits = np.squeeze(logits, axis=0)
+      height, width = feed_data[0][0].shape[0:2]
+
+      # resize to original size
+      resized_logits = resize(logits, (height, width))
+      mask = np.argmax(resized_logits, axis=3)
+
+      # record
+      ctx.recorder.record(mask)
+    except StopIteration:
+      break
 
 
 ###################################################

@@ -222,13 +222,16 @@ class TFTrainer(Trainer):
     self.lr = None
 
   # 2.step run model once
-  def run(self, data_generator, binds):
+  def run(self, data_generator, binds, whats=False):
     # bind data
     feed_dict = {}
+    feed_list = []
     with self.graph.as_default():
       for clone in self.clones:
         # generate data
         data = next(data_generator)
+
+        feed_list.append(data)
 
         for k, v in binds.items():
           placeholder_tensor = self.graph.get_tensor_by_name('{}{}:0'.format(clone.scope, k))
@@ -250,8 +253,7 @@ class TFTrainer(Trainer):
         
         if self.iter_at % self.log_every_n_steps == 0:
           logger.info('loss %f lr %f at iterator %d'%(loss_val, self.sess.run(self.lr), self.iter_at))
-
-      return result
+      return (result, feed_list) if whats else result
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0):
