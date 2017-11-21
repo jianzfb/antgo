@@ -30,7 +30,7 @@ def render_template(template_filename, context):
   return TEMPLATE_ENVIRONMENT.get_template(template_filename).render(context)
 
 
-def everything_to_html(data, dump_dir, data_source=None):
+def everything_to_html(data, dump_dir):
   assert(len(data) == 1)
   # list all statistics
   everything_statistics = []
@@ -91,7 +91,6 @@ def everything_to_html(data, dump_dir, data_source=None):
           if type(analysis_data) == list:
             # for group
             for tag, tag_data in analysis_data:
-              
               model_deep_analysis.append({'analysis_name': measure_name,
                                           'analysis_tag': analysis_title+'-'+tag,
                                           'analysis_data': tag_data})
@@ -126,7 +125,7 @@ def everything_to_html(data, dump_dir, data_source=None):
                               'measure': measure_names})
         
   statistic_visualization = _transform_statistic_to_visualization(everything_statistics)
-  analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis, data_source)
+  analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis)
   model_sig_diffs_visualization = _transform_significant_to_visualization(model_sig_diffs)
   
   context = {
@@ -154,8 +153,13 @@ def _transform_curve_svg_data(data):
   for curve_data in data:
     if type(curve_data) != np.ndarray:
       curve_data = np.array(curve_data)
-    x = curve_data[:,0]
-    y = curve_data[:,1]
+    
+    if curve_data.size == 0:
+      reorganized_data.append([])
+      continue
+      
+    x = curve_data[:, 0]
+    y = curve_data[:, 1]
 
     xlist = x.tolist()
     ylist = y.tolist()
@@ -175,8 +179,8 @@ def _transform_histogram_svg_data(data):
     data = [data]
   for his_data in data:
     svg_data = []
-    for xv,yv in zip(range(0,len(his_data)),his_data):
-      svg_data.append({'x':str(xv),'y':str(yv)})
+    for xv, yv in zip(range(0, len(his_data)), his_data):
+      svg_data.append({'x': str(xv), 'y': str(yv)})
 
     reorganized_data.append(svg_data)
 
@@ -241,10 +245,7 @@ def _transform_statistic_to_visualization(statistic_info):
   return visualization_statistic_info
 
 
-def _transform_analysis_to_visualization(analysis_info, data_source):
-  if data_source is None:
-    return []
-
+def _transform_analysis_to_visualization(analysis_info):
   analysis_vis_data = []
   # analysis-name, analysis-tag, analysis_data
   for data in analysis_info:
@@ -267,29 +268,7 @@ def _transform_analysis_to_visualization(analysis_info, data_source):
     region_samplings = analysis_data['sampling']
     region_samplings_vis = []
     for sampling in region_samplings:
-      name = sampling['name']
-      sampling_index = sampling['data']
-      sampling_data = []
-      for index in sampling_index:
-        d = data_source.at(index)
-        if type(d) == tuple or type(d) == list:
-          d = d[0]
-        
-        if type(d) == str:
-          # text
-          sampling_data.append({'type': 'TEXT', 'data': d})
-        elif type(d) == np.ndarray and len(d.shape) == 3:
-          # image
-          standard_d = scipy.misc.imresize(d, (100, 100))
-          standard_d = np.flipud(standard_d)
-          ss = base64.b64encode(png_encode(standard_d))
-          ss = ss.decode('utf-8')
-          sampling_data.append({'type': 'IMAGE', 'data': ss})
-        elif type(d) == np.ndarray and len(d.shape) == 1:
-          # sound / feature data
-          sampling_data.append({'type': 'CURVE', 'data': d})
-
-      region_samplings_vis.append({'name': name, 'data': sampling_data})
+      region_samplings_vis.append({'name': sampling['name'], 'data': sampling['data']})
 
     item['region_samplings'] = region_samplings_vis
     analysis_vis_data.append(item)

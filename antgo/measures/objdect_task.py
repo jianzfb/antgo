@@ -97,9 +97,10 @@ class AntVOCDet(AntMeasure):
 
           # record sample
           samples_scores.append({'id': sample_id,
-                                 'score': predict_score[dind],
+                                 'score': 1,
                                  'category': gt_category[m],
-                                 'box': gt_bbox[m].tolist()})
+                                 'box': gt_bbox[m].tolist(),
+                                 'index': sample_id * 100 + m})
 
       # process none matched det
       for dind, d in enumerate(predict_box.tolist()):
@@ -115,9 +116,10 @@ class AntVOCDet(AntMeasure):
 
         # record sample
         samples_scores.append({'id': sample_id,
-                               'score': -float("inf"),
+                               'score': 0,
                                'category': gt_category[missed_gt_bi],
-                               'box': gt_bbox[missed_gt_bi].tolist()})
+                               'box': gt_bbox[missed_gt_bi].tolist(),
+                               'index': sample_id * 100 +  missed_gt_bi})
 
       #########################################################################
 
@@ -154,7 +156,7 @@ class AntROCandAUCDet(AntMeasure):
 
         # assert(len(data) == len(label))
         #
-        overlap_thre = float(getattr(self.task, 'overlap', 0.5))
+        overlap_thre = float(getattr(self.task, 'roc_auc_overlap', 0.5))
 
         # 1.step positive sample is overlap > overlap_thre
         predict_box_total = 0
@@ -166,8 +168,8 @@ class AntROCandAUCDet(AntMeasure):
                 continue
 
             det_bbox = predict['det-bbox']
-            det_score = predict['det-score']
-            det_label = predict['det-label']
+            det_score = predict['det-score'].flatten()
+            det_label = predict['det-label'].flatten()
 
             # ground truth bbox and categories
             gt_bbox = np.array(gt['bbox'])
@@ -243,8 +245,16 @@ class AntROCandAUCDet(AntMeasure):
             category_auc_scroes.append(auc_score)
 
         return {'statistic': {'name': self.name,
-                              'value': [{'name': 'ROC', 'value': category_roc_curves, 'type': 'CURVE', 'x': 'FP', 'y': 'TP'},
-                                        {'name': 'AUC', 'value': category_auc_scroes, 'type': 'SCALAR', 'x': 'class', 'y': 'AUC'}]},}
+                              'value': [{'name': 'ROC',
+                                         'value': category_roc_curves,
+                                         'type': 'CURVE',
+                                         'x': 'FP',
+                                         'y': 'TP'},
+                                        {'name': 'AUC',
+                                         'value': category_auc_scroes,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'AUC'}]},}
 
 
 class AntPRDet(AntMeasure):
@@ -263,7 +273,7 @@ class AntPRDet(AntMeasure):
         # assert(len(data) == len(label))
 
         #
-        overlap_thre = float(getattr(self.task,'overlap',0.5))
+        overlap_thre = float(getattr(self.task, 'pr_overlap', 0.5))
 
         # 1.step positive sample is overlap > overlap_thre
         predict_box_total = 0
@@ -275,8 +285,8 @@ class AntPRDet(AntMeasure):
                 continue
 
             det_bbox = predict['det-bbox']
-            det_score = predict['det-score']
-            det_label = predict['det-label']
+            det_score = predict['det-score'].flatten()
+            det_label = predict['det-label'].flatten()
 
             # ground truth bbox and categories
             gt_bbox = np.array(gt['bbox'])
@@ -347,12 +357,16 @@ class AntPRDet(AntMeasure):
             category_pr_curves.append(pr_curve.tolist())
 
         return {'statistic': {'name': self.name,
-                              'value': [{'name': 'Precision-Recall', 'value': category_pr_curves, 'type': 'CURVE', 'x': 'recall', 'y': 'precision'}]},}
+                              'value': [{'name': 'Precision-Recall',
+                                         'value': category_pr_curves,
+                                         'type': 'CURVE',
+                                         'x': 'recall',
+                                         'y': 'precision'}]},}
 
 
 class AntAPRFDet(AntMeasure):
     def __init__(self, task):
-        super(AntAPRFDet, self).__init__(task,'APRF')
+        super(AntAPRFDet, self).__init__(task, 'APRF')
         assert(task.task_type == 'OBJECT-DETECTION')
 
     def eva(self, data, label):
@@ -366,7 +380,7 @@ class AntAPRFDet(AntMeasure):
         # assert(len(data) == len(label))
 
         #
-        overlap_thre = float(getattr(self.task,'APRF_overlap',0.5))
+        overlap_thre = float(getattr(self.task, 'aprf_overlap', 0.5))
 
         # 1.step positive sample is overlap > overlap_thre
         predict_box_total = 0
@@ -458,19 +472,31 @@ class AntAPRFDet(AntMeasure):
             category_F1.append(F1)
 
         return {'statistic': {'name': self.name,
-                              'value': [{'name': 'Accuracy', 'value': category_accuracy,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'accuracy'},
-                                        {'name': 'Precision', 'value': category_precision,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'precision'},
-                                        {'name': 'Recall', 'value': category_recall,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'recall'},
-                                        {'name': 'F1', 'value': category_F1,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'F1'}]}}
+                              'value': [{'name': 'Accuracy',
+                                         'value': category_accuracy,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'accuracy'},
+                                        {'name': 'Precision',
+                                         'value': category_precision,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'precision'},
+                                        {'name': 'Recall',
+                                         'value': category_recall,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'recall'},
+                                        {'name': 'F1',
+                                         'value': category_F1,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'F1'}]}}
 
 
 class AntTFTFDet(AntMeasure):
-    def __init__(self,task):
-        super(AntTFTFDet, self).__init__(task,'TFTF')
+    def __init__(self, task):
+        super(AntTFTFDet, self).__init__(task, 'TFTF')
         assert(task.task_type == 'OBJECT-DETECTION')
 
     def eva(self, data, label):
@@ -495,8 +521,8 @@ class AntTFTFDet(AntMeasure):
                 continue
 
             det_bbox = predict['det-bbox']
-            det_score = predict['det-score']
-            det_label = predict['det-label']
+            det_score = predict['det-score'].flatten()
+            det_label = predict['det-label'].flatten()
 
             # ground truth bbox and categories
             gt_bbox = np.array(gt['bbox'])
@@ -574,14 +600,26 @@ class AntTFTFDet(AntMeasure):
             category_FP.append(FP)
 
         return {'statistic': {'name': self.name,
-                              'value': [{'name': 'true-positive', 'value': category_TP,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'TP'},
-                                        {'name': 'false-negative', 'value': category_FN,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'FN'},
-                                        {'name': 'true-negative', 'value': category_TN,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'TN'},
-                                        {'name': 'false-positive', 'value': category_FP,
-                                         'type': 'SCALAR', 'x': 'class', 'y': 'FP'}]},}
+                              'value': [{'name': 'true-positive',
+                                         'value': category_TP,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'TP'},
+                                        {'name': 'false-negative',
+                                         'value': category_FN,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'FN'},
+                                        {'name': 'true-negative',
+                                         'value': category_TN,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'TN'},
+                                        {'name': 'false-positive',
+                                         'value': category_FP,
+                                         'type': 'SCALAR',
+                                         'x': 'class',
+                                         'y': 'FP'}]},}
 
 
 class AntCOCODet(AntMeasure):
@@ -639,8 +677,8 @@ class AntCOCODet(AntMeasure):
             # a dict {'det-bbox':, 'det-score':, 'det-label':,}
             # b annotation
             det_bbox = a['det-bbox']
-            det_score = a['det-score']
-            det_label = a['det-label']
+            det_score = a['det-score'].flatten()
+            det_label = a['det-label'].flatten()
 
             for box_i, box in enumerate(det_bbox):
                 dt = {}
@@ -971,15 +1009,51 @@ class AntCOCODet(AntMeasure):
             _summarize(0, areaRng='large', maxDets=self.maxDets[2])
 
         return {'statistic':{'name':self.name,
-                             'value':[{'name':self.name,'value':coco_status,'type':'SCALAR', 'x':coco_status_str},
-                                      {'name':'iou-0.5-max-det-100-AP','value':coco_iou05_maxdets100,'type':'SCALAR','x':coco_iou05_maxdets100_str},
-                                      {'name':'iou-0.75-max-det-100-AP','value':coco_iou075_maxdets100,'type':'SCALAR','x':coco_iou075_maxdets100_str},
-                                      {'name':'area-small-AP','value':coco_small_maxdets100,'type':'SCALAR','x':coco_small_maxdets100_str},
-                                      {'name':'area-medium-AP','value':coco_medium_maxdets100,'type':'SCALAR','x':coco_medium_maxdets100_str},
-                                      {'name':'area-large-AP','value':coco_large_maxdets100,'type':'SCALAR','x':coco_large_maxdets100_str},
-                                      {'name':'max-det-1','value':coco_maxdets1,'type':'SCALAR','x':coco_maxdets1_str},
-                                      {'name':'max-det-10','value':coco_maxdets10,'type':'SCALAR','x':coco_maxdets10_str},
-                                      {'name':'max-det-100','value':coco_maxdets100,'type':'SCALAR','x':coco_maxdets100_str},
-                                      {'name':'area-small','value':coco_small_maxdets100_nap,'type':'SCALAR','x':coco_small_maxdets100_nap_str},
-                                      {'name':'area-medium','value':coco_medium_maxdets100_nap,'type':'SCALAR','x':coco_medium_maxdets100_nap_str},
-                                      {'name':'area-large','value':coco_large_maxdets100_nap,'type':'SCALAR','x':coco_large_maxdets100_nap_str}]},}
+                             'value':[{'name': self.name,
+                                       'value': coco_status,
+                                       'type': 'SCALAR',
+                                       'x': coco_status_str},
+                                      {'name': 'iou-0.5-max-det-100-AP',
+                                       'value': coco_iou05_maxdets100,
+                                       'type': 'SCALAR',
+                                       'x': coco_iou05_maxdets100_str},
+                                      {'name': 'iou-0.75-max-det-100-AP',
+                                       'value': coco_iou075_maxdets100,
+                                       'type': 'SCALAR',
+                                       'x': coco_iou075_maxdets100_str},
+                                      {'name': 'area-small-AP',
+                                       'value': coco_small_maxdets100,
+                                       'type': 'SCALAR',
+                                       'x': coco_small_maxdets100_str},
+                                      {'name': 'area-medium-AP',
+                                       'value': coco_medium_maxdets100,
+                                       'type': 'SCALAR',
+                                       'x': coco_medium_maxdets100_str},
+                                      {'name': 'area-large-AP',
+                                       'value': coco_large_maxdets100,
+                                       'type': 'SCALAR',
+                                       'x': coco_large_maxdets100_str},
+                                      {'name': 'max-det-1',
+                                       'value': coco_maxdets1,
+                                       'type': 'SCALAR',
+                                       'x': coco_maxdets1_str},
+                                      {'name': 'max-det-10',
+                                       'value': coco_maxdets10,
+                                       'type': 'SCALAR',
+                                       'x': coco_maxdets10_str},
+                                      {'name': 'max-det-100',
+                                       'value': coco_maxdets100,
+                                       'type': 'SCALAR',
+                                       'x': coco_maxdets100_str},
+                                      {'name': 'area-small',
+                                       'value': coco_small_maxdets100_nap,
+                                       'type': 'SCALAR',
+                                       'x': coco_small_maxdets100_nap_str},
+                                      {'name': 'area-medium',
+                                       'value': coco_medium_maxdets100_nap,
+                                       'type': 'SCALAR',
+                                       'x': coco_medium_maxdets100_nap_str},
+                                      {'name': 'area-large',
+                                       'value': coco_large_maxdets100_nap,
+                                       'type': 'SCALAR',
+                                       'x': coco_large_maxdets100_nap_str}]},}

@@ -63,7 +63,7 @@ class SSDObjDModel(ModelDesc):
     
     # extend label (background is always 1)
     ext_labels = labels
-    ext_classes_num = self.num_classes + 1
+    ext_classes_num = self.num_classes
     
     # standard ssd model
     with slim.arg_scope(ssd_arg_scope()):
@@ -155,7 +155,7 @@ class SSDObjDModel(ModelDesc):
       rscores = tf.concat(rscores_list, axis=1)
       rbboxes = tf.concat(rbboxes_list, axis=1)
       return [rscores, rbboxes]
-      
+
 ##################################################
 ######## 4.step define training process  #########
 ##################################################

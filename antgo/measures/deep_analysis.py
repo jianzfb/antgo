@@ -6,24 +6,83 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import numpy as np
+from antgo.utils._resize import *
+from antgo.utils.encode import *
+import base64
+import copy
+
+# TODO: update incoming (data relevant)
+def _whats_data(data_source, id, infos):
+  d = data_source.at(id)
+  if type(d) == tuple or type(d) == list:
+    d = d[0]
+  
+  if data_source.dataset_type == "TEXT":
+    # text
+    return {'type': 'TEXT', 'data': d}
+  elif data_source.dataset_type == "IMAGE":
+    # image
+    height, width = d.shape[0:2]
+    if len(d.shape) == 2:
+      d = np.expand_dims(d, 1)
+      d = np.concatenate((d, d, d), axis=2)
+    standard_d = resize(d, (50, 50))
+    
+    if 'box' in infos:
+      x1, y1, x2, y2 = infos['box']
+      x_scale = 50.0 / float(width)
+      y_scale = 50.0 / float(height)
+      x1 = np.minimum(np.maximum(0, x1), width - 1)
+      x1 = x1 * x_scale
+      y1 = np.minimum(np.maximum(0, y1), height - 1)
+      y1 = y1 * y_scale
+      x2 = np.maximum(np.minimum(width - 1, x2), 0)
+      x2 = x2 * x_scale
+      y2 = np.maximum(np.minimum(height - 1, y2), 0)
+      y2 = y2 * y_scale
+
+      standard_d[int(y1), int(x1):int(x2), 0] = 255
+      standard_d[int(y1), int(x1):int(x2), 1] = 0
+      standard_d[int(y1), int(x1):int(x2), 2] = 0
+  
+      standard_d[int(y2), int(x1):int(x2), 0] = 255
+      standard_d[int(y2), int(x1):int(x2), 1] = 0
+      standard_d[int(y2), int(x1):int(x2), 2] = 0
+  
+      standard_d[int(y1):int(y2), int(x1), 0] = 255
+      standard_d[int(y1):int(y2), int(x1), 1] = 0
+      standard_d[int(y1):int(y2), int(x1), 2] = 0
+  
+      standard_d[int(y1):int(y2), int(x2), 0] = 255
+      standard_d[int(y1):int(y2), int(x2), 1] = 0
+      standard_d[int(y1):int(y2), int(x2), 2] = 0
+
+    ss = base64.b64encode(png_encode(standard_d))
+    ss = ss.decode('utf-8')
+    return {'type': 'IMAGE', 'data': ss}
+  
+  return None
 
 #bug here#
-def discrete_multi_model_measure_analysis(samples_score, data_id, data_source, filter_tag=None, random_sampling=5):
+def discrete_multi_model_measure_analysis(samples_score, samples_map, data_source, filter_tag=None, random_sampling=5):
   # 95%, 52%, 42%, 13%, only best, 0%
   # correct is 1; error is 0
   # 95% - sample could be recognized correctly by 95% models
   # 52% - sample could be recognized correctly by 52% models
   # ...
   # filter by tag
+  max_num = samples_score.shape[1]
+  assert(max_num == len(samples_map))
+
   remained_id = []
   if filter_tag is not None:
-    for data_index in data_id:
-      _, label = data_source.at(data_index)
+    for data_index in range(max_num):
+      _, label = data_source.at(samples_map[data_index]['id'])
       if filter_tag in label['tag']:
         remained_id.append(data_index)
 
   if len(remained_id) == 0:
-    remained_id = data_id
+    remained_id = range(max_num)
 
   samples_score = samples_score[:, remained_id]
   model_num, samples_num = samples_score.shape[0:2]
@@ -32,7 +91,7 @@ def discrete_multi_model_measure_analysis(samples_score, data_id, data_source, f
   cols_scores = np.sum(samples_score, axis=0)
   cols_orders = np.argsort(-cols_scores)
   ordered_samples_score = samples_score[:, cols_orders]
-  ordered_data_id = [remained_id[i] for i in cols_orders]
+  ordered_data_id = [samples_map[remained_id[i]]['id'] for i in cols_orders]
 
   # sort rows
   rows_scores = np.sum(ordered_samples_score, axis=1)
@@ -44,40 +103,74 @@ def discrete_multi_model_measure_analysis(samples_score, data_id, data_source, f
   score_hist = score_hist / float(model_num)
   # 95% (94% ~ 96%)
   pos_95 = np.searchsorted(score_hist, [0.95])[0]
-  pos_95_s = np.maximum(0, pos_95 - random_sampling/2)
-  pos_95_e = np.minimum(samples_num, pos_95_s+random_sampling)
-  region_95 = np.arange(pos_95_s, pos_95_e).tolist()
+  pos_95_s = int(np.maximum(0, pos_95 - random_sampling/2))
+  pos_95_e = int(np.minimum(samples_num, pos_95_s+random_sampling))
+
+  if pos_95_e <= pos_95_s:
+    pos_95_e = pos_95_s + 1
+  region_95 = cols_orders[pos_95_s: pos_95_e]
+  region_95 = [_whats_data(data_source,
+                           samples_map[remained_id[index]]['id'],
+                           samples_map[remained_id[index]]) for index in region_95]
 
   # 52%
   pos_52 = np.searchsorted(score_hist, [0.52])[0]
-  pos_52_s = np.maximum(0, pos_52 - random_sampling/2)
-  pos_52_e = np.minimum(samples_num, pos_52_s+random_sampling)
-  region_52 = np.arange(pos_52_s, pos_52_e)
+  pos_52_s = int(np.maximum(0, pos_52 - random_sampling/2))
+  pos_52_e = int(np.minimum(samples_num, pos_52_s+random_sampling))
+  if pos_52_e <= pos_52_s:
+    pos_52_e = pos_95_s + 1
+  region_52 = cols_orders[pos_52_s:pos_52_e]
+  region_52 = [_whats_data(data_source,
+                           samples_map[remained_id[index]]['id'],
+                           samples_map[remained_id[index]]) for index in region_52]
 
   # 42%
   pos_42 = np.searchsorted(score_hist, [0.42])[0]
-  pos_42_s = np.maximum(0, pos_42 - random_sampling/2)
-  pos_42_e = np.minimum(samples_num, pos_42_s+random_sampling)
-  region_42 = np.arange(pos_42_s, pos_42_e)
-
+  pos_42_s = int(np.maximum(0, pos_42 - random_sampling/2))
+  pos_42_e = int(np.minimum(samples_num, pos_42_s+random_sampling))
+  if pos_42_e <= pos_42_s:
+    pos_42_e = pos_42_s + 1
+  # region_42 = np.arange(pos_42_s, pos_42_e)
+  region_42 = cols_orders[pos_42_s:pos_42_e]
+  region_42 = [_whats_data(data_source,
+                           samples_map[remained_id[index]]['id'],
+                           samples_map[remained_id[index]]) for index in region_42]
+  
   # 13%
   pos_13 = np.searchsorted(score_hist, [0.13])[0]
-  pos_13_s = np.maximum(0, pos_13 - random_sampling/2)
-  pos_13_e = np.minimum(samples_num, pos_13_s+random_sampling)
-  region_13 = np.arange(pos_13_s, pos_13_e)
+  pos_13_s = int(np.maximum(0, pos_13 - random_sampling/2))
+  pos_13_e = int(np.minimum(samples_num, pos_13_s+random_sampling))
+  if pos_13_e <= pos_13_s:
+    pos_13_e = pos_13_s + 1
+  region_13 = cols_orders[pos_13_s: pos_13_e]
+  # region_13 = np.arange(pos_13_s, pos_13_e)
+  region_13 = [_whats_data(data_source,
+                           samples_map[remained_id[index]]['id'],
+                           samples_map[remained_id[index]]) for index in region_13]
 
   # only best
   pos_one = np.searchsorted(score_hist, [1.0/float(model_num)])[0]
-  pos_one_s = np.maximum(0, pos_one - random_sampling/2)
-  pos_one_e = np.minimum(samples_num, pos_one_s+random_sampling)
-  region_one = np.arange(pos_one_s,pos_one_e)
-
+  pos_one_s = int(np.maximum(0, pos_one - random_sampling/2))
+  pos_one_e = int(np.minimum(samples_num, pos_one_s+random_sampling))
+  if pos_one_e <= pos_one_s:
+    pos_one_e = pos_one_s + 1
+  # region_one = np.arange(pos_one_s,pos_one_e)
+  region_one = cols_orders[pos_one_s: pos_one_e]
+  region_one = [_whats_data(data_source,
+                            samples_map[remained_id[index]]['id'],
+                            samples_map[remained_id[index]]) for index in region_one]
 
   # 0%
   pos_zero = np.searchsorted(score_hist, [0.0])[0]
-  pos_zero_s = np.maximum(0, pos_zero - random_sampling / 2)
-  pos_zero_e = np.minimum(samples_num, pos_zero_s + random_sampling)
-  region_zero = np.arange(pos_zero_s, pos_zero_e)
+  pos_zero_s = int(np.maximum(0, pos_zero - random_sampling / 2))
+  pos_zero_e = int(np.minimum(samples_num, pos_zero_s + random_sampling))
+  if pos_zero_e <= pos_zero_s:
+    pos_zero_e = pos_zero_s + 1
+  region_zero = cols_orders[pos_zero_s: pos_zero_e]
+  # region_zero = np.arange(pos_zero_s, pos_zero_e)
+  region_zero = [_whats_data(data_source,
+                            samples_map[remained_id[index]]['id'],
+                            samples_map[remained_id[index]]) for index in region_zero]
 
   return ordered_samples_score, \
          ordered_model_id, \
@@ -90,19 +183,19 @@ def discrete_multi_model_measure_analysis(samples_score, data_id, data_source, f
          region_zero
 
 
-def continuous_multi_model_measure_analysis(samples_score, data_id, data_source, filter_tag=None, random_sampling=10):
+def continuous_multi_model_measure_analysis(samples_score, samples_map, data_source, filter_tag=None, random_sampling=10):
+  max_num = samples_score.shape[1]
+  assert(max_num == len(samples_map))
   # filter by tag
   remained_id = []
   if filter_tag is not None:
-    for data_index in data_id:
-      if data_index == -1:
-        continue
-      _, label = data_source.at(data_index)
+    for data_index in range(max_num):
+      _, label = data_source.at(samples_map[data_index]['id'])
       if filter_tag == label['tag']:
         remained_id.append(data_index)
   
   if len(remained_id) == 0:
-    remained_id = [index for index in data_id if index != -1]
+    remained_id = range(max_num)
   
   samples_score = samples_score[:, remained_id]
   
@@ -119,6 +212,7 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   # reorder cols (samples)
   s = np.sum(reorganized_samples_score, axis=0)
   reorganized_sample_id = np.argsort(-s)
+  output_reorganized_sample_id = [samples_map[remained_id[i]]['id'] for i in reorganized_sample_id]
   reorganized_samples_score = samples_score[:, reorganized_sample_id.tolist()]
 
   # high score region (0 ~ 1/10) - good
@@ -129,7 +223,9 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   high_region_sampling = reorganized_sample_id[region_start:region_end]
   high_region_random_sampling = np.minimum(len(high_region_sampling), random_sampling)
   high_region_sampling = np.random.choice(high_region_sampling, high_region_random_sampling, False)
-  high_region_sampling = [remained_id[index] for index in high_region_sampling]
+  high_region_sampling = [_whats_data(data_source,
+                                      samples_map[remained_id[index]]['id'],
+                                      samples_map[remained_id[index]]) for index in high_region_sampling]
   
   # middle score region (4/10 ~ 6/10) - just so so
   region_start = int(np.maximum(samples_num / 10 * 4, 0))
@@ -139,7 +235,9 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   middle_region_sampling = reorganized_sample_id[region_start: region_end]
   middle_region_random_sampling = np.minimum(len(middle_region_sampling), random_sampling)
   middle_region_sampling = np.random.choice(middle_region_sampling, middle_region_random_sampling, False)
-  middle_region_sampling = [remained_id[index] for index in middle_region_sampling]
+  middle_region_sampling = [_whats_data(data_source,
+                                        samples_map[remained_id[index]]['id'],
+                                        samples_map[remained_id[index]]) for index in middle_region_sampling]
   
   # low score region (9/10 ~ 10/10) - bad
   region_start = int(np.maximum(samples_num / 10 * 9, 0))
@@ -150,12 +248,13 @@ def continuous_multi_model_measure_analysis(samples_score, data_id, data_source,
   low_region_sampling = reorganized_sample_id[region_start: region_end]
   low_region_random_sampling = np.minimum(len(low_region_sampling), random_sampling)
   low_region_sampling = np.random.choice(low_region_sampling, low_region_random_sampling, False)
-  low_region_sampling = [remained_id[index] for index in low_region_sampling]
+  low_region_sampling = [_whats_data(data_source,
+                                     samples_map[remained_id[index]]['id'],
+                                     samples_map[remained_id[index]]) for index in low_region_sampling]
 
-  # samples score, [], []
   return reorganized_samples_score, \
          reorganized_model_id, \
-         reorganized_sample_id, \
+         output_reorganized_sample_id, \
          low_region_sampling, \
          middle_region_sampling, \
          high_region_sampling

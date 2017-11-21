@@ -1,5 +1,5 @@
 batch_size: 1
-num_classes: 20
+num_classes: 21
 num_clones: 1
 max_epochs: 400
 learning_rate_decay_type: 'exponential'

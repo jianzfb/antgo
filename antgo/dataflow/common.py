@@ -17,7 +17,7 @@ try:
 except:
     import Queue as queue
 
-
+# https://github.com/ppwwyyxx/tensorpack/blob/39b010abc6320af31c72e51c0090f5f2a53d83a5/tensorpack/dataflow/prefetch.py
 class BatchData(Node):
   class _FetchDataThread(StoppableProcess):
     def __init__(self, host_node, buffer_size):

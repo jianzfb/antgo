@@ -46,7 +46,9 @@ class Dataset(BaseNode):
     # basic info
     self.train_or_test = train_or_test
     self.dir = dir
-
+    
+    self._dataset_type = 'IMAGE'
+    
     # config extent params
     # included, excluded, transform(cls->id)
     self.ext_params = ext_params
@@ -88,7 +90,14 @@ class Dataset(BaseNode):
   @epoch.setter
   def epoch(self, val):
     self._epoch = val
-
+  
+  @property
+  def dataset_type(self):
+    return self._dataset_type
+  @dataset_type.setter
+  def dataset_type(self, val):
+    self._dataset_type = val
+  
   @property
   def data_generator(self):
     return self._data_generator

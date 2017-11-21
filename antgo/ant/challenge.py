@@ -44,6 +44,7 @@ class AntChallenge(AntBase):
         self.token = None
       elif challenge_task_config['status'] == 'SUSPEND':
         # prohibit submit challenge task frequently
+        # submit only one in one week
         logger.error('prohibit submit challenge task frequently')
         exit(-1)
       elif challenge_task_config['status'] == 'OK':
@@ -72,7 +73,6 @@ class AntChallenge(AntBase):
     # now time stamp
     # now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
     now_time_stamp = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
-
     
     # 0.step warp model (main_file and main_param)
     self.stage = 'CHALLENGE-MODEL'
@@ -151,8 +151,7 @@ class AntChallenge(AntBase):
             result['statistic']['value'][0]['interval'] = confidence_interval
 
           evaluation_measure_result.append(result)
-          
-          break
+
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
       # compare statistic
@@ -268,34 +267,43 @@ class AntChallenge(AntBase):
   
             # reorganize data as score matrix
             method_num = len(method_samples_list)
-            # samples_num = len(method_samples_list[0]['data'])
-            samples_num = ant_test_dataset.size
+            # samples_num are the same among methods
+            samples_num = len(method_samples_list[0]['data'])
+            # samples_num = ant_test_dataset.size
             method_measure_mat = np.zeros((method_num, samples_num))
-            samples_id = -1 * np.ones((samples_num), np.int64)
+            samples_map = []
   
             for method_id, method_measure_data in enumerate(method_samples_list):
+              # reorder data by index
+              order_key = 'id'
+              if 'index' in method_measure_data['data'][0]:
+                order_key = 'index'
+              method_measure_data_order = sorted(method_measure_data['data'], key=lambda x: x[order_key])
+              
               if method_id == 0:
                 # record sample id
-                for sample_id, sample in enumerate(method_measure_data['data']):
-                  samples_id[sample_id] = sample['id']
+                for sample_id, sample in enumerate(method_measure_data_order):
+                  samples_map.append(sample)
   
               for sample_id, sample in enumerate(method_measure_data['data']):
-                  method_measure_mat[method_id, samples_id[sample_id]] = sample['score']
+                  method_measure_mat[method_id, sample_id] = sample['score']
   
-            # check method_measure_mat is binary (0 or 1)
             is_binary = False
-            check_data = method_samples_list[0]['data'][0]['score']
-            if type(check_data) == int:
+            # collect all score
+            test_score = [td['score'] for td in method_samples_list[0]['data']
+                                if td['score'] > -float("inf") and td['score'] < float("inf")]
+            hist, x_bins = np.histogram(test_score, 100)
+            if len(np.where(hist > 0.0)[0]) <= 2:
               is_binary = True
-  
+
             # score matrix analysis
             if not is_binary:
               s, ri, ci, lr_samples, mr_samples, hr_samples = \
-                continuous_multi_model_measure_analysis(method_measure_mat, samples_id.tolist(), ant_test_dataset)
+                continuous_multi_model_measure_analysis(method_measure_mat, samples_map, ant_test_dataset)
               
               analysis_tag = 'Global'
               if len(measure_data_list) > 1:
-                analysis_tag = 'Global-Category ('+str(running_ant_task.class_label[category_id]) + ')'
+                analysis_tag = 'Global-Category-'+str(running_ant_task.class_label[category_id])
               
               model_name_ri = [method_samples_list[r]['name'] for r in ri]
               task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
@@ -313,13 +321,13 @@ class AntChallenge(AntBase):
                 for tag in tags:
                   g_s, g_ri, g_ci, g_lr_samples, g_mr_samples, g_hr_samples = \
                     continuous_multi_model_measure_analysis(method_measure_mat,
-                                                            samples_id.tolist(),
+                                                            samples_map,
                                                             ant_test_dataset,
                                                             filter_tag=tag)
                   
                   analysis_tag = 'Group'
                   if len(measure_data_list) > 1:
-                    analysis_tag = 'Group-Category (' + str(running_ant_task.class_label[category_id]) + ')'
+                    analysis_tag = 'Group-Category-' + str(running_ant_task.class_label[category_id])
 
                   if analysis_tag not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
                     task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
@@ -337,13 +345,19 @@ class AntChallenge(AntBase):
             else:
               s, ri, ci, region_95, region_52, region_42, region_13, region_one, region_zero = \
                 discrete_multi_model_measure_analysis(method_measure_mat,
-                                                      samples_id.tolist(),
+                                                      samples_map,
                                                       ant_test_dataset)
-              task_running_statictic[self.ant_name]['analysis'][measure_name]['global'] = \
+
+              analysis_tag = 'Global'
+              if len(measure_data_list) > 1:
+                analysis_tag = 'Global-Category-' + str(running_ant_task.class_label[category_id])
+
+              model_name_ri = [method_samples_list[r]['name'] for r in ri]
+              task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
                               {'value': s,
                                'type': 'MATRIX',
                                'x': ci,
-                               'y': ri,
+                               'y': model_name_ri,
                                'sampling': [{'name': '95%', 'data': region_95},
                                             {'name': '52%', 'data': region_52},
                                             {'name': '42%', 'data': region_42},
@@ -357,16 +371,24 @@ class AntChallenge(AntBase):
                 for tag in tags:
                   g_s, g_ri, g_ci, g_region_95, g_region_52, g_region_42, g_region_13, g_region_one, g_region_zero = \
                     discrete_multi_model_measure_analysis(method_measure_mat,
-                                                            samples_id.tolist(),
+                                                            samples_map,
                                                             ant_test_dataset,
                                                             filter_tag=tag)
-                  if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
-                    task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
-  
+                  # if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                  #   task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
+                  #
+                  analysis_tag = 'Group'
+                  if len(measure_data_list) > 1:
+                    analysis_tag = 'Group-Category-' + str(running_ant_task.class_label[category_id])
+
+                  if analysis_tag not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                    task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
+
+                  model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
                   tag_data = {'value': g_s,
                               'type': 'MATRIX',
                               'x': g_ci,
-                              'y': g_ri,
+                              'y': model_name_ri,
                               'sampling': [{'name': '95%', 'data': region_95},
                                            {'name': '52%', 'data': region_52},
                                            {'name': '42%', 'data': region_42},
@@ -374,11 +396,11 @@ class AntChallenge(AntBase):
                                            {'name': 'best', 'data': region_one},
                                            {'name': 'zero', 'data': region_zero}]}
   
-                  task_running_statictic[self.ant_name]['analysis'][measure_name]['group'].append((tag, tag_data))
+                  task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
 
       # notify
       self.context.job.send({'DATA': {'REPORT': copy.deepcopy(task_running_statictic), 'RECORD': intermediate_dump_dir}})
 
       # generate report html
       logger.info('generate model evaluation report')
-      everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp), ant_test_dataset)
+      everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
