@@ -30,11 +30,11 @@ class StoppableThread(threading.Thread):
   """
   A thread that has a 'stop' event.
   """
-  def __init__(self):
+  def __init__(self, evt=None):
     super(StoppableThread, self).__init__()
-    self._stop_evt = threading.Event()
-    
-    self._stop_condition = None
+    if evt is None:
+      evt = threading.Event()
+    self._stop_evt = evt
 
   def stop(self):
     """ stop the thread"""
@@ -60,12 +60,6 @@ class StoppableThread(threading.Thread):
         return q.get(timeout=5)
       except queue.Empty:
         pass
-  
-  @property
-  def stop_condition(self):
-    if self._stop_condition is None:
-      self._stop_condition = threading.Condition()
-    return self._stop_condition
   
   
 class LoopThread(StoppableThread):

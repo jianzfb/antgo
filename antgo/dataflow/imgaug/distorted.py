@@ -1,4 +1,4 @@
-# encoding=utf-8
+# -*- coding: UTF-8 -*-
 # @Time    : 17-6-8
 # @File    : distorted.py
 # @Author  : jian<jian@mltalker.com>

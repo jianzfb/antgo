@@ -1,4 +1,4 @@
-# encoding=utf-8
+# -*- coding: UTF-8 -*-
 # @Time    : 17-6-7
 # @File    : common.py
 # @Author  : jian<jian@mltalker.com>
@@ -17,60 +17,14 @@ try:
 except:
     import Queue as queue
 
-# https://github.com/ppwwyyxx/tensorpack/blob/39b010abc6320af31c72e51c0090f5f2a53d83a5/tensorpack/dataflow/prefetch.py
 class BatchData(Node):
-  class _FetchDataThread(StoppableProcess):
-    def __init__(self, host_node, buffer_size):
-      super(BatchData._FetchDataThread, self).__init__(buffer_size)
-      self.daemon = True
-      self._host_node = host_node
-      self._is_launched = False
-
-    @property
-    def is_launched(self):
-      return self._is_launched
-    @is_launched.setter
-    def is_launched(self, val):
-      self._is_launched = val
-
-    def run(self):
-      while True:
-        try:
-          data = self._host_node._fetch_batch_data()
-          self.process_queue.put(data)
-          
-          # force input update
-          for i in self._host_node._positional_inputs:
-            i._force_inputs_dirty()
-          for name, i in items(self._host_node._keyword_inputs):
-            i._force_inputs_dirty()
-            
-        except StopIteration:
-          with self.process_condition:
-            self.process_queue.put(DIE)
-            self.process_condition.wait()
-          if self.stopped():
-            break
-        except:
-          info = sys.exc_info()
-          logger.error('%s:%s' % (info[0], info[1]))
-          exit(-1)
-      
-  def __init__(self, inputs, batch_size, remainder=False, buffer_size=0):
+  def __init__(self, inputs, batch_size, remainder=False):
     super(BatchData, self).__init__(name=None, action=None, inputs=inputs)
     self.batch_size = batch_size
     self.remainder = remainder
     self.stop_iteration = False
     self.buffer = None
-    if buffer_size > 0:
-      self.producer_wait = False
-      self.fetch_data_thread = BatchData._FetchDataThread(self, buffer_size)
-      self.producer_condition = self.fetch_data_thread.process_condition
-      self.buffer = self.fetch_data_thread.process_queue
 
-      # register at context
-      get_global_context().register_stoppable_thread(self.fetch_data_thread)
-      
   def _fetch_batch_data(self):
     try:
       if self.stop_iteration:
@@ -118,25 +72,7 @@ class BatchData(Node):
       exit(-1)
   
   def _evaluate(self):
-    if self.buffer is not None:
-      if not self.fetch_data_thread.is_launched:
-        self.fetch_data_thread.start()
-        self.fetch_data_thread.is_launched = True
-
-      if self.producer_wait:
-        with self.producer_condition:
-          self.producer_condition.notify_all()
-        self.producer_wait = False
-      
-      data = self.buffer.get()
-      if data == DIE:
-        # no enough data as batch
-        self.producer_wait = True
-        raise StopIteration
-      else:
-        return data
-    else:
-      return self._fetch_batch_data()
+    return self._fetch_batch_data()
     
   @staticmethod
   def _aggregate_batch(batch_list):
@@ -610,3 +546,146 @@ class FilterNode(Node):
       data = self._positional_inputs[0].get_value()
 
     return data
+
+class PipeNode(Node):
+  def __init__(self):
+    super(PipeNode, self).__init__(name='pipe')
+    self.entry_node = Input(name='entry')
+    self.end_node = self.entry_node
+
+  def link(self, node, **kwargs):
+    self.end_node = node(Node.inputs(self.end_node), kwargs)
+
+  def set_value(self, new_value):
+    self.entry_node.set_value(new_value)
+
+  def get_value(self):
+    return self.end_node.get_value()
+
+
+class MultiThreadNode(object):
+  """
+  Same as :class:`MapData`, but start threads to run the mapping function.
+  This is useful when the mapping function is the bottleneck, but you don't
+  want to start processes for the entire dataflow pipeline.
+  Note:
+      1. There is tiny communication overhead with threads, but you
+         should avoid starting many threads in your main process to reduce GIL contention.
+         The threads will only start in the process which calls :meth:`reset_state()`.
+         Therefore you can use ``PrefetchDataZMQ(MultiThreadMapData(...), 1)``
+         to reduce GIL contention.
+      2. Threads run in parallel and can take different time to run the
+         mapping function. Therefore the order of datapoints won't be
+         preserved, and datapoints from one pass of `df.get_data()` might get
+         mixed with datapoints from the next pass.
+         You can use **strict mode**, where `MultiThreadMapData.get_data()`
+         is guranteed to produce the exact set which `df.get_data()`
+         produces. Although the order of data still isn't preserved.
+  """
+
+  class _Worker(StoppableThread):
+    def __init__(self, inq, outq, evt, map_func):
+      super(MultiThreadNode._Worker, self).__init__(evt)
+      self.inq = inq
+      self.outq = outq
+      self.func = map_func
+      self.daemon = True
+
+    def run(self):
+      try:
+        while True:
+          dp = self.queue_get_stoppable(self.inq)
+          if self.stopped():
+            return
+
+          # cannot ignore None here. will lead to unsynced send/recv
+          self.outq.put(self.func(dp))
+      except Exception:
+        if self.stopped():
+          pass  # skip duplicated error messages
+        else:
+          raise
+      finally:
+        self.stop()
+
+  def __init__(self, input_node, process_pipe, nr_thread, buffer_size=200, strict=False):
+    """
+    Args:
+        input_node (DataFlow): the dataflow to map
+        nr_thread (int): number of threads to use
+        map_func (callable): datapoint -> datapoint | None
+        buffer_size (int): number of datapoints in the buffer
+        strict (bool): use "strict mode", see notes above.
+    """
+    super(MultiThreadNode, self).__init__()
+
+    self._strict = strict
+    self.nr_thread = nr_thread
+    self.buffer_size = buffer_size
+
+    def map_func(x):
+      process_pipe.set_value(x)
+      return process_pipe.get_value()
+
+    self._is_start = False
+    self._threads = []
+
+    self._input_node = input_node
+    self._iter = None
+    self._in_queue = queue.Queue()
+    self._out_queue = queue.Queue()
+    self._evt = threading.Event()
+    self._threads = [MultiThreadNode._Worker(
+      self._in_queue, self._out_queue, self._evt, map_func)
+                     for _ in range(self.nr_thread)]
+
+  def _fill_buffer(self):
+    n = self.buffer_size - self._in_queue.qsize() - self._out_queue.qsize()
+    assert n >= 0, n
+    if n == 0:
+      return
+    try:
+      for _ in range(n):
+        self._in_queue.put(next(self._iter))
+    except StopIteration:
+      logger.error("[MultiThreadMapData] buffer_size cannot be larger than the size of the DataFlow!")
+      raise
+
+  def _recv(self):
+    ret = self._out_queue.get()
+    if ret is None:
+      assert not self._strict, \
+        "[MultiThreadMapData] Map function cannot return None when strict mode is used."
+    return ret
+
+  def iterator_value(self):
+    if not self._is_start:
+      for t in self._threads:
+        t.start()
+      self._is_start = True
+
+    self._iter = self._input_node.iterator_value()
+
+    # fill bufer
+    self._fill_buffer()
+
+    is_over = False
+    while True:
+      # return value
+      yield self._recv()
+
+      if not is_over:
+        try:
+          self._in_queue.put(next(self._iter))
+        except StopIteration:
+          is_over = True
+      else:
+        if self._out_queue.qsize() == 0:
+          self._input_node._reset_iteration_state()
+          break
+
+  # def __del__(self):
+  #   if self._evt is not None:
+  #     self._evt.set()
+  #   for p in self._threads:
+  #     p.join()
