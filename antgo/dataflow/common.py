@@ -547,23 +547,8 @@ class FilterNode(Node):
 
     return data
 
-class PipeNode(Node):
-  def __init__(self):
-    super(PipeNode, self).__init__(name='pipe')
-    self.entry_node = Input(name='entry')
-    self.end_node = self.entry_node
 
-  def link(self, node, **kwargs):
-    self.end_node = node(Node.inputs(self.end_node), kwargs)
-
-  def set_value(self, new_value):
-    self.entry_node.set_value(new_value)
-
-  def get_value(self):
-    return self.end_node.get_value()
-
-
-class MultiThreadNode(object):
+class MultiThreadPipe(Node):
   """
   Same as :class:`MapData`, but start threads to run the mapping function.
   This is useful when the mapping function is the bottleneck, but you don't
@@ -585,7 +570,7 @@ class MultiThreadNode(object):
 
   class _Worker(StoppableThread):
     def __init__(self, inq, outq, evt, map_func):
-      super(MultiThreadNode._Worker, self).__init__(evt)
+      super(MultiThreadPipe._Worker, self).__init__(evt)
       self.inq = inq
       self.outq = outq
       self.func = map_func
@@ -608,7 +593,7 @@ class MultiThreadNode(object):
       finally:
         self.stop()
 
-  def __init__(self, input_node, process_pipe, nr_thread, buffer_size=200, strict=False):
+  def __init__(self, input_node, pipe_nodes, nr_thread, buffer_size=200, strict=False):
     """
     Args:
         input_node (DataFlow): the dataflow to map
@@ -617,15 +602,20 @@ class MultiThreadNode(object):
         buffer_size (int): number of datapoints in the buffer
         strict (bool): use "strict mode", see notes above.
     """
-    super(MultiThreadNode, self).__init__()
+    super(MultiThreadPipe, self).__init__(name='pipe')
 
     self._strict = strict
     self.nr_thread = nr_thread
     self.buffer_size = buffer_size
-
-    def map_func(x):
-      process_pipe.set_value(x)
-      return process_pipe.get_value()
+    self.entry_node = Input(name='entry')
+    self.end_node = self.entry_node
+    
+    for node in pipe_nodes:
+      self.end_node = node[0](Node.inputs(self.end_node), **node[1])
+    
+    def pipe_process_func(x):
+      self.entry_node.set_value(x)
+      return self.end_node.get_value()
 
     self._is_start = False
     self._threads = []
@@ -635,8 +625,8 @@ class MultiThreadNode(object):
     self._in_queue = queue.Queue()
     self._out_queue = queue.Queue()
     self._evt = threading.Event()
-    self._threads = [MultiThreadNode._Worker(
-      self._in_queue, self._out_queue, self._evt, map_func)
+    self._threads = [MultiThreadPipe._Worker(
+      self._in_queue, self._out_queue, self._evt, pipe_process_func)
                      for _ in range(self.nr_thread)]
 
   def _fill_buffer(self):
@@ -684,6 +674,12 @@ class MultiThreadNode(object):
           self._input_node._reset_iteration_state()
           break
 
+  def set_value(self, new_value):
+    raise NotImplementedError
+
+  def get_value(self):
+    raise NotImplementedError
+  
   # def __del__(self):
   #   if self._evt is not None:
   #     self._evt.set()

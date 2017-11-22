@@ -117,10 +117,7 @@ class PascalBase(Dataset):
         gt_roidb = self.filter_by_condition(gt_roidb, ['segmentation'])
         if gt_roidb is None:
           continue
-        
-        # if 'segmentation' not in gt_roidb:
-        #   continue
-        #
+
         # image
         image = imread(self.image_path_from_index(index))
         # image original size
