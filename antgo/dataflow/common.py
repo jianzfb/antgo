@@ -670,7 +670,7 @@ class MultiThreadPipe(Node):
         except StopIteration:
           is_over = True
       else:
-        if self._out_queue.qsize() == 0:
+        if self._out_queue.qsize() == 0 and self._in_queue.qsize() == 0:
           self._input_node._reset_iteration_state()
           break
 

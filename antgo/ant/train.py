@@ -16,6 +16,7 @@ import tarfile
 import sys
 from datetime import datetime
 from antgo.ant import flags
+from multiprocessing import Process
 if sys.version > '3':
     PY3 = True
 else:
@@ -113,6 +114,14 @@ class AntTrain(AntBase):
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
     
+    # ablation train
+    ablation_experiments = []
+    ablation_blocks = getattr(self.context.params, 'ablation', None)
+    if ablation_blocks is not None:
+      ablation_experiments = self.start_ablation_train_proc(ant_train_dataset, running_ant_task, ablation_blocks, train_time_stamp)
+      for ablation_experiment in ablation_experiments:
+        ablation_experiment.start()
+        
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None and \
@@ -188,51 +197,10 @@ class AntTrain(AntBase):
       ant_train_dataset.reset_state()
       self.context.call_training_process(ant_train_dataset, train_dump_dir)
       
-      # 4.step ablation experiment(optional)
-      if len(self.context.blocks) > 0:
-        part_train_dataset, part_validation_dataset = ant_train_dataset.split(split_method='holdout')
-        part_train_dataset.reset_state()
-
-        for block in self.context.blocks:
-          self.context.deactivate_block(block.name)
-          logger.info('start ablation experiment %s'%block)
-
-          # dump_dir for ablation experiment
-          ablation_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train', 'ablation', block)
-          if not os.path.exists(ablation_dump_dir):
-            os.makedirs(ablation_dump_dir)
-
-          # 2.step training model
-          self.stage = 'ABLATION(%s)-TRAIN'%block
-          self.context.call_training_process(part_train_dataset, ablation_dump_dir)
-
-          # 3.step evaluation measures
-          # split data and label
-          data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
-          self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-
-          self.stage = 'ABLATION(%s)-EVALUATION'%block
-          with safe_recorder_manager(self.context.recorder):
-            self.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
-
-          # clear
-          self.context.recorder = None
-
-          ablation_running_statictic = {self.ant_name: {}}
-          ablation_evaluation_measure_result = []
-
-          with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
-            for measure in running_ant_task.evaluation_measures:
-              record_generator = record_reader.iterate_read('predict', 'groundtruth')
-              result = measure.eva(record_generator, None)
-              ablation_evaluation_measure_result.append(result)
-
-          ablation_running_statictic[self.ant_name]['measure'] = ablation_evaluation_measure_result
-          self.stage = 'ABLATION(%s)-REPORT'%block
-          # send statistic report
-          self.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
-          everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
-
+    # join
+    for ablation_experiment in ablation_experiments:
+      ablation_experiment.join()
+      
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
     # 1.step split train set and validation set
     part_train_dataset, part_validation_dataset = train_dataset.split(split_method='holdout')
@@ -439,3 +407,56 @@ class AntTrain(AntBase):
 
     evaluation_result = multi_repeats_measures_statistic(kfolds_running_statistic, method='kfold')
     return evaluation_result
+  
+  def start_ablation_train_proc(self, data_source, task, ablation_blocks, time_stamp):
+    def proc_func(handle, ds, task, block, root_time_stamp):
+      part_train_dataset, part_validation_dataset = ds.split(split_method='holdout')
+      part_train_dataset.reset_state()
+
+      handle.context.deactivate_block(block.name)
+      logger.info('start ablation experiment %s' % block)
+
+      # dump_dir for ablation experiment
+      ablation_dump_dir = os.path.join(handle.ant_dump_dir, root_time_stamp, 'train', 'ablation', block)
+      if not os.path.exists(ablation_dump_dir):
+        os.makedirs(ablation_dump_dir)
+
+      # 2.step training model
+      handle.stage = 'ABLATION(%s)-TRAIN' % block
+      handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
+
+      # 3.step evaluation measures
+      # split data and label
+      data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
+      handle.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+
+      handle.stage = 'ABLATION(%s)-EVALUATION' % block
+      with safe_recorder_manager(handle.context.recorder):
+        handle.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
+
+      # clear
+      handle.context.recorder = None
+
+      ablation_running_statictic = {handle.ant_name: {}}
+      ablation_evaluation_measure_result = []
+
+      with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
+        for measure in task.evaluation_measures:
+          record_generator = record_reader.iterate_read('predict', 'groundtruth')
+          result = measure.eva(record_generator, None)
+          ablation_evaluation_measure_result.append(result)
+
+      ablation_running_statictic[handle.ant_name]['measure'] = ablation_evaluation_measure_result
+      handle.stage = 'ABLATION(%s)-REPORT' % block
+      # send statistic report
+      handle.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
+      everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
+    
+    ablation_experiments = []
+    for block in ablation_blocks:
+      block_ablation_process = Process(target=proc_func,
+                                       args=(self, data_source, task, block, time_stamp),
+                                       name='%s_ablation_block_%s'%(self.ant_name, block))
+      ablation_experiments.append(block_ablation_process)
+      
+    return ablation_experiments
