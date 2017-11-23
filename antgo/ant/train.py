@@ -1,4 +1,4 @@
-# encoding=utf-8
+# -*- coding: UTF-8 -*-
 # @Time    : 17-6-22
 # @File    : train.py
 # @Author  : jian<jian@mltalker.com>
@@ -113,15 +113,31 @@ class AntTrain(AntBase):
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
-    
-    # ablation train
+
+    # user custom devices
+    apply_devices = getattr(self.context.params, 'devices', [])
+    # user model clones
+    num_clones = getattr(self.context.params, 'num_clones', 1)
+
+
+    # ablation train (parallel execute if device is OK)
     ablation_experiments = []
     ablation_blocks = getattr(self.context.params, 'ablation', None)
     if ablation_blocks is not None:
-      ablation_experiments = self.start_ablation_train_proc(ant_train_dataset, running_ant_task, ablation_blocks, train_time_stamp)
-      for ablation_experiment in ablation_experiments:
-        ablation_experiment.start()
-        
+      if len(apply_devices) > num_clones and \
+                  len(apply_devices) - num_clones >= len(ablation_blocks):
+        ablation_experiments_devices = apply_devices[num_clones:]
+        apply_devices = apply_devices[:num_clones]
+        # assign device to every ablation experiment
+        ablation_experiments = self.start_ablation_train_proc(ant_train_dataset,
+                                                              running_ant_task,
+                                                              ablation_blocks,
+                                                              train_time_stamp,
+                                                              ablation_experiments_devices)
+        for ablation_experiment in ablation_experiments:
+          ablation_experiment.start()
+    #
+    self.context.params.devices = apply_devices
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None and \
@@ -197,10 +213,17 @@ class AntTrain(AntBase):
       ant_train_dataset.reset_state()
       self.context.call_training_process(ant_train_dataset, train_dump_dir)
       
-    # join
-    for ablation_experiment in ablation_experiments:
-      ablation_experiment.join()
-      
+    # join (waiting until all experiments stop)
+    if len(ablation_experiments) > 0:
+      for ablation_experiment in ablation_experiments:
+        ablation_experiment.join()
+    else:
+      self.start_ablation_train_proc(ant_train_dataset,
+                                     running_ant_task,
+                                     ablation_blocks,
+                                     train_time_stamp)
+
+
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
     # 1.step split train set and validation set
     part_train_dataset, part_validation_dataset = train_dataset.split(split_method='holdout')
@@ -407,22 +430,28 @@ class AntTrain(AntBase):
 
     evaluation_result = multi_repeats_measures_statistic(kfolds_running_statistic, method='kfold')
     return evaluation_result
-  
-  def start_ablation_train_proc(self, data_source, task, ablation_blocks, time_stamp):
-    def proc_func(handle, ds, task, block, root_time_stamp):
-      part_train_dataset, part_validation_dataset = ds.split(split_method='holdout')
+
+  def start_ablation_train_proc(self, data_source, challenge_task, ablation_blocks, time_stamp, spare_devices=None):
+    # child func
+    def proc_func(handle, experiment_data_source, experiment_challenge_task, ablation_block, root_time_stamp, spare_device):
+      # reassign running device
+      handle.context.params.devices = [spare_device]
+      # only one clone
+      handle.context.params.num_clones = 1
+
+      part_train_dataset, part_validation_dataset = experiment_data_source.split(split_method='holdout')
       part_train_dataset.reset_state()
 
-      handle.context.deactivate_block(block.name)
-      logger.info('start ablation experiment %s' % block)
+      handle.context.deactivate_block(ablation_block.name)
+      logger.info('start ablation experiment %s' % ablation_block)
 
       # dump_dir for ablation experiment
-      ablation_dump_dir = os.path.join(handle.ant_dump_dir, root_time_stamp, 'train', 'ablation', block)
+      ablation_dump_dir = os.path.join(handle.ant_dump_dir, root_time_stamp, 'train', 'ablation', ablation_block)
       if not os.path.exists(ablation_dump_dir):
         os.makedirs(ablation_dump_dir)
 
       # 2.step training model
-      handle.stage = 'ABLATION(%s)-TRAIN' % block
+      handle.stage = 'ABLATION(%s)-TRAIN' % ablation_block
       handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
 
       # 3.step evaluation measures
@@ -430,7 +459,7 @@ class AntTrain(AntBase):
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       handle.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
 
-      handle.stage = 'ABLATION(%s)-EVALUATION' % block
+      handle.stage = 'ABLATION(%s)-EVALUATION' % ablation_block
       with safe_recorder_manager(handle.context.recorder):
         handle.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
 
@@ -441,22 +470,28 @@ class AntTrain(AntBase):
       ablation_evaluation_measure_result = []
 
       with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
-        for measure in task.evaluation_measures:
+        for measure in experiment_challenge_task.evaluation_measures:
           record_generator = record_reader.iterate_read('predict', 'groundtruth')
           result = measure.eva(record_generator, None)
           ablation_evaluation_measure_result.append(result)
 
       ablation_running_statictic[handle.ant_name]['measure'] = ablation_evaluation_measure_result
-      handle.stage = 'ABLATION(%s)-REPORT' % block
+      handle.stage = 'ABLATION(%s)-REPORT' % ablation_block
+
       # send statistic report
       handle.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
       everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
-    
+
     ablation_experiments = []
-    for block in ablation_blocks:
-      block_ablation_process = Process(target=proc_func,
-                                       args=(self, data_source, task, block, time_stamp),
-                                       name='%s_ablation_block_%s'%(self.ant_name, block))
-      ablation_experiments.append(block_ablation_process)
-      
+    for block_i, block in enumerate(ablation_blocks):
+      if spare_devices is not None:
+        # apply independent process
+        block_ablation_process = Process(target=proc_func,
+                                         args=(self, data_source, challenge_task, block, time_stamp, spare_devices[block_i]),
+                                         name='%s_ablation_block_%s'%(self.ant_name, block))
+        ablation_experiments.append(block_ablation_process)
+      else:
+        # process sequentially in main process
+        proc_func(self, data_source, challenge_task, block, time_stamp, [])
+
     return ablation_experiments
