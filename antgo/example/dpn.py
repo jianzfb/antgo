@@ -150,7 +150,11 @@ def _dual_path_block(input,
   return [residual_path, dense_path]
 
 
-def _initial_conv_block_inception(input, initial_conv_filters, weight_decay=5e-4):
+def _root_block(input,
+                initial_conv_filters,
+                weight_decay=5e-4,
+                ksize=(7,7),
+                is_pool=True):
   ''' Adds an initial conv block, with batch norm and relu for the DPN
   Args:
       input: input tensor
@@ -159,7 +163,8 @@ def _initial_conv_block_inception(input, initial_conv_filters, weight_decay=5e-4
   Returns: a keras tensor
   '''
   x = slim.conv2d(input,
-                  initial_conv_filters, (3, 3),
+                  initial_conv_filters,
+                  ksize,
                   padding='SAME',
                   stride=(1, 1),
                   weights_regularizer=slim.l2_regularizer(weight_decay),
@@ -167,14 +172,18 @@ def _initial_conv_block_inception(input, initial_conv_filters, weight_decay=5e-4
                   biases_initializer=None)
   x = slim.batch_norm(x)
   x = tf.nn.relu(x)
-  # x = slim.max_pool2d(x, (3, 3), stride=(2, 2), padding='SAME')
+  if is_pool:
+    x = slim.max_pool2d(x, (3, 3), stride=(2, 2), padding='SAME')
   return x
+
 
 def _create_dpn(nb_classes,
                 img_input,
                 initial_conv_filters,
                 filter_increment,
                 depth,
+                root_ksize=(7,7),
+                root_pooling=True,
                 cardinality=32,
                 width=3,
                 weight_decay=5e-4,
@@ -216,7 +225,7 @@ def _create_dpn(nb_classes,
   with tf.variable_scope(None, 'dpn', [img_input]):
     # block 1 (initial conv block)
     with tf.variable_scope(None, 'root', [img_input]):
-      x = _initial_conv_block_inception(img_input, initial_conv_filters, weight_decay)
+      x = _root_block(img_input, initial_conv_filters, weight_decay, root_ksize, root_pooling)
   
     # block 2 (projection block)
     filter_inc = filter_increment[0]
@@ -286,6 +295,8 @@ def _create_dpn(nb_classes,
 def DPN(initial_conv_filters=64,
         depth=[3, 4, 20, 3],
         filter_increment=[16, 32, 24, 128],
+        root_ksize=(7,7),
+        root_pooling=True,
         cardinality=32,
         width=3,
         weight_decay=5e-4,
@@ -353,6 +364,8 @@ def DPN(initial_conv_filters=64,
                   initial_conv_filters,
                   filter_increment,
                   depth,
+                  root_ksize,
+                  root_pooling,
                   cardinality,
                   width,
                   weight_decay,
@@ -382,7 +395,9 @@ def DPN98(input_tensor,
              weights=weights,
              input_tensor=input_tensor,
              pooling=pooling,
-             classes=classes)
+             classes=classes,
+             root_ksize=(3,3),
+             root_pooling=False)
 
 
 def DPN137(input_tensor,
