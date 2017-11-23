@@ -1,4 +1,4 @@
-batch_size: 64
+batch_size: 1
 num_classes: 10
 num_clones: 1
 max_epochs: 400

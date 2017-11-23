@@ -247,7 +247,7 @@ class TFTrainer(Trainer):
       if self.is_training:
         loss_val = 0.0
         if type(result) == list:
-          loss_val = result[0]
+          loss_val = result[1]
         else:
           loss_val = result
         

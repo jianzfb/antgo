@@ -26,45 +26,28 @@ def get_global_context():
   return global_context
 
 
-class _Ablation(object):
-  def __init__(self):
-    self._is_disable = False
-
-  def disable(self):
-    self._is_disable = True
-  def enable(self):
-    self._is_disable = False
-
+class Block(object):
+  def __init__(self, name):
+    self._name = name
+    self._activate = True
+    
   @property
-  def is_ablation(self):
-    return self._is_disable
-
-@contextmanager
-def ablation(obj):
-  yield obj
-
-
-class _Ablations(object):
-  def __init__(self):
-    self._blocks = []
-    self._ablations = {}
-
+  def activate(self):
+    return self._activate
+  @activate.setter
+  def activate(self, val):
+    self._activate = val
+  
   @property
-  def blocks(self):
-    return self._blocks
-
-  def disable(self, block):
-    for k, _ in self._ablations.items():
-      k.enable()
-    self._ablations[block].disable()
-
-  def create(self, block):
-    if block not in self._blocks:
-      self._blocks.append(block)
-      self._ablations[block] = _Ablation()
-
-    return ablation(self._ablations[block])
-
+  def name(self):
+    return self._name
+  
+  def __enter__(self):
+    return self
+  
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    pass
+  
 
 class Context(object):
   def __init__(self):
@@ -88,8 +71,8 @@ class Context(object):
     self.clear_callbacks = []
   
     self.data_source = None
-    self._ablation = _Ablations()
-    
+    self._blocks = []
+    self._blocks_status = {}
     self._stoppable_threads = []
 
   def wait_until_clear(self):
@@ -131,7 +114,7 @@ class Context(object):
     return self.context_ant
 
   @ant.setter
-  def ant(self,val):
+  def ant(self, val):
     self.context_ant = val
 
   @property
@@ -224,10 +207,22 @@ class Context(object):
   @data_source.setter
   def data_source(self, val):
     self._data_source = val
-
-  @property
-  def ablation(self):
-    return self._ablation
   
   def register_stoppable_thread(self, stoppable_thread):
     self._stoppable_threads.append(stoppable_thread)
+  
+  def block(self, name):
+    model_block = Block(name)
+    self._blocks.append(model_block)
+    model_block.activate = True
+    if name in self._blocks_status and not self._blocks_status[name]:
+      model_block.activate = False
+    return model_block
+  
+  def blocks(self):
+    return self._blocks
+    
+  def activate_block(self, name):
+    self._blocks_status[name] = True
+  def deactivate_block(self, name):
+    self._blocks_status[name] = False

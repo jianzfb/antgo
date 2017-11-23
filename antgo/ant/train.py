@@ -187,14 +187,14 @@ class AntTrain(AntBase):
       logger.info('start training process')
       ant_train_dataset.reset_state()
       self.context.call_training_process(ant_train_dataset, train_dump_dir)
-
+      
       # 4.step ablation experiment(optional)
-      if len(self.context.ablation.blocks) > 0:
+      if len(self.context.blocks) > 0:
         part_train_dataset, part_validation_dataset = ant_train_dataset.split(split_method='holdout')
         part_train_dataset.reset_state()
 
-        for block in self.context.ablation.blocks:
-          self.context.ablation.disable(block)
+        for block in self.context.blocks:
+          self.context.deactivate_block(block.name)
           logger.info('start ablation experiment %s'%block)
 
           # dump_dir for ablation experiment
@@ -230,7 +230,7 @@ class AntTrain(AntBase):
           ablation_running_statictic[self.ant_name]['measure'] = ablation_evaluation_measure_result
           self.stage = 'ABLATION(%s)-REPORT'%block
           # send statistic report
-          self.context.job.send({'DATA':{'REPORT': ablation_running_statictic}})
+          self.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
           everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
 
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):

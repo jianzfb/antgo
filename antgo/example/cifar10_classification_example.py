@@ -40,10 +40,10 @@ class DPNModel(ModelDesc):
   
   def model_fn(self, is_training=True, *args, **kwargs):
     # image x
-    x_input = tf.placeholder(tf.float32, [64, 32, 32, 3], name='x')
+    x_input = tf.placeholder(tf.float32, [ctx.params.batch_size, 32, 32, 3], name='x')
     logits = DPN98(x_input, classes=10, pooling='avg')
     if is_training:
-      y = tf.placeholder(tf.int32, [64], name='y')
+      y = tf.placeholder(tf.int32, [ctx.params.batch_size], name='y')
       ce_loss = tf.losses.sparse_softmax_cross_entropy(y, logits)
       return ce_loss
     else:
@@ -55,7 +55,7 @@ class DPNModel(ModelDesc):
 ##################################################
 def training_callback(data_source, dump_dir):
   ##########  1.step reorganized as batch ########
-  batch = BatchData(Node.inputs(data_source), batch_size=64)
+  batch = BatchData(Node.inputs(data_source), batch_size=ctx.params.batch_size)
   
   ##########  2.step building model ##############
   tf_trainer = TFTrainer(ctx.params, dump_dir)
@@ -70,13 +70,12 @@ def training_callback(data_source, dump_dir):
         _, loss_val = tf_trainer.run(data_generator, {'x': 0, 'y': 1})
         # record loss value
         if iter % 50 == 0:
+          print('loss %f iterator %d in epoch %d'%(loss_val, iter, epoch))
           loss_channel.send(iter, loss_val)
         iter += 1
+      except:
+        break
       
-        break
-      except StopIteration:
-        break
-  
     # save
     tf_trainer.snapshot(epoch)
 
