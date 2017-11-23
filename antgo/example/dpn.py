@@ -158,9 +158,8 @@ def _initial_conv_block_inception(input, initial_conv_filters, weight_decay=5e-4
       weight_decay: weight decay factor
   Returns: a keras tensor
   '''
-  channel_axis = -1
-  
-  x = slim.conv2d(input, initial_conv_filters, (3, 3),
+  x = slim.conv2d(input,
+                  initial_conv_filters, (3, 3),
                   padding='SAME',
                   stride=(1, 1),
                   weights_regularizer=slim.l2_regularizer(weight_decay),
@@ -169,7 +168,6 @@ def _initial_conv_block_inception(input, initial_conv_filters, weight_decay=5e-4
   x = slim.batch_norm(x)
   x = tf.nn.relu(x)
   # x = slim.max_pool2d(x, (3, 3), stride=(2, 2), padding='SAME')
-  
   return x
 
 def _create_dpn(nb_classes,
@@ -184,8 +182,6 @@ def _create_dpn(nb_classes,
   ''' Creates a ResNeXt model with specified parameters
   Args:
       initial_conv_filters: number of features for the initial convolution
-      include_top: Flag to include the last dense layer
-      initial_conv_filters: number of features for the initial convolution
       filter_increment: number of filters incremented per block, defined as a list.
           DPN-92  = [16, 32, 24, 128]
           DON-98  = [16, 32, 32, 128]
@@ -198,8 +194,7 @@ def _create_dpn(nb_classes,
           DPN-107 = [4, 8, 20, 3]
       width: width multiplier for network
       weight_decay: weight_decay (l2 norm)
-      pooling: Optional pooling mode for feature extraction
-          when `include_top` is `False`.include_top
+      pooling:
           - `None` means that the output of the model will be
               the 4D tensor output of the
               last convolutional layer.
@@ -220,43 +215,23 @@ def _create_dpn(nb_classes,
   
   with tf.variable_scope(None, 'dpn', [img_input]):
     # block 1 (initial conv block)
-    x = _initial_conv_block_inception(img_input, initial_conv_filters, weight_decay)
+    with tf.variable_scope(None, 'root', [img_input]):
+      x = _initial_conv_block_inception(img_input, initial_conv_filters, weight_decay)
   
     # block 2 (projection block)
     filter_inc = filter_increment[0]
     filters = int(cardinality * width)
     
-    x = _dual_path_block(x,
-                         pointwise_filters_a=filters,
-                         grouped_conv_filters_b=filters,
-                         pointwise_filters_c=base_filters,
-                         filter_increment=filter_inc,
-                         cardinality=cardinality,
-                         block_type='projection')
-  
-    for i in range(N[0] - 1):
-      x = _dual_path_block(x, pointwise_filters_a=filters,
+    with tf.variable_scope(None, 'block-1', [x]):
+      x = _dual_path_block(x,
+                           pointwise_filters_a=filters,
                            grouped_conv_filters_b=filters,
                            pointwise_filters_c=base_filters,
                            filter_increment=filter_inc,
                            cardinality=cardinality,
-                           block_type='normal')
-  
-    # remaining blocks
-    for k in range(1, len(N)):
-      print("BLOCK %d" % (k + 1))
-      filter_inc = filter_increment[k]
-      filters *= 2
-      base_filters *= 2
+                           block_type='projection')
     
-      x = _dual_path_block(x, pointwise_filters_a=filters,
-                           grouped_conv_filters_b=filters,
-                           pointwise_filters_c=base_filters,
-                           filter_increment=filter_inc,
-                           cardinality=cardinality,
-                           block_type='downsample')
-    
-      for i in range(N[k] - 1):
+      for i in range(N[0] - 1):
         x = _dual_path_block(x, pointwise_filters_a=filters,
                              grouped_conv_filters_b=filters,
                              pointwise_filters_c=base_filters,
@@ -264,6 +239,29 @@ def _create_dpn(nb_classes,
                              cardinality=cardinality,
                              block_type='normal')
   
+    # remaining blocks
+    for k in range(1, len(N)):
+      with tf.variable_scope(None, 'block-%d'%k, [x]):
+        filter_inc = filter_increment[k]
+        filters *= 2
+        base_filters *= 2
+      
+        x = _dual_path_block(x, pointwise_filters_a=filters,
+                             grouped_conv_filters_b=filters,
+                             pointwise_filters_c=base_filters,
+                             filter_increment=filter_inc,
+                             cardinality=cardinality,
+                             block_type='downsample')
+      
+        for i in range(N[k] - 1):
+          x = _dual_path_block(x, pointwise_filters_a=filters,
+                               grouped_conv_filters_b=filters,
+                               pointwise_filters_c=base_filters,
+                               filter_increment=filter_inc,
+                               cardinality=cardinality,
+                               block_type='normal')
+  
+    
     x = tf.concat(x, axis=channel_axis)
     if pooling == 'avg':
       # Global average pooling.
@@ -291,7 +289,6 @@ def DPN(initial_conv_filters=64,
         cardinality=32,
         width=3,
         weight_decay=5e-4,
-        include_top=True,
         weights=None,
         input_tensor=None,
         pooling=None,
@@ -319,8 +316,6 @@ def DPN(initial_conv_filters=64,
           cardinality: the size of the set of transformations
           width: width multiplier for the network
           weight_decay: weight decay (l2 norm)
-          include_top: whether to include the fully-connected
-              layer at the top of the network.
           weights: `None` (random initialization) or `imagenet` (trained
               on ImageNet)
           input_tensor: optional Keras tensor (i.e. output of `layers.Input()`)
@@ -366,16 +361,16 @@ def DPN(initial_conv_filters=64,
 
 
 def DPN92(input_tensor,
-          include_top=True,
           weights=None,
           pooling=None,
           classes=1000):
-  return DPN(include_top=include_top, weights=weights, input_tensor=input_tensor,
-    pooling=pooling, classes=classes)
+  return DPN(weights=weights,
+             input_tensor=input_tensor,
+             pooling=pooling,
+             classes=classes)
 
 
 def DPN98(input_tensor,
-          include_top=True,
           weights=5e-4,
           pooling=None,
           classes=1000):
@@ -384,7 +379,6 @@ def DPN98(input_tensor,
              filter_increment=[16, 32, 32, 128],
              cardinality=40,
              width=4,
-             include_top=include_top,
              weights=weights,
              input_tensor=input_tensor,
              pooling=pooling,
@@ -392,21 +386,31 @@ def DPN98(input_tensor,
 
 
 def DPN137(input_tensor,
-           include_top=True,
            weights=None,
            pooling=None,
            classes=1000):
-  return DPN(initial_conv_filters=128, depth=[4, 8, 28, 3], filter_increment=[16, 32, 32, 128],
-    cardinality=40, width=4, include_top=include_top, weights=weights, input_tensor=input_tensor,
-    pooling=pooling, classes=classes)
+  return DPN(initial_conv_filters=128,
+             depth=[4, 8, 28, 3],
+             filter_increment=[16, 32, 32, 128],
+             cardinality=40,
+             width=4,
+             weights=weights,
+             input_tensor=input_tensor,
+             pooling=pooling,
+             classes=classes)
 
 
 def DPN107(input_tensor=None,
-           include_top=True,
            weights=None,
            pooling=None,
            classes=1000):
-  return DPN(initial_conv_filters=128, depth=[4, 8, 20, 3], filter_increment=[20, 64, 64, 128],
-    cardinality=50, width=4, include_top=include_top, weights=weights, input_tensor=input_tensor,
-    pooling=pooling, classes=classes)
+  return DPN(initial_conv_filters=128,
+             depth=[4, 8, 20, 3],
+             filter_increment=[20, 64, 64, 128],
+             cardinality=50,
+             width=4,
+             weights=weights,
+             input_tensor=input_tensor,
+             pooling=pooling,
+             classes=classes)
 
