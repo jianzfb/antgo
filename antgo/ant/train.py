@@ -24,6 +24,7 @@ else:
 
 FLAGS = flags.AntFLAGS
 
+
 class AntTrain(AntBase):
   def __init__(self, ant_context,
                ant_name,
@@ -218,10 +219,11 @@ class AntTrain(AntBase):
       for ablation_experiment in ablation_experiments:
         ablation_experiment.join()
     else:
-      self.start_ablation_train_proc(ant_train_dataset,
-                                     running_ant_task,
-                                     ablation_blocks,
-                                     train_time_stamp)
+      if ablation_blocks is not None:
+        self.start_ablation_train_proc(ant_train_dataset,
+                                       running_ant_task,
+                                       ablation_blocks,
+                                       train_time_stamp)
 
 
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):

@@ -569,7 +569,8 @@ class AntCmd(AntBase):
           return
 
       if os.path.exists(os.path.join(data_factory, dataset_name)):
-        shutil.rmtree(os.path.join(data_factory, dataset_name))
+        logger.error('dataset has existed')
+        return
 
       if dataset_path is not None:
         # move dataset to datafactory

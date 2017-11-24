@@ -9,8 +9,7 @@ from antgo.utils.serialize import loads, dumps
 import numpy as np
 import os
 import yaml
-import plyvel
-from antgo.dataflow.dataflow_server import *
+import rocksdb
 from antgo import config
 from contextlib import contextmanager
 from antgo.utils import logger
@@ -29,41 +28,33 @@ class Sample(object):
 
 
 class RecordWriter(object):
-  def __init__(self, record_path, block_size=None):
+  def __init__(self, record_path):
     self._record_path = record_path
-    self._db = plyvel.DB(record_path, create_if_missing=True, block_size=block_size)
-    self._count = 0
-
+    opts = rocksdb.Options()
+    opts.create_if_missing = True
+    self._db = rocksdb.DB(record_path, opts)
+    
+    count = self._db.get(str('attrib-count').encode('utf-8'))
+    if count is None:
+      self._db.put(str('attrib-count').encode('utf-8'), b'0')
+    
   def close(self):
-    # 1.step db attributes
-    if self._count > 0:
-      db_attrs = {}
-      if os.path.exists(os.path.join(self._record_path, 'attrs.yaml')):
-        attrs = yaml.load(open(os.path.join(self._record_path, 'attrs.yaml'), 'r'))
-        db_attrs.update(attrs)
-
-      db_attrs['count'] = self._count
-
-      with open(os.path.join(self._record_path, 'attrs.yaml'), 'w') as outfile:
-        yaml.dump(db_attrs, outfile, default_flow_style=False)
-
-    # 2.step close db
-    self._db.close()
+    pass
 
   def write(self, sample):
-    self._db.put(bytes(self._count), sample.serialize())
-    self._count += 1
+    count = self._db.get(str('attrib-count').encode('utf-8'))
+    assert(count is not None)
+    count = int(count)
+    self._db.put(str(count).encode('utf-8'), sample.serialize())
+
+    count += 1
+    self._db.put('attrib-count'.encode('utf-8'), str(count).encode('utf-8'))
+    
 
   def bind_attrs(self, **kwargs):
     # bind extra db attributes
-    db_attrs = kwargs
-    # load existed attrs
-    if os.path.exists(os.path.join(self._record_path, 'attrs.yaml')):
-      attrs = yaml.load(open(os.path.join(self._record_path, 'attrs.yaml'), 'r'))
-      db_attrs.update(attrs)
-
-    with open(os.path.join(self._record_path, 'attrs.yaml'), 'w') as outfile:
-      yaml.dump(db_attrs, outfile, default_flow_style=False)
+    for k,v in kwargs.items():
+      self._db.put(str('attrib-%s'%k).encode('utf-8'), str('attrib-%s'%v).encode('utf-8'))
 
 
 @contextmanager
@@ -73,17 +64,15 @@ def safe_recorder_manager(recorder):
   except:
     error_info = sys.exc_info()
     logger.error(error_info)
-    recorder.close()
-
     raise error_info[0]
-  
-  recorder.close()
 
 
 class RecordReader(object):
   def __init__(self, record_path, daemon=False):
     # db
-    self._db = None
+    opts = rocksdb.Options(create_if_missing=False)
+
+    self._db = rocksdb.DB(record_path, opts, read_only=True)
     # daemon
     self._daemon = daemon
 
@@ -92,30 +81,31 @@ class RecordReader(object):
 
     # db attributes
     self._db_attrs = {}
-    if os.path.exists(os.path.join(record_path, 'attrs.yaml')):
-      attrs = yaml.load(open(os.path.join(record_path, 'attrs.yaml'), 'r'))
-      self._db_attrs.update(attrs)
+    
+    # attrib
+    it = self._db.iteritems()
+    it.seek('attrib-'.encode('utf-8'))
+    for attrib_item in it:
+      key, value = attrib_item
+      key = key.decode('utf-8')
+      value = value.decode('utf-8')
+      if key.startswith('attrib-'):
+        key = key.replace('attrib-', '')
+        value = value.replace('attrib-', '')
+        self._db_attrs[key] = value
+        setattr(self, key, value)
 
-    for attr_key, attr_value in self._db_attrs.items():
-      setattr(self, attr_key, attr_value)
 
   def close(self):
-    if self._db is not None:
-      self._db.close()
+    pass
 
   def record_attrs(self):
     return self._db_attrs
 
   def read(self, index, *args):
     try:
-      if self._db is None:
-        if self._daemon:
-          self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
-          self._db.open(self._record_path.encode('utf-8'))
-        else:
-          self._db = plyvel.DB(self._record_path.encode('utf-8'))
-
-      data = Sample.unserialize(self._db.get(bytes(index)))
+      ss = self._db.get(str(index).encode('utf-8'))
+      data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for k, v in data.items():
@@ -132,15 +122,9 @@ class RecordReader(object):
       return [None for _ in range(len(args))]
 
   def iterate_read(self, *args):
-    if self._db is None:
-      if self._daemon:
-        self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
-        self._db.open(self._record_path.encode('utf-8'))
-      else:
-        self._db = plyvel.DB(self._record_path.encode('utf-8'))
-
-    for k in range(self.count):
-      data = Sample.unserialize(self._db.get(bytes(k)))
+    for k in range(int(self.count)):
+      ss = self._db.get(str(k).encode('utf-8'))
+      data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for data_key, data_val in data.items():
@@ -155,15 +139,9 @@ class RecordReader(object):
         yield sample
 
   def iterate_sampling_read(self, index, *args):
-    if self._db is None:
-      if self._daemon:
-        self._db = DataflowClient(host=getattr(config.AntConfig, 'dataflow_server_host', 'tcp://127.0.0.1:9999'))
-        self._db.open(self._record_path.encode('utf-8'))
-      else:
-        self._db = plyvel.DB(self._record_path.encode('utf-8'))
-
     for i in index:
-      data = Sample.unserialize(self._db.get(bytes(i)))
+      ss = self._db.get(str(i).encode('utf-8'))
+      data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for data_key, data_val in data.items():

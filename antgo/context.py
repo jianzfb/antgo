@@ -97,6 +97,8 @@ class Context(object):
     # clear
     self.training_process_callback = None
     self.infer_process_callback = None
+    self._data_generator = None
+    
     self.dataset_factory_callback = AntDataset
     self.running_recorder = None
     self.context_params = None
@@ -164,7 +166,14 @@ class Context(object):
 
     # clone charts
     self.job.clone_charts()
-
+  
+  @property
+  def data_generator(self):
+    return self._data_generator
+  @data_generator.setter
+  def data_generator(self, g):
+    self._data_generator = g
+  
   @property
   def recorder(self):
     return self.running_recorder
@@ -184,10 +193,6 @@ class Context(object):
   @property
   def dataset_factory(self):
     return self.dataset_factory_callback
-
-  @dataset_factory.setter
-  def dataset_factory(self, callback):
-    self.dataset_factory_callback = callback
 
   def registry_trainer_callback(self, key, value, condition, func):
     # condition: equal, less, greater or mod

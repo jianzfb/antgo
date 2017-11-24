@@ -15,6 +15,7 @@ from antgo.ant.train import *
 from antgo.ant.deploy import *
 from antgo.ant.workflow import *
 from antgo.ant.challenge import *
+from antgo.ant.generate import *
 from antgo.ant.cmd import *
 from antgo.utils import logger
 from antgo.ant import flags
@@ -32,7 +33,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", "server"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy", "generate"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -87,9 +88,8 @@ def main():
     token = unicode(token)
 
   # 2.2 step key 2: antgo daemon (data server)
-  dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
-  dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
-
+  # dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
+  # dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
   # dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads), dataflow_server_host, 'antgo-data-server.pid')
   # dfs_daemon.start()
 
@@ -104,10 +104,6 @@ def main():
   ant_cmd = sys.argv[1]
   if ant_cmd not in _ant_support_commands:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
-    return
-
-  if ant_cmd == 'server':
-    # directly return
     return
 
   # 4.step check related params
@@ -128,7 +124,7 @@ def main():
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
     logger.error('main executing file dont exist')
     sys.exit(-1)
-
+  
   # 4.3 check dump dir (all running data is stored here)
   dump_dir = FLAGS.dump()
   if dump_dir is None:
@@ -183,6 +179,12 @@ def main():
     running_process.start()
   elif ant_cmd == "deploy":
     pass
+  elif ant_cmd == 'generate':
+    running_process = AntGenerate(ant_context,
+                                  name,
+                                  data_factory,
+                                  token)
+    running_process.start()
 
   # 7.step clear context
   ant_context.wait_until_clear()

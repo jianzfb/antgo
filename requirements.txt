@@ -9,4 +9,4 @@ psutil
 pyzmq
 jinja2
 pyyaml
-plyvel
+python-rocksdb
