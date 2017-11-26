@@ -80,6 +80,21 @@ class AntConfusionMatrixMultiC(AntMeasure):
     class_num = len(self.task.class_label)
     cm = compute_confusion_matrix(acutal_label, predicated_label, class_num)
 
+    # ######
+    # curve_data = [[[0,0],[1,1],[2,2]]]
+    # bar_data = [[10,5,2],[23,2,9]]
+    # image = np.random.random((50,50,3))
+    # image = image*255
+    # image = image.astype(np.uint8)
+    # {'name': 'test-curve', 'value': curve_data,
+    #  'type': 'CURVE', 'x': 'x', 'y': 'y'},
+    # {'name': 'test-bar', 'value': bar_data,
+    #  'type': 'SCALAR', 'x': ['a', 'b', 'c'], 'y': 'y'},
+    # {'name': 'test-image', 'value': image,
+    #  'type': 'IMAGE'}]
+    # ######
+
     return {'statistic': {'name': self.name,
                           'value': [{'name': self.name, 'value': cm.tolist(),
-                                     'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label}]}}
+                                     'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label}
+                                    ]}}

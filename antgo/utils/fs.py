@@ -89,6 +89,9 @@ def maybe_here_match_format(dest_dir, target_pattern):
   return maybe_dest_dir
 
 def maybe_here_fixed_3_hierarchy(dest_dir,target_pattern):
+  if not os.path.exists(dest_dir):
+    return None
+
   maybe_dest_dir = dest_dir
   while maybe_dest_dir is not None:
     check_dirs = [os.path.join(maybe_dest_dir, family, character) \

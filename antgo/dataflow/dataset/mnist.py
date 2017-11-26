@@ -119,7 +119,7 @@ class Mnist(Dataset):
 
       self.ids = [i for i in range(self.test.num_examples)]
 
-  def split(self,split_params={}, split_method='holdout'):
+  def split(self, split_params={}, split_method='holdout'):
       assert(self.train_or_test == 'train')
       assert(split_method in ['repeated-holdout','bootstrap','kfold'])
 

@@ -17,6 +17,7 @@ from functools import reduce
 import re
 import multiprocessing
 import tarfile
+import zipfile
 from antgo import config
 
 Config = config.AntConfig
@@ -513,7 +514,7 @@ class Dataset(BaseNode):
 
     return label
 
-  def download(self, target_path, file_names=[], default_url=None, auto_untar=False, is_gz=False):
+  def download(self, target_path, file_names=[], default_url=None, auto_untar=False, is_gz=False, auto_unzip=False):
     dataset_url = getattr(self, 'dataset_url', None)
     if dataset_url is None or len(dataset_url) == 0:
       dataset_url = default_url
@@ -539,16 +540,24 @@ class Dataset(BaseNode):
         if len(file_names) > 0:
           for file_name in file_names:
             if maybe_here(target_path, file_name) is None:
-              download(os.path.join(dataset_url,file_name), target_path)
+              download(os.path.join(dataset_url, file_name), target_path)
+
+              if auto_unzip:
+                with zipfile.ZipFile(os.path.join(target_path, file_name), mode='r') as zpfd:
+                  zpfd.extractall(target_path)
         else:
           if not is_mltalker:
             download_path = os.path.join(target_path, dataset_url.split('/')[-1])
             if not os.path.exists(download_path):
               download(dataset_url, target_path)
 
-            if auto_untar:
-              with tarfile.open(download_path, 'r:gz' if is_gz else 'r') as tar:
-                tar.extractall(target_path)
+              if auto_untar:
+                with tarfile.open(download_path, 'r:gz' if is_gz else 'r') as tar:
+                  tar.extractall(target_path)
+
+              if auto_unzip:
+                with zipfile.ZipFile(download_path, mode='r') as zpfd:
+                  zpfd.extractall(target_path)
           else:
             download_path = os.path.join(target_path, 'data.tar')
             if not os.path.exists(download_path):

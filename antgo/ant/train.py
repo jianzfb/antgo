@@ -129,6 +129,8 @@ class AntTrain(AntBase):
                   len(apply_devices) - num_clones >= len(ablation_blocks):
         ablation_experiments_devices = apply_devices[num_clones:]
         apply_devices = apply_devices[:num_clones]
+
+        self.context.params.devices = apply_devices
         # assign device to every ablation experiment
         ablation_experiments = self.start_ablation_train_proc(ant_train_dataset,
                                                               running_ant_task,
@@ -138,7 +140,6 @@ class AntTrain(AntBase):
         for ablation_experiment in ablation_experiments:
           ablation_experiment.start()
     #
-    self.context.params.devices = apply_devices
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None and \

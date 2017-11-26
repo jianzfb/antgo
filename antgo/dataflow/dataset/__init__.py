@@ -4,7 +4,7 @@ import os
 import os.path
 from .standard import *
 from .csvs import *
-
+from mnist import *
 def global_import(name):
   p = __import__(name, globals(), locals(), level=1)
   globals().pop(name)
