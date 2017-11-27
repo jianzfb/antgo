@@ -21,6 +21,7 @@ from antgo.utils import logger
 from antgo.ant import flags
 from antgo import config
 from antgo.ant.utils import *
+from antgo.sandbox.sandbox import *
 from antgo.dataflow.dataflow_server import *
 from datetime import datetime
 if sys.version > '3':
@@ -43,6 +44,7 @@ flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('name', None, 'app name')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
+flags.DEFINE_string('sandbox_time', None, 'max running time')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -162,13 +164,15 @@ def main():
     ant_context.params = params
   
   if ant_cmd == "train":
-    running_process = AntTrain(ant_context,
-                               name,
-                               data_factory,
-                               dump_dir,
-                               token,
-                               task)
-    running_process.start()
+    sandbox_time = FLAGS.sandbox_time()
+    with running_sandbox(sandbox_time=sandbox_time):
+      running_process = AntTrain(ant_context,
+                                 name,
+                                 data_factory,
+                                 dump_dir,
+                                 token,
+                                 task)
+      running_process.start()
   elif ant_cmd == 'challenge':
     running_process = AntChallenge(ant_context,
                                    name,

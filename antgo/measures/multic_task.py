@@ -36,7 +36,7 @@ class AntAccuracyMultiC(AntMeasure):
       id = None
       gt_label = gt
       if type(gt) == dict:
-        gt_label = int(gt['data'])
+        gt_label = int(gt['category_id'])
         id = gt['id']
 
       if id is not None:
@@ -71,7 +71,7 @@ class AntConfusionMatrixMultiC(AntMeasure):
 
       gt_label = -1
       if type(gt) == dict:
-        gt_label = int(gt['data'])
+        gt_label = int(gt['category_id'])
       else:
         gt_label = int(gt)
 

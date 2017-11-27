@@ -220,8 +220,7 @@ def _gather_clone_loss(clone, num_clones, regularization_losses):
     if clone_losses:
       clone_loss = tf.add_n(clone_losses, name='clone_loss')
       if num_clones > 1:
-        clone_loss = tf.div(clone_loss, 1.0 * num_clones,
-                            name='scaled_clone_loss')
+        clone_loss = tf.div(clone_loss, 1.0 * num_clones, name='scaled_clone_loss')
       all_losses.append(clone_loss)
     if regularization_losses:
       regularization_loss = tf.add_n(regularization_losses,
@@ -229,6 +228,7 @@ def _gather_clone_loss(clone, num_clones, regularization_losses):
       all_losses.append(regularization_loss)
     if all_losses:
       sum_loss = tf.add_n(all_losses)
+      
   # Add the summaries out of the clone device block.
   if clone_loss is not None:
     tf.summary.scalar(clone.scope + '/clone_loss', clone_loss)
@@ -263,7 +263,8 @@ def _optimize_clone(optimizer, clone, num_clones, regularization_losses,
   return sum_loss, clone_grad
 
 
-def optimize_clones(clones, optimizer,
+def optimize_clones(clones,
+                    optimizer,
                     regularization_losses=None,
                     **kwargs):
   """Compute clone losses and gradients for the given list of `Clones`.
@@ -292,6 +293,7 @@ def optimize_clones(clones, optimizer,
   if regularization_losses is None:
     regularization_losses = tf.get_collection(
         tf.GraphKeys.REGULARIZATION_LOSSES)
+  
   for clone in clones:
     with tf.name_scope(clone.scope):
       clone_loss, clone_grad = _optimize_clone(
@@ -439,6 +441,7 @@ def _sum_clones_gradients(clone_grads):
     if grads:
       if len(grads) > 1:
         sum_grad = tf.add_n(grads, name=var.op.name + '/sum_grads')
+        sum_grad = tf.div(sum_grad, 1.0 * len(grads))
       else:
         sum_grad = grads[0]
       sum_grads.append((sum_grad, var))

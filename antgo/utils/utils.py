@@ -20,7 +20,7 @@ __all__ = ['change_env',
         'map_arg',
         'get_rng', 'memoized',
         'get_tqdm_kwargs',
-        'targz'
+        'targz',
         ]
 
 #def expand_dim_if_necessary(var, dp):

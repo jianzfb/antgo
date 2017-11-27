@@ -48,7 +48,7 @@ class ILSVRCMeta(object):
     fname = os.path.join(self.dir, 'synsets.txt')
     assert os.path.isfile(fname)
     lines = [x.strip() for x in open(fname).readlines()]
-    inv_synset = dict([ (b,a) for a,b in enumerate(lines)])
+    inv_synset = dict([ (b, a) for a, b in enumerate(lines)])
     return dict(enumerate(lines)), inv_synset
 
   def _download_caffe_meta(self):
@@ -95,23 +95,37 @@ class ILSVRC12(Dataset):
         for i in *.tar; do dir=${i%.tar}; echo $dir; mkdir -p $dir; tar xf $i -C $dir; done
 
     """
-    # absorb some small error
-    dataset_path = maybe_here(dataset_path, train_or_test)
     # init parent class
     super(ILSVRC12, self).__init__(train_or_test, dataset_path)
     self.train_or_test = train_or_test
-    self.full_dir = os.path.join(dataset_path, self.train_or_test)
 
     # some meta info
+    if not os.path.exists(os.path.join(self.dir, 'meta')):
+      self.download(os.path.join(self.dir, 'meta'),
+                    default_url="http://dl.caffe.berkeleyvision.org/caffe_ilsvrc12.tar.gz",
+                    auto_untar=True,
+                    is_gz=True)
+    
     meta = ILSVRCMeta(os.path.join(self.dir, 'meta'))
     self.synset, self.inv_synset = meta.get_synset_1000()
-
+    
     # image list
     bbdir = os.path.join(self.dir, 'bbox')
     if self.train_or_test == 'train':
+      # maybe download
+      if not os.path.exists(os.path.join(self.dir, self.train_or_test)):
+        self.download(self.dir, file_names=['ILSVRC2012_img_train.tar'],
+          default_url="shell:mkdir train && tar xvf {file_placeholder} -C train\n cd train && find -type f -name '*.tar' | parallel -P 10 'echo {} && mkdir -p {/.} && tar xf {} -C {/.}'")
+  
       self.imglist = self.get_train_image_list(self.train_or_test)
       self.bblist, _ = ILSVRC12.get_bbox(bbdir, self.imglist, self.train_or_test)
     else:
+      # maybe download
+      if train_or_test == 'val':
+        if not os.path.exists(os.path.join(self.dir, self.train_or_test)):
+          self.download(self.dir, file_names=['ILSVRC2012_img_val.tar'],
+            default_url="shell:mkdir train && tar xvf {file_placeholder} -C train\n cd train && find -type f -name '*.tar' | parallel -P 10 'echo {} && mkdir -p {/.} && tar xf {} -C {/.}'")
+    
       self.imglist = self.get_val_or_test_image_list(self.train_or_test)
       if self.train_or_test == 'val':
         self.bblist, label_list = ILSVRC12.get_bbox(bbdir, self.imglist, self.train_or_test)
@@ -122,10 +136,10 @@ class ILSVRC12(Dataset):
     :param name: 'train'
     :returns: list of (image filename, cls)
     """
-    image_list  =  [('%s/%s'%(class_name,file_name),self.inv_synset[class_name])  \
-                                            for  class_index, class_name in enumerate(os.listdir(os.path.join(self.dir,name)) ) \
-                                            if os.path.isdir(os.path.join(self.dir,name,class_name)) \
-                                            for file_name in os.listdir(os.path.join(self.dir,name,class_name))]
+    image_list = [('%s/%s'%(class_name, file_name), self.inv_synset[class_name]) \
+                   for class_index, class_name in enumerate(os.listdir(os.path.join(self.dir, name)) ) \
+                   if os.path.isdir(os.path.join(self.dir, name, class_name)) \
+                   for file_name in os.listdir(os.path.join(self.dir, name, class_name))]
 
     return image_list
   def get_val_or_test_image_list(self, name):
@@ -133,11 +147,10 @@ class ILSVRC12(Dataset):
     :param name: 'val'
     :returns: list of (image filename, cls)
     """
-    image_list  =  [(filename,-1)  for  fileindex,filename in enumerate(os.listdir(os.path.join(self.dir,name))) ]
+    image_list = [(filename,-1) for fileindex,filename in enumerate(os.listdir(os.path.join(self.dir, self.train_or_test, name))) ]
     return image_list
 
-  def split(self,split_params={}, split_method='holdout'):
-
+  def split(self, split_params={}, split_method='holdout'):
     assert (self.train_or_test == 'train')
     assert (split_method == 'holdout')
     validation_dataset = ILSVRC12('val', self.dir)
@@ -165,11 +178,11 @@ class ILSVRC12(Dataset):
 
       for k in idxs:
         fname, label = self.imglist[k]
-        fname = os.path.join(self.full_dir, fname)
+        fname = os.path.join(self.dir, self.train_or_test, fname)
         im = imread(fname.strip())
 
         if im.ndim == 2:
-          im = np.expand_dims(im, 2).repeat(3,2)
+          im = np.expand_dims(im, 2).repeat(3, 2)
 
         if self.train_or_test == "train" or \
                 self.train_or_test == 'val':
@@ -179,12 +192,34 @@ class ILSVRC12(Dataset):
 
           yield [im, {'category_id': label,
                       'bbox': bbox,
-                      'info': (im.shape[0],im.shape[1],im.shape[2])}]
+                      'id': k,
+                      'info': (im.shape[0], im.shape[1], im.shape[2])}]
         else:
           yield [im]
+  
+  def at(self, k):
+    fname, label = self.imglist[k]
+    fname = os.path.join(self.dir, self.train_or_test, fname)
+    im = imread(fname.strip())
+  
+    if im.ndim == 2:
+      im = np.expand_dims(im, 2).repeat(3, 2)
+  
+    if self.train_or_test == "train" or \
+            self.train_or_test == 'val':
+      bbox = self.bblist[k]
+      if bbox is None:
+        bbox = np.array([0, 0, im.shape[1] - 1, im.shape[0] - 1])
+    
+      yield [im, {'category_id': label,
+                  'bbox': bbox,
+                  'id': k,
+                  'info': (im.shape[0], im.shape[1], im.shape[2])}]
+    else:
+      yield [im]
 
   @staticmethod
-  def get_bbox(bbox_dir, imglist,train_or_test):
+  def get_bbox(bbox_dir, imglist, train_or_test):
     ret = []
     ret_label = []
     def parse_bbox(fname):

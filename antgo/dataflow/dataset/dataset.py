@@ -19,6 +19,7 @@ import multiprocessing
 import tarfile
 import zipfile
 from antgo import config
+import subprocess
 
 Config = config.AntConfig
 
@@ -514,7 +515,13 @@ class Dataset(BaseNode):
 
     return label
 
-  def download(self, target_path, file_names=[], default_url=None, auto_untar=False, is_gz=False, auto_unzip=False):
+  def download(self, target_path,
+               file_names=[],
+               default_url=None,
+               auto_untar=False,
+               is_gz=False,
+               auto_unzip=False,
+               shell=None):
     dataset_url = getattr(self, 'dataset_url', None)
     if dataset_url is None or len(dataset_url) == 0:
       dataset_url = default_url
@@ -558,6 +565,10 @@ class Dataset(BaseNode):
               if auto_unzip:
                 with zipfile.ZipFile(download_path, mode='r') as zpfd:
                   zpfd.extractall(target_path)
+                  
+              if shell is not None:
+                logger.info('execute: %s' % shell)
+                subprocess.call(shell, shell=True, cwd=target_path)
           else:
             download_path = os.path.join(target_path, 'data.tar')
             if not os.path.exists(download_path):
@@ -566,5 +577,27 @@ class Dataset(BaseNode):
               if auto_untar:
                 with tarfile.open(download_path, 'r:gz' if is_gz else 'r') as tar:
                   tar.extractall(target_path)
-
+              
+              if shell is not None:
+                logger.info('execute: %s' % shell)
+                subprocess.call(shell, shell=True, cwd=target_path)
+                
       # validate ipfs address
+      
+      # validate shell (download and reorganize data manully)
+      is_shell = re.match('^(shell:)', dataset_url)
+      if is_shell is not None:
+        for f in file_names:
+          if os.path.exists(os.path.join(target_path, f)):
+            cmd_str = dataset_url[6:]
+            cmds = cmd_str.split('\n')
+            for cmd in cmds:
+              if '{file_placeholder}' in cmd:
+                cmd = cmd.format(file_placeholder=f)
+                
+              logger.info('execute: %s'%cmd)
+              subprocess.call(cmd, shell=True, cwd=target_path)
+          else:
+            logger.error('perhaps %s must be prepared manully and '
+                         'put it at %s'%(f, target_path))
+            os._exit(-1)

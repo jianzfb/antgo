@@ -319,14 +319,15 @@ class TFTrainer(Trainer):
       variables_to_train = _get_variables_to_train(self)
 
       # Train_tensor
-      total_loss, clones_gradients = tfmodel_deploy.optimize_clones(
-        self.clones,
-        optimizer,
-        var_list=variables_to_train)
+      total_loss, clones_gradients = \
+        tfmodel_deploy.optimize_clones(self.clones,
+                                       optimizer,
+                                       regularization_losses=None if self.regularization_loss else [],
+                                       var_list=variables_to_train)
 
       # Create gradient updates.
       grad_updates = optimizer.apply_gradients(clones_gradients,
-        global_step=global_step)
+                                               global_step=global_step)
 
       # Value ops
       update_ops.append(grad_updates)

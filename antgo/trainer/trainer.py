@@ -54,6 +54,7 @@ trainer_default_params = [
   DefaultParam('checkpoint_path', None, ''),
   DefaultParam('checkpoint_exclude_scopes', None, ''),
   DefaultParam('checkpoint_transfer_scopes', None, ''),
+  DefaultParam('regularization_loss', True, ''),
 ]
 
 
