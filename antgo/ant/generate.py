@@ -90,6 +90,7 @@ class AntGenerate(AntBase):
       is_train_data_ok = True
     except:
       logger.error('error in generating train data')
+      logger.error(sys.exc_info())
     
     # 3.step generate val data
     is_val_data_ok = False
@@ -105,6 +106,7 @@ class AntGenerate(AntBase):
       is_val_data_ok = True
     except:
       logger.error('error in generating val data')
+      logger.error(sys.exc_info())
 
     # 4.step generate test data
     is_test_data_ok = False
@@ -120,6 +122,7 @@ class AntGenerate(AntBase):
       is_test_data_ok = True
     except:
       logger.error('error in generating test data')
+      logger.error(sys.exc_info())
       
     if not is_train_data_ok and not is_test_data_ok:
       logger.error('fail to generate train/test dataset')

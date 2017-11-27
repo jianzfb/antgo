@@ -259,10 +259,7 @@ def infer_callback(data_source, dump_dir):
 
       # record
       ctx.recorder.record(mask)
-      if count == 10:
-        break
       count += 1
-      
     except StopIteration:
       break
 
