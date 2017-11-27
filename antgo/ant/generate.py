@@ -127,8 +127,6 @@ class AntGenerate(AntBase):
       
     # 4.step synchronize with cloud
     if self.token is not None:
-      logger.error('synchronize with cloud')
-      
       create_dataset_remote_api = 'hub/api/terminal/create/dataset'
       response = self.remote_api_request(create_dataset_remote_api,
                                          action='post',
