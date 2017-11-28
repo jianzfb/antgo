@@ -21,6 +21,9 @@ import requests
 from antgo.ant import flags
 from antgo.utils.fs import *
 from antgo import config
+from antgo.ant.utils import *
+import yaml
+
 if sys.version > '3':
   PY3 = True
 else:
@@ -30,7 +33,7 @@ FLAGS = flags.AntFLAGS
 Config = config.AntConfig
 
 class AntBase(object):
-  def __init__(self, ant_name, ant_context=None, ant_token=None):
+  def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
     self.http_port = '9999'
     self.http_prefix = 'http'
@@ -38,16 +41,24 @@ class AntBase(object):
     self.app_token = os.environ.get('APP_TOKEN', ant_token)
     self.app_connect = os.environ.get('APP_CONNECT', 'tcp://%s:%s' % (self.server_ip, '2345'))
     self.app_file_connect = os.environ.get('APP_FILE_CONNECT', 'tcp://%s:%s' % (self.server_ip, '2346'))
-
+    
+    # three key info
+    if 'main_file' in kwargs:
+      self.main_file = kwargs['main_file']
+    if 'main_folder' in kwargs:
+      self.main_folder = kwargs['main_folder']
+    if 'main_param' in kwargs:
+      self.main_param = kwargs['main_param']
+    
+    self._pid = str(os.getpid())
+    
     # config zmq connect
-    self.zmq_context = zmq.Context()
-    self.zmq_socket = self.zmq_context.socket(zmq.REQ)
-    self.zmq_socket.connect(self.app_connect)
+    self._zmq_socket = zmq.Context().socket(zmq.REQ)
+    self._zmq_socket.connect(self.app_connect)
     
     # config zmq file connect
-    self.zmq_file_context = zmq.Context()
-    self.zmq_file_socket = self.zmq_file_context.socket(zmq.DEALER)
-    self.zmq_file_socket.connect(self.app_file_connect)
+    self._zmq_file_socket = zmq.Context().socket(zmq.DEALER)
+    self._zmq_file_socket.connect(self.app_file_connect)
     
     # server flag
     self.app_server = self.__class__.__name__
@@ -62,7 +73,30 @@ class AntBase(object):
 
     # time
     self.ant_time_stamp = time.time()
-
+  
+  @property
+  def zmq_socket(self):
+    return self._zmq_socket
+  @zmq_socket.setter
+  def zmq_socket(self, val):
+    self._zmq_socket = val
+    self._zmq_socket.connect(self.app_connect)
+  
+  @property
+  def zmq_file_socket(self):
+    return self._zmq_file_socket
+  @zmq_file_socket.setter
+  def zmq_file_socket(self,val):
+    self._zmq_file_socket = val
+    self._zmq_file_socket.connect(self.app_file_connect)
+  
+  @property
+  def pid(self):
+    return self._pid
+  @pid.setter
+  def pid(self, val):
+    self._pid = val
+  
   def send(self, data, stage):
     if self.app_token is not None:
       now_time = time.time()
@@ -304,3 +338,22 @@ class AntBase(object):
   @property
   def time_stamp(self):
     return self.ant_time_stamp
+  
+  def flash(self):
+    if self.pid != str(os.getpid()):
+      # reset process pid
+      self.pid = str(os.getpid())
+      
+      # update zmq sockets
+      # (couldnt share socket in differenet process)
+      self.zmq_socket = zmq.Context().socket(zmq.REQ)
+      self.zmq_file_socket = zmq.Context().socket(zmq.DEALER)
+      
+      # update context
+      ctx = main_context(self.main_file, self.main_folder)
+      if self.main_param is not None:
+        main_config_path = os.path.join(self.main_folder, self.main_param)
+        params = yaml.load(open(main_config_path, 'r'))
+        ctx.params = params
+      
+      self.context = ctx

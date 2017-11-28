@@ -17,6 +17,7 @@ import sys
 from datetime import datetime
 from antgo.ant import flags
 from multiprocessing import Process
+from antgo.ant.utils import *
 if sys.version > '3':
     PY3 = True
 else:
@@ -31,13 +32,14 @@ class AntTrain(AntBase):
                ant_data_folder,
                ant_dump_dir,
                ant_token,
-               ant_task_config):
-    super(AntTrain, self).__init__(ant_name, ant_context, ant_token)
+               ant_task_config,
+               **kwargs):
+    super(AntTrain, self).__init__(ant_name, ant_context, ant_token, **kwargs)
     self.ant_data_source = ant_data_folder
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
-
+    
   def start(self):
     # 0.step loading challenge task
     running_ant_task = None
@@ -119,7 +121,6 @@ class AntTrain(AntBase):
     apply_devices = getattr(self.context.params, 'devices', [])
     # user model clones
     num_clones = getattr(self.context.params, 'num_clones', 1)
-
 
     # ablation train (parallel execute if device is OK)
     ablation_experiments = []
@@ -437,6 +438,9 @@ class AntTrain(AntBase):
   def start_ablation_train_proc(self, data_source, challenge_task, ablation_blocks, time_stamp, spare_devices=None):
     # child func
     def proc_func(handle, experiment_data_source, experiment_challenge_task, ablation_block, root_time_stamp, spare_device):
+      # perhaps proc_func is running in a new process
+      handle.flash()
+
       # reassign running device
       handle.context.params.devices = [spare_device]
       # only one clone
@@ -445,7 +449,7 @@ class AntTrain(AntBase):
       part_train_dataset, part_validation_dataset = experiment_data_source.split(split_method='holdout')
       part_train_dataset.reset_state()
 
-      handle.context.deactivate_block(ablation_block.name)
+      handle.context.deactivate_block(ablation_block)
       logger.info('start ablation experiment %s' % ablation_block)
 
       # dump_dir for ablation experiment
@@ -454,7 +458,7 @@ class AntTrain(AntBase):
         os.makedirs(ablation_dump_dir)
 
       # 2.step training model
-      handle.stage = 'ABLATION(%s)-TRAIN' % ablation_block
+      handle.stage = 'ABLATION-%s-TRAIN' % ablation_block
       handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
 
       # 3.step evaluation measures
@@ -462,7 +466,7 @@ class AntTrain(AntBase):
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       handle.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
 
-      handle.stage = 'ABLATION(%s)-EVALUATION' % ablation_block
+      handle.stage = 'ABLATION-%s-EVALUATION' % ablation_block
       with safe_recorder_manager(handle.context.recorder):
         handle.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
 
@@ -479,11 +483,13 @@ class AntTrain(AntBase):
           ablation_evaluation_measure_result.append(result)
 
       ablation_running_statictic[handle.ant_name]['measure'] = ablation_evaluation_measure_result
-      handle.stage = 'ABLATION(%s)-REPORT' % ablation_block
+      handle.stage = 'ABLATION-%s-REPORT' % ablation_block
 
       # send statistic report
       handle.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
-      everything_to_html(ablation_evaluation_measure_result, ablation_dump_dir)
+      everything_to_html(ablation_running_statictic, ablation_dump_dir)
+
+      handle.context.wait_until_clear()
 
     ablation_experiments = []
     for block_i, block in enumerate(ablation_blocks):
@@ -495,6 +501,6 @@ class AntTrain(AntBase):
         ablation_experiments.append(block_ablation_process)
       else:
         # process sequentially in main process
-        proc_func(self, data_source, challenge_task, block, time_stamp, [])
+        proc_func(self, data_source, challenge_task, block, time_stamp, 0)
 
     return ablation_experiments

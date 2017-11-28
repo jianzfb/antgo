@@ -36,6 +36,7 @@ class AntTask(object):
 
     if self._dataset_params is None:
       self._dataset_params = {}
+      
     if self._dataset_url is not None and len(self._dataset_url) > 0:
       self._dataset_params['dataset_url'] = self._dataset_url
 
@@ -52,9 +53,11 @@ class AntTask(object):
       else:
         # get dataset IO
         # logger.info('dataset io from mltalker')
-        if self._dataset_url is not None:
+        parse_flag = ''
+        if self._dataset_url is not None and len(self._dataset_url) > 0:
           parse_flag = self._dataset_url.split('/')[-2]
-          self._ant_dataset = AntDataset(self._dataset_name, parse_flag)
+        
+        self._ant_dataset = AntDataset(self._dataset_name, parse_flag)
 
     # related evaluation measures
     self._ant_measures = AntMeasures(self)
@@ -182,7 +185,7 @@ def create_task_from_json(task_config_json, ant_context=None):
     dataset_name = ""
     target_feature = ""
     dataset_params = {}
-    dataset_url = ""
+    dataset_url = None
     estimation_procedure_type = ""
     inputs = task['input']
     estimation_procedure_params = {}

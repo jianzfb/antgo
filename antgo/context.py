@@ -52,17 +52,19 @@ class Block(object):
 class Context(object):
   def __init__(self):
     global global_context
-    assert(global_context == None)
+    # assert(global_context == None)
 
     self.training_process_callback = None
     self.infer_process_callback = None
     self.dataset_factory_callback = AntDataset
     self.running_recorder = None
     self.context_params = None
-
+    
+    self.pid = str(os.getpid())
+    
     global_context = self
-    self.context_job = Job(self)
-    self.context_job.start()
+    self.job = Job(self)
+    self.job.start()
 
     self.context_ant = None
     self.context_stage = ""
@@ -76,10 +78,10 @@ class Context(object):
     self._stoppable_threads = []
 
   def wait_until_clear(self):
-    if self.context_job is not None:
-      self.context_job.stop()
-      self.context_job.join()
-      self.context_job = None
+    if self.job is not None:
+      self.job.stop()
+      self.job.join()
+      self.job = None
     
     for stoppable_thread in self._stoppable_threads:
       stoppable_thread.stop()
@@ -110,6 +112,9 @@ class Context(object):
   @property
   def job(self):
     return self.context_job
+  @job.setter
+  def job(self, val):
+    self.context_job = val
 
   @property
   def ant(self):
@@ -230,4 +235,5 @@ class Context(object):
   def activate_block(self, name):
     self._blocks_status[name] = True
   def deactivate_block(self, name):
+    self._blocks_status = {}
     self._blocks_status[name] = False

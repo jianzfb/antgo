@@ -151,7 +151,14 @@ def _get_init_fn(trainer_obj, dump_dir):
   # ignoring the checkpoint anyway.
   if tf.train.latest_checkpoint(dump_dir):
     logger.info('Ignoring --checkpoint_path because a checkpoint already exists in %s'% dump_dir)
-    return None
+    # initilize model from dump_dir
+    latest_checkpoint = tf.train.latest_checkpoint(dump_dir)
+    variables_to_restore = {}
+    for var in slim.get_model_variables():
+      var_name = var.op.name
+      variables_to_restore[var_name] = var
+
+    return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
 
   exclusions = []
   checkpoint_exclude_scopes = getattr(trainer_obj, 'checkpoint_exclude_scopes', None)

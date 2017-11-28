@@ -171,7 +171,10 @@ def main():
                                  data_factory,
                                  dump_dir,
                                  token,
-                                 task)
+                                 task,
+                                 main_file=main_file,
+                                 main_folder=main_folder,
+                                 main_param=main_param)
       running_process.start()
   elif ant_cmd == 'challenge':
     running_process = AntChallenge(ant_context,

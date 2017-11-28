@@ -16,6 +16,7 @@ from antgo.utils.encode import *
 from antgo.utils import logger
 import scipy.misc
 import base64
+import os
 
 PYTHON_VERSION = sys.version_info[0]
 if PYTHON_VERSION == 2:
@@ -201,9 +202,9 @@ class Job(threading.Thread):
     self.data_queue = queue.Queue()
     self.job_context = context
     self.setDaemon(True)
-
+    self.pid = str(os.getpid())
     self.charts = []
-
+  
   def create_channel(self, channel_name, channel_type):
     return Channel(channel_name, channel_type, self)
 
@@ -244,18 +245,18 @@ class Job(threading.Thread):
       # 1.step reorganize data
       job_stage = data.pop('STAGE')
       if 'CHANNEL' in data:
-          job_channel = data['CHANNEL']
-          chart_data = data['DATA']["CHART"]
+        job_channel = data['CHANNEL']
+        chart_data = data['DATA']["CHART"]
 
-          # reorganize (channel_type, channel_y)
-          reorganized_xy= job_channel.reorganize_data(chart_data[6], [chart_data[8], chart_data[9]])
-          if reorganized_xy is None:
-            continue
-          chart_data[8] = reorganized_xy[0]
-          chart_data[9] = reorganized_xy[1]
+        # reorganize (channel_type, channel_y)
+        reorganized_xy= job_channel.reorganize_data(chart_data[6], [chart_data[8], chart_data[9]])
+        if reorganized_xy is None:
+          continue
+        chart_data[8] = reorganized_xy[0]
+        chart_data[9] = reorganized_xy[1]
 
-          data['DATA']["CHART"] = chart_data
+        data['DATA']["CHART"] = chart_data
 
       # 2.step sending to mltalker
       if self.job_context != None and data['DATA'] != None:
-          self.job_context.send(data['DATA'], job_stage)
+        self.job_context.send(data['DATA'], job_stage)

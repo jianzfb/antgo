@@ -129,11 +129,23 @@ def densenet(inputs,
                                                 growth_rate,
                                                 scope='dense_block' + str(i + 1))
 
-                # Add transition_block
-                net, num_filters = _transition_block(net, num_filters,
-                                                     compression=compression,
-                                                     scope='transition_block' + str(i + 1))
-
+                #Add transition_block
+                # net, num_filters = _transition_block(net, num_filters,
+                #                                      compression=compression,
+                #                                      scope='transition_block' + str(i + 1))
+                if i == 0:
+                  net, num_filters = _transition_block(net, 128,
+                    compression=1.0,
+                    scope='transition_block' + str(i + 1))
+                elif i == 1:
+                  net, num_filters = _transition_block(net, 256,
+                    compression=1.0,
+                    scope='transition_block' + str(i + 1))
+                elif i == 2:
+                  net, num_filters = _transition_block(net, 512,
+                    compression=1.0,
+                    scope='transition_block' + str(i + 1))
+                
             net, num_filters = _dense_block(
                 net, num_layers[-1], num_filters,
                 growth_rate,
