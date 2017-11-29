@@ -72,7 +72,7 @@ class AntChallenge(AntBase):
 
     # now time stamp
     # now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
-    now_time_stamp = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
+    now_time_stamp = time.strftime('%Y%m%d.%H%M%S.%f', time.localtime(self.time_stamp))
     
     # 0.step warp model (main_file and main_param)
     self.stage = 'CHALLENGE-MODEL'

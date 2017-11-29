@@ -221,7 +221,9 @@ def densenet_arg_scope(weight_decay=1e-4,
     with slim.arg_scope([slim.conv2d],
                         weights_regularizer=slim.l2_regularizer(weight_decay),
                         activation_fn=None,
-                        biases_initializer=None):
+                        biases_initializer=None,
+                        weights_initializer=slim.variance_scaling_initializer(),
+                        ):
         with slim.arg_scope([slim.batch_norm],
                             scale=True,
                             decay=batch_norm_decay,

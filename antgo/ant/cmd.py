@@ -516,12 +516,9 @@ class AntCmd(AntBase):
       if experiment_optimum is not None:
         data['experiment-optimum'] = int(experiment_optimum)
 
-      if new_experiment_name is not None:
-        data['new-experiment-name'] = new_experiment_name
-
       if len(data) > 1:
         remote_api = 'hub/api/terminal/update/experiment'
-        response = self.remote_api_request(remote_api,data=data,action='patch')
+        response = self.remote_api_request(remote_api, data=data, action='patch')
 
         if response is None:
           logger.error('update error')

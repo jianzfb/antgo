@@ -108,8 +108,8 @@ def tf_random_crop(image_list, label_list, crop_height, crop_width):
   return cropped_images, cropped_labels
 
 
-def tf_random_rotate(image, label):
-  random_angle = (tf.to_float(tf.random_uniform([1]))[0] * 2 - 1) * 90.0 / 180.0 * 3.14
+def tf_random_rotate(image, label, max_angle=90.0):
+  random_angle = (tf.to_float(tf.random_uniform([1]))[0] * 2 - 1) * max_angle / 180.0 * 3.14
   image = tf.contrib.image.rotate(image, random_angle)
   label = tf.contrib.image.rotate(label, random_angle)
   return image, label

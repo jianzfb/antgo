@@ -295,7 +295,7 @@ class TFTrainer(Trainer):
 
       # Create global_step
       with tf.device(deploy_config.variables_device()):
-        global_step = slim.create_global_step()
+        global_step = slim.get_or_create_global_step()
 
       func = model.model_fn
       @functools.wraps(func)
