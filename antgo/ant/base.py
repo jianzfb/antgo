@@ -11,7 +11,6 @@ from ..utils.serialize import loads,dumps
 from ..utils import logger
 import zmq
 import uuid
-import time
 import json
 import sys
 import tarfile
@@ -23,7 +22,7 @@ from antgo.utils.fs import *
 from antgo import config
 from antgo.ant.utils import *
 import yaml
-
+from datetime import datetime
 if sys.version > '3':
   PY3 = True
 else:
@@ -49,7 +48,12 @@ class AntBase(object):
       self.main_folder = kwargs['main_folder']
     if 'main_param' in kwargs:
       self.main_param = kwargs['main_param']
+    if 'time_stamp' in kwargs:
+      self._time_stamp = kwargs['time_stamp']
+    else:
+      self._time_stamp = datetime.now().timestamp()
     
+    # current pid
     self._pid = str(os.getpid())
     
     # config zmq connect
@@ -71,9 +75,6 @@ class AntBase(object):
       self.ant_context = ant_context
       self.ant_context.ant = self
 
-    # time
-    self.ant_time_stamp = time.time()
-  
   @property
   def zmq_socket(self):
     return self._zmq_socket
@@ -99,10 +100,10 @@ class AntBase(object):
   
   def send(self, data, stage):
     if self.app_token is not None:
-      now_time = time.time()
+      now_time = datetime.now().timestamp()
       # 0.step add extra data
       data['APP_TOKEN'] = self.app_token
-      data['APP_TIME'] = self.ant_time_stamp
+      data['APP_TIME'] = self.time_stamp
       # if self.context is not None:
       #   if self.context.params is not None:
       #     data['APP_HYPER_PARAMETER'] = json.dumps(self.context.params)
@@ -166,7 +167,7 @@ class AntBase(object):
           self.zmq_file_socket.send(dumps((self.app_token,
                                            self.ant_name,
                                            stage,
-                                           self.ant_time_stamp,
+                                           self.time_stamp,
                                            'EXPERIMENT-RECORD',
                                            record_id,
                                            BLOCK_SIZE,
@@ -178,7 +179,7 @@ class AntBase(object):
         self.zmq_file_socket.send(dumps((self.app_token,
                                          self.ant_name,
                                          stage,
-                                         self.ant_time_stamp,
+                                         self.time_stamp,
                                          'EXPERIMENT-RECORD',
                                          record_id,
                                          BLOCK_SIZE,
@@ -206,7 +207,7 @@ class AntBase(object):
         self.zmq_file_socket.send(dumps((self.app_token,
                                          name,
                                          stage,
-                                         self.ant_time_stamp,
+                                         self.time_stamp,
                                          mode,
                                          target_name,
                                          BLOCK_SIZE,
@@ -218,7 +219,7 @@ class AntBase(object):
       self.zmq_file_socket.send(dumps((self.app_token,
                                        name,
                                        stage,
-                                       self.ant_time_stamp,
+                                       self.time_stamp,
                                        mode,
                                        target_name,
                                        BLOCK_SIZE,
@@ -233,10 +234,10 @@ class AntBase(object):
       # 0.step config data
       data = {}
       data['APP_TOKEN'] = self.app_token
-      data['APP_TIME'] = self.ant_time_stamp
+      data['APP_TIME'] = self.time_stamp
       data['APP_RPC'] = cmd
       data['APP_STAGE'] = 'RPC'
-      data['APP_NOW_TIME'] = time.time()
+      data['APP_NOW_TIME'] = datetime.now().timestamp()
       data["APP_NAME"] = self.ant_name
       data['APP_SERVER'] = self.app_server
 
@@ -337,7 +338,7 @@ class AntBase(object):
 
   @property
   def time_stamp(self):
-    return self.ant_time_stamp
+    return self._time_stamp
   
   def flash(self):
     if self.pid != str(os.getpid()):

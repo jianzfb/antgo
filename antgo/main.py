@@ -42,7 +42,6 @@ flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
-flags.DEFINE_string('name', None, 'app name')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
 flags.DEFINE_string('sandbox_time', None, 'max running time')
 
@@ -108,15 +107,16 @@ def main():
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
     return
 
-  # 4.step check related params
-  # 4.1 step check name, if None, set it as current time automatically
-  name = FLAGS.name()
-  if name is None:
-    name = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
-
+  # # 4.step check related params
+  # # 4.1 step check name, if None, set it as current time automatically
+  # name = FLAGS.name()
+  # if name is None:
+  #   name = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
+  time_stamp = datetime.now().timestamp()
+  name = datetime.fromtimestamp(time_stamp).strftime('%Y%m%d.%H%M%S.%f')
   if not PY3:
     name = unicode(name)
-
+  
   # 4.2 check main folder (all related model code, includes main_file and main_param)
   main_folder = FLAGS.main_folder()
   if main_folder is None:
@@ -174,7 +174,8 @@ def main():
                                  task,
                                  main_file=main_file,
                                  main_folder=main_folder,
-                                 main_param=main_param)
+                                 main_param=main_param,
+                                 time_stamp=time_stamp)
       running_process.start()
   elif ant_cmd == 'challenge':
     running_process = AntChallenge(ant_context,
@@ -182,7 +183,11 @@ def main():
                                    data_factory,
                                    dump_dir,
                                    token,
-                                   task)
+                                   task,
+                                   main_file=main_file,
+                                   main_folder=main_folder,
+                                   main_param=main_param,
+                                   time_stamp=time_stamp)
     running_process.start()
   elif ant_cmd == "deploy":
     pass

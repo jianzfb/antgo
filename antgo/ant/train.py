@@ -77,7 +77,7 @@ class AntTrain(AntBase):
     
     # now time stamp
     # train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
-    train_time_stamp = time.strftime('%Y%m%d.%H%M%S.%f', time.localtime(self.time_stamp))
+    train_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
 
     # 0.step warp model (main_file and main_param)
     self.stage = 'MODEL'

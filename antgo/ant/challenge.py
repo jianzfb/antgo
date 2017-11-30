@@ -25,8 +25,9 @@ class AntChallenge(AntBase):
                ant_data_folder,
                ant_dump_dir,
                ant_token,
-               ant_task_config=None):
-    super(AntChallenge, self).__init__(ant_name, ant_context, ant_token)
+               ant_task_config=None,
+               **kwargs):
+    super(AntChallenge, self).__init__(ant_name, ant_context, ant_token, **kwargs)
     self.ant_data_source = ant_data_folder
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
@@ -72,7 +73,7 @@ class AntChallenge(AntBase):
 
     # now time stamp
     # now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
-    now_time_stamp = time.strftime('%Y%m%d.%H%M%S.%f', time.localtime(self.time_stamp))
+    now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
     
     # 0.step warp model (main_file and main_param)
     self.stage = 'CHALLENGE-MODEL'
