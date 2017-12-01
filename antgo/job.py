@@ -63,7 +63,7 @@ class Chart():
 
 
 class Channel():
-  def __init__(self, channel_name = None, channel_type = None, channel_job=None, channel_params={}):
+  def __init__(self, channel_name = None, channel_type = None, channel_job=None, **channel_params):
     self.channel_id = -1
     self.channel_name = channel_name
     self.channel_type = channel_type
@@ -128,8 +128,9 @@ class Channel():
       new_height = int(height * min_scale)
       new_width = int(width * min_scale)
       resized_img = scipy.misc.imresize(data_y,(new_height, new_width))
+      # resized_img = data_y
       if resized_img.dtype == np.uint8:
-        return (data_x, base64.b64encode(png_encode(resized_img)))
+        return (data_x, base64.b64encode(png_encode(resized_img)).decode('utf-8'))
 
       max_val = np.max(resized_img.flatten())
       min_val = np.min(resized_img.flatten())
@@ -140,7 +141,7 @@ class Channel():
           resized_img = (resized_img - min_val) / max_val * 255
           resized_img = resized_img.astype(np.uint8)
 
-      return (data_x, base64.b64encode(png_encode(resized_img)))
+      return (data_x, base64.b64encode(png_encode(resized_img)).decode('utf-8'))
     except:
       logger.error("Channel Y Must be Numpy Array")
 
@@ -205,8 +206,8 @@ class Job(threading.Thread):
     self.pid = str(os.getpid())
     self.charts = []
   
-  def create_channel(self, channel_name, channel_type):
-    return Channel(channel_name, channel_type, self)
+  def create_channel(self, channel_name, channel_type, **kwargs):
+    return Channel(channel_name, channel_type, self, **kwargs)
 
   def create_chart(self, chart_channels, chart_title, chart_x_axis="x", chart_y_axis="y"):
     chart = Chart(chart_title, chart_x_axis, chart_y_axis)

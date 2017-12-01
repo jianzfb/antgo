@@ -35,7 +35,7 @@ def png_encode(data):
     assert(data.shape[2] == 3 or data.shape[2] == 4)
     aug_data[:,:,3] = 255
     aug_data[:,:,0:data.shape[2]] = data
-  buf = bytes(aug_data.flatten().tolist())
+  buf = bytes(aug_data.flatten().data)
 
   # reverse the vertical line order and add null bytes at the start
   width_byte_4 = width * 4

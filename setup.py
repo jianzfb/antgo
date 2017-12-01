@@ -30,7 +30,7 @@ ext_modules = [
     Extension('antgo.utils._resize',
               ["antgo/utils/_resize.pyx"],
               include_dirs=[np.get_include()],
-              extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
+              extra_compile_args=["-Wno-cpp", "-Wno-unused-function"]
               ),
 ]
 
