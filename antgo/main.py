@@ -24,6 +24,7 @@ from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.dataflow.dataflow_server import *
 from datetime import datetime
+from antgo.utils.utils import *
 if sys.version > '3':
     PY3 = True
 else:
@@ -112,7 +113,8 @@ def main():
   # name = FLAGS.name()
   # if name is None:
   #   name = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
-  time_stamp = datetime.now().timestamp()
+  # time_stamp = datetime.now().timestamp()
+  time_stamp = timestamp()
   name = datetime.fromtimestamp(time_stamp).strftime('%Y%m%d.%H%M%S.%f')
   if not PY3:
     name = unicode(name)

@@ -14,6 +14,11 @@ import collections
 import numpy as np
 import six
 import tarfile
+from datetime import datetime
+if sys.version > '3':
+    PY3 = True
+else:
+    PY3 = False
 
 
 __all__ = ['change_env',
@@ -21,7 +26,7 @@ __all__ = ['change_env',
         'get_rng', 'memoized',
         'get_tqdm_kwargs',
         'targz',
-        ]
+        'timestamp']
 
 #def expand_dim_if_necessary(var, dp):
 #    """
@@ -130,3 +135,14 @@ def get_tqdm_kwargs(**kwargs):
 def targz(output_filename, source_dir):
     with tarfile.open(output_filename, "w:gz") as tar:
         tar.add(source_dir, arcname=os.path.basename(source_dir))
+        
+        
+def timestamp():
+  now_time = datetime.now()
+  if PY3:
+    return now_time.timestamp()
+  else:
+    epoch = datetime.utcfromtimestamp(0)
+    total_seconds = (now_time - epoch).total_seconds()
+    # total_seconds will be in decimals (millisecond precision)
+    return total_seconds

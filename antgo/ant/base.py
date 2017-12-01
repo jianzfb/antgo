@@ -22,6 +22,7 @@ from antgo.utils.fs import *
 from antgo import config
 from antgo.ant.utils import *
 import yaml
+from antgo.utils.utils import *
 from datetime import datetime
 if sys.version > '3':
   PY3 = True
@@ -51,7 +52,7 @@ class AntBase(object):
     if 'time_stamp' in kwargs:
       self._time_stamp = kwargs['time_stamp']
     else:
-      self._time_stamp = datetime.now().timestamp()
+      self._time_stamp = timestamp()
     
     # current pid
     self._pid = str(os.getpid())
@@ -100,7 +101,8 @@ class AntBase(object):
   
   def send(self, data, stage):
     if self.app_token is not None:
-      now_time = datetime.now().timestamp()
+      # now_time = datetime.now().timestamp()
+      now_time = timestamp()
       # 0.step add extra data
       data['APP_TOKEN'] = self.app_token
       data['APP_TIME'] = self.time_stamp
@@ -237,7 +239,7 @@ class AntBase(object):
       data['APP_TIME'] = self.time_stamp
       data['APP_RPC'] = cmd
       data['APP_STAGE'] = 'RPC'
-      data['APP_NOW_TIME'] = datetime.now().timestamp()
+      data['APP_NOW_TIME'] = timestamp()
       data["APP_NAME"] = self.ant_name
       data['APP_SERVER'] = self.app_server
 
