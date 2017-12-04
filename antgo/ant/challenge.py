@@ -110,8 +110,8 @@ class AntChallenge(AntBase):
     # 1.step loading test dataset
     logger.info('loading test dataset %s'%running_ant_task.dataset_name)
     ant_test_dataset = running_ant_task.dataset('test',
-                                                 os.path.join(self.ant_data_source, running_ant_task.dataset_name),
-                                                 running_ant_task.dataset_params)
+                                                os.path.join(self.ant_data_source, running_ant_task.dataset_name),
+                                                running_ant_task.dataset_params)
     
     with safe_recorder_manager(ant_test_dataset):
       # split data and label
@@ -139,6 +139,17 @@ class AntChallenge(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(ant_test_dataset.size)
 
+      if not self.context.recorder.is_measure:
+        # has no annotation to continue to meausre
+        # notify
+        self.context.job.send(
+          {'DATA': {'REPORT': copy.deepcopy(task_running_statictic), 'RECORD': intermediate_dump_dir}})
+  
+        # generate report html
+        logger.info('generate model evaluation report')
+        everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
+        return
+    
       logger.info('start evaluation process')
       evaluation_measure_result = []
 

@@ -9,4 +9,5 @@ psutil
 pyzmq
 jinja2
 pyyaml
+requests
 python-rocksdb

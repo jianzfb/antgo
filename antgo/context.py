@@ -76,6 +76,8 @@ class Context(object):
     self._blocks = []
     self._blocks_status = {}
     self._stoppable_threads = []
+    
+    self._from_experiment = None
 
   def wait_until_clear(self):
     if self.job is not None:
@@ -93,7 +95,7 @@ class Context(object):
 
     for clear_func in self.clear_callbacks:
       clear_func()
-
+    
     global global_context
     global_context = None
     # clear
@@ -115,7 +117,7 @@ class Context(object):
   @job.setter
   def job(self, val):
     self.context_job = val
-
+  
   @property
   def ant(self):
     return self.context_ant
@@ -237,3 +239,13 @@ class Context(object):
   def deactivate_block(self, name):
     self._blocks_status = {}
     self._blocks_status[name] = False
+  
+  @property
+  def from_experiment(self):
+    return self._from_experiment
+
+  @from_experiment.setter
+  def from_experiment(self, experiment):
+    self._from_experiment = experiment
+  
+  

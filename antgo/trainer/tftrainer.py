@@ -134,7 +134,7 @@ def _get_variables_to_train(trainer_obj):
   return variables_to_train
 
 
-def _get_init_fn(trainer_obj, dump_dir):
+def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   """Returns a function run by the chief worker to warm-start the training.
 
   Note that the init_fn is only run when initializing the model during the very
@@ -143,12 +143,23 @@ def _get_init_fn(trainer_obj, dump_dir):
   Returns:
     An init function run by the supervisor.
   """
-  checkpoint_path = getattr(trainer_obj, 'checkpoint_path', None)
-  if checkpoint_path is None:
-    return None
+  # 1.step load from experiment
+  if ctx is not None:
+    if ctx.from_experiment is not None:
+      # TODO support dencentrid storage in future
+      logger.info('load model experiment %s' % ctx.from_experiment.split('/')[-1])
+      latest_checkpoint = tf.train.latest_checkpoint(ctx.from_experiment)
+      
+      variables_to_restore = {}
+      for var in slim.get_model_variables():
+        var_name = var.op.name
+        variables_to_restore[var_name] = var
+  
+      return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
 
   # Warn the user if a checkpoint exists in the train_dir. Then we'll be
   # ignoring the checkpoint anyway.
+  # 2.step load from dump_dir
   if tf.train.latest_checkpoint(dump_dir):
     logger.info('Ignoring --checkpoint_path because a checkpoint already exists in %s'% dump_dir)
     # initilize model from dump_dir
@@ -159,6 +170,11 @@ def _get_init_fn(trainer_obj, dump_dir):
       variables_to_restore[var_name] = var
 
     return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
+  
+  # 3.step load from checkpoint_path
+  checkpoint_path = getattr(trainer_obj, 'checkpoint_path', None)
+  if checkpoint_path is None:
+    return None
 
   exclusions = []
   checkpoint_exclude_scopes = getattr(trainer_obj, 'checkpoint_exclude_scopes', None)
@@ -228,6 +244,9 @@ class TFTrainer(Trainer):
     self.clones = None
     self.lr = None
 
+    self.coord = None
+    self.threads = None
+  
   # 2.step run model once
   def run(self, data_generator, binds, whats=False):
     # bind data
@@ -282,7 +301,10 @@ class TFTrainer(Trainer):
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
-
+      
+      # initialize data source
+      self.ctx.data_source.init(sess=self.sess)
+      
       #######################
       # Config model deploy #
       #######################
@@ -356,12 +378,16 @@ class TFTrainer(Trainer):
 
       # Global initialization
       self.sess.run(tf.global_variables_initializer())
-
+      self.sess.run(tf.local_variables_initializer())
+      
       # Restore from checkpoint
-      restore_fns = _get_init_fn(self, self.dump_dir)
+      restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
       if restore_fns is not None:
         for restore_fn in restore_fns:
           restore_fn(self.sess)
+
+      self.coord = tf.train.Coordinator()
+      self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
 
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
@@ -371,7 +397,10 @@ class TFTrainer(Trainer):
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
-
+      
+      # initialize data source
+      self.ctx.data_source.init(sess=self.sess)
+      
       #######################
       # Config model_deploy #
       #######################
@@ -398,7 +427,7 @@ class TFTrainer(Trainer):
       self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
 
       # Restore from checkpoint
-      restore_fns = _get_init_fn(self, self.dump_dir)
+      restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
       if restore_fns is not None:
         for restore_fn in restore_fns:
           restore_fn(self.sess)
@@ -407,6 +436,9 @@ class TFTrainer(Trainer):
       self.val_ops = self.clones[0].outputs
       if type(self.val_ops) != list:
         self.val_ops = [self.val_ops]
+        
+      self.coord = tf.train.Coordinator()
+      self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
 
   # 1.step deploy model on hardwares
   def deploy(self, model):
@@ -418,3 +450,7 @@ class TFTrainer(Trainer):
       self.training_deploy(model)
     else:
       self.infer_deploy(model)
+      
+  def wait_until_clear(self):
+    self.coord.request_stop()
+    self.coord.join(self.threads)

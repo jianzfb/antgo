@@ -68,7 +68,10 @@ class Dataset(BaseNode):
     self._ids = []
     # data rng flag
     self._is_data_rng = False
-
+  
+  def init(self, *args, **kwargs):
+    pass
+  
   def close(self):
     pass
   

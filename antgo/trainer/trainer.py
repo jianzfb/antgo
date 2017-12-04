@@ -77,8 +77,8 @@ class Trainer(object):
 
         # context
         self.ctx = get_global_context()
-        self.ctx.registry_clear_callback(self.clear)
-
+        self.ctx.registry_clear_callback(self.wait_until_clear)
+        
     def deploy(self, model):
         pass
 
@@ -114,7 +114,7 @@ class Trainer(object):
     def iter_at(self, val):
         self.iter = val
 
-    def clear(self):
+    def wait_until_clear(self):
         pass
 
 

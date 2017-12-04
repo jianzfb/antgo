@@ -4,6 +4,13 @@ import os
 import os.path
 from .standard import *
 from .csvs import *
+is_support_tf = True
+try:
+  from .tfrecordsreader import *
+  is_support_tf = True
+except:
+  is_support_tf = False
+
 def global_import(name):
   p = __import__(name, globals(), locals(), level=1)
   globals().pop(name)
@@ -31,5 +38,10 @@ def AntDataset(dataset_name, parse_flag=''):
   else:
     if parse_flag == 'csv':
       return CSV
-
+    elif (parse_flag == 'tfrecord' or parse_flag == 'tfrecords') and is_support_tf:
+      return TFRecordsReader
+    
+    if dataset_name.startswith('tf') and is_support_tf:
+      return TFRecordsReader
+    
     return Standard

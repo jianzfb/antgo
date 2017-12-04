@@ -4,13 +4,14 @@ from antgo.dataflow.dataset.standard import Standard
 from antgo.measures.measure import *
 from antgo.dataflow.dataset import *
 from antgo.utils import logger
+from antgo import config
 import json
 try:
   import xml.etree.cElementTree as ET
 except ImportError:
   import xml.etree.ElementTree as ET
 
-
+Config = config.AntConfig
 class AntTask(object):
   def __init__(self, task_id, task_name, task_type_id, task_type,
                dataset_id, dataset_name, dataset_params,
@@ -33,7 +34,13 @@ class AntTask(object):
     self._evaluation_measure = evaluation_measure
     self._cost_matrix = cost_matrix
     self._ant_context = ant_context
-
+    
+    # config extent params
+    if ext_params is not None:
+      for k, v in ext_params.items():
+        if k != 'self':
+          setattr(self, k, v)
+    
     if self._dataset_params is None:
       self._dataset_params = {}
       
@@ -56,18 +63,12 @@ class AntTask(object):
         parse_flag = ''
         if self._dataset_url is not None and len(self._dataset_url) > 0:
           parse_flag = self._dataset_url.split('/')[-2]
-        
+          
         self._ant_dataset = AntDataset(self._dataset_name, parse_flag)
 
     # related evaluation measures
     self._ant_measures = AntMeasures(self)
     self._class_label = class_label
-
-    # config extent params
-    if ext_params is not None:
-      for k, v in ext_params.items():
-        if k != 'self':
-          setattr(self, k, v)
 
   @property
   def dataset_name(self):

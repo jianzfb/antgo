@@ -45,6 +45,7 @@ flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
 flags.DEFINE_string('sandbox_time', None, 'max running time')
+flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -157,7 +158,9 @@ def main():
 
   # 6.2 step load ant context
   ant_context = main_context(main_file, main_folder)
-
+  if FLAGS.from_experiment() is not None:
+    ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
+  
   # 6.3 step load model config
   main_param = FLAGS.main_param()
   if main_param is not None:

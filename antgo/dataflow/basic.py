@@ -51,12 +51,19 @@ class RecordWriter(object):
     count += 1
     self._db.put('attrib-count'.encode('utf-8'), str(count).encode('utf-8'))
     
-
   def bind_attrs(self, **kwargs):
     # bind extra db attributes
     for k,v in kwargs.items():
       self._db.put(str('attrib-%s'%k).encode('utf-8'), str('attrib-%s'%v).encode('utf-8'))
-
+  
+  @property
+  def size(self):
+    count = self._db.get(str('attrib-count').encode('utf-8'))
+    if count is None:
+      return 0
+    
+    count = int(count)
+    return count
 
 @contextmanager
 def safe_recorder_manager(recorder):
@@ -95,7 +102,6 @@ class RecordReader(object):
         value = value.replace('attrib-', '')
         self._db_attrs[key] = value
         setattr(self, key, value)
-
 
   def close(self):
     pass
@@ -155,3 +161,12 @@ class RecordReader(object):
           else:
             sample.append(None)
         yield sample
+
+  @property
+  def size(self):
+    count = self._db.get(str('attrib-count').encode('utf-8'))
+    if count is None:
+      return 0
+
+    count = int(count)
+    return count
