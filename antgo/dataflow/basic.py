@@ -10,11 +10,13 @@ import numpy as np
 import os
 import sys
 import yaml
-import rocksdb
+try:
+  import rocksdb
+except:
+  rocksdb = None
 from antgo import config
 from contextlib import contextmanager
 from antgo.utils import logger
-
 
 class Sample(object):
   def __init__(self, **kwargs):
