@@ -13,9 +13,15 @@ class Params(object):
         if k != 'self':
           setattr(self, k, v)
 
+    self._params = params
+
   def define(self, k, v=None):
     setattr(self, k, v)
+    self._params[k] = v
 
+  @property
+  def content(self):
+    return self._params
 
 global_context = None
 

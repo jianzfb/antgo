@@ -35,7 +35,7 @@ Config = config.AntConfig
 class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
-    self.http_port = '9999'
+    self.http_port = '8999'
     self.http_prefix = 'http'
     self.ant_name = ant_name
     self.app_token = os.environ.get('APP_TOKEN', ant_token)
@@ -106,9 +106,10 @@ class AntBase(object):
       # 0.step add extra data
       data['APP_TOKEN'] = self.app_token
       data['APP_TIME'] = self.time_stamp
-      # if self.context is not None:
-      #   if self.context.params is not None:
-      #     data['APP_HYPER_PARAMETER'] = json.dumps(self.context.params)
+      if self.context is not None:
+        if self.context.params is not None:
+          print(self.context.params.content)
+          data['APP_HYPER_PARAMETER'] = json.dumps(self.context.params.content)
       data['APP_RPC'] = "INFO"
       data['APP_STAGE'] = stage
       data['APP_NOW_TIME'] = now_time
