@@ -15,7 +15,7 @@ class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
     self._batch_size = getattr(self, '_batch_size', 1)
-    self._capacity = getattr(self, '_capacity', 2)
+    self._capacity = getattr(self, '_capacity', 10)
     self._min_after_dequeue = getattr(self, '_min_after_dequeue', 1)
     
     self._data_size = None
@@ -103,6 +103,7 @@ class TFRecordsReader(Dataset):
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
       if self.epoch >= max_epoches:
+        self._reset_iteration_state()
         break
       self.epoch += 1
       
@@ -127,17 +128,24 @@ class TFRecordsReader(Dataset):
   def init(self, *args, **kwargs):
     if 'sess' in kwargs:
       self._sess = kwargs['sess']
-
+    
+    # 1.step candidate data file list
     file_names = tf.train.match_filenames_once(os.path.join(self.dir, self.train_or_test, self.file_pattern))
+    
+    # 2.step shuffle data file list
     filename_queue = tf.train.string_input_producer(file_names)
+    
+    # 3.step read from data file
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
+    
+    # 4.step parse data
     features = tf.parse_single_example(serialized_example,
                                        features={
                                           'image': tf.FixedLenFeature([], tf.string),
                                           'label': tf.FixedLenFeature([], tf.string),
                                        })
-
+    
     image = tf.decode_raw(features['image'], self.data_type)
     image = tf.reshape(image, self.data_size)
 
@@ -146,8 +154,9 @@ class TFRecordsReader(Dataset):
 
     self.data_tensor = image
     self.label_tensor = label
-
+    
     if self.batch_size > 0:
+      # 5.step reorganize as batch
       image_batch, label_batch = tf.train.shuffle_batch([image, label],
                                                         batch_size=self.batch_size,
                                                         capacity=self.capacity,
