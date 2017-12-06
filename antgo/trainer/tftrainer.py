@@ -147,7 +147,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   if ctx is not None:
     if ctx.from_experiment is not None:
       # TODO support dencentrid storage in future
-      logger.info('load model experiment %s' % ctx.from_experiment.split('/')[-1])
+      logger.info('load model experiment %s' % ctx.from_experiment.split('/')[-2])
       latest_checkpoint = tf.train.latest_checkpoint(ctx.from_experiment)
       
       variables_to_restore = {}

@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.dataflow.dataset import Dataset
 import tensorflow as tf
+slim = tf.contrib.slim
 import os
 import sys
 
@@ -24,9 +25,12 @@ class TFRecordsReader(Dataset):
     self._label_type = None
     self._num_threads = getattr(self, '_num_threads', 2)
     self._num_samples = getattr(self, '_num_samples', 100)
+    self._prefetch_capacity = getattr(self, '_prefetch_capacity', 8)
     
     self._pattern = getattr(self, '_pattern', '*.tfrecords')
     self._sess = None
+    
+    self.batch_queue = None
   
   @property
   def batch_size(self):
@@ -92,6 +96,13 @@ class TFRecordsReader(Dataset):
     self._num_samples = val
   
   @property
+  def prefetch_capacity(self):
+    return self._prefetch_capacity
+  @prefetch_capacity.setter
+  def prefectch_capacity(self, val):
+    self._prefetch_capacity = val
+  
+  @property
   def file_pattern(self):
     return self._pattern
   @file_pattern.setter
@@ -109,7 +120,7 @@ class TFRecordsReader(Dataset):
       
       try:
         for _ in range(self.num_samples):
-          a, b = self._sess.run([self.data_tensor, self.label_tensor])
+          a, b = self._sess.run([self.images, self.labels])
           yield a, b
       except:
         error_info = sys.exc_info()
@@ -152,8 +163,8 @@ class TFRecordsReader(Dataset):
     label = tf.decode_raw(features['label'], self.label_type)
     label = tf.reshape(label, self.label_size)
 
-    self.data_tensor = image
-    self.label_tensor = label
+    batch_queue = slim.prefetch_queue.prefetch_queue([label, label], capacity=self.prefetch_capacity)
+    self.images, self.labels = batch_queue.dequeue()
     
     if self.batch_size > 0:
       # 5.step reorganize as batch
@@ -162,6 +173,6 @@ class TFRecordsReader(Dataset):
                                                         capacity=self.capacity,
                                                         min_after_dequeue=self.min_after_dequeue,
                                                         num_threads=self.num_threads)
-  
-      self.data_tensor = image_batch
-      self.label_tensor = label_batch
+            
+      batch_queue = slim.prefetch_queue.prefetch_queue([image_batch, label_batch], capacity=self.prefetch_capacity)
+      self.images, self.labels = batch_queue.dequeue()
