@@ -16,16 +16,17 @@ class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
     self._batch_size = getattr(self, '_batch_size', 1)
-    self._capacity = getattr(self, '_capacity', 2)
-    self._min_after_dequeue = getattr(self, '_min_after_dequeue', 1)
+    self._capacity = getattr(self, '_capacity', self._batch_size * 5)
+    self._min_after_dequeue = getattr(self, '_min_after_dequeue', self._capacity / 2)
+    self._num_threads = getattr(self, '_num_threads', 2)
     
     self._data_size = [700, 700, 3]
     self._data_type = tf.uint8
     self._label_size = [700, 700, 1]
     self._label_type = tf.uint8
-    self._num_threads = getattr(self, '_num_threads', 2)
-    self._num_samples = getattr(self, '_num_samples', 100)
-    self._prefetch_capacity = getattr(self, '_prefetch_capacity', 2)
+    self._num_samples = getattr(self, '_num_samples', 199600)
+    self._prefetch_capacity = getattr(self, '_prefetch_capacity', 4)
+    self._prefetch_num_threads = getattr(self, '_prefetch_num_threads', 1)
     
     self._pattern = getattr(self, '_pattern', '*.tfrecords')
     self._sess = None
@@ -98,6 +99,9 @@ class TFRecordsReader(Dataset):
   @property
   def prefetch_capacity(self):
     return self._prefetch_capacity
+  @prefetch_capacity.setter
+  def prefetch_capacity(self, val):
+    self._prefetch_capacity = val
   
   @property
   def file_pattern(self):

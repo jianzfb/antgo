@@ -289,7 +289,8 @@ class TFTrainer(Trainer):
         os.makedirs(self.dump_dir)
 
     model_filename = "{prefix}_{infix}_{d}.ckpt".format(prefix=self.snapshot_prefix,
-                                                             infix=self.snapshot_infix, d=self.iter_at)
+                                                        infix=self.snapshot_infix,
+                                                        d=self.iter_at)
     model_filepath = os.path.join(self.dump_dir, model_filename)
     
     # save checkpoint
