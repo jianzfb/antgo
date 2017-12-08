@@ -12,6 +12,7 @@ import functools
 from antgo.trainer.trainer import *
 from antgo.trainer import tfmodel_deploy
 from antgo.utils import logger
+from antgo.measures.moving_statistic import *
 import numpy as np
 slim = tf.contrib.slim
 
@@ -246,7 +247,10 @@ class TFTrainer(Trainer):
 
     self.coord = None
     self.threads = None
-  
+    
+    # record run time
+    self.time_stat = MovingAverage(self.log_every_n_steps)
+    
   # 2.step run model once
   def run(self, data_generator, binds, whats=False):
     # bind data
@@ -265,11 +269,15 @@ class TFTrainer(Trainer):
 
       # increment
       self.iter_at += 1
-
-      # father method
-      super(TFTrainer, self).run(data_generator, binds)
+      
+      # run
+      start_time = time.clock()
       result = self.sess.run(self.val_ops, feed_dict)
-
+      elapsed_time = (time.clock() - start_time)
+      
+      # record elapsed time
+      self.time_stat.add(elapsed_time)
+      
       if self.is_training:
         loss_val = 0.0
         if type(result) == list:
@@ -278,7 +286,10 @@ class TFTrainer(Trainer):
           loss_val = result
         
         if self.iter_at % self.log_every_n_steps == 0:
-          logger.info('loss %f lr %f at iterator %d'%(loss_val, self.sess.run(self.lr), self.iter_at))
+          logger.info('INFO: loss %f lr %f at iterator %d (%f sec/step)'%(loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
+      else:
+        logger.info('INFO: (%f sec/step)'%float(self.time_stat.get()))
+      
       return (result, feed_list) if whats else result
 
   # 3.step snapshot running state

@@ -9,30 +9,30 @@ import numpy as np
 
 
 class MovingStatistic(object):
-    def __init__(self):
-        self.value = None
+  def __init__(self):
+    self.value = None
 
-    def add(self, value):
-        pass
+  def add(self, value):
+    pass
 
-    def get(self):
-        pass
+  def get(self):
+    pass
 
 
 class MovingAverage(MovingStatistic):
-    def __init__(self, ws=1):
-        super(MovingAverage,self).__init__()
-        self.value = []
-        self.window_size = ws
+  def __init__(self, ws=1):
+    super(MovingAverage, self).__init__()
+    self.value = np.zeros((ws))
+    self.window_size = ws
+    self.count = 0
+    
+  def add(self, value):
+    index = self.count % self.window_size
+    self.value[index] = value
+    
+    self.count = index + 1
 
-    def add(self, value):
-        if len(self.value) < self.window_size:
-            self.value.append(value)
-        else:
-            self.value.pop(0)
-            self.value.append(value)
-
-    def get(self):
-        if len(self.value) == 0:
-            return None
-        return np.mean(self.value)
+  def get(self):
+    if len(self.value) == 0:
+      return None
+    return np.mean(self.value)
