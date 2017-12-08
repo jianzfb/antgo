@@ -35,7 +35,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", "generate"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy", "generate", "frozen"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -46,6 +46,8 @@ flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
 flags.DEFINE_string('sandbox_time', None, 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
+flags.DEFINE_string('input_nodes', '', 'input node names in graph')
+flags.DEFINE_string('output_nodes', '', 'output node names in graph')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -124,11 +126,6 @@ def main():
   main_folder = FLAGS.main_folder()
   if main_folder is None:
     main_folder = os.path.abspath(os.curdir)
-
-  main_file = FLAGS.main_file()
-  if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
-    logger.error('main executing file dont exist')
-    sys.exit(-1)
   
   # 4.3 check dump dir (all running data is stored here)
   dump_dir = FLAGS.dump()
@@ -136,7 +133,23 @@ def main():
     dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
+
+  # 4.4. step tools (option)
+  if ant_cmd == 'frozen':
+    # tensorflow tools
+    import antgo.utils.tftools as tftools
+    tftools.tftool_frozen_graph(dump_dir,
+                                FLAGS.from_experiment(),
+                                FLAGS.input_nodes(),
+                                FLAGS.output_nodes())
+    return
   
+  # 4.5 check main file
+  main_file = FLAGS.main_file()
+  if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
+    logger.error('main executing file dont exist')
+    sys.exit(-1)
+
   # 5. step custom workflow
   if ant_cmd == 'compose':
     # user custom workflow
@@ -160,7 +173,7 @@ def main():
   ant_context = main_context(main_file, main_folder)
   if FLAGS.from_experiment() is not None:
     ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
-  
+
   # 6.3 step load model config
   main_param = FLAGS.main_param()
   if main_param is not None:

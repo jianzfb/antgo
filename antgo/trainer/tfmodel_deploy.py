@@ -186,6 +186,7 @@ def create_clones(config, model_fn, args=None, kwargs=None):
                       device=config.variables_device()):
     # Create clones.
     for i in range(0, config.num_clones):
+      kwargs['clone'] = i
       with tf.name_scope(config.clone_scope(i)) as clone_scope:
         clone_device = config.clone_device(i)
         with tf.device(clone_device):
@@ -193,6 +194,7 @@ def create_clones(config, model_fn, args=None, kwargs=None):
                                  reuse=True if i > 0 else None):
             outputs = model_fn(*args, **kwargs)
           clones.append(Clone(outputs, clone_scope, clone_device))
+          
   return clones
 
 

@@ -261,7 +261,7 @@ class TFTrainer(Trainer):
 
         for k, v in binds.items():
           placeholder_tensor = self.graph.get_tensor_by_name('{}{}:0'.format(clone.scope, k))
-          feed_dict[placeholder_tensor] = data[v]
+          feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
 
       # increment
       self.iter_at += 1
@@ -283,15 +283,17 @@ class TFTrainer(Trainer):
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0):
-      assert(self.is_training)
-      logger.info('snapshot at %d in %d epoch' % (self.iter_at, epoch))
-      if not os.path.exists(self.dump_dir):
-          os.makedirs(self.dump_dir)
+    assert(self.is_training)
+    logger.info('snapshot at %d in %d epoch' % (self.iter_at, epoch))
+    if not os.path.exists(self.dump_dir):
+        os.makedirs(self.dump_dir)
 
-      model_filename = "{prefix}_{infix}_{d}.ckpt".format(prefix=self.snapshot_prefix,
-                                                               infix=self.snapshot_infix, d=self.iter_at)
-      model_filepath = os.path.join(self.dump_dir, model_filename)
-      self.saver.save(self.sess, model_filepath)
+    model_filename = "{prefix}_{infix}_{d}.ckpt".format(prefix=self.snapshot_prefix,
+                                                             infix=self.snapshot_infix, d=self.iter_at)
+    model_filepath = os.path.join(self.dump_dir, model_filename)
+    
+    # save checkpoint
+    self.saver.save(self.sess, model_filepath)
 
   def training_deploy(self, model):
     with tf.Graph().as_default() as graph:
@@ -302,8 +304,9 @@ class TFTrainer(Trainer):
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
       
-      # initialize data source
-      self.ctx.data_source.init(sess=self.sess)
+      # init some info
+      for func in self.ctx.registried_init_callbacks:
+        func(sess=self.sess)
       
       #######################
       # Config model deploy #
@@ -325,9 +328,13 @@ class TFTrainer(Trainer):
         arg_scope = model.arg_scope_fn()
         if arg_scope is not None:
           with slim.arg_scope(arg_scope):
-            return func(is_training=self.is_training, *args, **kwargs)
+            res = func(is_training=self.is_training, *args, **kwargs)
+            if kwargs['clone'] == 0:
+              tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
+            return res
         else:
-          return func(is_training=self.is_training, *args, **kwargs)
+          res = func(is_training=self.is_training, *args, **kwargs)
+          return res
 
       #######################
       # Create model clones #
@@ -398,9 +405,10 @@ class TFTrainer(Trainer):
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
       
-      # initialize data source
-      self.ctx.data_source.init(sess=self.sess)
-      
+      # init some info
+      for func in self.ctx.registried_init_callbacks:
+        func(sess=self.sess)
+
       #######################
       # Config model_deploy #
       #######################
@@ -417,21 +425,30 @@ class TFTrainer(Trainer):
         arg_scope = model.arg_scope_fn()
         if arg_scope is not None:
           with slim.arg_scope(arg_scope):
-            return func(is_training=self.is_training, *args, **kwargs)
+            res = func(is_training=self.is_training, *args, **kwargs)
+            return res
         else:
-          return func(is_training=self.is_training, *args, **kwargs)
+          res = func(is_training=self.is_training, *args, **kwargs)
+          return res
 
       #######################
       # Create model clones #
       #######################
       self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
-
+      
+      # Global initialization
+      self.sess.run(tf.global_variables_initializer())
+      self.sess.run(tf.local_variables_initializer())
+      
       # Restore from checkpoint
       restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
       if restore_fns is not None:
         for restore_fn in restore_fns:
           restore_fn(self.sess)
-      
+
+      # write graph
+      tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
+
       # Value ops
       self.val_ops = self.clones[0].outputs
       if type(self.val_ops) != list:

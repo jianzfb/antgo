@@ -16,16 +16,16 @@ class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
     self._batch_size = getattr(self, '_batch_size', 1)
-    self._capacity = getattr(self, '_capacity', 10)
+    self._capacity = getattr(self, '_capacity', 2)
     self._min_after_dequeue = getattr(self, '_min_after_dequeue', 1)
     
-    self._data_size = None
-    self._data_type = None
-    self._label_size = None
-    self._label_type = None
+    self._data_size = [700, 700, 3]
+    self._data_type = tf.uint8
+    self._label_size = [700, 700, 1]
+    self._label_type = tf.uint8
     self._num_threads = getattr(self, '_num_threads', 2)
     self._num_samples = getattr(self, '_num_samples', 100)
-    self._prefetch_capacity = getattr(self, '_prefetch_capacity', 8)
+    self._prefetch_capacity = getattr(self, '_prefetch_capacity', 2)
     
     self._pattern = getattr(self, '_pattern', '*.tfrecords')
     self._sess = None
@@ -98,9 +98,6 @@ class TFRecordsReader(Dataset):
   @property
   def prefetch_capacity(self):
     return self._prefetch_capacity
-  @prefetch_capacity.setter
-  def prefectch_capacity(self, val):
-    self._prefetch_capacity = val
   
   @property
   def file_pattern(self):
@@ -137,8 +134,7 @@ class TFRecordsReader(Dataset):
     return self.num_samples
     
   def init(self, *args, **kwargs):
-    if 'sess' in kwargs:
-      self._sess = kwargs['sess']
+    self._sess = kwargs['sess']
     
     # 1.step candidate data file list
     file_names = tf.train.match_filenames_once(os.path.join(self.dir, self.train_or_test, self.file_pattern))
@@ -163,9 +159,6 @@ class TFRecordsReader(Dataset):
     label = tf.decode_raw(features['label'], self.label_type)
     label = tf.reshape(label, self.label_size)
 
-    batch_queue = slim.prefetch_queue.prefetch_queue([label, label], capacity=self.prefetch_capacity)
-    self.images, self.labels = batch_queue.dequeue()
-    
     if self.batch_size > 0:
       # 5.step reorganize as batch
       image_batch, label_batch = tf.train.shuffle_batch([image, label],
@@ -175,4 +168,7 @@ class TFRecordsReader(Dataset):
                                                         num_threads=self.num_threads)
             
       batch_queue = slim.prefetch_queue.prefetch_queue([image_batch, label_batch], capacity=self.prefetch_capacity)
+      self.images, self.labels = batch_queue.dequeue()
+    else:
+      batch_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
       self.images, self.labels = batch_queue.dequeue()

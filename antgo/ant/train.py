@@ -116,7 +116,9 @@ class AntTrain(AntBase):
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
-
+    # add init func
+    self.context.registry_init_callback(ant_train_dataset.init)
+    
     # user custom devices
     apply_devices = getattr(self.context.params, 'devices', [])
     # user model clones

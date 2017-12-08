@@ -108,7 +108,6 @@ class AntBase(object):
       data['APP_TIME'] = self.time_stamp
       if self.context is not None:
         if self.context.params is not None:
-          print(self.context.params.content)
           data['APP_HYPER_PARAMETER'] = json.dumps(self.context.params.content)
       data['APP_RPC'] = "INFO"
       data['APP_STAGE'] = stage
