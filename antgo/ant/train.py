@@ -5,19 +5,20 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-from antgo.html.html import *
+import tarfile
+from datetime import datetime
+from multiprocessing import Process
+
+from antgo.ant import flags
 from antgo.ant.base import *
+from antgo.ant.utils import *
 from antgo.dataflow.common import *
+from antgo.dataflow.recorder import *
 from antgo.measures.statistic import *
 from antgo.task.task import *
-from antgo.utils import logger
-from antgo.dataflow.recorder import *
-import tarfile
-import sys
-from datetime import datetime
-from antgo.ant import flags
-from multiprocessing import Process
-from antgo.ant.utils import *
+from antgo.utils.net import *
+from antgo.utils.serialize import *
+
 if sys.version > '3':
     PY3 = True
 else:
@@ -217,7 +218,23 @@ class AntTrain(AntBase):
       logger.info('start training process')
       ant_train_dataset.reset_state()
       self.context.call_training_process(ant_train_dataset, train_dump_dir)
-      
+
+      # # 4.step mdoel graph
+      # test_graph = Graph(name='testnet')
+      # test_graph.add_node(name='conv', label='hello')
+      # test_graph.add_node(name='pool', label='world')
+      # test_graph.add_node(name='input', label='www')
+      # test_graph.add_node(name='ssd', label='hhh')
+      # test_graph.add_link('conv','pool',Link('ab',''))
+      # test_graph.add_link('input','conv',Link('bd',''))
+      # test_graph.add_link('input','ssd',Link('ac',''))
+      #
+      # ss = Encoder().encode(test_graph)
+      # print(ss)
+      # dd = Decoder().decode(ss)
+      # graph_content = graph_net_visualization(dd, '/Users/zhangken/Downloads/testnet.svg')
+      # self.context.job.send({'DATA': {'GRAPH': graph_content}})
+
     # join (waiting until all experiments stop)
     if len(ablation_experiments) > 0:
       for ablation_experiment in ablation_experiments:

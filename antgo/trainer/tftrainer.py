@@ -14,6 +14,7 @@ from antgo.trainer import tfmodel_deploy
 from antgo.utils import logger
 from antgo.measures.moving_statistic import *
 import numpy as np
+from antgo.utils.net import *
 slim = tf.contrib.slim
 
 
@@ -342,7 +343,10 @@ class TFTrainer(Trainer):
           with slim.arg_scope(arg_scope):
             res = func(is_training=self.is_training, *args, **kwargs)
             if kwargs['clone'] == 0:
+              # 1.step save graph file
               tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
+              # 2.step transfer to local graph net
+
             return res
         else:
           res = func(is_training=self.is_training, *args, **kwargs)
