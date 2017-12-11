@@ -16,8 +16,8 @@ class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
     self._batch_size = getattr(self, '_batch_size', 1)
-    self._capacity = getattr(self, '_capacity', self._batch_size * 5)
-    self._min_after_dequeue = getattr(self, '_min_after_dequeue', self._capacity / 2)
+    self._capacity = getattr(self, '_capacity', int(self._batch_size * 5))
+    self._min_after_dequeue = getattr(self, '_min_after_dequeue', int(self._capacity / 2))
     self._num_threads = getattr(self, '_num_threads', 2)
     
     self._data_size = [700, 700, 3]
@@ -29,8 +29,6 @@ class TFRecordsReader(Dataset):
     self._prefetch_num_threads = getattr(self, '_prefetch_num_threads', 1)
     
     self._pattern = getattr(self, '_pattern', '*.tfrecords')
-    self._sess = None
-    
     self.batch_queue = None
   
   @property
@@ -111,22 +109,8 @@ class TFRecordsReader(Dataset):
     self._pattern = val
 
   def data_pool(self):
-    self.epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if self.epoch >= max_epoches:
-        self._reset_iteration_state()
-        break
-      self.epoch += 1
-      
-      try:
-        for _ in range(self.num_samples):
-          a, b = self._sess.run([self.images, self.labels])
-          yield a, b
-      except:
-        error_info = sys.exc_info()
-        print(error_info)
-        
+    raise NotImplementedError
+  
   def at(self, id):
     raise NotImplementedError
 
@@ -137,9 +121,7 @@ class TFRecordsReader(Dataset):
   def size(self):
     return self.num_samples
     
-  def init(self, *args, **kwargs):
-    self._sess = kwargs['sess']
-    
+  def model_fn(self, *args, **kwargs):
     # 1.step candidate data file list
     file_names = tf.train.match_filenames_once(os.path.join(self.dir, self.train_or_test, self.file_pattern))
     
@@ -176,3 +158,5 @@ class TFRecordsReader(Dataset):
     else:
       batch_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
       self.images, self.labels = batch_queue.dequeue()
+  
+    return self.images, self.labels

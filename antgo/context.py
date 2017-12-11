@@ -85,6 +85,7 @@ class Context(object):
     self._stoppable_threads = []
     
     self._from_experiment = None
+    self._model = None
 
   def wait_until_clear(self):
     if self.job is not None:
@@ -140,6 +141,14 @@ class Context(object):
   @stage.setter
   def stage(self, val):
     self.context_stage = val
+
+  @property
+  def model(self):
+    return self._model
+  
+  @model.setter
+  def model(self, val):
+    self._model = val
 
   def send(self, data, stage):
     if self.ant is not None:

@@ -13,6 +13,11 @@ from antgo.trainer.trainer import *
 from antgo.trainer import tfmodel_deploy
 from antgo.utils import logger
 from antgo.measures.moving_statistic import *
+from google.protobuf import text_format
+from tensorflow.core.framework import graph_pb2
+from tensorflow.python.platform import gfile
+from antgo.utils.serialize import *
+
 import numpy as np
 from antgo.utils.net import *
 slim = tf.contrib.slim
@@ -233,7 +238,29 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   else:
     logger.info('load from %s' % checkpoint_path)
   return [slim.assign_from_checkpoint_fn(checkpoint_path, vr) for vr in auxilary_variables_to_restore]
+
+
+def _convert_to_svg_graph(tf_graph_pb_file, dump_dir):
+  input_graph_def = graph_pb2.GraphDef()
   
+  with gfile.FastGFile(tf_graph_pb_file, 'r') as f:
+    text_format.Merge(f.read(), input_graph_def)
+  
+  my_graph = Graph(name='graph')
+  
+  for node in input_graph_def.node:
+    my_graph.add_node(name=node.op, full_name=node.name, label='')
+    if len(node.input) > 0:
+      for linked_node in node.input:
+        my_graph.add_link(node.op, linked_node, Link(label='', args=''))
+      
+  with open(os.path.join(dump_dir, 'graph.txt')) as fp:
+    graph_str = Encoder().encode(my_graph)
+    fp.write(graph_str)
+
+  svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
+  return svg_graph
+
 
 class TFTrainer(Trainer):
   def __init__(self, trainer_context, dump_dir, is_training=True):
@@ -253,27 +280,29 @@ class TFTrainer(Trainer):
     self.time_stat = MovingAverage(self.log_every_n_steps)
     
   # 2.step run model once
-  def run(self, data_generator, binds, whats=False):
+  def run(self, data_generator=None, binds={}, whats=False):
     # bind data
-    feed_dict = {}
-    feed_list = []
     with self.graph.as_default():
-      for clone in self.clones:
-        # generate data
-        data = next(data_generator)
-
-        feed_list.append(data)
-
-        for k, v in binds.items():
-          placeholder_tensor = self.graph.get_tensor_by_name('{}{}:0'.format(clone.scope, k))
-          feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
+      feed_dict = {}
+      feed_list = []
+  
+      if self.ctx.model.need_feed:
+        for clone in self.clones:
+          # generate data
+          data = next(data_generator)
+  
+          feed_list.append(data)
+  
+          for k, v in binds.items():
+            placeholder_tensor = self.graph.get_tensor_by_name('{}{}:0'.format(clone.scope, k))
+            feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
 
       # increment
       self.iter_at += 1
       
       # run
       start_time = time.clock()
-      result = self.sess.run(self.val_ops, feed_dict)
+      result = self.sess.run(self.val_ops, feed_dict=feed_dict if len(feed_dict) > 0 else None)
       elapsed_time = (time.clock() - start_time)
       
       # record elapsed time
@@ -317,10 +346,6 @@ class TFTrainer(Trainer):
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
       
-      # init some info
-      for func in self.ctx.registried_init_callbacks:
-        func(sess=self.sess)
-      
       #######################
       # Config model deploy #
       #######################
@@ -334,83 +359,96 @@ class TFTrainer(Trainer):
       # Create global_step
       with tf.device(deploy_config.variables_device()):
         global_step = slim.get_or_create_global_step()
-
-      func = model.model_fn
-      @functools.wraps(func)
-      def network_fn(*args, **kwargs):
-        arg_scope = model.arg_scope_fn()
-        if arg_scope is not None:
-          with slim.arg_scope(arg_scope):
+        
+      # init some info
+      with tf.device(deploy_config.inputs_device()):
+        # build model input
+        self.ctx.model.model_input(self.ctx.data_source)
+        
+        func = model.model_fn
+        @functools.wraps(func)
+        def network_fn(*args, **kwargs):
+          arg_scope = model.arg_scope_fn()
+          if arg_scope is not None:
+            with slim.arg_scope(arg_scope):
+              res = func(is_training=self.is_training, *args, **kwargs)
+              if kwargs['clone'] == 0:
+                # 1.step save graph file
+                tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
+                # # 2.step transfer to local graph net
+                # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'), self.dump_dir)
+                # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+                #
+              return res
+          else:
             res = func(is_training=self.is_training, *args, **kwargs)
             if kwargs['clone'] == 0:
               # 1.step save graph file
               tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
-              # 2.step transfer to local graph net
-
+              # # 2.step transfer to local graph net
+              # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'), self.dump_dir)
+              # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
             return res
-        else:
-          res = func(is_training=self.is_training, *args, **kwargs)
-          return res
-
-      #######################
-      # Create model clones #
-      #######################
-      self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
-      first_clone_scope = deploy_config.clone_scope(0)
-      update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
-
-      #########################################
-      # Configure the optimization procedure. #
-      #########################################
-      with tf.device(deploy_config.optimizer_device()):
-        num_samples = self.num_samples if self.num_samples > 0 else self.ctx.data_source.size
-        self.lr = _configure_learning_rate(self, num_samples, global_step)
-        optimizer = _configure_optimizer(self, self.lr)
-
-      # Variables to train.
-      variables_to_train = _get_variables_to_train(self)
-
-      # Train_tensor
-      total_loss, clones_gradients = \
-        tfmodel_deploy.optimize_clones(self.clones,
-                                       optimizer,
-                                       regularization_losses=None if self.regularization_loss else [],
-                                       var_list=variables_to_train)
-
-      # Create gradient updates.
-      grad_updates = optimizer.apply_gradients(clones_gradients,
-                                               global_step=global_step)
-
-      # Value ops
-      update_ops.append(grad_updates)
-      update_op = tf.group(*update_ops)
-      with tf.control_dependencies([update_op]):
-        self.val_ops = tf.identity(total_loss, name='train_op')
-
-      if self.clones[0].outputs is not None:
-        self.val_ops = [self.val_ops]
-        if type(self.clones[0].outputs) == list:
-          self.val_ops.extend(self.clones[0].outputs)
-        elif type(self.clones[0].outputs) == tuple:
-          self.val_ops.extend(list(self.clones[0].outputs))
-        else:
-          self.val_ops.append(self.clones[0].outputs)
-
-      # Training saver
-      self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
-
-      # Global initialization
-      self.sess.run(tf.global_variables_initializer())
-      self.sess.run(tf.local_variables_initializer())
-      
-      # Restore from checkpoint
-      restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
-      if restore_fns is not None:
-        for restore_fn in restore_fns:
-          restore_fn(self.sess)
-
-      self.coord = tf.train.Coordinator()
-      self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+  
+        #######################
+        # Create model clones #
+        #######################
+        self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
+        first_clone_scope = deploy_config.clone_scope(0)
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
+  
+        #########################################
+        # Configure the optimization procedure. #
+        #########################################
+        with tf.device(deploy_config.optimizer_device()):
+          num_samples = self.num_samples if self.num_samples > 0 else self.ctx.data_source.size
+          self.lr = _configure_learning_rate(self, num_samples, global_step)
+          optimizer = _configure_optimizer(self, self.lr)
+  
+        # Variables to train.
+        variables_to_train = _get_variables_to_train(self)
+  
+        # Train_tensor
+        total_loss, clones_gradients = \
+          tfmodel_deploy.optimize_clones(self.clones,
+                                         optimizer,
+                                         regularization_losses=None if self.regularization_loss else [],
+                                         var_list=variables_to_train)
+  
+        # Create gradient updates.
+        grad_updates = optimizer.apply_gradients(clones_gradients,
+                                                 global_step=global_step)
+  
+        # Value ops
+        update_ops.append(grad_updates)
+        update_op = tf.group(*update_ops)
+        with tf.control_dependencies([update_op]):
+          self.val_ops = tf.identity(total_loss, name='train_op')
+  
+        if self.clones[0].outputs is not None:
+          self.val_ops = [self.val_ops]
+          if type(self.clones[0].outputs) == list:
+            self.val_ops.extend(self.clones[0].outputs)
+          elif type(self.clones[0].outputs) == tuple:
+            self.val_ops.extend(list(self.clones[0].outputs))
+          else:
+            self.val_ops.append(self.clones[0].outputs)
+  
+        # Training saver
+        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
+  
+        # Global initialization
+        self.sess.run(tf.global_variables_initializer())
+        self.sess.run(tf.local_variables_initializer())
+        
+        # Restore from checkpoint
+        restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
+        if restore_fns is not None:
+          for restore_fn in restore_fns:
+            restore_fn(self.sess)
+  
+        self.coord = tf.train.Coordinator()
+        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
 
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
@@ -435,6 +473,9 @@ class TFTrainer(Trainer):
                                                       num_replicas=1,
                                                       num_ps_tasks=0)
 
+      # build model input
+      self.ctx.model.model_input(self.ctx.data_source)
+      
       func = model.model_fn
       @functools.wraps(func)
       def network_fn(*args, **kwargs):
@@ -464,7 +505,9 @@ class TFTrainer(Trainer):
 
       # write graph
       tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
-
+      # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'), self.dump_dir)
+      # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+      
       # Value ops
       self.val_ops = self.clones[0].outputs
       if type(self.val_ops) != list:
@@ -476,8 +519,8 @@ class TFTrainer(Trainer):
   # 1.step deploy model on hardwares
   def deploy(self, model):
     # model context
-    model.ctx = self._trainer_context
-
+    self.ctx.model = model
+    
     # deploy model
     if self.is_training:
       self.training_deploy(model)

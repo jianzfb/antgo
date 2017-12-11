@@ -114,7 +114,7 @@ class AntChallenge(AntBase):
                                                 running_ant_task.dataset_params)
         
     # registry init func
-    self.context.registry_init_callback(ant_test_dataset.init)
+    # self.context.registry_init_callback(ant_test_dataset.init)
     
     with safe_recorder_manager(ant_test_dataset):
       # split data and label

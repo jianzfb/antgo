@@ -126,7 +126,8 @@ class ModelDesc(object):
       self.model_name = model_name
     else:
       self.model_name = self.__class__.__name__
-
+    
+    self._need_feed = True
     self._ctx = None
 
   @property
@@ -142,7 +143,17 @@ class ModelDesc(object):
     for k in dir(self._ctx):
       if not k.startswith('__'):
         setattr(self, k, getattr(self._ctx, k, None))
-
+  
+  @property
+  def need_feed(self):
+    return self._need_feed
+  @need_feed.setter
+  def need_feed(self, val):
+    self._need_feed = val
+    
+  def model_input(self, data_source):
+    pass
+  
   @abstractmethod
   def model_fn(self, is_training=True, *args, **kwargs):
     '''

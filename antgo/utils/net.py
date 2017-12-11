@@ -19,7 +19,7 @@ from antgo.dataflow.core import Input, Node
 import collections
 from antgo.utils.serialize import *
 
-__all__ = ['GraphNode', 'Graph','Link','graph_net_visualization']
+__all__ = ['GraphNode', 'Graph', 'Link', 'graph_net_visualization']
 
 class Link(collections.namedtuple('Link', ['label', 'args'])):
   """
@@ -28,15 +28,17 @@ class Link(collections.namedtuple('Link', ['label', 'args'])):
 
 class GraphNode(object):
   def __init__(self, **kwargs):
-    self.name = kwargs['name']
+    self.name = kwargs['name']            # name
+    self.op_name = kwargs['op_name'].replace('/','-')      # op name
     self.link_nodes = [] if 'link_nodes' not in kwargs else kwargs['link_nodes']
     self.label = '' if 'label' not in kwargs else kwargs['label']
     self.id = kwargs['id']
     self._in_degree = 0 if '_in_degree' not in kwargs else kwargs['_in_degree']
     self._out_degree = 0 if '_out_degree' not in kwargs else kwargs['_out_degree']
+    self._attr = {} if '_attr' not in kwargs else kwargs['_attr']
 
   def add_link(self, node, link):
-    self.link_nodes.append({'node':node, 'link':link})
+    self.link_nodes.append({'node': node, 'link': link})
 
   @property
   def linked_node(self):
@@ -66,20 +68,24 @@ class Graph(object):
     self._graph_nodes_outdegree = {} if '_graph_nodes_outdegree' not in kwargs else kwargs['_graph_nodes_outdegree']
     self._nodes_num = 0 if '_nodes_num' not in kwargs else kwargs['_nodes_num']
 
-  def add_node(self, name, label):
+  def add_node(self, name, op_name, label):
     if name not in self._graph_nodes:
-      self._graph_nodes[name] = GraphNode(name=name, id=self._nodes_num, label=label)
+      self._graph_nodes[name] = GraphNode(name=name, op_name=op_name, id=self._nodes_num, label=label)
       self._graph_nodes_indegree[name] = 0
       self._graph_nodes_outdegree[name] = 0
       self._nodes_num += 1
 
   def add_link(self, from_node, to_node, link):
-    assert(from_node in self._graph_nodes)
-    assert(to_node in self._graph_nodes)
-
-    self._graph_nodes[from_node].add_link(self._graph_nodes[to_node], link)
-    self._graph_nodes[from_node].out_degree_increment()
-    self._graph_nodes[to_node].in_degree_increment()
+    try:
+      assert(from_node in self._graph_nodes)
+      assert(to_node in self._graph_nodes)
+      
+      self._graph_nodes[from_node].add_link(self._graph_nodes[to_node], link)
+      self._graph_nodes[from_node].out_degree_increment()
+      self._graph_nodes[to_node].in_degree_increment()
+    except:
+      print(from_node)
+      print(to_node)
 
   @property
   def nodes(self):
@@ -104,7 +110,7 @@ def node_format(node_id, node):
            '{action}>'
            ' shape={shape} style=filled fillcolor=forestgreen fontcolor=white penwidth=1];'
            .format(node_id=node_id,
-                   name=node.name.replace(':', ':<BR ALIGN="CENTER"/>'),
+                   name=node.op_name.replace(':', ':<BR ALIGN="CENTER"/>'),
                    action=action,
                    shape=shape))
   elif node.out_degree == 0:
@@ -113,7 +119,7 @@ def node_format(node_id, node):
            '{action}>'
            ' shape={shape} style=filled fillcolor=mediumpurple fontcolor=white penwidth=1];'
            .format(node_id=node_id,
-                   name=node.name.replace(':', ':<BR ALIGN="CENTER"/>'),
+                   name=node.op_name.replace(':', ':<BR ALIGN="CENTER"/>'),
                    action=action,
                    shape=shape))
   else:
@@ -122,7 +128,7 @@ def node_format(node_id, node):
            '{action}>'
            ' shape={shape} style=filled fillcolor=goldenrod fontcolor=white penwidth=1];'
            .format(node_id=node_id,
-                   name=node.name.replace(':', ':<BR ALIGN="CENTER"/>'),
+                   name=node.op_name.replace(':', ':<BR ALIGN="CENTER"/>'),
                    action=action,
                    shape=shape))
   yield '  edge [color=darkgrey ];'
@@ -175,7 +181,11 @@ def graph_net_visualization(graph, file_path):
       '''),
                  source,
                  re.S)
-
+  
+  mm = open('/home/mi/mm.txt', 'w')
+  mm.write(source)
+  mm.close()
+  
   # 4.step save to file
   graphviz.communicate(source.encode('utf-8'))
 
