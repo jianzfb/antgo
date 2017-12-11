@@ -160,9 +160,7 @@ class TFRecordsReader(Dataset):
                                                         num_threads=self.num_threads)
             
       batch_queue = slim.prefetch_queue.prefetch_queue([image_batch, label_batch], capacity=self.prefetch_capacity)
-      x, y = batch_queue.dequeue()
-      return x, y
+      return batch_queue
     else:
-      batch_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
-      x, y = batch_queue.dequeue()
-      return x, y
+      data_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
+      return  data_queue
