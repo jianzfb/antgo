@@ -240,26 +240,26 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   return [slim.assign_from_checkpoint_fn(checkpoint_path, vr) for vr in auxilary_variables_to_restore]
 
 
-def _convert_to_svg_graph(tf_graph_pb_file, dump_dir):
-  input_graph_def = graph_pb2.GraphDef()
-  
-  with gfile.FastGFile(tf_graph_pb_file, 'r') as f:
-    text_format.Merge(f.read(), input_graph_def)
-  
-  my_graph = Graph(name='graph')
-  
-  for node in input_graph_def.node:
-    my_graph.add_node(name=node.op, full_name=node.name, label='')
-    if len(node.input) > 0:
-      for linked_node in node.input:
-        my_graph.add_link(node.op, linked_node, Link(label='', args=''))
-      
-  with open(os.path.join(dump_dir, 'graph.txt')) as fp:
-    graph_str = Encoder().encode(my_graph)
-    fp.write(graph_str)
-
-  svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
-  return svg_graph
+# def _convert_to_svg_graph(tf_graph_pb_file, dump_dir):
+#   input_graph_def = graph_pb2.GraphDef()
+#
+#   with gfile.FastGFile(tf_graph_pb_file, 'r') as f:
+#     text_format.Merge(f.read(), input_graph_def)
+#
+#   my_graph = Graph(name='graph')
+#
+#   for node in input_graph_def.node:
+#     my_graph.add_node(name=node.op, full_name=node.name, label='')
+#     if len(node.input) > 0:
+#       for linked_node in node.input:
+#         my_graph.add_link(node.op, linked_node, Link(label='', args=''))
+#
+#   with open(os.path.join(dump_dir, 'graph.txt')) as fp:
+#     graph_str = Encoder().encode(my_graph)
+#     fp.write(graph_str)
+#
+#   svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
+#   return svg_graph
 
 
 class TFTrainer(Trainer):
@@ -280,18 +280,14 @@ class TFTrainer(Trainer):
     self.time_stat = MovingAverage(self.log_every_n_steps)
     
   # 2.step run model once
-  def run(self, data_generator=None, binds={}, whats=False):
+  def run(self, data_generator=None, binds={}):
     # bind data
     with self.graph.as_default():
       feed_dict = {}
-      feed_list = []
-  
-      if self.ctx.model.need_feed:
+      if data_generator is not None:
         for clone in self.clones:
           # generate data
           data = next(data_generator)
-  
-          feed_list.append(data)
   
           for k, v in binds.items():
             placeholder_tensor = self.graph.get_tensor_by_name('{}{}:0'.format(clone.scope, k))
@@ -316,11 +312,12 @@ class TFTrainer(Trainer):
           loss_val = result
         
         if self.iter_at % self.log_every_n_steps == 0:
-          logger.info('INFO: loss %f lr %f at iterator %d (%f sec/step)'%(loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
+          logger.info('INFO: loss %f lr %f at iterator %d (%f sec/step)'%
+                      (loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
       else:
         logger.info('INFO: (%f sec/step)'%float(self.time_stat.get()))
       
-      return (result, feed_list) if whats else result
+      return result
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0):

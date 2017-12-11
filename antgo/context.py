@@ -77,8 +77,7 @@ class Context(object):
 
     self.trainer_callbacks = []
     self.clear_callbacks = []
-    self.init_callbacks = []
-  
+
     self.data_source = None
     self._blocks = []
     self._blocks_status = {}
@@ -227,12 +226,6 @@ class Context(object):
 
   def registry_clear_callback(self, func):
     self.clear_callbacks.append(func)
-  
-  def registry_init_callback(self, func):
-    self.init_callbacks.append(func)
-  @property
-  def registried_init_callbacks(self):
-    return self.init_callbacks
   
   @property
   def data_source(self):

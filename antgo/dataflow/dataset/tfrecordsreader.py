@@ -29,7 +29,6 @@ class TFRecordsReader(Dataset):
     self._prefetch_num_threads = getattr(self, '_prefetch_num_threads', 1)
     
     self._pattern = getattr(self, '_pattern', '*.tfrecords')
-    self.batch_queue = None
   
   @property
   def batch_size(self):
@@ -102,6 +101,13 @@ class TFRecordsReader(Dataset):
     self._prefetch_capacity = val
   
   @property
+  def prefetch_num_threads(self):
+    return self._prefetch_num_threads
+  @prefetch_num_threads.setter
+  def prefetch_num_threads(self, val):
+    self._prefetch_num_threads = val
+  
+  @property
   def file_pattern(self):
     return self._pattern
   @file_pattern.setter
@@ -154,9 +160,9 @@ class TFRecordsReader(Dataset):
                                                         num_threads=self.num_threads)
             
       batch_queue = slim.prefetch_queue.prefetch_queue([image_batch, label_batch], capacity=self.prefetch_capacity)
-      self.images, self.labels = batch_queue.dequeue()
+      x, y = batch_queue.dequeue()
+      return x, y
     else:
       batch_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
-      self.images, self.labels = batch_queue.dequeue()
-  
-    return self.images, self.labels
+      x, y = batch_queue.dequeue()
+      return x, y
