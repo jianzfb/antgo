@@ -307,11 +307,16 @@ class _TransparantNode(Node):
         i._force_inputs_dirty()
       self._value = DIRTY
 
+  def model_branch_fn(self, *args, **kwargs):
+    # dataset format - tfrecord
+    return self._positional_inputs[0].model_branch_fn(*args, **kwargs)
+
 
 class DataAnnotationBranch(Node):
   def __init__(self, inputs):
     super(DataAnnotationBranch, self).__init__(name=None, action=self.action, inputs=inputs)
     self.annotation_branch = _TransparantNode(upper_node=Node.inputs(self), name='annotation')
+    self._y = None
 
   def action(self, *args, **kwargs):
     image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
@@ -323,8 +328,21 @@ class DataAnnotationBranch(Node):
       return self
     else:
       return self.annotation_branch
+  
+  def model_fn(self, *args, **kwargs):
+    # dataset format - tfrecord
+    x, self._y = self._positional_inputs[0].model_fn(*args, **kwargs)
+    return x
+  
+  def model_branch_fn(self, *args, **kwargs):
+    # dataset format - tfrecord
+    return self._y
+  
+  @property
+  def size(self):
+    return self._positional_inputs[0].size
 
-
+  
 class AutoBranch(Node):
   def __init__(self, inputs, branch_func):
     super(AutoBranch, self).__init__(name=None, action=self.action, inputs=inputs)

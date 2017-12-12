@@ -116,17 +116,3 @@ class TFRecordsReader(Dataset):
     label = tf.reshape(label, self.label_size)
     
     return image, label
-    
-    # if self.batch_size > 0:
-    #   # 5.step reorganize as batch
-    #   image_batch, label_batch = tf.train.shuffle_batch([image, label],
-    #                                                     batch_size=self.batch_size,
-    #                                                     capacity=self.capacity,
-    #                                                     min_after_dequeue=self.min_after_dequeue,
-    #                                                     num_threads=self.num_threads)
-    #
-    #   batch_queue = slim.prefetch_queue.prefetch_queue([image_batch, label_batch], capacity=self.prefetch_capacity)
-    #   return batch_queue
-    # else:
-    #   data_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
-    #   return  data_queue

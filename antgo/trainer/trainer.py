@@ -150,7 +150,7 @@ class ModelDesc(object):
   def need_feed(self, val):
     self._need_feed = val
     
-  def model_input(self, data_source):
+  def model_input(self, is_training, data_source):
     return None
   
   @abstractmethod

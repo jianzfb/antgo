@@ -358,8 +358,10 @@ class TFTrainer(Trainer):
         
       # init some info
       with tf.device(deploy_config.inputs_device()):
-        # build model input
-        data_queue = self.ctx.model.model_input(self.ctx.data_source)
+        #############################
+        ####    define model input ##
+        #############################
+        data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
         
         #############################
         ####    define model       ##
@@ -451,6 +453,7 @@ class TFTrainer(Trainer):
         #   sync_optimizer=None)
   
   def infer_deploy(self, model):
+    tf.logging.set_verbosity(tf.logging.INFO)
     with tf.Graph().as_default() as graph:
       # Default graph
       self.graph = graph
@@ -458,10 +461,6 @@ class TFTrainer(Trainer):
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
       self.sess = tf.Session(graph=graph, config=config)
-      
-      # init some info
-      for func in self.ctx.registried_init_callbacks:
-        func(sess=self.sess)
 
       #######################
       # Config model_deploy #
@@ -472,44 +471,51 @@ class TFTrainer(Trainer):
                                                       replica_id=0,
                                                       num_replicas=1,
                                                       num_ps_tasks=0)
-
-      # build model input
-      self.ctx.model.model_input(self.ctx.data_source)
       
-      func = model.model_fn
-      @functools.wraps(func)
-      def network_fn(*args, **kwargs):
-        res = func(self.is_training, *args, **kwargs)
-        return res
-
-      #######################
-      # Create model clones #
-      #######################
-      self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
-      
-      # Global initialization
-      self.sess.run(tf.global_variables_initializer())
-      self.sess.run(tf.local_variables_initializer())
-      
-      # Restore from checkpoint
-      restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
-      if restore_fns is not None:
-        for restore_fn in restore_fns:
-          restore_fn(self.sess)
-
-      # write graph
-      tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
-      # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'), self.dump_dir)
-      # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
-      
-      # Value ops
-      self.val_ops = self.clones[0].outputs
-      if type(self.val_ops) != list:
-        self.val_ops = [self.val_ops]
+      # init some info
+      with tf.device(deploy_config.inputs_device()):
+        #############################
+        ####    define model input ##
+        #############################
+        data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
         
-      self.coord = tf.train.Coordinator()
-      self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-
+        #############################
+        ####    define model       ##
+        #############################
+        func = model.model_fn
+        @functools.wraps(func)
+        def network_fn(*args, **kwargs):
+          res = func(self.is_training, *args, **kwargs)
+          return res
+  
+        #######################
+        # Create model clones #
+        #######################
+        self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue])
+        
+        # Global initialization
+        self.sess.run(tf.global_variables_initializer())
+        self.sess.run(tf.local_variables_initializer())
+        
+        self.coord = tf.train.Coordinator()
+        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+        
+        # Restore from checkpoint
+        restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
+        if restore_fns is not None:
+          for restore_fn in restore_fns:
+            restore_fn(self.sess)
+            
+        # write graph
+        tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
+        # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'), self.dump_dir)
+        # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+        
+        # Value ops
+        self.val_ops = self.clones[0].outputs
+        if type(self.val_ops) != list:
+          self.val_ops = [self.val_ops]
+        
   # 1.step deploy model on hardwares
   def deploy(self, model):
     # model context

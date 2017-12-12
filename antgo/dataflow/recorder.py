@@ -57,7 +57,12 @@ class RecorderNode(Node):
         cache = copy.deepcopy(entry)
         self._annotation_cache.append(cache)
 
-  def record(self, val):
+  def record(self, val, **kwargs):
+    if len(self._annotation_cache) == 0:
+      # sluggishness
+      label_val = kwargs['sess'].run(self._positional_inputs[0].model_branch_fn())
+      self._annotation_cache.append(label_val)
+      
     if type(val) == list:
       if len(self._annotation_cache) > 0:
           assert(len(self._annotation_cache) == len(val))
@@ -66,7 +71,7 @@ class RecorderNode(Node):
       if len(self._annotation_cache) > 0:
           assert(len(self._annotation_cache) == 1)
       results = [val]
-
+  
     # proxy
     annotation_cache_proxy = self._annotation_cache if len(self._annotation_cache) > 0 else [None for _ in range(len(results))]
 
