@@ -154,7 +154,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   if ctx is not None:
     if ctx.from_experiment is not None:
       # TODO support dencentrid storage in future
-      logger.info('load model experiment %s' % ctx.from_experiment.split('/')[-2])
+      logger.info('load model from experiment %s' % ctx.from_experiment.split('/')[-2])
       latest_checkpoint = tf.train.latest_checkpoint(ctx.from_experiment)
       
       variables_to_restore = {}
@@ -176,6 +176,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
       var_name = var.op.name
       variables_to_restore[var_name] = var
 
+    logger.info('load model from %s' % latest_checkpoint)
     return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
   
   # 3.step load from checkpoint_path
@@ -233,11 +234,8 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   if tf.gfile.IsDirectory(checkpoint_path):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
   
-  if trainer_obj.is_training:
-    logger.info('fine-tune from %s' % checkpoint_path)
-  else:
-    logger.info('load from %s' % checkpoint_path)
-  return [slim.assign_from_checkpoint_fn(checkpoint_path, vr) for vr in auxilary_variables_to_restore]
+  logger.info('load model from %s' % checkpoint_path)
+  return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in auxilary_variables_to_restore]
 
 
 # def _convert_to_svg_graph(tf_graph_pb_file, dump_dir):
@@ -297,9 +295,9 @@ class TFTrainer(Trainer):
       self.iter_at += 1
       
       # run
-      start_time = time.clock()
+      start_time = time.time()
       result = self.sess.run(self.val_ops, feed_dict=feed_dict if len(feed_dict) > 0 else None)
-      elapsed_time = (time.clock() - start_time)
+      elapsed_time = int((time.time() - start_time) * 100) / 100.0
       
       # record elapsed time
       self.time_stat.add(elapsed_time)
@@ -335,6 +333,7 @@ class TFTrainer(Trainer):
     self.saver.save(self.sess, model_filepath)
 
   def training_deploy(self, model):
+    tf.logging.set_verbosity(tf.logging.INFO)
     with tf.Graph().as_default() as graph:
       # Default graph
       self.graph = graph
@@ -420,36 +419,36 @@ class TFTrainer(Trainer):
               self.val_ops.extend(list(self.clones[0].outputs))
             else:
               self.val_ops.append(self.clones[0].outputs)
-        #
-        # # Global initialization
-        # self.sess.run(tf.global_variables_initializer())
-        # self.sess.run(tf.local_variables_initializer())
-        #
-        # self.coord = tf.train.Coordinator()
-        # self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-        #
-        # # Training saver
-        # self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
-        #
-        # # Restore from checkpoint
-        restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
-        # if restore_fns is not None:
-        #   for restore_fn in restore_fns:
-        #     restore_fn(self.sess)
 
-        ###########################
-        # Kicks off the training. #
-        ###########################
-        slim.learning.train(
-          self.val_ops[0],
-          logdir=self.dump_dir,
-          master='',
-          is_chief=1,
-          init_fn=restore_fns[0],
-          number_of_steps=2000,
-          log_every_n_steps=20,
-          save_interval_secs=600,
-          sync_optimizer=None)
+        # Global initialization
+        self.sess.run(tf.global_variables_initializer())
+        self.sess.run(tf.local_variables_initializer())
+
+        self.coord = tf.train.Coordinator()
+        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+
+        # Training saver
+        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
+
+        # Restore from checkpoint
+        restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
+        if restore_fns is not None:
+          for restore_fn in restore_fns:
+            restore_fn(self.sess)
+
+        # ###########################
+        # # Kicks off the training. #
+        # ###########################
+        # slim.learning.train(
+        #   self.val_ops[0],
+        #   logdir=self.dump_dir,
+        #   master='',
+        #   is_chief=True,
+        #   init_fn=restore_fns[0],
+        #   number_of_steps=2000,
+        #   log_every_n_steps=1,
+        #   save_interval_secs=600,
+        #   sync_optimizer=None)
   
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
