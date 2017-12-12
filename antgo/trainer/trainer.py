@@ -126,8 +126,7 @@ class ModelDesc(object):
       self.model_name = model_name
     else:
       self.model_name = self.__class__.__name__
-    
-    self._need_feed = True
+  
     self._ctx = None
 
   @property

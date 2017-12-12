@@ -15,27 +15,12 @@ import sys
 class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
-    self._batch_size = getattr(self, '_batch_size', 1)
-    self._capacity = getattr(self, '_capacity', int(self._batch_size * 5))
-    self._min_after_dequeue = getattr(self, '_min_after_dequeue', int(self._capacity / 2))
-    self._num_threads = getattr(self, '_num_threads', 2)
-    
     self._data_size = [700, 700, 3]
     self._data_type = tf.uint8
     self._label_size = [700, 700, 1]
     self._label_type = tf.uint8
     self._num_samples = getattr(self, '_num_samples', 199600)
-    self._prefetch_capacity = getattr(self, '_prefetch_capacity', 4)
-    self._prefetch_num_threads = getattr(self, '_prefetch_num_threads', 1)
-    
     self._pattern = getattr(self, '_pattern', '*.tfrecords')
-  
-  @property
-  def batch_size(self):
-    return self._batch_size
-  @batch_size.setter
-  def batch_size(self, val):
-    self._batch_size = val
   
   @property
   def capacity(self):
@@ -80,32 +65,11 @@ class TFRecordsReader(Dataset):
     self._label_type = val
   
   @property
-  def num_threads(self):
-    return self._num_threads
-  @num_threads.setter
-  def num_threads(self, val):
-    self._num_threads = val
-  
-  @property
   def num_samples(self):
     return self._num_samples
   @num_samples.setter
   def num_samples(self, val):
     self._num_samples = val
-  
-  @property
-  def prefetch_capacity(self):
-    return self._prefetch_capacity
-  @prefetch_capacity.setter
-  def prefetch_capacity(self, val):
-    self._prefetch_capacity = val
-  
-  @property
-  def prefetch_num_threads(self):
-    return self._prefetch_num_threads
-  @prefetch_num_threads.setter
-  def prefetch_num_threads(self, val):
-    self._prefetch_num_threads = val
   
   @property
   def file_pattern(self):
@@ -150,17 +114,19 @@ class TFRecordsReader(Dataset):
 
     label = tf.decode_raw(features['label'], self.label_type)
     label = tf.reshape(label, self.label_size)
-
-    if self.batch_size > 0:
-      # 5.step reorganize as batch
-      image_batch, label_batch = tf.train.shuffle_batch([image, label],
-                                                        batch_size=self.batch_size,
-                                                        capacity=self.capacity,
-                                                        min_after_dequeue=self.min_after_dequeue,
-                                                        num_threads=self.num_threads)
-            
-      batch_queue = slim.prefetch_queue.prefetch_queue([image_batch, label_batch], capacity=self.prefetch_capacity)
-      return batch_queue
-    else:
-      data_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
-      return  data_queue
+    
+    return image, label
+    
+    # if self.batch_size > 0:
+    #   # 5.step reorganize as batch
+    #   image_batch, label_batch = tf.train.shuffle_batch([image, label],
+    #                                                     batch_size=self.batch_size,
+    #                                                     capacity=self.capacity,
+    #                                                     min_after_dequeue=self.min_after_dequeue,
+    #                                                     num_threads=self.num_threads)
+    #
+    #   batch_queue = slim.prefetch_queue.prefetch_queue([image_batch, label_batch], capacity=self.prefetch_capacity)
+    #   return batch_queue
+    # else:
+    #   data_queue = slim.prefetch_queue.prefetch_queue([image, label], capacity=self.prefetch_capacity)
+    #   return  data_queue
