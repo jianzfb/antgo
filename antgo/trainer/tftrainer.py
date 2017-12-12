@@ -360,7 +360,7 @@ class TFTrainer(Trainer):
       # init some info
       with tf.device(deploy_config.inputs_device()):
         # build model input
-        self.ctx.model.model_input(self.ctx.data_source)
+        data_queue = self.ctx.model.model_input(self.ctx.data_source)
         
         func = model.model_fn
         @functools.wraps(func)
@@ -368,7 +368,7 @@ class TFTrainer(Trainer):
           arg_scope = model.arg_scope_fn()
           if arg_scope is not None:
             with slim.arg_scope(arg_scope):
-              res = func(is_training=self.is_training, *args, **kwargs)
+              res = func(self.is_training, *args, **kwargs)
               if kwargs['clone'] == 0:
                 # 1.step save graph file
                 tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
@@ -378,7 +378,7 @@ class TFTrainer(Trainer):
                 #
               return res
           else:
-            res = func(is_training=self.is_training, *args, **kwargs)
+            res = func(self.is_training, *args, **kwargs)
             if kwargs['clone'] == 0:
               # 1.step save graph file
               tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
@@ -390,7 +390,7 @@ class TFTrainer(Trainer):
         #######################
         # Create model clones #
         #######################
-        self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn)
+        self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue] if data_queue is not None else None)
         first_clone_scope = deploy_config.clone_scope(0)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
   
@@ -479,10 +479,10 @@ class TFTrainer(Trainer):
         arg_scope = model.arg_scope_fn()
         if arg_scope is not None:
           with slim.arg_scope(arg_scope):
-            res = func(is_training=self.is_training, *args, **kwargs)
+            res = func(self.is_training, *args, **kwargs)
             return res
         else:
-          res = func(is_training=self.is_training, *args, **kwargs)
+          res = func(self.is_training, *args, **kwargs)
           return res
 
       #######################

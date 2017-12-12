@@ -152,7 +152,7 @@ class ModelDesc(object):
     self._need_feed = val
     
   def model_input(self, data_source):
-    pass
+    return None
   
   @abstractmethod
   def model_fn(self, is_training=True, *args, **kwargs):
