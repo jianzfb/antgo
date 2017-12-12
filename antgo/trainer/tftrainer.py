@@ -422,31 +422,31 @@ class TFTrainer(Trainer):
         with tf.control_dependencies([update_op]):
           self.val_ops = tf.identity(total_loss, name='train_op')
   
-        if self.clones[0].outputs is not None:
-          self.val_ops = [self.val_ops]
-          if type(self.clones[0].outputs) == list:
-            self.val_ops.extend(self.clones[0].outputs)
-          elif type(self.clones[0].outputs) == tuple:
-            self.val_ops.extend(list(self.clones[0].outputs))
-          else:
-            self.val_ops.append(self.clones[0].outputs)
-  
-        # Training saver
-        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
+          if self.clones[0].outputs is not None:
+            self.val_ops = [self.val_ops]
+            if type(self.clones[0].outputs) == list:
+              self.val_ops.extend(self.clones[0].outputs)
+            elif type(self.clones[0].outputs) == tuple:
+              self.val_ops.extend(list(self.clones[0].outputs))
+            else:
+              self.val_ops.append(self.clones[0].outputs)
   
         # Global initialization
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(tf.local_variables_initializer())
         
+        self.coord = tf.train.Coordinator()
+        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+        
+        # Training saver
+        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
+
         # Restore from checkpoint
         restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
   
-        self.coord = tf.train.Coordinator()
-        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
       # Default graph
