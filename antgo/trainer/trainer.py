@@ -159,6 +159,3 @@ class ModelDesc(object):
     '''
     :return: 
     '''
-
-  def arg_scope_fn(self):
-    return None

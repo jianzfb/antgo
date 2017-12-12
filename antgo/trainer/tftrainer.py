@@ -362,30 +362,20 @@ class TFTrainer(Trainer):
         # build model input
         data_queue = self.ctx.model.model_input(self.ctx.data_source)
         
+        #############################
+        ####    define model       ##
+        #############################
         func = model.model_fn
         @functools.wraps(func)
         def network_fn(*args, **kwargs):
-          arg_scope = model.arg_scope_fn()
-          if arg_scope is not None:
-            with slim.arg_scope(arg_scope):
-              res = func(self.is_training, *args, **kwargs)
-              if kwargs['clone'] == 0:
-                # 1.step save graph file
-                tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
-                # # 2.step transfer to local graph net
-                # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'), self.dump_dir)
-                # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
-                #
-              return res
-          else:
-            res = func(self.is_training, *args, **kwargs)
-            if kwargs['clone'] == 0:
-              # 1.step save graph file
-              tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
-              # # 2.step transfer to local graph net
-              # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'), self.dump_dir)
-              # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
-            return res
+          res = func(self.is_training, *args, **kwargs)
+          if kwargs['clone'] == 0:
+            # 1.step save graph file
+            tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
+            # # 2.step transfer to local graph net
+            # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'), self.dump_dir)
+            # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+          return res
   
         #######################
         # Create model clones #
@@ -430,22 +420,36 @@ class TFTrainer(Trainer):
               self.val_ops.extend(list(self.clones[0].outputs))
             else:
               self.val_ops.append(self.clones[0].outputs)
-  
-        # Global initialization
-        self.sess.run(tf.global_variables_initializer())
-        self.sess.run(tf.local_variables_initializer())
-        
-        self.coord = tf.train.Coordinator()
-        self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-        
-        # Training saver
-        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
-
-        # Restore from checkpoint
+        #
+        # # Global initialization
+        # self.sess.run(tf.global_variables_initializer())
+        # self.sess.run(tf.local_variables_initializer())
+        #
+        # self.coord = tf.train.Coordinator()
+        # self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
+        #
+        # # Training saver
+        # self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
+        #
+        # # Restore from checkpoint
         restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
-        if restore_fns is not None:
-          for restore_fn in restore_fns:
-            restore_fn(self.sess)
+        # if restore_fns is not None:
+        #   for restore_fn in restore_fns:
+        #     restore_fn(self.sess)
+
+        ###########################
+        # Kicks off the training. #
+        ###########################
+        slim.learning.train(
+          self.val_ops[0],
+          logdir=self.dump_dir,
+          master='',
+          is_chief=1,
+          init_fn=restore_fns[0],
+          number_of_steps=2000,
+          log_every_n_steps=20,
+          save_interval_secs=600,
+          sync_optimizer=None)
   
   def infer_deploy(self, model):
     with tf.Graph().as_default() as graph:
@@ -476,14 +480,8 @@ class TFTrainer(Trainer):
       func = model.model_fn
       @functools.wraps(func)
       def network_fn(*args, **kwargs):
-        arg_scope = model.arg_scope_fn()
-        if arg_scope is not None:
-          with slim.arg_scope(arg_scope):
-            res = func(self.is_training, *args, **kwargs)
-            return res
-        else:
-          res = func(self.is_training, *args, **kwargs)
-          return res
+        res = func(self.is_training, *args, **kwargs)
+        return res
 
       #######################
       # Create model clones #
