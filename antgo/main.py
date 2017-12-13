@@ -35,7 +35,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", "generate", "frozen"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy", "dataset", "frozen"]
 
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
@@ -209,7 +209,7 @@ def main():
     running_process.start()
   elif ant_cmd == "deploy":
     pass
-  elif ant_cmd == 'generate':
+  elif ant_cmd == 'dataset':
     running_process = AntGenerate(ant_context,
                                   name,
                                   data_factory,

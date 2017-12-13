@@ -20,7 +20,7 @@ def tftool_frozen_graph(dump_dir,
                         input_node_names,
                         output_node_names):
   # 1.step experiment
-  checkpoint_main_folder = os.path.join(dump_dir, experiment_name, 'train')
+  checkpoint_main_folder = os.path.join(dump_dir, experiment_name, 'inference')
   if not os.path.isdir(checkpoint_main_folder):
     logger.error('dont exist experiment')
     return
@@ -30,7 +30,12 @@ def tftool_frozen_graph(dump_dir,
     logger.error('dont exist graph file')
     return
   
-  # 3.step build frozen graph
+  # 3.step check input_node_names and output_node_names
+  if input_node_names == '' or output_node_names == '':
+    logger.error('must set input_nodes and output_nodes')
+    return
+  
+  # 4.step build frozen graph
   # We retrieve our checkpoint fullpath
   checkpoint = tf.train.get_checkpoint_state(checkpoint_main_folder)
   input_checkpoint = checkpoint.model_checkpoint_path
@@ -60,7 +65,7 @@ def tftool_frozen_graph(dump_dir,
                             output_graph_path,
                             clear_devices, initializer_nodes)
   
-  # 3.step build optimized graph
+  # 5.step build optimized graph
   with tf.Graph().as_default():
     input_graph_def = tf.GraphDef()
     with open(output_graph_path, 'rb') as f:

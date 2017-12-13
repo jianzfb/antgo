@@ -155,14 +155,26 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
     if ctx.from_experiment is not None:
       # TODO support dencentrid storage in future
       logger.info('load model from experiment %s' % ctx.from_experiment.split('/')[-2])
-      latest_checkpoint = tf.train.latest_checkpoint(ctx.from_experiment)
+      latest_checkpoint = None
+      try:
+        latest_checkpoint = tf.train.latest_checkpoint(ctx.from_experiment)
+      except:
+        latest_checkpoint_index = -1
+        for f in os.listdir(ctx.from_experiment):
+          key_terms = f.split('.')
+          if len(key_terms) >= 2 and key_terms[1] == 'ckpt':
+            index = int(key_terms[0].split('_')[-1])
+            if latest_checkpoint_index < index:
+              latest_checkpoint_index = index
+              latest_checkpoint = os.path.join(ctx.from_experiment, '.'.join(key_terms[0:2]))
       
-      variables_to_restore = {}
-      for var in slim.get_model_variables():
-        var_name = var.op.name
-        variables_to_restore[var_name] = var
-  
-      return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
+      if latest_checkpoint is not None:
+        variables_to_restore = {}
+        for var in slim.get_model_variables():
+          var_name = var.op.name
+          variables_to_restore[var_name] = var
+    
+        return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
 
   # Warn the user if a checkpoint exists in the train_dir. Then we'll be
   # ignoring the checkpoint anyway.
@@ -319,7 +331,6 @@ class TFTrainer(Trainer):
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0):
-    assert(self.is_training)
     logger.info('snapshot at %d in %d epoch' % (self.iter_at, epoch))
     if not os.path.exists(self.dump_dir):
         os.makedirs(self.dump_dir)
@@ -505,7 +516,13 @@ class TFTrainer(Trainer):
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
-            
+
+        # model saver
+        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=1)
+
+        # snapshot
+        self.snapshot(0)
+        
         # write graph
         tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
         # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'), self.dump_dir)
@@ -513,7 +530,7 @@ class TFTrainer(Trainer):
         
         # Value ops
         self.val_ops = self.clones[0].outputs
-        if type(self.val_ops) != list:
+        if type(self.val_ops) != list and type(self.val_ops) != tuple:
           self.val_ops = [self.val_ops]
         
   # 1.step deploy model on hardwares
