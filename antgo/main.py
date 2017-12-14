@@ -41,6 +41,7 @@ flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('task', None, 'task file')
+flags.DEFINE_string('dataset', None, 'dataset')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
@@ -168,11 +169,26 @@ def main():
   task = FLAGS.task()
   if task is not None:
     task = os.path.join(task_factory, task)
-
+  dataset = FLAGS.dataset()
+  if task is None and dataset is not None:
+    # build default task
+    with open(os.path.join(task_factory, '%s.xml'%name), 'w') as fp:
+      task_content = '<task><task-name>%s</task-name>' \
+                     '<input>' \
+                     '<source_data><data_set_name>%s</data_set_name>' \
+                     '</source_data>' \
+                     '</input>' \
+                     '</task>'%('default-task', dataset)
+      fp.write(task_content)
+    task = os.path.join(task_factory, '%s.xml'%name)
+  
   # 6.2 step load ant context
   ant_context = main_context(main_file, main_folder)
   if FLAGS.from_experiment() is not None:
-    ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
+    if os.path.exists(os.path.join(dump_dir, FLAGS.from_experiment(), 'train')):
+      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
+    else:
+      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
 
   # 6.3 step load model config
   main_param = FLAGS.main_param()

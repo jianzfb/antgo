@@ -65,6 +65,7 @@ class AntTrain(AntBase):
         logger.error('unknow error')
         exit(-1)
 
+    self.is_non_mltalker_task = False
     if running_ant_task is None:
       # 0.step load custom task
       if self.ant_task_config is not None:
@@ -73,7 +74,8 @@ class AntTrain(AntBase):
           logger.error('couldnt load custom task')
           exit(-1)
         running_ant_task = custom_task
-
+        self.is_non_mltalker_task = True
+        
     assert(running_ant_task is not None)
     
     # now time stamp

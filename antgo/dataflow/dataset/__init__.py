@@ -3,6 +3,7 @@ from pkgutil import walk_packages
 import os
 import os.path
 from .standard import *
+from .simpleimages import *
 from .csvs import *
 is_support_tf = True
 try:
@@ -45,5 +46,8 @@ def AntDataset(dataset_name, parse_flag=''):
     
     if dataset_name.startswith('tf') and is_support_tf:
       return TFRecordsReader
+    
+    if dataset_name.startswith('raw'):
+      return SimpleImages
     
     return Standard

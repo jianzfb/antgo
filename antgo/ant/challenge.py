@@ -60,7 +60,8 @@ class AntChallenge(AntBase):
         # unknow error
         logger.error('unknow error')
         exit(-1)
-
+    
+    self.is_non_mltalker_task = False
     if running_ant_task is None:
       # 0.step load custom task
       custom_task = create_task_from_xml(self.ant_task_config, self.context)
@@ -68,7 +69,8 @@ class AntChallenge(AntBase):
         logger.error('couldnt load custom task')
         exit(0)
       running_ant_task = custom_task
-
+      self.is_non_mltalker_task = True
+      
     assert(running_ant_task is not None)
 
     # now time stamp
@@ -141,7 +143,10 @@ class AntChallenge(AntBase):
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(ant_test_dataset.size)
-
+      
+      if self.is_non_mltalker_task:
+        return
+      
       if not self.context.recorder.is_measure:
         # has no annotation to continue to meausre
         # notify

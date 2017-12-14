@@ -27,21 +27,23 @@ def png_encode(data):
   height = data.shape[0]
 
   # convert to buf
-  aug_data = np.zeros((height,width,4),dtype=np.uint8)
+  aug_data = np.zeros((height, width, 4), dtype=np.uint8)
   if len(data.shape) == 2:
-    aug_data[:, :, 0:3] = np.tile(data,[1,1,3])
-    aug_data[:,:,3] = 255
+    aug_data[:, :, 0:3] = np.tile(np.expand_dims(data,2), [1, 1, 3])
+    aug_data[:, :, 3] = 255
   else:
     assert(data.shape[2] == 3 or data.shape[2] == 4)
-    aug_data[:,:,3] = 255
-    aug_data[:,:,0:data.shape[2]] = data
+    aug_data[:, :, 3] = 255
+    aug_data[:, :, 0:data.shape[2]] = data
   buf = bytes(aug_data.flatten().data)
 
   # reverse the vertical line order and add null bytes at the start
   width_byte_4 = width * 4
+  # raw_data = b''.join(b'\x00' + buf[span:span + width_byte_4]
+  #                     for span in range((height - 1) * width_byte_4, -1, -width_byte_4))
   raw_data = b''.join(b'\x00' + buf[span:span + width_byte_4]
-                      for span in range((height - 1) * width_byte_4, -1, - width_byte_4))
-
+                      for span in range(0, height * width_byte_4, width_byte_4))
+  
   def png_pack(png_tag, data):
     chunk_head = png_tag + data
     return (struct.pack("!I", len(data)) +

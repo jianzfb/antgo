@@ -8,6 +8,7 @@ from __future__ import print_function
 from antgo.utils.serialize import loads, dumps
 import numpy as np
 import os
+import traceback
 import sys
 import yaml
 try:
@@ -72,9 +73,8 @@ def safe_recorder_manager(recorder):
   try:
     yield recorder
   except:
-    error_info = sys.exc_info()
-    logger.error(error_info)
-    raise error_info[0]
+    traceback.print_exc()
+    raise sys.exc_info()[0]
 
 
 class RecordReader(object):
