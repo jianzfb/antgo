@@ -10,4 +10,6 @@ pyzmq
 jinja2
 pyyaml
 requests
+cryptographyf
+ipfsapi
 python-rocksdb
