@@ -15,9 +15,9 @@ import sys
 class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
-    self._data_size = [700, 700, 3]
+    self._data_size = None
     self._data_type = tf.uint8
-    self._label_size = [700, 700, 1]
+    self._label_size = None
     self._label_type = tf.uint8
     self._num_samples = getattr(self, '_num_samples', 199600)
     self._pattern = getattr(self, '_pattern', '*.tfrecords')
@@ -110,9 +110,11 @@ class TFRecordsReader(Dataset):
                                        })
     
     image = tf.decode_raw(features['image'], self.data_type)
-    image = tf.reshape(image, self.data_size)
+    if self.data_size is not None:
+      image = tf.reshape(image, self.data_size)
 
     label = tf.decode_raw(features['label'], self.label_type)
-    label = tf.reshape(label, self.label_size)
+    if self.label_size is not None:
+      label = tf.reshape(label, self.label_size)
     
     return image, label

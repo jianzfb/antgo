@@ -164,3 +164,11 @@ def tf_aspect_preserving_resize(image, label, smallest_side):
   resized_label = tf.cast(resized_label, tf.uint8)
   resized_label = tf.squeeze(resized_label, 0)
   return resized_image, resized_label
+
+
+def tf_mirror(image, label):
+  val_lr = tf.to_float(tf.random_uniform([1]))[0]
+  image = tf.cond(val_lr > 0.5, lambda: tf.image.flip_left_right(image), lambda: image)
+  label = tf.cond(val_lr > 0.5, lambda: tf.image.flip_left_right(label), lambda: label)
+  
+  return image, label
