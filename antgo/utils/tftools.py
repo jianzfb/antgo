@@ -10,9 +10,13 @@ import tensorflow as tf
 from tensorflow.python.tools import freeze_graph
 from tensorflow.python.tools import optimize_for_inference_lib
 from tensorflow.python.platform import gfile
+from antgo.ant.utils import *
 slim = tf.contrib.slim
 from antgo.utils import logger
 from antgo.dataflow.dataset.dataset import *
+from antgo.ant import flags
+import yaml
+FLAGS = flags.AntFLAGS
 
 
 def tftool_frozen_graph(dump_dir,
@@ -24,17 +28,17 @@ def tftool_frozen_graph(dump_dir,
   if not os.path.isdir(checkpoint_main_folder):
     logger.error('dont exist experiment')
     return
-  
-  # 2.step check infer_graph.pbtxt in experiment
-  if not os.path.exists(os.path.join(checkpoint_main_folder, 'infer_graph.pbtxt')):
-    logger.error('dont exist graph file')
-    return
-  
-  # 3.step check input_node_names and output_node_names
+
+  # 2.step check input_node_names and output_node_names
   if input_node_names == '' or output_node_names == '':
     logger.error('must set input_nodes and output_nodes')
     return
-  
+
+  # 3.step check infer_graph.pbtxt in experiment
+  if not os.path.exists(os.path.join(checkpoint_main_folder, 'infer_graph.pbtxt')):
+    logger.error('dont exist graph file')
+    return
+
   # 4.step build frozen graph
   # We retrieve our checkpoint fullpath
   checkpoint = tf.train.get_checkpoint_state(checkpoint_main_folder)

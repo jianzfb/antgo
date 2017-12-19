@@ -20,7 +20,18 @@ class SimpleImages(Dataset):
       if data_file.lower().split('.')[-1] in ['png', 'jpg', 'bmp', 'jpeg']:
         file_path = os.path.join(self.dir, self.train_or_test, data_file)
         self.data_files.append(file_path)
-        
+    
+    self.is_movie = False
+    if len(self.data_files) == 0:
+      for data_file in os.listdir(os.path.join(self.dir, self.train_or_test)):
+        if data_file.lower().split('.')[-1] in ['avi', 'mp4']:
+          file_path = os.path.join(self.dir, self.train_or_test, data_file)
+          self.data_files.append(file_path)
+      
+      if len(self.data_files) > 0:
+        self.is_movie = True
+    
+    assert(len(self.data_files) > 0)
     self.ids = [i for i in range(len(self.data_files))]
   
   def data_pool(self):
@@ -35,13 +46,30 @@ class SimpleImages(Dataset):
       if self.rng:
         self.rng.shuffle(ids)
       
-      for id in ids:
-        img = imread(self.data_files[id])
-        yield [img]
+      if not self.is_movie:
+        for id in ids:
+          img = imread(self.data_files[id])
+          yield [img]
+      else:
+        import cv2
+        for id in ids:
+          # read frame from movie
+          cap = cv2.VideoCapture(self.data_files[id])
+    
+          while cap.isOpened():
+            ret, frame = cap.read()
+            b = frame[:,:,0]
+            g = frame[:,:,1]
+            r = frame[:,:,2]
+            rgb_frame = np.stack((r,g,b), 2)
+            yield [rgb_frame]
         
   def at(self, id):
-    img = imread(self.data_files[id])
-    return img
+    if not self.is_movie:
+      img = imread(self.data_files[id])
+      return img
+    else:
+      raise NotImplementedError
     
   @property
   def size(self):
