@@ -20,8 +20,9 @@ class TFRecordsReader(Dataset):
     self._label_size = [700, 700, 1]
     self._label_type = tf.uint8
     self._num_samples = getattr(self, '_num_samples', 199600)
-    self._pattern = getattr(self, '_pattern', '*.tfrecords')
-  
+    self._pattern = getattr(self, '_pattern', '*.tfrecord')
+    self._has_format = getattr(self, '_format', False)
+    
   @property
   def capacity(self):
     return self._capacity
@@ -77,7 +78,14 @@ class TFRecordsReader(Dataset):
   @file_pattern.setter
   def file_pattern(self,val):
     self._pattern = val
-
+  
+  @property
+  def has_format(self):
+    return self._has_format
+  @has_format.setter
+  def has_format(self, val):
+    self._has_format = val
+  
   def data_pool(self):
     raise NotImplementedError
   
@@ -94,6 +102,7 @@ class TFRecordsReader(Dataset):
   def model_fn(self, *args, **kwargs):
     # 1.step candidate data file list
     file_names = tf.train.match_filenames_once(os.path.join(self.dir, self.train_or_test, self.file_pattern))
+    # dd= tf.get_default_session().run(file_names)
     
     # 2.step shuffle data file list
     filename_queue = tf.train.string_input_producer(file_names)
@@ -103,18 +112,35 @@ class TFRecordsReader(Dataset):
     _, serialized_example = reader.read(filename_queue)
     
     # 4.step parse data
-    features = tf.parse_single_example(serialized_example,
-                                       features={
-                                          'image': tf.FixedLenFeature([], tf.string),
-                                          'label': tf.FixedLenFeature([], tf.string),
-                                       })
-    
-    image = tf.decode_raw(features['image'], self.data_type)
-    if self.data_size is not None:
-      image = tf.reshape(image, self.data_size)
-
-    label = tf.decode_raw(features['label'], self.label_type)
-    if self.label_size is not None:
-      label = tf.reshape(label, self.label_size)
-    
-    return image, label
+    if self.has_format:
+      keys_to_features = {
+        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/format': tf.FixedLenFeature((), tf.string, default_value='jpeg'),
+        'label/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
+        'label/format': tf.FixedLenFeature((), tf.string, default_value='png'),
+      }
+      items_to_handlers = {
+        'image': slim.tfexample_decoder.Image(),
+        'label': slim.tfexample_decoder.Image('label/encoded', 'label/format')
+      }
+  
+      decoder = slim.tfexample_decoder.TFExampleDecoder(keys_to_features, items_to_handlers)
+      serialized_example = tf.reshape(serialized_example, shape=[])
+      image, label = decoder.decode(serialized_example, ['image', 'label'])
+      return image, label
+    else:
+      features = tf.parse_single_example(serialized_example,
+                                         features={
+                                            'image': tf.FixedLenFeature([], tf.string),
+                                            'label': tf.FixedLenFeature([], tf.string),
+                                         })
+  
+      image = tf.decode_raw(features['image'], self.data_type)
+      if self.data_size is not None:
+        image = tf.reshape(image, self.data_size)
+  
+      label = tf.decode_raw(features['label'], self.label_type)
+      if self.label_size is not None:
+        label = tf.reshape(label, self.label_size)
+      
+      return image, label

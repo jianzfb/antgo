@@ -3,28 +3,20 @@
 # @File    : common.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
-from __future__ import unicode_literals
 from __future__ import print_function
+from __future__ import unicode_literals
 
-import imp
-import os
-import sys
-import getopt
-import yaml
-from antgo.ant.train import *
-from antgo.ant.deploy import *
-from antgo.ant.workflow import *
-from antgo.ant.challenge import *
-from antgo.ant.generate import *
-from antgo.ant.cmd import *
-from antgo.utils import logger
-from antgo.ant import flags
-from antgo import config
-from antgo.ant.utils import *
-from antgo.sandbox.sandbox import *
-from antgo.dataflow.dataflow_server import *
 from datetime import datetime
+
+from antgo import config
+from antgo.ant import flags
+from antgo.ant.cmd import *
+from antgo.ant.generate import *
+from antgo.ant.utils import *
+from antgo.dataflow.dataflow_server import *
+from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
+
 if sys.version > '3':
     PY3 = True
 else:
@@ -35,8 +27,11 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", "dataset", "frozen"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy", "dataset", "tools-tffrozen", "tools-tfrecords"]
 
+#############################################
+#######   antgo parameters            #######
+#############################################
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
@@ -47,8 +42,20 @@ flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
 flags.DEFINE_string('sandbox_time', None, 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
+#############################################
+########  tools - tffrozen            #######
+#############################################
 flags.DEFINE_string('input_nodes', '', 'input node names in graph')
 flags.DEFINE_string('output_nodes', '', 'output node names in graph')
+#############################################
+########  tools - tfrecords           #######
+#############################################
+flags.DEFINE_string('tfrecords_data_dir', None, 'data folder')
+flags.DEFINE_string('tfrecords_label_dir', None, 'label folder')
+flags.DEFINE_string('tfrecords_record_dir', None, 'output tfrecord folder')
+flags.DEFINE_string('tfrecords_label_suffix', '', 'label suffix')
+flags.DEFINE_string('tfrecords_train_or_test', 'train', 'train or test')
+flags.DEFINE_string('tfrecords_shards', 10, 'tfrecord shards')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -136,15 +143,26 @@ def main():
       os.makedirs(dump_dir)
 
   # 4.4. step tools (option)
-  if ant_cmd == 'frozen':
+  if ant_cmd == 'tools-tffrozen':
     # tensorflow tools
-    import antgo.utils.tftools as tftools
+    import antgo.tools.tftools as tftools
     tftools.tftool_frozen_graph(dump_dir,
                                 FLAGS.from_experiment(),
                                 FLAGS.input_nodes(),
                                 FLAGS.output_nodes())
     return
-  
+  elif ant_cmd == 'tools-tfrecords':
+    # tensorflwo tools
+    import antgo.tools.tftools as tftools
+    tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir,
+                                          FLAGS.tfrecords_label_dir,
+                                          FLAGS.tfrecords_record_dir,
+                                          FLAGS.tfrecords_label_suffix,
+                                          FLAGS.tfrecords_train_or_test,
+                                          FLAGS.tfrecords_shards)
+    
+    return
+    
   # 4.5 check main file
   main_file = FLAGS.main_file()
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):

@@ -130,7 +130,11 @@ def _get_variables_to_train(trainer_obj):
   """
   trainable_scopes = getattr(trainer_obj, 'trainable_scopes', None)
   if trainable_scopes is None:
-    return tf.trainable_variables()
+    trainable_filter = getattr(trainer_obj, 'trainable_filter', None)
+    if trainable_filter is None:
+      return tf.trainable_variables()
+    else:
+      return [var for var in tf.trainable_variables() if var.name.startswith(trainable_filter)]
   else:
     scopes = [scope.strip() for scope in trainable_scopes.split(',')]
 

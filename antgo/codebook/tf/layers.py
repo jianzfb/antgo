@@ -1,0 +1,57 @@
+# -*- coding: UTF-8 -*-
+# @Time    : 17-12-20
+# @File    : layers.py
+# @Author  : jian<jian@mltalker.com>
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+
+import tensorflow as tf
+import numpy as np
+
+
+def _bilinear_filter(filter_shape, upscale_factor):
+  ##filter_shape is [width, height, num_in_channels, num_out_channels]
+  kernel_size = filter_shape[1]
+  ### Centre location of the filter for which value is calculated
+  if kernel_size % 2 == 1:
+    centre_location = upscale_factor - 1
+  else:
+    centre_location = upscale_factor - 0.5
+  
+  bilinear = np.zeros([filter_shape[0], filter_shape[1]])
+  for x in range(filter_shape[0]):
+    for y in range(filter_shape[1]):
+      ##Interpolation Calculation
+      value = (1 - abs((x - centre_location) / upscale_factor)) * (1 - abs((y - centre_location) / upscale_factor))
+      bilinear[x, y] = value
+  weights = np.zeros(filter_shape)
+  for i in range(filter_shape[2]):
+    weights[:, :, i, i] = bilinear
+  init = tf.constant_initializer(value=weights,
+    dtype=tf.float32)
+  
+  bilinear_weights = tf.get_variable(name="decon_bilinear_filter", initializer=init, shape=weights.shape)
+  return bilinear_weights
+
+
+def deconv(bottom, n_channels, upscale_factor, output_shape=None, name=None):
+  kernel_size = 2 * upscale_factor - upscale_factor % 2
+  stride = upscale_factor
+  strides = [1, stride, stride, 1]
+  with tf.variable_scope(name, 'deconv'):
+    # Shape of the bottom tensor
+    in_shape = tf.shape(bottom)
+    
+    if output_shape is None:
+      h = ((in_shape[1] - 1) * stride) + 1
+      w = ((in_shape[2] - 1) * stride) + 1
+      new_shape = [in_shape[0], h, w, n_channels]
+      output_shape = tf.stack(new_shape)
+    else:
+      output_shape = tf.stack(output_shape)
+    
+    filter_shape = [kernel_size, kernel_size, n_channels, n_channels]
+    
+    weights = _bilinear_filter(filter_shape, upscale_factor)
+  return tf.nn.conv2d_transpose(bottom, weights, output_shape, strides=strides, padding='SAME')
