@@ -35,7 +35,7 @@ def _bilinear_filter(filter_shape, upscale_factor):
   return bilinear_weights
 
 
-def deconv(bottom, out_channels, in_channels, upscale_factor, output_shape=None, name=None):
+def deconv_bilinear(bottom, out_channels, in_channels, upscale_factor, output_shape=None, name=None):
   kernel_size = 2 * upscale_factor - upscale_factor % 2
   stride = upscale_factor
   strides = [1, stride, stride, 1]
