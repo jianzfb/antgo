@@ -154,7 +154,14 @@ class AntTask(object):
 
   @staticmethod
   def support_task_types():
-    return ['OBJECT-DETECTION', 'SEGMENTATION', 'CLASSIFICATION', 'REGRESSION', 'INSTANCE-SEGMENTATION', 'MATTING']
+    return ['OBJECT-DETECTION',
+            'SEGMENTATION',
+            'CLASSIFICATION',
+            'REGRESSION',
+            'INSTANCE-SEGMENTATION',
+            'MATTING',
+            'IMAGE-GENERATION',
+            'TTS']
 
 
 def create_dummy_task(task_type):

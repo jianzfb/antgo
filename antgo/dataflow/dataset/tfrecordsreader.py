@@ -19,9 +19,9 @@ class TFRecordsReader(Dataset):
     self._data_type = tf.uint8
     self._label_size = [700, 700, 1]
     self._label_type = tf.uint8
-    self._num_samples = getattr(self, '_num_samples', 199600)
-    self._pattern = getattr(self, '_pattern', '*.tfrecord')
-    self._has_format = getattr(self, '_format', False)
+    self._num_samples = int(getattr(self, '_num_samples', 199600))
+    self._pattern = getattr(self, '_pattern', '*.tfrecord?')
+    self._has_format = bool(getattr(self, '_format', False))
     
   @property
   def capacity(self):

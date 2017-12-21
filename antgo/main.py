@@ -27,7 +27,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", "dataset", "tools-tffrozen", "tools-tfrecords"]
+_ant_support_commands = ["train", "challenge", "compose", "deploy", "dataset", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -45,8 +45,8 @@ flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
-flags.DEFINE_string('input_nodes', '', 'input node names in graph')
-flags.DEFINE_string('output_nodes', '', 'output node names in graph')
+flags.DEFINE_string('tffrozen_input_nodes', '', 'input node names in graph')
+flags.DEFINE_string('tffrozen_output_nodes', '', 'output node names in graph')
 #############################################
 ########  tools - tfrecords           #######
 #############################################
@@ -143,15 +143,15 @@ def main():
       os.makedirs(dump_dir)
 
   # 4.4. step tools (option)
-  if ant_cmd == 'tools-tffrozen':
+  if ant_cmd == 'tools/tffrozen':
     # tensorflow tools
     import antgo.tools.tftools as tftools
     tftools.tftool_frozen_graph(dump_dir,
                                 FLAGS.from_experiment(),
-                                FLAGS.input_nodes(),
-                                FLAGS.output_nodes())
+                                FLAGS.tffrozen_input_nodes(),
+                                FLAGS.tffrozen_output_nodes())
     return
-  elif ant_cmd == 'tools-tfrecords':
+  elif ant_cmd == 'tools/tfrecords':
     # tensorflwo tools
     import antgo.tools.tftools as tftools
     tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir,
@@ -160,7 +160,6 @@ def main():
                                           FLAGS.tfrecords_label_suffix,
                                           FLAGS.tfrecords_train_or_test,
                                           FLAGS.tfrecords_shards)
-    
     return
     
   # 4.5 check main file

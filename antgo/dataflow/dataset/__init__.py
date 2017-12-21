@@ -48,7 +48,7 @@ def AntDataset(dataset_name, parse_flag=''):
     if dataset_name.startswith('tf') and is_support_tf:
       return TFRecordsReader
     
-    if dataset_name.startswith('raw'):
+    if dataset_name.startswith('image'):
       return SimpleImages
     
     return Standard

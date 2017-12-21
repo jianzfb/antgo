@@ -159,10 +159,9 @@ def tftool_generate_image_records(data_dir,
           tfrecord_writer.write(example.SerializeToString())
           
           
-# tftool_generate_image_records('/home/mi/PycharmProjects/face2face-demo/original',
-#                               '/home/mi/PycharmProjects/face2face-demo/landmarks',
-#                               '/home/mi/',
-#                               'f2f',
+# tftool_generate_image_records('/home/mi/PycharmProjects/face2face-demo/landmarks',
+#                               '/home/mi/PycharmProjects/face2face-demo/original',
+#                               '/home/mi/sdf',
 #                               label_flag='')
 
 # from antgo.dataflow.dataset.tfrecordsreader import *

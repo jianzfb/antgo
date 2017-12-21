@@ -35,7 +35,7 @@ def _bilinear_filter(filter_shape, upscale_factor):
   return bilinear_weights
 
 
-def deconv(bottom, n_channels, upscale_factor, output_shape=None, name=None):
+def deconv(bottom, out_channels, in_channels, upscale_factor, output_shape=None, name=None):
   kernel_size = 2 * upscale_factor - upscale_factor % 2
   stride = upscale_factor
   strides = [1, stride, stride, 1]
@@ -46,12 +46,12 @@ def deconv(bottom, n_channels, upscale_factor, output_shape=None, name=None):
     if output_shape is None:
       h = ((in_shape[1] - 1) * stride) + 1
       w = ((in_shape[2] - 1) * stride) + 1
-      new_shape = [in_shape[0], h, w, n_channels]
+      new_shape = [in_shape[0], h, w, out_channels]
       output_shape = tf.stack(new_shape)
     else:
       output_shape = tf.stack(output_shape)
     
-    filter_shape = [kernel_size, kernel_size, n_channels, n_channels]
+    filter_shape = [kernel_size, kernel_size, out_channels, in_channels]
     
     weights = _bilinear_filter(filter_shape, upscale_factor)
   return tf.nn.conv2d_transpose(bottom, weights, output_shape, strides=strides, padding='SAME')

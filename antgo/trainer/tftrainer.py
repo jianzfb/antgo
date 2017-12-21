@@ -399,7 +399,7 @@ class TFTrainer(Trainer):
         self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue] if data_queue is not None else None)
         first_clone_scope = deploy_config.clone_scope(0)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
-  
+        
         #########################################
         # Configure the optimization procedure. #
         #########################################
