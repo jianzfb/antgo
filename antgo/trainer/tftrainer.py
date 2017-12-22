@@ -174,7 +174,8 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
       
       if latest_checkpoint is not None:
         variables_to_restore = {}
-        for var in slim.get_model_variables():
+        model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+        for var in model_variables:
           var_name = var.op.name
           variables_to_restore[var_name] = var
     
@@ -188,7 +189,8 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
     # initilize model from dump_dir
     latest_checkpoint = tf.train.latest_checkpoint(dump_dir)
     variables_to_restore = {}
-    for var in slim.get_model_variables():
+    model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+    for var in model_variables:
       var_name = var.op.name
       variables_to_restore[var_name] = var
 
@@ -216,7 +218,8 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   # TODO(sguada) variables.filter_variables()
   auxilary_variables_to_restore = []
   variables_to_restore = {}
-  for var in slim.get_model_variables():
+  model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+  for var in model_variables:
     # transfer name
     var_name = var.op.name
     for k, v in transfers.items():
@@ -290,6 +293,8 @@ class TFTrainer(Trainer):
     self.coord = None
     self.threads = None
     
+    # model variables
+    self._model_variables = None
     # record run time
     self.time_stat = MovingAverage(self.log_every_n_steps)
     
@@ -396,7 +401,10 @@ class TFTrainer(Trainer):
         #######################
         # Create model clones #
         #######################
-        self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue] if data_queue is not None else None)
+        self.clones = tfmodel_deploy.create_clones(deploy_config,
+                                                   network_fn,
+                                                   [data_queue] if data_queue is not None else None,
+                                                   {'trainer': self})
         first_clone_scope = deploy_config.clone_scope(0)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
         
@@ -445,7 +453,8 @@ class TFTrainer(Trainer):
         self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
 
         # Training saver
-        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=2)
+        model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
+        self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=2)
 
         # Restore from checkpoint
         restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
@@ -522,7 +531,8 @@ class TFTrainer(Trainer):
             restore_fn(self.sess)
 
         # model saver
-        self.saver = tf.train.Saver(var_list=slim.get_model_variables(), max_to_keep=1)
+        model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
+        self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
 
         # snapshot
         self.snapshot(0)
@@ -547,7 +557,15 @@ class TFTrainer(Trainer):
       self.training_deploy(model)
     else:
       self.infer_deploy(model)
-      
+  
+  @property
+  def model_variables(self):
+    return self._model_variables
+  @model_variables.setter
+  def model_variables(self, val):
+    self._model_variables = val
+    
   def wait_until_clear(self):
     self.coord.request_stop()
     self.coord.join(self.threads)
+  

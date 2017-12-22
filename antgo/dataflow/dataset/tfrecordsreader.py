@@ -105,8 +105,8 @@ class TFRecordsReader(Dataset):
     # dd= tf.get_default_session().run(file_names)
     
     # 2.step shuffle data file list
-    filename_queue = tf.train.string_input_producer(file_names)
-    
+    filename_queue = tf.train.string_input_producer(file_names, shuffle= self.train_or_test == "train")
+
     # 3.step read from data file
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
