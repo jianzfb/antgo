@@ -28,8 +28,8 @@ class Link(collections.namedtuple('Link', ['label', 'args'])):
 
 class GraphNode(object):
   def __init__(self, **kwargs):
-    self.name = kwargs['name']            # name
-    self.op_name = kwargs['op_name'].replace('/','-')      # op name
+    self.name = kwargs['name']                                      # name
+    self.op_name = kwargs['op_name'].replace('/', '<br />')         # op name
     self.link_nodes = [] if 'link_nodes' not in kwargs else kwargs['link_nodes']
     self.label = '' if 'label' not in kwargs else kwargs['label']
     self.id = kwargs['id']
@@ -38,7 +38,12 @@ class GraphNode(object):
     self._attr = {} if '_attr' not in kwargs else kwargs['_attr']
 
   def add_link(self, node, link):
+    for ln in self.link_nodes:
+      if node == ln['node']:
+        return False
+    
     self.link_nodes.append({'node': node, 'link': link})
+    return True
 
   @property
   def linked_node(self):
@@ -80,9 +85,11 @@ class Graph(object):
       assert(from_node in self._graph_nodes)
       assert(to_node in self._graph_nodes)
       
-      self._graph_nodes[from_node].add_link(self._graph_nodes[to_node], link)
-      self._graph_nodes[from_node].out_degree_increment()
-      self._graph_nodes[to_node].in_degree_increment()
+      flag = self._graph_nodes[from_node].add_link(self._graph_nodes[to_node], link)
+      if flag:
+        # add new link successfully
+        self._graph_nodes[from_node].out_degree_increment()
+        self._graph_nodes[to_node].in_degree_increment()
     except:
       print(from_node)
       print(to_node)
@@ -152,8 +159,12 @@ def graphviz_net(graph, format_node):
     for line in format_node('n{}'.format(node.id), node):
       yield line
     for other in node.linked_node:
-      yield ('  n{node} -> n{other}[label={label},fontcolor=darkgreen,penwidth=2,arrowsize=0.5];'
+      if other['link'][0] != '':
+        yield ('  n{node} -> n{other}[label={label},fontcolor=darkgreen,penwidth=2,arrowsize=0.5];'
              .format(node=node.id, other=other['node'].id, label=other['link'][0]))
+      else:
+        yield ('  n{node} -> n{other}[fontcolor=darkgreen,penwidth=2,arrowsize=0.5];'
+             .format(node=node.id, other=other['node'].id))
   yield '}'
 
 
@@ -182,15 +193,11 @@ def graph_net_visualization(graph, file_path):
                  source,
                  re.S)
   
-  mm = open('/home/mi/mm.txt', 'w')
-  mm.write(source)
-  mm.close()
-  
   # 4.step save to file
   graphviz.communicate(source.encode('utf-8'))
 
   # 5.step svg content
-  fp = open(file_path,'r')
+  fp = open(file_path, 'r')
   content = fp.read()
   fp.close()
   return content

@@ -162,7 +162,7 @@ def tftool_generate_image_records(data_dir,
 # tftool_generate_image_records('/home/mi/PycharmProjects/face2face-demo/landmarks',
 #                               '/home/mi/PycharmProjects/face2face-demo/original',
 #                               '/home/mi/sdf',
-#                               label_flag='')
+#                               label_flag='', num_shards=400)
 
 # from antgo.dataflow.dataset.tfrecordsreader import *
 # ss = TFRecordsReader('train', '/home/mi/antgo/antgo-dataset/tf-f2f')

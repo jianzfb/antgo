@@ -257,26 +257,78 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in auxilary_variables_to_restore]
 
 
-# def _convert_to_svg_graph(tf_graph_pb_file, dump_dir):
-#   input_graph_def = graph_pb2.GraphDef()
-#
-#   with gfile.FastGFile(tf_graph_pb_file, 'r') as f:
-#     text_format.Merge(f.read(), input_graph_def)
-#
-#   my_graph = Graph(name='graph')
-#
-#   for node in input_graph_def.node:
-#     my_graph.add_node(name=node.op, full_name=node.name, label='')
-#     if len(node.input) > 0:
-#       for linked_node in node.input:
-#         my_graph.add_link(node.op, linked_node, Link(label='', args=''))
-#
-#   with open(os.path.join(dump_dir, 'graph.txt')) as fp:
-#     graph_str = Encoder().encode(my_graph)
-#     fp.write(graph_str)
-#
-#   svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
-#   return svg_graph
+def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
+  input_graph_def = graph_pb2.GraphDef()
+  
+  with gfile.FastGFile(tf_graph_pb_file, 'r') as f:
+    text_format.Merge(f.read(), input_graph_def)
+  
+  my_graph = Graph(name='graph')
+  # build group table (convolution and batchnorm)
+  group_lookup_table = {}
+  for node in input_graph_def.node:
+    terms = node.name.split('/')
+    if terms[0] not in scopes:
+      # check convolution group
+      if terms[-1] == 'convolution' and node.op == 'Conv2D':
+        # special flag
+        group_lookup_table['/'.join(terms[0:-1])] = len(terms[0:-1])
+      # check batchnorm group
+      if len(terms) >= 2:
+        if terms[-2] == 'batchnorm' and terms[-1] == 'Rsqrt':
+          # special flag
+          group_lookup_table['/'.join(terms[0:-2])] = len(terms[0:-2])
+      
+      # check Relu in convolution scope
+      if '/'.join(terms[0:-1]) in group_lookup_table:
+        if terms[-1] == 'Relu':
+          group_lookup_table['/'.join(terms)] = len(terms)
+  
+  node_name_map = {}
+  for node in input_graph_def.node:
+    terms = node.name.split('/')
+    name = node.name
+    if terms[0] not in scopes:
+      if node.op == 'Const':
+        continue
+      
+      for k, v in group_lookup_table.items():
+        if '/'.join(terms[0:v]) == k:
+          # check larger match (+1)
+          if '/'.join(terms[0:v + 1]) in group_lookup_table:
+            name = '/'.join(terms[0:v + 1])
+          else:
+            name = '/'.join(terms[0:v])
+          break
+      
+      node_name_map[node.name] = name
+      # print('%s - %s' % (node.name, name))
+      my_graph.add_node(name=name, op_name=name, label='l')
+  
+  for node in input_graph_def.node:
+    terms = node.name.split('/')
+    if terms[0] not in scopes:
+      if node.op == 'Const':
+        continue
+      
+      input_name = node_name_map[node.name]
+      if len(node.input) > 0:
+        for linked_node in node.input:
+          if linked_node not in node_name_map:
+            continue
+          
+          linked_name = node_name_map[linked_node]
+          if linked_name == input_name:
+            continue
+          
+          my_graph.add_link(linked_name, input_name, Link(label='', args=''))
+  
+  # with open(os.path.join(dump_dir, 'graph.txt'), 'w') as fp:
+  #   graph_str = Encoder().encode(my_graph)
+  #   fp.write(graph_str)
+  
+  svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
+  return svg_graph
 
 
 class TFTrainer(Trainer):
@@ -295,6 +347,8 @@ class TFTrainer(Trainer):
     
     # model variables
     self._model_variables = None
+    self._model_dependence = None
+
     # record run time
     self.time_stat = MovingAverage(self.log_every_n_steps)
     
@@ -372,16 +426,13 @@ class TFTrainer(Trainer):
                                                       num_replicas=self.worker_replicas,
                                                       num_ps_tasks=self.num_ps_tasks)
 
-      # Create global_step
-      with tf.device(deploy_config.variables_device()):
-        global_step = slim.get_or_create_global_step()
-        
       # init some info
       with tf.device(deploy_config.inputs_device()):
         #############################
         ####    define model input ##
         #############################
-        data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
+        with tf.variable_scope('input'):
+          data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
         
         #############################
         ####    define model       ##
@@ -393,9 +444,13 @@ class TFTrainer(Trainer):
           if kwargs['clone'] == 0:
             # 1.step save graph file
             tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
-            # # 2.step transfer to local graph net
-            # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'), self.dump_dir)
-            # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+            
+            # 2.step transfer to local graph net
+            logger.info('generate model graph svg')
+            svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
+                                              self.dump_dir,
+                                              ['input'])
+            self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
           return res
   
         #######################
@@ -407,7 +462,11 @@ class TFTrainer(Trainer):
                                                    {'trainer': self})
         first_clone_scope = deploy_config.clone_scope(0)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
-        
+
+        # Create global_step
+        with tf.device(deploy_config.variables_device()):
+          global_step = slim.get_or_create_global_step()
+
         #########################################
         # Configure the optimization procedure. #
         #########################################
@@ -418,18 +477,19 @@ class TFTrainer(Trainer):
   
         # Variables to train.
         variables_to_train = _get_variables_to_train(self)
-  
-        # Train_tensor
-        total_loss, clones_gradients = \
-          tfmodel_deploy.optimize_clones(self.clones,
-                                         optimizer,
-                                         regularization_losses=None if self.regularization_loss else [],
-                                         var_list=variables_to_train)
-  
-        # Create gradient updates.
-        grad_updates = optimizer.apply_gradients(clones_gradients,
-                                                 global_step=global_step)
-  
+        
+        with tf.control_dependencies(self.model_dependence):
+          # Train_tensor
+          total_loss, clones_gradients = \
+            tfmodel_deploy.optimize_clones(self.clones,
+                                           optimizer,
+                                           regularization_losses=None if self.regularization_loss else [],
+                                           var_list=variables_to_train)
+    
+          # Create gradient updates.
+          grad_updates = optimizer.apply_gradients(clones_gradients,
+                                                   global_step=global_step)
+
         # Value ops
         update_ops.append(grad_updates)
         update_op = tf.group(*update_ops)
@@ -564,7 +624,14 @@ class TFTrainer(Trainer):
   @model_variables.setter
   def model_variables(self, val):
     self._model_variables = val
-    
+  
+  @property
+  def model_dependence(self):
+    return self._model_dependence
+  @model_dependence.setter
+  def model_dependence(self, val):
+    self._model_dependence = val
+  
   def wait_until_clear(self):
     self.coord.request_stop()
     self.coord.join(self.threads)
