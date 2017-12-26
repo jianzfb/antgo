@@ -327,9 +327,12 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
   #   graph_str = Encoder().encode(my_graph)
   #   fp.write(graph_str)
   
-  svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
-  return svg_graph
-
+  try:
+    svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
+    return svg_graph
+  except:
+    logger.error('dont support graphviz')
+    return None
 
 class TFTrainer(Trainer):
   def __init__(self, trainer_context, dump_dir, is_training=True):
@@ -450,7 +453,8 @@ class TFTrainer(Trainer):
             svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
                                               self.dump_dir,
                                               ['input'])
-            self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+            if svg_graph is not None:
+              self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
           return res
   
         #######################
