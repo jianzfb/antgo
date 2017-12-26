@@ -28,10 +28,9 @@ def _bilinear_filter(filter_shape, upscale_factor):
   weights = np.zeros(filter_shape)
   for i in range(filter_shape[2]):
     weights[:, :, i, i] = bilinear
-  init = tf.constant_initializer(value=weights,
-    dtype=tf.float32)
+  init = tf.constant_initializer(value=weights, dtype=tf.float32)
   
-  bilinear_weights = tf.get_variable(name="decon_bilinear_filter", initializer=init, shape=weights.shape)
+  bilinear_weights = tf.get_variable(name="filter", initializer=init, shape=weights.shape)
   return bilinear_weights
 
 
@@ -52,6 +51,16 @@ def deconv_bilinear(bottom, out_channels, in_channels, upscale_factor, output_sh
       output_shape = tf.stack(output_shape)
     
     filter_shape = [kernel_size, kernel_size, out_channels, in_channels]
-    
-    weights = _bilinear_filter(filter_shape, upscale_factor)
+
+    weights = None
+    if out_channels == in_channels:
+      # filter with bilinear parameters
+      weights = _bilinear_filter(filter_shape, upscale_factor)
+    else:
+      # filter with random
+      weights = tf.get_variable("filter",
+                                filter_shape,
+                                dtype=tf.float32,
+                                initializer=tf.random_normal_initializer(0, 0.02))
+
   return tf.nn.conv2d_transpose(bottom, weights, output_shape, strides=strides, padding='SAME')

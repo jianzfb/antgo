@@ -144,7 +144,7 @@ def node_format(node_id, node):
 def graphviz_net(graph, format_node):
   """Generate source lines for a Graphviz graph definition"""
   all_nodes = sorted(graph.nodes, key=id)
-  input_nodes = [n for n in all_nodes if n.in_degree==0]
+  input_nodes = [n for n in all_nodes if n.in_degree==0 and n.out_degree > 0]
 
   yield 'digraph gr {'
   yield '  graph [ dpi = 12 ];'
@@ -156,6 +156,9 @@ def graphviz_net(graph, format_node):
   yield '  }'
 
   for node in all_nodes:
+    if node.in_degree == 0 and node.out_degree == 0:
+      continue
+      
     for line in format_node('n{}'.format(node.id), node):
       yield line
     for other in node.linked_node:

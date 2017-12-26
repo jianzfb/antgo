@@ -266,6 +266,8 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
   my_graph = Graph(name='graph')
   # build group table (convolution and batchnorm)
   group_lookup_table = {}
+  exclude_lookup_table = {}
+  exclude_subfix = {}
   for node in input_graph_def.node:
     terms = node.name.split('/')
     if terms[0] not in scopes:
@@ -278,6 +280,37 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
         if terms[-2] == 'batchnorm' and terms[-1] == 'Rsqrt':
           # special flag
           group_lookup_table['/'.join(terms[0:-2])] = len(terms[0:-2])
+      # check AssignmovingAvg group
+      if terms[-1].startswith('AssignMovingAvg'):
+        group_lookup_table['/'.join(terms[0:-1])] = len(terms[0:-1])
+      
+      # check dropout group
+      if 'dropout' in terms:
+        p = 0
+        for ti, t in enumerate(terms):
+          if t == 'dropout':
+            p = ti
+        group_lookup_table['/'.join(terms[0:p + 1])] = p + 1
+      
+      # check optimizer
+      if len(terms) >= 3:
+        if 'update_discriminator' in terms:
+          p = 0
+          for ti, t in enumerate(terms):
+            if t == 'update_discriminator':
+              p = ti
+          
+          exclude_subfix[terms[p - 1]] = True
+          exclude_lookup_table['/'.join(terms[0:p])] = p
+      
+      # check gradients group
+      if len(terms) >= 2:
+        if 'gradients' in terms:
+          p = 0
+          for ti, t in enumerate(terms):
+            if t == 'gradients':
+              p = ti
+          exclude_lookup_table['/'.join(terms[0:p + 1])] = p + 1
       
       # check Relu in convolution scope
       if '/'.join(terms[0:-1]) in group_lookup_table:
@@ -289,7 +322,30 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
     terms = node.name.split('/')
     name = node.name
     if terms[0] not in scopes:
+      # check const op
       if node.op == 'Const':
+        continue
+      
+      # check special node
+      if 'Initializer' in terms or 'Assign' in terms or 'read' in terms:
+        continue
+      
+      # check exclude lookup table
+      is_exclude = False
+      for k, v in exclude_lookup_table.items():
+        if name.startswith(k):
+          is_exclude = True
+          break
+      if is_exclude:
+        continue
+      
+      # check exclude subfix
+      is_exclude = False
+      for k, v in exclude_subfix.items():
+        if terms[-1].startswith(k):
+          is_exclude = True
+          break
+      if is_exclude:
         continue
       
       for k, v in group_lookup_table.items():
@@ -309,6 +365,27 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
     terms = node.name.split('/')
     if terms[0] not in scopes:
       if node.op == 'Const':
+        continue
+      
+      if 'Initializer' in terms or 'Assign' in terms or 'read' in terms:
+        continue
+      
+      # check exclude lookup table
+      is_exclude = False
+      for k, v in exclude_lookup_table.items():
+        if node.name.startswith(k):
+          is_exclude = True
+          break
+      if is_exclude:
+        continue
+      
+      # check exclude subfix
+      is_exclude = False
+      for k, v in exclude_subfix.items():
+        if terms[-1].startswith(k):
+          is_exclude = True
+          break
+      if is_exclude:
         continue
       
       input_name = node_name_map[node.name]
@@ -333,6 +410,7 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
   except:
     logger.error('dont support graphviz')
     return None
+
 
 class TFTrainer(Trainer):
   def __init__(self, trainer_context, dump_dir, is_training=True):
@@ -449,7 +527,7 @@ class TFTrainer(Trainer):
             tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
             
             # 2.step transfer to local graph net
-            logger.info('generate model graph svg')
+            logger.info('build model graph svg')
             svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
                                               self.dump_dir,
                                               ['input'])
@@ -565,7 +643,8 @@ class TFTrainer(Trainer):
         #############################
         ####    define model input ##
         #############################
-        data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
+        with tf.variable_scope('input'):
+          data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
         
         #############################
         ####    define model       ##
@@ -580,7 +659,15 @@ class TFTrainer(Trainer):
         # Create model clones #
         #######################
         self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue])
-        
+
+        # write graph
+        tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
+        svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'),
+                                          self.dump_dir,
+                                          ['input'])
+        if svg_graph is not None:
+          self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+
         # Global initialization
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(tf.local_variables_initializer())
@@ -593,19 +680,14 @@ class TFTrainer(Trainer):
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
-
+        
         # model saver
         model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
         self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
 
         # snapshot
         self.snapshot(0)
-        
-        # write graph
-        tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
-        # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'), self.dump_dir)
-        # self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
-        
+
         # Value ops
         self.val_ops = self.clones[0].outputs
         if type(self.val_ops) != list and type(self.val_ops) != tuple:
