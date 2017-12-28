@@ -107,7 +107,6 @@ class Resize(Node):
       boxes[:, [1, 3]] = boxes[:, [1, 3]] * vertical_scale
 
       annotation['bbox'] = boxes
-      annotation['info'] = (self.shape[0], self.shape[1], info[2])
     if type(annotation) == dict and 'segmentation' in annotation:
       resized_obj_seg = []
       for obj_seg in annotation['segmentation']:

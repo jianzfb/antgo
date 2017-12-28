@@ -1,0 +1,6 @@
+batch_size: 64
+nstacks: 4
+output_dim: 10
+nfeat: 512
+nlow: 2
+dropout_rate: 0.8

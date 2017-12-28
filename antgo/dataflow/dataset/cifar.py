@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
-# File: cifar.py
-# Author: jian(jian@mltalker.com)
+# @Time    : 17-12-27
+# @File: cifar.py
+# @Author: jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 
