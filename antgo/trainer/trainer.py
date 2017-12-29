@@ -45,7 +45,6 @@ trainer_default_params = [
   DefaultParam('learning_rate_decay_type', 'polynomial', 'Specifies how the learning rate is decayed. One of "fixed", "exponential", or "polynomial"'),
   DefaultParam('learning_rate', 0.01, 'Initial learning rate'),
   DefaultParam('end_learning_rate', 0.0001, 'The minimal end learning rate used by a polynomial decay learning rate'),
-  DefaultParam('label_smoothing', 0.0, 'The amount of label smoothing'),
   DefaultParam('learning_rate_decay_factor', 0.94, 'Learning rate decay factor'),
   DefaultParam('num_epochs_per_decay', 20, 'Number of epochs after which learning rate decays.'),
   DefaultParam('sync_replicas', False, 'Whether or not to synchronize the replicas during training.'),

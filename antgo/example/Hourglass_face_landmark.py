@@ -51,25 +51,24 @@ class HourglassModel(ModelDesc):
         with slim.arg_scope([slim.batch_norm], **batch_norm_params) as scope:
             return scope
 
-  
   def _residual(self, inputs, out_channels, name='residual_block'):
     with tf.name_scope(name):
       # three convs
       norm_1 = slim.batch_norm(inputs, activation_fn=tf.nn.relu)
-      conv_1 = slim.conv2d(norm_1, out_channels/2, [1,1], stride=1, normalizer_fn=None, activation_fn=None)
+      conv_1 = slim.conv2d(norm_1, out_channels/2, [1, 1], stride=1, normalizer_fn=None, activation_fn=None)
       
       norm_2 = slim.batch_norm(conv_1, activation_fn=tf.nn.relu)
       conv_2 =slim.conv2d(norm_2, out_channels/2, [3, 3], stride=1, normalizer_fn=None, activation_fn=None)
       
       norm_3 = slim.batch_norm(conv_2, activation_fn=tf.nn.relu)
-      conv_3 = slim.conv2d(norm_3, out_channels, [1,1], stride=1, normalizer_fn=None, activation_fn=None)
+      conv_3 = slim.conv2d(norm_3, out_channels, [1, 1], stride=1, normalizer_fn=None, activation_fn=None)
       
       # skip
       res_layer = None
       if inputs.get_shape().as_list()[3] == out_channels:
         res_layer = inputs
       else:
-        res_layer = slim.conv2d(inputs, out_channels, [1,1],stride=1, normalizer_fn=None, activation_fn=None)
+        res_layer = slim.conv2d(inputs, out_channels, [1, 1], stride=1, normalizer_fn=None, activation_fn=None)
       
       return tf.add(res_layer, conv_3)
   
@@ -78,7 +77,7 @@ class HourglassModel(ModelDesc):
       # upper branch
       up_1 = self._residual(inputs, num_out, name='up_1')
       # lower branch
-      low_ = slim.max_pool2d(inputs, [2,2], stride=2)
+      low_ = slim.max_pool2d(inputs, [2, 2], stride=2)
       low_1 = self._residual(low_, num_out, name='low_1')
       
       if n > 0:

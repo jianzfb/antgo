@@ -4,3 +4,9 @@ output_dim: 10
 nfeat: 512
 nlow: 2
 dropout_rate: 0.8
+optimizer: rmsprop
+learning_rate: 0.00025
+end_learning_rate: 0.00001
+learning_rate_decay_type: exponential
+num_epochs_per_decay: 10
+learning_rate_decay_factor: 0.9
