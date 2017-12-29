@@ -7,6 +7,7 @@ from antgo.measures.segmentation_task import *
 from antgo.measures.matting_task import *
 from antgo.html.html import *
 from antgo.measures.significance import *
+from antgo.measures.pck import *
 import copy
 
 
@@ -43,7 +44,9 @@ class AntMeasures():
                 return [AntSADMatting(self.task),
                         AntMSEMatting(self.task),
                         AntGradientMatting(self.task)]
-
+            elif self.task.task_type == 'LANDMARK':
+              return [AntPCK(self.task)]
+            
             return []
         else:
             # return all

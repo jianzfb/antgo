@@ -161,7 +161,8 @@ class AntTask(object):
             'INSTANCE-SEGMENTATION',
             'MATTING',
             'IMAGE-GENERATION',
-            'TTS']
+            'TTS',
+            'LANDMARK']
 
 
 def create_dummy_task(task_type):

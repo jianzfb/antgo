@@ -141,10 +141,13 @@ def node_format(node_id, node):
   yield '  edge [color=darkgrey ];'
 
 
-def graphviz_net(graph, format_node):
+def graphviz_net(graph, format_node, who_is_input):
   """Generate source lines for a Graphviz graph definition"""
   all_nodes = sorted(graph.nodes, key=id)
-  input_nodes = [n for n in all_nodes if n.in_degree==0 and n.out_degree > 0]
+  if who_is_input is not None and len(who_is_input) > 0:
+    input_nodes = [n for n in all_nodes if n.name in who_is_input]
+  else:
+    input_nodes = [n for n in all_nodes if n.in_degree==0 and n.out_degree > 0]
 
   yield 'digraph gr {'
   yield '  graph [ dpi = 12 ];'
@@ -171,7 +174,7 @@ def graphviz_net(graph, format_node):
   yield '}'
 
 
-def graph_net_visualization(graph, file_path):
+def graph_net_visualization(graph, file_path, who_is_input=[]):
   # 1.step extract export format
   image_format = file_path.split('.')[-1].lower()
   # 2.step dot
@@ -181,7 +184,7 @@ def graph_net_visualization(graph, file_path):
                               stdin=subprocess.PIPE)
 
   # 3.step generate dot code
-  source = '\n'.join(graphviz_net(graph, node_format))
+  source = '\n'.join(graphviz_net(graph, node_format, who_is_input))
 
   if image_format == 'svg':
     source = re.sub(r'(<svg\s[^>]*>)',

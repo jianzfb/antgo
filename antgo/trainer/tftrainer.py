@@ -268,8 +268,12 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
   group_lookup_table = {}
   exclude_lookup_table = {}
   exclude_subfix = {}
+  who_is_input = []
   for node in input_graph_def.node:
     terms = node.name.split('/')
+    if node.op == 'Placeholder' or terms[0] == 'input':
+      who_is_input.append(node.name)
+
     if terms[0] not in scopes:
       # check convolution group
       if terms[-1] == 'convolution' and node.op == 'Conv2D':
@@ -405,7 +409,7 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
   #   fp.write(graph_str)
   
   try:
-    svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'))
+    svg_graph = graph_net_visualization(my_graph, os.path.join(dump_dir, 'graph.svg'), who_is_input)
     return svg_graph
   except:
     logger.error('dont support graphviz')

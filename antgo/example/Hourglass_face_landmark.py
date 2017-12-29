@@ -52,7 +52,7 @@ class HourglassModel(ModelDesc):
             return scope
 
   def _residual(self, inputs, out_channels, name='residual_block'):
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
       # three convs
       norm_1 = slim.batch_norm(inputs, activation_fn=tf.nn.relu)
       conv_1 = slim.conv2d(norm_1, out_channels/2, [1, 1], stride=1, normalizer_fn=None, activation_fn=None)
@@ -73,7 +73,7 @@ class HourglassModel(ModelDesc):
       return tf.add(res_layer, conv_3)
   
   def _hourglass(self, inputs, n, num_out, name='hourglass'):
-    with tf.name_scope(name):
+    with tf.variable_scope(name):
       # upper branch
       up_1 = self._residual(inputs, num_out, name='up_1')
       # lower branch
@@ -96,8 +96,8 @@ class HourglassModel(ModelDesc):
     labels = tf.placeholder(tf.float32, shape=(ctx.params.batch_size, ctx.params.nstacks, 32, 32, ctx.params.output_dim), name='label_y')
 
     with slim.arg_scope(self.arg_scope(is_training)):
-      with tf.name_scope('model'):
-        with tf.name_scope('preprocessing'):
+      with tf.variable_scope('model'):
+        with tf.variable_scope('preprocessing'):
           # inputs batch_size x 64 x 64 x 3
           pad1 = tf.pad(inputs, [[0, 0], [2, 2], [2, 2], [0, 0]], name='pad_1')
           # batch_size x 32 x 32 x 64
@@ -117,11 +117,11 @@ class HourglassModel(ModelDesc):
         out = [None] * self._nstack
         out_ = [None] * self._nstack
         sum_ = [None] * self._nstack
-        with tf.name_scope('stacks'):
+        with tf.variable_scope('stacks'):
           with tf.variable_scope('stage_0'):
             hg[0] = self._hourglass(r3, self._nlow, self._nfeat, 'hourglass')
             drop[0] = slim.dropout(hg[0], keep_prob=self._dropout_rate, is_training=is_training)
-            ll[0] = slim.conv2d(drop[0], self._nfeat, [1, 1], stride=1, scope='conv')
+            ll[0] = slim.conv2d(drop[0], self._nfeat, [1, 1], stride=1, scope='cc')
             ll_[0] = slim.conv2d(ll[0], self._nfeat, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='ll')
             
             out[0] = slim.conv2d(ll[0], self._output_dim, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
@@ -132,7 +132,7 @@ class HourglassModel(ModelDesc):
             with tf.variable_scope('stage_'+str(i)):
               hg[i] = self._hourglass(sum_[i-1], self._nlow, self._nfeat, 'hourglass')
               drop[i] = slim.dropout(hg[i], keep_prob=self._dropout_rate, is_training=is_training)
-              ll[i] = slim.conv2d(drop[i], self._nfeat, [1, 1], stride=1, scope='conv')
+              ll[i] = slim.conv2d(drop[i], self._nfeat, [1, 1], stride=1, scope='cc')
               ll_[i] = slim.conv2d(ll[i], self._nfeat, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='ll')
               
               out[i] = slim.conv2d(ll[i], self._output_dim, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
@@ -142,7 +142,7 @@ class HourglassModel(ModelDesc):
           with tf.variable_scope('stage_'+str(self._nstack - 1)):
             hg[self._nstack - 1] = self._hourglass(sum_[self._nstack - 2], self._nlow, self._nfeat, 'hourglass')
             drop[self._nstack - 1] = slim.dropout(hg[self._nstack - 1], keep_prob=self._dropout_rate, is_training=is_training)
-            ll[self._nstack - 1] = slim.conv2d(drop[self._nstack - 1], self._nfeat, [1,1], stride=1, scope='conv')
+            ll[self._nstack - 1] = slim.conv2d(drop[self._nstack - 1], self._nfeat, [1,1], stride=1, scope='cc')
             
             out[self._nstack - 1] = slim.conv2d(ll[self._nstack - 1], self._output_dim, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
             
@@ -210,14 +210,14 @@ def _data_preprocess(*args, **kwargs):
     train_gtmap[i] = hm
 
   train_img = train_img / 255.0
-  yield train_img, train_gtmap, train_weights
+  return train_img, train_gtmap, train_weights
 
 
 def training_callback(data_source, dump_dir):
   resized_data = Resize(Node.inputs(data_source), shape=(64, 64))
   batch_data = BatchData(Node.inputs(resized_data), ctx.params.batch_size)
   preprocess_node = Node('preprocess', _data_preprocess, Node.inputs(batch_data))
-  
+
   # for data in preprocess_node.iterator_value():
   #   # train_img, train_gtmap, train_weights = data
   #   train_img, annotation = data
