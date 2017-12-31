@@ -216,7 +216,10 @@ def main():
   
   if ant_cmd == "train":
     sandbox_time = FLAGS.sandbox_time()
-    with running_sandbox(sandbox_time=sandbox_time):
+    with running_sandbox(sandbox_time=sandbox_time,
+                         sandbox_dump_dir=dump_dir,
+                         sandbox_experiment=name,
+                         sandbox_user_token=token):
       running_process = AntTrain(ant_context,
                                  name,
                                  data_factory,
@@ -229,17 +232,20 @@ def main():
                                  time_stamp=time_stamp)
       running_process.start()
   elif ant_cmd == 'challenge':
-    running_process = AntChallenge(ant_context,
-                                   name,
-                                   data_factory,
-                                   dump_dir,
-                                   token,
-                                   task,
-                                   main_file=main_file,
-                                   main_folder=main_folder,
-                                   main_param=main_param,
-                                   time_stamp=time_stamp)
-    running_process.start()
+    with running_sandbox(sandbox_dump_dir=dump_dir,
+                         sandbox_experiment=name,
+                         sandbox_user_token=token):
+      running_process = AntChallenge(ant_context,
+                                     name,
+                                     data_factory,
+                                     dump_dir,
+                                     token,
+                                     task,
+                                     main_file=main_file,
+                                     main_folder=main_folder,
+                                     main_param=main_param,
+                                     time_stamp=time_stamp)
+      running_process.start()
   elif ant_cmd == "deploy":
     pass
   elif ant_cmd == 'dataset':
