@@ -509,7 +509,6 @@ class AntCmd(AntBase):
     elif experiment_name is not None:
       # rename experiment name request
       experiment_optimum = FLAGS.optimum()
-      new_experiment_name = FLAGS.new_experiment_name()
 
       data = {'experiment-name': experiment_name}
       if experiment_optimum is not None:
