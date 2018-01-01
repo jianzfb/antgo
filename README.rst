@@ -15,7 +15,9 @@ Installation
 install 3rd software or packages::
 
     1. rocksdb
-    2. graphviz
+    2. ipfs
+        https://ipfs.io/
+    3. graphviz
         http://www.graphviz.org/Download_linux_ubuntu.php
 
 install antgo::
@@ -91,6 +93,7 @@ Example
     (2) call antgo cli at terminal
         antgo run --main_file=challenge_task.py --task=yourtask.xml
         # --task=yourtask.xml config your challenge task
+        # eg. segmentation_task.xml (antgo/antgo/example/task/segmentation_task.xml)
 
 
 2. Run Challenge Task::
@@ -119,59 +122,5 @@ Example
     (2) call antgo cli at terminal
     antgo challenge --main_file=challenge_task.py --task=yourtask.xml
     # --task=yourtask.xml config your challenge task
+    # eg. segmentation_task.xml (antgo/antgo/example/task/segmentation_task.xml)
 
-
-3. Custom Explore Task::
-
-    (1) like 'Train' or 'Challenge' task, build running main file
-        ...
-    (2) build workflow configure file (.yaml)
-        Bootstrap:
-         name: 'DataSplit'
-         dataset:
-          name: 'portrait'
-          train_or_test: 'train'
-         method: 'bootstrap'
-         params:
-          bootstrap_counts: 2
-         feedback-bind:
-         - 'InferenceB'
-
-        TrainingA:
-         name: 'Training'
-         cpu:
-         - 1
-         occupy: 'no share'
-         dataset:
-          name: 'portrait'
-         model:
-          hello: 'world'
-         continue:
-          key: 'iter_at'
-          value: 10
-          condition: 'mod'
-         input-bind:
-         - 'Bootstrap'
-
-        InferenceB:
-         name: 'Inference'
-         cpu:
-         - 2
-         occupy: 'no share'
-         input-bind:
-         - 'TrainingA'
-
-        EvaluationC:
-         name: 'Evaluating'
-         task:
-          type: 'SEGMENTATION'
-          class_label: [1]
-         measure:
-         - 'PixelAccuracy'
-         - 'MeanAccuracy'
-         input-bind:
-         - 'InferenceB'
-
-        ** implement bootstrap statistic evaluation process at training procedure
-    (2) call antgo cli at terminal
-    antgo compose --main_file=....py --main_params=...yaml

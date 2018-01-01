@@ -234,37 +234,36 @@ class AntCmd(AntBase):
   def process_create_command(self):
     # every task must be related with one dataset
     # 0.step check paramters
-    is_local = FLAGS.is_local()
     is_public = FLAGS.is_public()
     dataset_name = FLAGS.dataset_name()   # must be unique at cloud
     if dataset_name is None:
       logger.error('dataset name must be set')
       return
 
-    if is_local:
-      if is_public:
-        logger.error('if set "public" attribute, dataset couldnt be stored local')
+    ########################## stage 1 - dataset create #############################
+    if FLAGS.task_name() is None:
+      # create dataset record at cloud
+      is_local = FLAGS.is_local()
+      if is_local:
+        if is_public:
+          logger.error('if set "public" attribute, dataset couldnt be stored local')
+          return
+
+      create_dataset_remote_api = 'hub/api/terminal/create/dataset'
+      response = self.remote_api_request(create_dataset_remote_api,
+                                         action='post',
+                                         data={'dataset-name': dataset_name,
+                                               'dataset-is-local': int(is_local),
+                                               'dataset-is-public': int(is_public)})
+
+      if response['status'] != 'OK':
+        logger.error('dataset name has been existed at cloud, please reset')
         return
 
-    ########################## stage 1 - dataset create #############################
-    # create dataset record at cloud
-    create_dataset_remote_api = 'hub/api/terminal/create/dataset'
-    response = self.remote_api_request(create_dataset_remote_api,
-                                       action='post',
-                                       data={'dataset-name': dataset_name,
-                                             'dataset-is-local': int(is_local),
-                                             'dataset-is-public': int(is_public)})
-
-    if response['status'] != 'OK':
-      logger.error('dataset name has been existed at cloud, please reset')
+      logger.info('register dataset in mltalker')
       return
 
-    # dataset valid name (dataset name maybe added prefix automatically)
-    dataset_name = response['dataset-name']
-    ########################## stage 2 - stask create #############################
-    if FLAGS.task_name() is None:
-      return
-
+    ########################## stage 2 - task create #############################
     # check task type
     task_type = FLAGS.task_type()
     if task_type is None:
@@ -618,6 +617,10 @@ class AntCmd(AntBase):
         else:
           logger.error('dataset address upload error')
       else:
+        if not os.path.isfile(dataset_path):
+          logger.error('only support single file')
+          return
+
         # dataset is uploaded
         dataset_path = dataset_path.replace('\\','/')
         file_name = dataset_path.split('/')[-1]
