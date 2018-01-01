@@ -17,6 +17,7 @@ from google.protobuf import text_format
 from tensorflow.core.framework import graph_pb2
 from tensorflow.python.platform import gfile
 from antgo.utils.serialize import *
+from antgo.utils.p2p_experiment import *
 
 import numpy as np
 from antgo.utils.net import *
@@ -157,7 +158,6 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   # 1.step load from experiment
   if ctx is not None:
     if ctx.from_experiment is not None:
-      # TODO support dencentrid storage in future
       logger.info('load model from experiment %s' % ctx.from_experiment.split('/')[-2])
       latest_checkpoint = None
       try:

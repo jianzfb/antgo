@@ -7,6 +7,8 @@ from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.ant.base import *
 from antgo.dataflow.basic import *
+from antgo.utils.p2p_data import *
+import multiprocessing
 if sys.version > '3':
     PY3 = True
 else:
@@ -42,31 +44,39 @@ class AntGenerate(AntBase):
         
       # 1.2 step input 'is_local'
       if PY3:
-        dataset_is_local = input('is local(0 or 1): ')
+        dataset_is_local = input('dataset is local: ')
       else:
-        dataset_is_local = raw_input('is local(0 or 1): ')
+        dataset_is_local = raw_input('dataset is local: ')
       
       try:
-        dataset_is_local = int(dataset_is_local)
-        if dataset_is_local not in [0, 1]:
+        if not (dataset_is_local.lower() == 'yes' or dataset_is_local.lower() == 'no'):
           continue
       except:
-        logger.error('is_local must is 0 or 1')
+        logger.error('yes or no')
         continue
-      
+
+      if dataset_is_local.lower() == 'yes':
+        dataset_is_local = 1
+      else:
+        dataset_is_local = 0
+
       # 1.3 step input 'is_public'
       if PY3:
-        dataset_is_public = input('is public(0 or 1): ')
+        dataset_is_public = input('dataset is public: ')
       else:
-        dataset_is_public = raw_input('is public(0 or 1): ')
+        dataset_is_public = raw_input('dataset is public: ')
 
       try:
-        dataset_is_public = int(dataset_is_public)
-        if dataset_is_public not in [0, 1]:
+        if not (dataset_is_public.lower() == 'yes' or dataset_is_public.lower() == 'no'):
           continue
       except:
-        logger.error('is_public must is 0 or 1')
+        logger.error('yes or no')
         continue
+
+      if dataset_is_public.lower() == 'yes':
+        dataset_is_public = 1
+      else:
+        dataset_is_public = 0
 
       if dataset_name is None or \
               dataset_is_local is None or \
@@ -130,19 +140,23 @@ class AntGenerate(AntBase):
     if not is_train_data_ok and not is_test_data_ok:
       logger.error('fail to generate train/test dataset')
       return
-      
-    # 4.step synchronize with cloud
+
     if self.token is not None:
+      # 5.step create dataset in mltalker
       create_dataset_remote_api = 'hub/api/terminal/create/dataset'
       response = self.remote_api_request(create_dataset_remote_api,
                                          action='post',
                                          data={'dataset-name': dataset_name,
                                                'dataset-is-local': int(dataset_is_local),
                                                'dataset-is-public': int(dataset_is_public)})
+
       if response['status'] != 'OK':
         logger.error('fail to synchronize (maybe dataset name not unique)')
         return
-      
+
+      # 6.step publish to DHT
       if not dataset_is_local:
-        # TODO: synchronize dataset
-        pass
+        logger.info('publish to DHT')
+        process = multiprocessing.Process(target=data_publish_dht, args=(dataset_name, self.token))
+        process.start()
+        process.join()

@@ -18,8 +18,12 @@ class Standard(Dataset):
   def __init__(self, train_or_test, dataset_dir=None, ext_params=None):
     dataset_name = dataset_dir.split('/')[-1]
     super(Standard, self).__init__(train_or_test, dataset_dir, ext_params, dataset_name)
-    assert(os.path.exists(dataset_dir))
 
+    if not os.path.exists(dataset_dir):
+      logger.info('download data from DHT')
+      self.download(dataset_dir)
+
+    assert(os.path.exists(dataset_dir))
     self._record_reader = RecordReader(os.path.join(dataset_dir, train_or_test))
     for k, v in self._record_reader.record_attrs().items():
       setattr(self, k, v)

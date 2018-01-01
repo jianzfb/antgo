@@ -6,18 +6,13 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 
-
 import os, sys
 from contextlib import contextmanager
 from antgo.utils.concurrency import *
 from antgo.utils import logger
-from antgo.utils.experiment import *
+from antgo.utils.p2p_experiment import *
 import multiprocessing
-import requests
 import time
-import ipfsapi
-import shutil
-import subprocess
 
 @contextmanager
 def running_sandbox(*wargs, **kwargs):

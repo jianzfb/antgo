@@ -20,6 +20,7 @@ import tarfile
 import zipfile
 from antgo import config
 import subprocess
+from antgo.utils.p2p_data import *
 
 Config = config.AntConfig
 
@@ -586,7 +587,14 @@ class Dataset(BaseNode):
                 subprocess.call(shell, shell=True, cwd=target_path)
                 
       # validate ipfs address
-      
+      is_ipfs = re.match('^(ipfs://)', dataset_url)
+      if is_ipfs:
+        dataset_name = os.path.normpath(target_path).split('/')[-1]
+        process = multiprocessing.Process(target=data_download_local, args=(dataset_name, dataset_url))
+        process.start()
+        process.join()
+        return
+
       # validate shell (download and reorganize data manully)
       is_shell = re.match('^(shell:)', dataset_url)
       if is_shell is not None:

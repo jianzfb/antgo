@@ -16,6 +16,8 @@ from antgo.ant.utils import *
 from antgo.dataflow.dataflow_server import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
+from antgo.utils.p2p_experiment import *
+import multiprocessing
 
 if sys.version > '3':
     PY3 = True
@@ -202,6 +204,17 @@ def main():
   # 6.2 step load ant context
   ant_context = main_context(main_file, main_folder)
   if FLAGS.from_experiment() is not None:
+    experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
+    if not os.path.exists(experiment_path):
+      process = multiprocessing.Process(target=experiment_download_local,
+                                        args=(dump_dir, FLAGS.from_experiment(), token, token))
+      process.start()
+      process.join()
+
+    if not os.path.exists(experiment_path):
+      logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
+      exit(-1)
+
     if os.path.exists(os.path.join(dump_dir, FLAGS.from_experiment(), 'train')):
       ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
     else:
