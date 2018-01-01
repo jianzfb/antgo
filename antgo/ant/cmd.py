@@ -570,22 +570,10 @@ class AntCmd(AntBase):
       if dataset_path is not None:
         # move dataset to datafactory
         shutil.copytree(dataset_path, os.path.join(data_factory, dataset_name))
-      else:
-        # build dataset local path
-        os.makedirs(os.path.join(data_factory, dataset_name))
+        return
 
-        # update dataset url
-        update_remote_api = 'hub/api/terminal/update/dataset'
-        response = self.remote_api_request(update_remote_api,
-                                           action='patch',
-                                           data={'dataset-name': dataset_name,
-                                                 'dataset-url': dataset_url,})
-
-        if response['status'] == 'OK':
-          logger.info('dataset address has been config successfully')
-        else:
-          logger.error('dataset address upload error')
-          return
+      logger.error('dont support dataset url for local storage')
+      return
     else:
       # upload dataset to cloud
       dataset_path = FLAGS.dataset_path()
