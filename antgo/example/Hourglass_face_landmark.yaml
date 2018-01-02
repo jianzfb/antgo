@@ -1,4 +1,4 @@
-batch_size: 16
+batch_size: 1
 nstacks: 4
 output_dim: 5
 nfeat: 512
@@ -11,3 +11,12 @@ learning_rate_decay_type: 'exponential'
 num_epochs_per_decay: 10
 learning_rate_decay_factor: 0.9
 max_epochs: 400
+hm_size: 32
+input_size: 64
+joints:
+- lefteye
+- righteye
+- nose
+- leftmouth
+- rightmouth
+thresh: 0.2

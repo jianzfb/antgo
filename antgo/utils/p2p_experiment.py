@@ -57,9 +57,13 @@ def experiment_download_local(dump_dir, experiment, pwd, token):
     traceback.print_exc()
     return False
 
+
 def experiment_publish_dht(dump_dir, experiment, pwd, token):
   # call in an independent process
   try:
+    if token is None:
+      return
+    
     import ipfsapi
     # 1.step tar all files
     tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (experiment, pwd)

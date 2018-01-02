@@ -1,0 +1,5 @@
+batch_size: 1
+max_epochs: 400
+input_size: 256
+ngf: 32
+ndf: 64

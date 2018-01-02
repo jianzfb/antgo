@@ -21,7 +21,7 @@ ctx = Context()
 
 
 ##################################################
-######## 3.step model building (tensorflow) ######
+######## 2.step model building (tensorflow) ######
 ##################################################
 class HourglassModel(ModelDesc):
   def __init__(self):
@@ -93,7 +93,10 @@ class HourglassModel(ModelDesc):
     # inputs: batch_size x 256 x 256 x 3
     # labels: batch_size x nstack x 64 x 64 x output_dim(landmark number)
     inputs = tf.placeholder(tf.float32, shape=(ctx.params.batch_size, 64, 64, 3), name='input_x')
-    labels = tf.placeholder(tf.float32, shape=(ctx.params.batch_size, ctx.params.nstacks, 32, 32, ctx.params.output_dim), name='label_y')
+    labels = None
+    if is_training:
+      labels = tf.placeholder(tf.float32,
+        shape=(ctx.params.batch_size, ctx.params.nstacks, 32, 32, ctx.params.output_dim), name='label_y')
 
     with slim.arg_scope(self.arg_scope(is_training)):
       with tf.variable_scope('model'):
@@ -147,15 +150,18 @@ class HourglassModel(ModelDesc):
             out[self._nstack - 1] = slim.conv2d(ll[self._nstack - 1], self._output_dim, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
             
           output = tf.stack(out, axis=1, name='final_output')
-          
-          ss = tf.nn.sigmoid_cross_entropy_with_logits(logits=output, labels=labels)
-          loss = tf.reduce_mean(ss)
-          tf.losses.add_loss(loss)
-          return loss
 
+          if is_training:
+            ss = tf.nn.sigmoid_cross_entropy_with_logits(logits=output, labels=labels)
+            loss = tf.reduce_mean(ss)
+            tf.losses.add_loss(loss)
+            return loss
+          else:
+            output = tf.nn.sigmoid(output[:, ctx.params.nstacks - 1])
+            return output
 
 ##################################################
-######## 4.step define training process  #########
+######## 3.step define training process  #########
 ##################################################
 def _makeGaussian(height, width, sigma=3, center=None):
   """ Make a square gaussian kernel.
@@ -200,8 +206,8 @@ def _data_preprocess(*args, **kwargs):
     info = train_img_annotations[i]['info']
     old_height, old_width = info[0:2]
     joints = np.array(joints).reshape((-1, 2))
-    joints[:, 0] = joints[:, 0] / float(old_width) * float(img_width)
-    joints[:, 1] = joints[:, 1] / float(old_height) * float(img_height)
+    joints[:, 0] = joints[:, 0] / float(old_width) * 32.0
+    joints[:, 1] = joints[:, 1] / float(old_height) * 32.0
     train_weights[i] = 1
     
     hm = _generate_hm(32, 32, joints, 32, train_weights[i])
@@ -214,16 +220,12 @@ def _data_preprocess(*args, **kwargs):
 
 
 def training_callback(data_source, dump_dir):
+  ##########  1.step data preprocess ##############
   resized_data = Resize(Node.inputs(data_source), shape=(64, 64))
   batch_data = BatchData(Node.inputs(resized_data), ctx.params.batch_size)
   preprocess_node = Node('preprocess', _data_preprocess, Node.inputs(batch_data))
 
-  # for data in preprocess_node.iterator_value():
-  #   # train_img, train_gtmap, train_weights = data
-  #   train_img, annotation = data
-  #   print(annotation)
-  #
-  # config trainer
+  ##########  2.step build model     ##############
   tf_trainer = TFTrainer(ctx.params, dump_dir)
   tf_trainer.deploy(HourglassModel())
 
@@ -241,36 +243,60 @@ def training_callback(data_source, dump_dir):
 
 
 ###################################################
-######## 5.step define infer process     ##########
+######## 4.step define infer process     ##########
 ###################################################
 import cv2
-
-
 def infer_callback(data_source, dump_dir):
-  ##########  2.step building model ###############
+  ##########  1.step data preprocess ##############
+  resized_data = Resize(Node.inputs(data_source), shape=(ctx.params.input_size, ctx.params.input_size))
+  def _div255(*args, **kwargs):
+    return args[0][0] / 255.0
+  normalize_data = Node('div255', _div255, Node.inputs(resized_data))
+  batch_data = BatchData(Node.inputs(normalize_data), 1, True)
+
+  ##########  2.step building model  ##############
   tf_trainer = TFTrainer(ctx.params, dump_dir, is_training=False)
-  tf_trainer.deploy(GCNModel())
-  
-  for _ in range(data_source.size):
-    logits, original_image = tf_trainer.run()
-    logits = np.squeeze(logits, axis=0)
-    
-    # resize to original size
-    # mask = np.zeros(logits.shape[0], logits.shape[1], np.uint8)
-    # mask[np.where(logits > 0.5)] = 1
-    mask = np.argmax(logits, 2)
-    mask = mask.astype(np.uint8)
-    cv2.imshow('mask', mask * 255)
-    cv2.imshow('origi', original_image)
-    cv2.waitKey()
-    mask = np.expand_dims(mask, 2)
-    
-    # record
-    ctx.recorder.record(mask, sess=tf_trainer.sess)
+  tf_trainer.deploy(HourglassModel())
+
+  ##########  3.step predict sample  ##############
+  generator = batch_data.iterator_value()
+  while True:
+    try:
+      # predict landmark
+      output = tf_trainer.run(generator, binds={'input_x': 0})
+      output = output[0][0]
+      
+      # original data
+      predict_img = data_source.get_value()
+      height, width = predict_img.shape[0:2]
+
+      predict_joints = -1 * np.ones((len(ctx.params.joints), 2))
+      
+      for joint_i in range(len(ctx.params.joints)):
+        index = np.unravel_index(output[:, :, joint_i], (ctx.params.hm_size, ctx.params.hm_size))
+        if output[index[0], index[1], joint_i] > ctx.params.thresh:
+          # resize to original scale
+          y = index[0]
+          y = y / float(ctx.params.hm_size) * height
+          x = index[1]
+          x = x / float(ctx.params.hm_size) * width
+          predict_joints[joint_i, 0] = y
+          predict_joints[joint_i, 1] = x
+        
+          predict_img[int(y), int(x)] = 255
+        
+      # 4.step record predicted landmark
+      ctx.recorder.record(predict_joints)
+      
+      # show
+      cv2.imshow('ss1', predict_img.astype(np.uint8))
+      cv2.waitKey()
+    except:
+      break
 
 
 ###################################################
-####### 6.step link training and infer ############
+####### 5.step link training and infer ############
 #######        process to context      ############
 ###################################################
 ctx.training_process = training_callback

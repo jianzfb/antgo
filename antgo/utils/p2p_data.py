@@ -46,6 +46,9 @@ def data_download_local(dataset, ipfs_url, pwd=None):
 
 def data_publish_dht(dataset, token, pwd=None):
   try:
+    if token is None:
+      return False
+    
     # 1.step dataset root folder
     data_factory = getattr(Config, 'data_factory', None)
 
