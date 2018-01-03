@@ -162,7 +162,8 @@ class AntTask(object):
             'MATTING',
             'IMAGE-GENERATION',
             'TTS',
-            'LANDMARK']
+            'LANDMARK',
+            'GENERATION']
 
 
 def create_dummy_task(task_type):

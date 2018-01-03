@@ -8,6 +8,7 @@ from __future__ import print_function
 from antgo.dataflow.dataset import *
 import os
 import numpy as np
+__all__ = ['Horse2Zebra']
 
 ZEBRA_URL = 'https://people.eecs.berkeley.edu/~taesung_park/CycleGAN/datasets/horse2zebra.zip'
 class Horse2Zebra(Dataset):
