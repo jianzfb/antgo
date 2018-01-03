@@ -12,3 +12,4 @@ pyyaml
 requests
 python-rocksdb
 ipfsapi
+tornado
