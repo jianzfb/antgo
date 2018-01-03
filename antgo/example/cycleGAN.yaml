@@ -1,5 +1,13 @@
 batch_size: 1
 max_epochs: 400
-input_size: 256
+img_width: 256
+img_height: 256
+img_channels: 3
+pool_size: 50
+lambda_a: 10.0
+lambda_b: 10.0
+base_lr: 0.0002
+do_flipping: false
 ngf: 32
 ndf: 64
+size_before_crop: 286

@@ -55,6 +55,7 @@ trainer_default_params = [
   DefaultParam('checkpoint_transfer_scopes', None, ''),
   DefaultParam('regularization_loss', True, ''),
   DefaultParam('trainable_filter', None, ''),
+  DefaultParam('dataset_queue_threads', 1, '')
 ]
 
 

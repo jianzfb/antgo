@@ -594,10 +594,16 @@ class TFTrainer(Trainer):
         # Global initialization
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(tf.local_variables_initializer())
-
+        # coord
         self.coord = tf.train.Coordinator()
         self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-
+        
+        custom_dataset_queue = tf.get_collection('CUSTOM_DATASET_QUEUE')
+        if len(custom_dataset_queue) > 0:
+          custom_dataset_queue[0].coord = self.coord
+          custom_threads = custom_dataset_queue[0].start_threads(self.sess, self.dataset_queue_threads)
+          self.threads.extend(custom_threads)
+        
         # Training saver
         model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
         self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=2)
