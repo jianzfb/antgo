@@ -278,7 +278,8 @@ class CelebA(Dataset):
         break
       epoch += 1
       
-      idxs = np.arange(len(self.ids))
+      # idxs = np.arange(len(self.ids))
+      idxs = copy.deepcopy(self.ids)
       if self.rng:
         self.rng.shuffle(idxs)
         

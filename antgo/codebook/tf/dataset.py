@@ -56,20 +56,24 @@ class DatasetQueue(object):
       for data in iterator:
         while self.queue_size.eval(session=sess) == self.max_queue_size:
           if self.coord.should_stop():
+            self.queue.close()
             break
           time.sleep(self.wait_time)
           
         if self.coord.should_stop():
           stop = True
-          print("Enqueue thread receives stop request.")
+          self.queue.close()
           break
         feed_dict = {}
-        for i in range(len(data)):
-          feed_dict.update({self.sample_placeholder[i]: data[i]})
+        if type(data) == list or type(data) == tuple:
+          for i in range(len(data)):
+            feed_dict.update({self.sample_placeholder[i]: data[i]})
+        else:
+          feed_dict = {self.sample_placeholder[0]: data}
         sess.run(self.enqueue, feed_dict=feed_dict)
         
-  def start_threads(self, sess, n_threads=1):
-    for _ in range(n_threads):
+  def start_threads(self, sess):
+    for _ in range(1):
       thread = threading.Thread(target=self.thread_main, args=(sess,))
       thread.daemon = True  # Thread will close when parent quits.
       thread.start()

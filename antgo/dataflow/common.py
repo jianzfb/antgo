@@ -317,6 +317,8 @@ class DataAnnotationBranch(Node):
     super(DataAnnotationBranch, self).__init__(name=None, action=self.action, inputs=inputs)
     self.annotation_branch = _TransparantNode(upper_node=Node.inputs(self), name='annotation')
     self._y = None
+    for k, v in self._positional_inputs[0].__dict__.items():
+      setattr(self, k, v)
 
   def action(self, *args, **kwargs):
     image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
@@ -564,6 +566,23 @@ class FilterNode(Node):
       data = self._positional_inputs[0].get_value()
 
     return data
+
+
+class FilterPNNode(Node):
+  def __init__(self, inputs, filter_condition):
+    super(FilterPNNode, self).__init__(name=None, action=None, inputs=inputs)
+    # filter_condition return -1, 0, 1
+    self._filter_condition = filter_condition
+  
+  def _evaluate(self):
+    data = self._positional_inputs[0].get_value()
+    is_n = self._filter_condition(data)
+    while not is_n != -1:
+      self._positional_inputs[0]._force_inputs_dirty()
+      data = self._positional_inputs[0].get_value()
+      is_n = self._filter_condition(data)
+    
+    return data, is_n
 
 
 class MultiThreadPipe(Node):
