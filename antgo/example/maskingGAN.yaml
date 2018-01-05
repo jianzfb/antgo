@@ -10,4 +10,3 @@ base_lr: 0.0002
 do_flipping: true
 ngf: 32
 ndf: 64
-size_before_crop: 286

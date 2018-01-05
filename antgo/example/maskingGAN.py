@@ -169,54 +169,13 @@ def discriminator(inputdisc, name="discriminator"):
   with tf.variable_scope(name):
     f = 4
     
-    o_c1 = _conv2d(inputdisc, ctx.params.ndf, f, 2, 0.02, "SAME", "c1", do_norm=False, relufactor=0.2)
+    o_c1 = _conv2d(inputdisc, ctx.params.ndf, f, 2, 0.02, "SAME", "c1", relufactor=0.2)
     o_c2 = _conv2d(o_c1, ctx.params.ndf * 2, f, 2, 0.02, "SAME", "c2", relufactor=0.2)
     o_c3 = _conv2d(o_c2, ctx.params.ndf * 4, f, 2, 0.02, "SAME", "c3", relufactor=0.2)
-    o_c4 = _conv2d(o_c3, ctx.params.ndf * 8, f, 1, 0.02, "SAME", "c4", relufactor=0.2)
-    o_c5 = _conv2d(o_c4, 1, f, 1, 0.02, "SAME", "c5", do_norm=False, do_relu=False)
+    o_c4 = _conv2d(o_c3, ctx.params.ndf * 8, f, 2, 0.02, "SAME", "c4", relufactor=0.2)
+    o_c5 = _conv2d(o_c4, 1, 1, 1, 0.02, "SAME", "c5", do_norm=False, do_relu=False)
     
     return o_c5
-
-
-def get_outputs(inputs, skip=False):
-  images_a = inputs['images_a']
-  images_b = inputs['images_b']
-  
-  fake_pool_a = inputs['fake_pool_a']
-  fake_pool_b = inputs['fake_pool_b']
-  
-  with tf.variable_scope("Model") as scope:
-    prob_real_a_is_real = discriminator(images_a, "d_A")
-    prob_real_b_is_real = discriminator(images_b, "d_B")
-    
-    fake_images_b = generator(images_a, output_nc=4, name="g_A", skip=skip)
-    fake_images_a = generator(images_b, output_nc=4, name="g_B", skip=skip)
-    
-    scope.reuse_variables()
-    
-    prob_fake_a_is_real = discriminator(fake_images_a, "d_A")
-    prob_fake_b_is_real = discriminator(fake_images_b, "d_B")
-    
-    cycle_images_a = generator(fake_images_b, output_nc=4, name="g_B", skip=skip)
-    cycle_images_b = generator(fake_images_a, output_nc=4, name="g_A", skip=skip)
-    
-    scope.reuse_variables()
-    
-    prob_fake_pool_a_is_real = discriminator(fake_pool_a, "d_A")
-    prob_fake_pool_b_is_real = discriminator(fake_pool_b, "d_B")
-  
-  return {
-    'prob_real_a_is_real': prob_real_a_is_real,
-    'prob_real_b_is_real': prob_real_b_is_real,
-    'prob_fake_a_is_real': prob_fake_a_is_real,
-    'prob_fake_b_is_real': prob_fake_b_is_real,
-    'prob_fake_pool_a_is_real': prob_fake_pool_a_is_real,
-    'prob_fake_pool_b_is_real': prob_fake_pool_b_is_real,
-    'cycle_images_a': cycle_images_a,
-    'cycle_images_b': cycle_images_b,
-    'fake_images_a': fake_images_a,
-    'fake_images_b': fake_images_b,
-  }
 
 
 def cycle_consistency_loss(real_images, generated_images):
@@ -288,15 +247,13 @@ def lsgan_loss_discriminator(prob_real_is_real, prob_fake_is_real):
           tf.reduce_mean(tf.squared_difference(prob_fake_is_real, 0))) * 0.5
 
 
-class CycleGAN:
+class CycleGAN(object):
   """The CycleGAN module."""
   def __init__(self, pool_size, lambda_a, lambda_b, base_lr, skip=False):
     self._pool_size = pool_size
-    self._size_before_crop = 286
+
     self._lambda_a = lambda_a
     self._lambda_b = lambda_b
-    
-    self._num_imgs_to_save = 20
     self._base_lr = base_lr
     self._skip = skip
     
@@ -310,10 +267,9 @@ class CycleGAN:
     )
   
   def model_input(self):
-    self.a = tf.placeholder(tf.uint8, shape=[None, None, 3], name='input_aa')
-    self.b = tf.placeholder(tf.uint8, shape=[None, None, 3], name='input_bb')
+    self.a = tf.placeholder(tf.uint8, shape=[None, None, 3])
+    self.b = tf.placeholder(tf.uint8, shape=[None, None, 3])
 
-    # Preprocessing:
     aa = tf.image.resize_images(
       self.a, [ctx.params.img_height, ctx.params.img_width])
     bb = tf.image.resize_images(
@@ -341,72 +297,61 @@ class CycleGAN:
     self.fake_A/self.fake_B to corresponding generator.
     This is use to calculate cyclic loss
     """
-    self.input_a = tf.placeholder(
-      tf.float32, [
-        1,
-        ctx.params.img_height,
-        ctx.params.img_width,
-        ctx.params.img_channels
-      ], name="input_A")
-    self.input_b = tf.placeholder(
-      tf.float32, [
-        1,
-        ctx.params.img_height,
-        ctx.params.img_width,
-        ctx.params.img_channels
-      ], name="input_B")
+    self.input_a = tf.placeholder(tf.float32, [
+                                    1,
+                                    ctx.params.img_height,
+                                    ctx.params.img_width,
+                                    ctx.params.img_channels
+                                  ], name="input_A")
+    self.input_b = tf.placeholder(tf.float32,[
+                                    1,
+                                    ctx.params.img_height,
+                                    ctx.params.img_width,
+                                    ctx.params.img_channels
+                                  ], name="input_B")
     
-    self.fake_pool_A = tf.placeholder(
-      tf.float32, [
-        None,
-        ctx.params.img_height,
-        ctx.params.img_width,
-        ctx.params.img_channels
-      ], name="fake_pool_A")
-    self.fake_pool_B = tf.placeholder(
-      tf.float32, [
-        None,
-        ctx.params.img_height,
-        ctx.params.img_width,
-        ctx.params.img_channels
-      ], name="fake_pool_B")
+    self.fake_pool_A = tf.placeholder(tf.float32, [
+                                        None,
+                                        ctx.params.img_height,
+                                        ctx.params.img_width,
+                                        ctx.params.img_channels
+                                      ], name="fake_pool_A")
+    self.fake_pool_B = tf.placeholder(tf.float32, [
+                                        None,
+                                        ctx.params.img_height,
+                                        ctx.params.img_width,
+                                        ctx.params.img_channels
+                                      ], name="fake_pool_B")
     
-    self.global_step = slim.get_or_create_global_step()
-    self.num_fake_inputs = 0
     self.learning_rate = tf.placeholder(tf.float32, shape=[], name="lr")
-    
-    inputs = {
-      'images_a': self.input_a,
-      'images_b': self.input_b,
-      'fake_pool_a': self.fake_pool_A,
-      'fake_pool_b': self.fake_pool_B,
-    }
-    
-    outputs = get_outputs(inputs, skip=self._skip)
-    
-    self.prob_real_a_is_real = outputs['prob_real_a_is_real']
-    self.prob_real_b_is_real = outputs['prob_real_b_is_real']
-    self.fake_images_a = outputs['fake_images_a']
-    self.fake_images_b = outputs['fake_images_b']
-    self.prob_fake_a_is_real = outputs['prob_fake_a_is_real']
-    self.prob_fake_b_is_real = outputs['prob_fake_b_is_real']
-    
-    self.cycle_images_a = outputs['cycle_images_a']
-    self.cycle_images_b = outputs['cycle_images_b']
-    
-    self.prob_fake_pool_a_is_real = outputs['prob_fake_pool_a_is_real']
-    self.prob_fake_pool_b_is_real = outputs['prob_fake_pool_b_is_real']
-  
-  def compute_losses(self):
-    """
-    In this function we are defining the variables for loss calculations
-    and training model.
 
-    d_loss_A/d_loss_B -> loss for discriminator A/B
-    g_loss_A/g_loss_B -> loss for generator A/B
-    *_trainer -> Various trainer for above loss functions
-    *_summ -> Summary variables for above loss functions
-    """
+    images_a = self.input_a
+    images_b = self.input_b
+    fake_pool_a = self.fake_pool_A
+    fake_pool_b = self.fake_pool_B
+    
+    # 1.step main model
+    with tf.variable_scope("Model") as scope:
+      self.prob_real_a_is_real = discriminator(images_a, "d_A")
+      self.prob_real_b_is_real = discriminator(images_b, "d_B")
+  
+      self.fake_images_b = generator(images_a, output_nc=4, name="g_A", skip=self._skip)
+      self.fake_images_a = generator(images_b, output_nc=4, name="g_B", skip=self._skip)
+  
+      scope.reuse_variables()
+  
+      self.prob_fake_a_is_real = discriminator(self.fake_images_a, "d_A")
+      self.prob_fake_b_is_real = discriminator(self.fake_images_b, "d_B")
+  
+      self.cycle_images_a = generator(self.fake_images_b, output_nc=4, name="g_B", skip=self._skip)
+      self.cycle_images_b = generator(self.fake_images_a, output_nc=4, name="g_A", skip=self._skip)
+  
+      scope.reuse_variables()
+  
+      self.prob_fake_pool_a_is_real = discriminator(fake_pool_a, "d_A")
+      self.prob_fake_pool_b_is_real = discriminator(fake_pool_b, "d_B")
+      
+  def model_loss(self):
     cycle_consistency_loss_a = \
       self._lambda_a * cycle_consistency_loss(
         real_images=self.input_a, generated_images=self.cycle_images_a,
@@ -415,15 +360,15 @@ class CycleGAN:
       self._lambda_b * cycle_consistency_loss(
         real_images=self.input_b, generated_images=self.cycle_images_b,
       )
-    
+  
     lsgan_loss_a = lsgan_loss_generator(self.prob_fake_a_is_real)
     lsgan_loss_b = lsgan_loss_generator(self.prob_fake_b_is_real)
-    
+  
     self.g_loss_A = \
       cycle_consistency_loss_a + cycle_consistency_loss_b + lsgan_loss_b
     self.g_loss_B = \
       cycle_consistency_loss_b + cycle_consistency_loss_a + lsgan_loss_a
-    
+  
     self.d_loss_A = lsgan_loss_discriminator(
       prob_real_is_real=self.prob_real_a_is_real,
       prob_fake_is_real=self.prob_fake_pool_a_is_real,
@@ -432,16 +377,16 @@ class CycleGAN:
       prob_real_is_real=self.prob_real_b_is_real,
       prob_fake_is_real=self.prob_fake_pool_b_is_real,
     )
-    
+  
     optimizer = tf.train.AdamOptimizer(self.learning_rate, beta1=0.5)
-    
+  
     self.model_vars = tf.trainable_variables()
-    
+  
     d_A_vars = [var for var in self.model_vars if 'd_A' in var.name]
     g_A_vars = [var for var in self.model_vars if 'g_A' in var.name]
     d_B_vars = [var for var in self.model_vars if 'd_B' in var.name]
     g_B_vars = [var for var in self.model_vars if 'g_B' in var.name]
-    
+  
     self.d_A_trainer = optimizer.minimize(self.d_loss_A, var_list=d_A_vars)
     self.d_B_trainer = optimizer.minimize(self.d_loss_B, var_list=d_B_vars)
     self.g_A_trainer = optimizer.minimize(self.g_loss_A, var_list=g_A_vars)
@@ -469,39 +414,42 @@ def _pool_fake_image(num_fakes, fake, fake_pool):
 def training_callback(data_source, dump_dir):
   ##########  1.step build model     ##############
   cycle_gan = CycleGAN(ctx.params.pool_size, ctx.params.lambda_a, ctx.params.lambda_b, ctx.params.base_lr)
+  # 1.1.step building input model
   cycle_gan.model_input()
+  # 1.2.step building model main root
   cycle_gan.model_setup()
-  cycle_gan.compute_losses()
+  # 1.3.step building model loss
+  cycle_gan.model_loss()
   
-  # Initializing the global variables
-  init = (tf.global_variables_initializer(),
-          tf.local_variables_initializer())
-  saver = tf.train.Saver()
-  
+  ##########  2.step training model  ##############
   fake_images_A = np.zeros((ctx.params.pool_size,
                             1,
                             ctx.params.img_height,
                             ctx.params.img_width,
                             ctx.params.img_channels))
-  
+
   fake_images_B = np.zeros((ctx.params.pool_size,
                             1,
                             ctx.params.img_height,
                             ctx.params.img_width,
                             ctx.params.img_channels))
   
+  # record fake input number (from generator)
   num_fake_inputs = 0
-  ##########  2.step training model  ##############
+  
   with tf.Session() as sess:
+    # 2.1.step initializing model
+    init = (tf.global_variables_initializer(),
+            tf.local_variables_initializer())
     sess.run(init)
-    coord = tf.train.Coordinator()
-    queue_threads = tf.train.start_queue_runners(coord=coord)
     
+    # save object
+    saver = tf.train.Saver()
+
     iter = 0
     for epoch in range(ctx.params.max_epochs):
-      print("In the epoch ", epoch)
-      
-      # saver.save(sess, os.path.join(dump_dir, "cyclegan"), global_step=epoch)
+      # save model
+      saver.save(sess, os.path.join(dump_dir, "maskingGAN"), global_step=epoch)
       # Dealing with the learning rate as per the epoch number
       if epoch < 100:
         curr_lr = ctx.params.base_lr
@@ -512,77 +460,67 @@ def training_callback(data_source, dump_dir):
       data_source._reset_iteration_state()
       for no_smiling, smiling in data_source.iterator_value():
         iter += 1
-        # 0.step data prepare
+        # 2.2.step training process
+        # 2.2.0.step data prepare
         aa, bb = sess.run([cycle_gan.aa, cycle_gan.bb], feed_dict={cycle_gan.a: smiling, cycle_gan.b: no_smiling})
         
-        # 1.step optimizing the G_A network
-        _, fake_B_temp, g_loss_A_val = sess.run(
-          [cycle_gan.g_A_trainer,
-           cycle_gan.fake_images_b,
-           cycle_gan.g_loss_A],
-          feed_dict={
-            cycle_gan.input_a: aa,
-            cycle_gan.input_b: bb,
-            cycle_gan.learning_rate: curr_lr
-          }
-        )
+        # 2.2.1.step optimizing the G_A network
+        _, fake_B_temp, g_loss_A_val = sess.run([cycle_gan.g_A_trainer,
+                                                 cycle_gan.fake_images_b,
+                                                 cycle_gan.g_loss_A],
+                                                feed_dict={
+                                                  cycle_gan.input_a: aa,
+                                                  cycle_gan.input_b: bb,
+                                                  cycle_gan.learning_rate: curr_lr
+                                                }
+                                              )
         
-        fake_B_temp1 = _pool_fake_image(
-          num_fake_inputs, fake_B_temp, fake_images_B)
+        fake_B_temp1 = _pool_fake_image(num_fake_inputs, fake_B_temp, fake_images_B)
         
-        # 2.step optimizing the D_B network
-        _, d_loss_B_val = sess.run(
-          [cycle_gan.d_B_trainer, cycle_gan.d_loss_B],
-          feed_dict={
-            cycle_gan.input_a: aa,
-            cycle_gan.input_b: bb,
-            cycle_gan.learning_rate: curr_lr,
-            cycle_gan.fake_pool_B: fake_B_temp1
-          }
-        )
+        # 2.2.2.step optimizing the D_B network
+        _, d_loss_B_val = sess.run([cycle_gan.d_B_trainer, cycle_gan.d_loss_B],
+                                    feed_dict={
+                                      cycle_gan.input_a: aa,
+                                      cycle_gan.input_b: bb,
+                                      cycle_gan.learning_rate: curr_lr,
+                                      cycle_gan.fake_pool_B: fake_B_temp1
+                                    }
+                                  )
         
-        # 3.step optimizing the G_B network
-        _, fake_A_temp, g_loss_B_val = sess.run(
-          [cycle_gan.g_B_trainer,
-           cycle_gan.fake_images_a,
-           cycle_gan.g_loss_B],
-          feed_dict={
-            cycle_gan.input_a: aa,
-            cycle_gan.input_b: bb,
-            cycle_gan.learning_rate: curr_lr
-          }
-        )
+        # 2.2.3.step optimizing the G_B network
+        _, fake_A_temp, g_loss_B_val = sess.run([cycle_gan.g_B_trainer,
+                                                 cycle_gan.fake_images_a,
+                                                 cycle_gan.g_loss_B],
+                                                feed_dict={
+                                                  cycle_gan.input_a: aa,
+                                                  cycle_gan.input_b: bb,
+                                                  cycle_gan.learning_rate: curr_lr
+                                                }
+                                              )
         
-        fake_A_temp1 = _pool_fake_image(
-          num_fake_inputs, fake_A_temp, fake_images_A)
+        fake_A_temp1 = _pool_fake_image(num_fake_inputs, fake_A_temp, fake_images_A)
         
-        # 4.step optimizing the D_A network
-        _, d_loss_A_val = sess.run(
-          [cycle_gan.d_A_trainer, cycle_gan.d_loss_A],
-          feed_dict={
-            cycle_gan.input_a: aa,
-            cycle_gan.input_b: bb,
-            cycle_gan.learning_rate: curr_lr,
-            cycle_gan.fake_pool_A: fake_A_temp1
-          }
-        )
+        # 2.2.4.step optimizing the D_A network
+        _, d_loss_A_val = sess.run([cycle_gan.d_A_trainer, cycle_gan.d_loss_A],
+                                    feed_dict={
+                                      cycle_gan.input_a: aa,
+                                      cycle_gan.input_b: bb,
+                                      cycle_gan.learning_rate: curr_lr,
+                                      cycle_gan.fake_pool_A: fake_A_temp1
+                                    }
+                                  )
         
         if iter % 100 == 0:
           logger.info('g_A_loss %f d_A_loss %f g_B_loss %f d_B_loss %f in iterator %d (epoch %d)' %
                       (g_loss_A_val, d_loss_A_val, g_loss_B_val, d_loss_B_val, iter, epoch))
         
         num_fake_inputs += 1
-    
-    coord.request_stop()
-    coord.join(queue_threads)
 
 
 ###################################################
 ######## 4.step define infer process     ##########
 ###################################################
 import cv2
-
-
 def infer_callback(data_source, dump_dir):
   #################################################
   data_queue = DatasetQueue(data_source, [tf.uint8], [(None, None, None)], max_queue_size=1)

@@ -14,6 +14,9 @@ import tensorflow.contrib.slim as slim
 from antgo.trainer.tftrainer import *
 from antgo.dataflow.imgaug.regular import *
 from antgo.annotation.image_tool import *
+from antgo.codebook.tf.dataset import *
+from antgo.codebook.tf.preprocess import *
+
 ##################################################
 ######## 1.step global interaction handle ########
 ##################################################
@@ -89,27 +92,54 @@ class HourglassModel(ModelDesc):
       up_2 = tf.image.resize_nearest_neighbor(low_3, tf.shape(low_3)[1:3]*2, name='upsampling')
       return tf.nn.relu(tf.add(up_2, up_1), name='out_hg')
   
+  def model_input(self, is_training, data_source):
+    resized_data = Resize(Node.inputs(data_source), shape=(64, 64))
+    reorganized_data = Node('reorganize', _data_reorganize, Node.inputs(resized_data))
+  
+    qq = DatasetQueue(reorganized_data, [tf.float32, tf.float32], [(64, 64, 3), (ctx.params.nstacks, 32, 32, 5)])
+    image, gtmap = qq.dequeue()
+
+    random_angle = (tf.to_float(tf.random_uniform([1]))[0] * 2 - 1) * 30.0 / 180.0 * 3.14
+    # for image
+    image = tf.expand_dims(image, 0)
+    rotated_image = tf.contrib.image.rotate(image, random_angle)
+    rotated_image = tf.squeeze(rotated_image, 0)
+
+    # for gtmap
+    rotated_gtmap = tf.contrib.image.rotate(gtmap, random_angle)
+
+    # rotated_image = image
+    # rotated_gtmap = gtmap
+    #
+    # make batch
+    rotated_images, rotated_gtmaps = tf.train.batch([rotated_image, rotated_gtmap], ctx.params.batch_size)
+    data_queue = slim.prefetch_queue.prefetch_queue([rotated_images, rotated_gtmaps])
+    return data_queue
+  
   def model_fn(self, is_training=True, *args, **kwargs):
     # inputs: batch_size x 256 x 256 x 3
     # labels: batch_size x nstack x 64 x 64 x output_dim(landmark number)
-    inputs = tf.placeholder(tf.float32, shape=(ctx.params.batch_size, 64, 64, 3), name='input_x')
-    labels = None
-    if is_training:
-      labels = tf.placeholder(tf.float32,
-        shape=(ctx.params.batch_size, ctx.params.nstacks, 32, 32, ctx.params.output_dim), name='label_y')
-
+    # inputs = tf.placeholder(tf.float32, shape=(ctx.params.batch_size, 64, 64, 3), name='input_x')
+    # labels = None
+    # if is_training:
+    #   labels = tf.placeholder(tf.float32,
+    #     shape=(ctx.params.batch_size, ctx.params.nstacks, 32, 32, ctx.params.output_dim), name='label_y')
+    #
+    inputs, labels = args[0].dequeue()
+    self.aa = inputs
+    self.bb = labels
+    
     with slim.arg_scope(self.arg_scope(is_training)):
       with tf.variable_scope('model'):
         with tf.variable_scope('preprocessing'):
           # inputs batch_size x 64 x 64 x 3
           pad1 = tf.pad(inputs, [[0, 0], [2, 2], [2, 2], [0, 0]], name='pad_1')
           # batch_size x 32 x 32 x 64
-          conv_1 = slim.conv2d(pad1, self._nfeat, [6, 6], stride=2, scope='conv_64_to_32', padding='VALID')
-          r3 = conv_1
-          # r1 = self._residual(conv_1, 128, name='r1')
+          conv_1 = slim.conv2d(pad1, 64, [6, 6], stride=2, scope='conv_64_to_32', padding='VALID')
+          r1 = self._residual(conv_1, 128, name='r1')
           # pool1 = slim.avg_pool2d(r1, kernel_size=[2,2],stride=2)
-          # r2 = self._residual(pool1, int(self._nfeat/2), name='r2')
-          # r3 = self._residual(r2, self._nfeat, name='r3')
+          r2 = self._residual(r1, int(self._nfeat/2), name='r2')
+          r3 = self._residual(r2, self._nfeat, name='r3')
         
         # storage table
         # root block
@@ -155,7 +185,7 @@ class HourglassModel(ModelDesc):
             ss = tf.nn.sigmoid_cross_entropy_with_logits(logits=output, labels=labels)
             loss = tf.reduce_mean(ss)
             tf.losses.add_loss(loss)
-            return loss
+            return loss, self.aa, self.bb
           else:
             output = tf.nn.sigmoid(output[:, ctx.params.nstacks - 1])
             return output
@@ -192,49 +222,34 @@ def _generate_hm(height, width, joints, maxlength, weight):
   return hm
 
 
-def _data_preprocess(*args, **kwargs):
-  train_img = args[0][0]                # batch x 64 x 64 x 3
-  train_img_annotations = args[0][1]    # [[], ..., []]
-  batch_size, img_height, img_width = train_img.shape[0:3]
+def _data_reorganize(*args, **kwargs):
+  train_img = args[0][0]                        # 64 x 64 x 3
+  train_img_annotation = args[0][1]             # {}
+
+  joints = train_img_annotation['landmark']
+  info = train_img_annotation['info']
+  old_height, old_width = info[0:2]
+  joints = np.array(joints).reshape((-1, 2))
+  joints[:, 0] = joints[:, 0] / float(old_width) * 32.0
+  joints[:, 1] = joints[:, 1] / float(old_height) * 32.0
+  train_weight = np.ones((5), np.float32)
+  hm = _generate_hm(32, 32, joints, 32, train_weight)
+  hm = np.expand_dims(hm, axis=0)
+  hm = np.repeat(hm, ctx.params.nstacks, axis=0)
   
-  train_img = train_img.astype(np.float32)
-  train_gtmap = np.zeros((batch_size, ctx.params.nstacks, 32, 32, 5), np.float32)
-  train_weights = np.zeros((batch_size, 5), np.float32)
-
-  for i in range(batch_size):
-    joints = train_img_annotations[i]['landmark']
-    info = train_img_annotations[i]['info']
-    old_height, old_width = info[0:2]
-    joints = np.array(joints).reshape((-1, 2))
-    joints[:, 0] = joints[:, 0] / float(old_width) * 32.0
-    joints[:, 1] = joints[:, 1] / float(old_height) * 32.0
-    train_weights[i] = 1
-    
-    hm = _generate_hm(32, 32, joints, 32, train_weights[i])
-    hm = np.expand_dims(hm, axis=0)
-    hm = np.repeat(hm, ctx.params.nstacks, axis=0)
-    train_gtmap[i] = hm
-
   train_img = train_img / 255.0
-  return train_img, train_gtmap, train_weights
-
+  return train_img, hm
 
 def training_callback(data_source, dump_dir):
-  ##########  1.step data preprocess ##############
-  resized_data = Resize(Node.inputs(data_source), shape=(64, 64))
-  batch_data = BatchData(Node.inputs(resized_data), ctx.params.batch_size)
-  preprocess_node = Node('preprocess', _data_preprocess, Node.inputs(batch_data))
-
   ##########  2.step build model     ##############
   tf_trainer = TFTrainer(ctx.params, dump_dir)
   tf_trainer.deploy(HourglassModel())
 
   iter = 0
   for epoch in range(ctx.params.max_epochs):
-    generator = preprocess_node.iterator_value()
     while True:
       try:
-        _, loss_val = tf_trainer.run(generator, binds={'input_x': 0, 'label_y': 1})
+        _, loss_val, aa, bb = tf_trainer.run()
         iter = iter + 1
       except:
         break
@@ -273,7 +288,7 @@ def infer_callback(data_source, dump_dir):
       predict_joints = -1 * np.ones((len(ctx.params.joints), 2))
       
       for joint_i in range(len(ctx.params.joints)):
-        index = np.unravel_index(output[:, :, joint_i], (ctx.params.hm_size, ctx.params.hm_size))
+        index = np.unravel_index(output[:, :, joint_i].argmax(), (ctx.params.hm_size, ctx.params.hm_size))
         if output[index[0], index[1], joint_i] > ctx.params.thresh:
           # resize to original scale
           y = index[0]

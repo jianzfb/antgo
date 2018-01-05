@@ -601,7 +601,7 @@ class TFTrainer(Trainer):
         custom_dataset_queue = tf.get_collection('CUSTOM_DATASET_QUEUE')
         if len(custom_dataset_queue) > 0:
           custom_dataset_queue[0].coord = self.coord
-          custom_threads = custom_dataset_queue[0].start_threads(self.sess, self.dataset_queue_threads)
+          custom_threads = custom_dataset_queue[0].start_threads(self.sess)
           self.threads.extend(custom_threads)
         
         # Training saver
