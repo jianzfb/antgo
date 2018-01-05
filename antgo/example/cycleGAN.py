@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 18-1-2
 # @File    : cycleGAN.py
-# @Author  : 
+# @Author  : Jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -494,12 +494,7 @@ def _data_preprocess(*args, **kwargs):
 
 
 def training_callback(data_source, dump_dir):
-  ##########  1.step data preprocess ##############
-  # resized_data = Resize(Node.inputs(data_source), shape=(ctx.params.img_height, ctx.params.img_width))
-  # batch_data = BatchData(Node.inputs(resized_data), ctx.params.batch_size)
-  # preprocess_data = Node('preprocess', _data_preprocess, Node.inputs(batch_data))
-  
-  ##########  2.step build model     ##############
+  ##########  1.step build model     ##############
   cycle_gan = CycleGAN(ctx.params.pool_size, ctx.params.lambda_a, ctx.params.lambda_b, ctx.params.base_lr)
   cycle_gan.model_input(data_source)
   cycle_gan.model_setup()
@@ -537,13 +532,13 @@ def training_callback(data_source, dump_dir):
     for epoch in range(ctx.params.max_epochs):
       print("In the epoch ", epoch)
       
-      # saver.save(sess, os.path.join(dump_dir, "cyclegan"), global_step=epoch)
+      saver.save(sess, os.path.join(dump_dir, "cyclegan"), global_step=epoch)
       # Dealing with the learning rate as per the epoch number
       if epoch < 100:
         curr_lr = ctx.params.base_lr
       else:
-        curr_lr = ctx.params._base_lr - \
-                  ctx.params._base_lr * (epoch - 100) / 100
+        curr_lr = ctx.params.base_lr - \
+                  ctx.params.base_lr * (epoch - 100) / 100
       
       for _ in range(1067):
         iter += 1
@@ -614,7 +609,60 @@ def training_callback(data_source, dump_dir):
 ###################################################
 ######## 4.step define infer process     ##########
 ###################################################
+import cv2
 def infer_callback(data_source, dump_dir):
+  #################################################
+  data_queue = DatasetQueue(data_source, [tf.uint8], [(None, None, None)], max_queue_size=1)
+  a = data_queue.dequeue()
+
+  # Preprocessing:
+  aa = tf.image.resize_images(a, [ctx.params.img_height, ctx.params.img_width])
+  aa = tf.subtract(tf.div(aa, 127.5), 1)
+  aa = tf.expand_dims(aa, 0)
+  aa.set_shape((1, 256, 256, 3))
+  
+  ##########  1.step build model     ##############
+  cycle_gan = CycleGAN(ctx.params.pool_size, ctx.params.lambda_a, ctx.params.lambda_b, ctx.params.base_lr)
+  cycle_gan.model_setup()
+  init = (tf.global_variables_initializer(),
+          tf.local_variables_initializer())
+  saver = tf.train.Saver()
+
+  with tf.Session() as sess:
+    sess.run(init)
+    # chkpt_fname = tf.train.latest_checkpoint('/home/mi/20180103.223432.634196/train/cyclegan-100')
+    chkpt_fname = '/home/mi/20180103.223432.634196/train/cyclegan-100'
+    saver.restore(sess, chkpt_fname)
+    
+    coord = tf.train.Coordinator()
+    custom_dataset_queue = tf.get_collection('CUSTOM_DATASET_QUEUE')
+    custom_dataset_queue[0].coord = coord
+    threads = custom_dataset_queue[0].start_threads(sess, 1)
+    queue_threads = tf.train.start_queue_runners(coord=coord)
+    threads.extend(queue_threads)
+    
+    for i in range(data_source.size):
+      # 1.step input a
+      aa_val = sess.run(aa)
+      # 2.step transfer to b
+      bb_val = sess.run(cycle_gan.fake_images_b, feed_dict={cycle_gan.input_a: aa_val})
+      
+      img_aa = np.squeeze(aa_val, 0)
+      img_bb = np.squeeze(bb_val, 0)
+      
+      img_aa = ((img_aa + 1) * 127.5).astype(np.uint8)
+      img_bb = ((img_bb + 1) * 127.5).astype(np.uint8)
+      # cv2.imshow('aa', img_aa)
+      # cv2.imshow('bb', img_bb)
+      # cv2.waitKey()
+      
+      ctx.recorder.record(img_bb)
+      cv2.imwrite('/home/mi/aa/%d-aa.png'%i, img_aa)
+      cv2.imwrite('/home/mi/aa/%d-bb.png'%i, img_bb)
+      print(i)
+      
+    coord.request_stop()
+    coord.join(threads)
   pass
 
 

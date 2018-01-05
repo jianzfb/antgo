@@ -52,7 +52,7 @@ class CelebA(Dataset):
         
         content = fp.readline()
     
-    self.ids = range(len(self._file_list))
+    self.ids = list(range(len(self._file_list)))
     
     # 3.step annotation folder
     self._annotations = {}

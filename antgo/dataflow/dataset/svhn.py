@@ -50,7 +50,7 @@ class SVHNDigit(Dataset):
     self.Y[np.where(self.Y == 10)] = 0
     self.Y = self.Y.astype(np.uint8)
 
-    self.ids = range(self.Y.shape[0])
+    self.ids = list(range(self.Y.shape[0]))
 
   def split(self, split_params={}, split_method='holdout'):
     assert (self.train_or_test == 'train')

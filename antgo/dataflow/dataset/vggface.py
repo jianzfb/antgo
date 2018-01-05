@@ -81,7 +81,7 @@ class VGGFace(Dataset):
       person_id = person_id_map[person_id_str]
       self._persons_id.append(person_id)
 
-    self.ids = range(len(self._persons_file))
+    self.ids = list(range(len(self._persons_file)))
 
     # fixed seed
     self.seed = time.time()

@@ -40,7 +40,7 @@ class Horse2Zebra(Dataset):
         if b[0] != '.':
           self.data_b_list.append(os.path.join(self.dir, 'horse2zebra', 'testB', b))
     
-    self.ids = range(len(self.data_a_list))
+    self.ids = list(range(len(self.data_a_list)))
     
   @property
   def size(self):

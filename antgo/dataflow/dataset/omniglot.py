@@ -54,7 +54,7 @@ class Omniglot(Dataset):
     for ll in self.character_image_paths:
       self.samples_num += len(ll)
 
-    self.ids = range(self.samples_num)
+    self.ids = list(range(self.samples_num))
     self.samples = self.make_data(self.character_image_paths, self.character_labels)
 
     # fixed seed
