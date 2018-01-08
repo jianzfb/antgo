@@ -1,16 +1,139 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<title>众包盲评-{{task}}</title>
-	<script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
-	<link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+    <meta charset="UTF-8">
+    <title>众包盲评-{{task['title']}}</title>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+    <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script>
+    String.prototype.replaceAll = function(exp, newStr){
+        return this.replace(new RegExp(exp, 'gm'), newStr)
+    };
+    /**
+     * 原型：字符串格式化
+     * @param args 格式化参数值
+     */
+    String.prototype.format = function(args) {
+        var result = this;
+        if (arguments.length < 1) {
+            return result;
+        }
+
+        var data = arguments; // 如果模板参数是数组
+        if (arguments.length == 1 && typeof (args) == "object") {
+            // 如果模板参数是对象
+            data = args;
+        }
+        for ( var key in data) {
+            var value = data[key];
+            if (undefined != value) {
+                result = result.replaceAll("\\{" + key + "\\}", value);
+            }
+        }
+        return result;
+    };
+    var response_data = null;
+    $(document).ready(function(){
+        // initialize query page
+        // 1.step render complete crowdsource page
+        $.post('crowdsource/render', {}, function(data){
+            data = eval('('+data+')')
+            response_data = data
+            response_type=response_data['TYPE']
+            response_content = response_data['RESPONSE']
+            if (response_type == 'SELECT'){
+                var html_template = $('<div class="dropdown"><button class="btn btn-default dropdown-toggle" type="button" id="select_list" data-toggle="dropdown">{item}<span class="caret"></span></button></div>'.format({item: response_content[0]}))
+                var select_group_template = $('<ul class="dropdown-menu" aria-labelledby="select_list"></ul>')
+                var select_item_template = '<li><a href="#">{item}</a></li>'
+                for(var k in response_content){
+                    select_item = select_item_template.format({item: response_content[k]})
+                    select_group_template.append(select_item)
+                }
+                html_template.append(select_group_template)
+                $('#query_measure').append(html_template)
+            }
+            }).done(function(){
+              $(function(){
+                $(".dropdown-menu li a").click(function(){
+                   var id = $(this).parent().parent().attr('aria-labelledby');
+                   $('#'+id + ':first-child').html('{content}<span class="caret"></span>'.format({content: $(this).text()}))
+                   $('#hidden_content').text($(this).text())
+                })
+              })
+            })
+
+        // 2.step welcome page
+        var start_query_data={'QUERY': 'START'}
+        $.post('crowdsource/query', start_query_data, function(data){
+            var data_obj = eval('('+data+')');
+            var page_data = data_obj['PAGE_DATA'];
+            for(var k in page_data){
+               var data = page_data[k];
+               var data_content = data['DATA'];
+               var data_type = data['TYPE'];
+
+               if(data_type == 'TEXT'){
+                 $('#'+k).text(data_content);
+               }
+               else if(data_type == 'IMAGE'){
+                 $('#'+k).attr('src', data_content, alt=k);
+               }
+               else if(data_type == 'SOUND'){
+               }
+            }
+        })
+
+        /*************************************************************
+        ******          user submit click response              ******
+        **************************************************************/
+        $('#user_submit').on('click', function(){
+            var response_type=response_data['TYPE']
+            var response_content = response_data['RESPONSE']
+
+            var user_response_data = {}
+            if(response_type == 'SELECT'){
+                user_response_data = {'CLIENT_RESPONSE': $('#hidden_content').text()}
+            }
+            else if(response_type == 'RANK'){
+            }
+            else if(response_type == 'SCORE'){
+            }
+
+            $.post('crowdsource/query', user_response_data, function(data){
+                alert(data);
+            })
+        })
+    })
+    </script>
 </head>
 <body>
 
 <div class="container">
-	<div>lala</div>
-	<img src={{static_url("1.jpg")}}>
+	<div class="jumbotron">
+      <h1>Hello, MLTalker Contributer!</h1>
+      <p>{{task["content"]}}</p>
+      <p><a class="btn btn-primary btn-lg" href="#" role="button">Learn More</a></p>
+    </div>
+    <div class="panel panel-info" id="query_block">
+        <div class="panel-heading" id="query_title">
+            <p style="float:right" id="query_status"></p>
+        </div>
+      <div class="panel-body" id="custom_task_block">
+          {% raw task["html"] %}
+      </div>
+      <hr>
+      <div class="row" id="query_response_block">
+          <div class="col-lg-8">
+              <div id="query_measure">User Response: </div>
+          </div>
+          <div class="col-lg-4">
+              <button class="btn btn-default" type="button" style="float: right" id="user_submit">NEXT</button>
+          </div>
+          <p hidden id="hidden_content"></p>
+      </div>
+    </div>
+
 </div>
 </body>
 </html>

@@ -27,7 +27,7 @@ class AntCrowdsource(AntMeasure):
     self._waiting_time_per_sample = getattr(task, 'waiting_time_per_sample', 60)              # unit: second (from task)
     self._max_time_in_session = getattr(task, 'max_time_in_session', 60*60)                   # unit: second (max time in one session) (from task)
     self._max_samples_in_session = getattr(task, 'max_samples_in_session', -1)                # max samples in one session  (from task)
-    self._client_query_data = {}                # task publisher define (key(data id): value(data type)) (from task)
+    self._client_query_data = getattr(task, 'query_data', {'query_data': {'GROUNDTRUTH_ID': 'TEXT', 'GROUNDTRUTH_CONTENT': 'TEXT'}})                                 # task publisher define (key(data id): value(data type)) (from task)
     self._client_response_data = {}             # measure designer define (key(data id): value(data type))
                                                 # socre, list
 
@@ -58,7 +58,6 @@ class AntCrowdsource(AntMeasure):
     #
     # return True
 
-
   def _prepare_ground_truth_page(self, client_id, query_index, record_db):
     gt, _ = record_db.read(self._client_response_record[client_id]['ID'][query_index])
     response_data = {'STATUS': 'GROUND_TRUTH', 'QUERY_INDEX': query_index}
@@ -71,6 +70,7 @@ class AntCrowdsource(AntMeasure):
         data = gt[k]
       else:
         data = gt[k]
+        
       if v == 'IMAGE':
         # save to .png
         data_en = png_encode(data)
@@ -96,17 +96,18 @@ class AntCrowdsource(AntMeasure):
     self._client_response_record[client_id]['RESPONSE_TIME'][query_index] = {'START_TIME': now_time, 'STOP_TIME': -1}
 
     # 2.step server response
-    gt, predict = record_db.read(self._client_response_record[client_id]['ID'][query_index])
+    gt, predict = record_db.read(self._client_response_record[client_id]['ID'][query_index], 'groundtruth', 'predict')
     response_data = {}
     response_data['PAGE_DATA'] = {}
     # 2.1.step prepare page data
     for k, v in self._client_query_data.items():
       # k is name, v is type(IMAGE, SOUND, TEXT)
       data = None
-      if k in predict:
-        data = predict[k]
-      else:
+      if k.lower().startswith('GROUNDTRUTH_'):
         data = gt[k]
+      elif k.lower().startswith('PREDICT_'):
+        data = predict[k]
+
       if v == 'IMAGE':
         # save to .png
         data_en = png_encode(data)
@@ -143,7 +144,7 @@ class AntCrowdsource(AntMeasure):
       logger.info('enter client id %s "START" response'%client_id)
       # start a new session
       # 1.step update client response_record
-      ids = list(range(len(record_db.count)))
+      ids = list(range(int(record_db.count)))
       np.random.shuffle(ids)
       client_record = {}
       # 1.1.step prepare data index order
@@ -154,7 +155,7 @@ class AntCrowdsource(AntMeasure):
       client_record['START_TIME'] = now_time
       # 1.3.step record first sample time
       client_record['RESPONSE_TIME'] = [None for _ in ids]
-      client_query['RESPONSE_TIME'][0] = {'START_TIME': now_time, 'STOP_TIME': -1}
+      client_record['RESPONSE_TIME'][0] = {'START_TIME': now_time, 'STOP_TIME': -1}
 
       self._client_response_record[client_id] = client_record
 
@@ -166,10 +167,11 @@ class AntCrowdsource(AntMeasure):
       for k, v in self._client_query_data.items():
         # k is name, v is type(IMAGE, SOUND, TEXT)
         data = None
-        if k in predict:
-          data = predict[k]
-        else:
+        if k.lower().startswith('GROUNDTRUTH_'):
           data = gt[k]
+        elif k.lower().startswith('PREDICT_'):
+          data = predict[k]
+          
         if v == 'IMAGE':
           # save to .png
           data_en = png_encode(data)
@@ -313,7 +315,7 @@ class AntCrowdsource(AntMeasure):
     self._dump_dir = dump_dir
 
     # 1.step launch http server (independent process)
-    process = multiprocessing.Process(target=crowdsrouce_server_start, args=(self._client, self._dump_dir, self._task_html))
+    process = multiprocessing.Process(target=crowdsrouce_server_start, args=(self._client, self._dump_dir, self._task_html, self.client_response_data))
     process.start()
 
     # 2.step listening client query
@@ -326,7 +328,7 @@ class AntCrowdsource(AntMeasure):
         # 2.2 step check query is legal
         if not self._query_is_legal(client_query):
           self._server.send(json.dumps({}))
-          return
+          break
         # client id
         client_id = client_query['CLIENT_ID']
 
@@ -339,7 +341,7 @@ class AntCrowdsource(AntMeasure):
           logger.info('response client_id %s %s query'%(client_id, 'START'))
           response = self._start_click_branch(client_query, record_db)
           self._server.send(response)
-          return
+          continue
 
         ########################################################
         #############            NEXT            ###############
@@ -348,10 +350,11 @@ class AntCrowdsource(AntMeasure):
           logger.info('response client_id %s %s query'%(client_id, 'NEXT'))
           response = self._next_click_branch(client_query, record_db)
           self._server.send(response)
-          return
+          continue
 
         logger.error('client_id %s unknow error'%client_id)
         self._server.send(json.dumps({}))
+        continue
       except:
         logger.error('client_id %s unknow error'%client_id)
         self._server.send(json.dumps({}))
