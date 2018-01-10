@@ -7,6 +7,6 @@ pool_size: 50
 lambda_a: 10.0
 lambda_b: 10.0
 base_lr: 0.0002
-do_flipping: true
+do_flipping: false
 ngf: 32
 ndf: 64

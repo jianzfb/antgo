@@ -12,6 +12,7 @@ import tornado.web
 import os
 import pipes
 import json
+import uuid
 from tornado.options import define, options
 define('port', default=8000, help="run on the given port", type=int)
 
@@ -24,6 +25,18 @@ class BaseHandler(tornado.web.RequestHandler):
   def server_pipe(self):
     return self.settings['client_pipe']
   
+  @property
+  def task_html(self):
+    return self.settings['task_html']
+  
+  @property
+  def task_name(self):
+    return self.settings['task_name']
+  
+  @property
+  def crowdsource_helper(self):
+    return self.settings['crowdsource_helper']
+
   
 class IndexHandler(BaseHandler):
   def get(self):
@@ -31,7 +44,7 @@ class IndexHandler(BaseHandler):
     if self.get_secure_cookie('user') is None:
       self.set_secure_cookie('user', str(uuid.uuid4()))
     
-    task = {'content': 'welcome the MLTalker', 'html': '<p id="AA"></p>', 'title': 'Jian'}
+    task = {'content': self.crowdsource_helper, 'html': self.task_html, 'title': self.task_name}
     self.render('crowdsource.html', task=task)
 
 
@@ -50,23 +63,29 @@ class ClientQuery(BaseHandler):
     client_query = {}
     client_query['QUERY'] = self.get_argument('QUERY')
     client_query['CLIENT_ID'] = self.get_current_user().decode('utf-8')
-    client_query['CLIENT_RESPONSE'] = self.get_argument('CLIENT_RESPONSE')
+    client_query['CLIENT_RESPONSE'] = self.get_argument('CLIENT_RESPONSE', None)
+    client_query['QUERY_INDEX'] = int(self.get_argument('QUERY_INDEX', -1))
+    client_query['QUERY_STATUS'] = self.get_argument('QUERY_STATUS', '')
+    
+    # send client query to server backend
     self.server_pipe.send(client_query)
+    # waiting server response
     server_response = self.server_pipe.recv()
-    # data = {'PAGE_DATA': {'AA': {'DATA': 'hello the world', 'TYPE': 'START'}}}
-    #
+    
+    # return
     self.write(json.dumps(server_response))
 
 
-def crowdsrouce_server_start(client_pipe, dump_dir, task_html, custom_response_html):
-  dump_dir = os.curdir
-
+def crowdsrouce_server_start(client_pipe, dump_dir, crowdsource_helper, task_name, task_html, custom_response_html):
   tornado.options.parse_command_line()
   static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
 
   settings={'template_path': os.path.join(static_folder, 'html', 'templates'),
-            'static_path': os.path.join(static_folder, 'html', "static"),
+            'static_path': dump_dir,
             'client_pipe': client_pipe,
+            'crowdsource_helper': crowdsource_helper,
+            'task_name': task_name,
+            'task_html': task_html,
             'custom_response_html': custom_response_html,
             'cookie_secret': str(uuid.uuid4())}
   app = tornado.web.Application(handlers=[(r"/", IndexHandler),

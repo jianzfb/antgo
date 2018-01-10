@@ -247,12 +247,10 @@ def training_callback(data_source, dump_dir):
 
   iter = 0
   for epoch in range(ctx.params.max_epochs):
-    while True:
-      try:
-        _, loss_val, aa, bb = tf_trainer.run()
-        iter = iter + 1
-      except:
-        break
+    for _ in range(data_source.size):
+      _, loss_val, aa, bb = tf_trainer.run()
+      iter = iter + 1
+      
     # save
     tf_trainer.snapshot(epoch)
 

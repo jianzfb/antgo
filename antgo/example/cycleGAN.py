@@ -631,13 +631,13 @@ def infer_callback(data_source, dump_dir):
   with tf.Session() as sess:
     sess.run(init)
     # chkpt_fname = tf.train.latest_checkpoint('/home/mi/20180103.223432.634196/train/cyclegan-100')
-    chkpt_fname = '/home/mi/20180103.223432.634196/train/cyclegan-100'
+    chkpt_fname = '/home/mi/20180106.030529.302640/train/cyclegan-399'
     saver.restore(sess, chkpt_fname)
     
     coord = tf.train.Coordinator()
     custom_dataset_queue = tf.get_collection('CUSTOM_DATASET_QUEUE')
     custom_dataset_queue[0].coord = coord
-    threads = custom_dataset_queue[0].start_threads(sess, 1)
+    threads = custom_dataset_queue[0].start_threads(sess)
     queue_threads = tf.train.start_queue_runners(coord=coord)
     threads.extend(queue_threads)
     

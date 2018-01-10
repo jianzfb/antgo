@@ -33,7 +33,16 @@
         }
         return result;
     };
+
+    var is_user_submit_modal_open = 0;
+    function waiting_triger(){
+        $('#user_submit_modal').modal({backdrop: 'static', keyboard: false})
+        is_user_submit_modal_open = 1;
+    }
+
     var response_data = null;
+    var query_index = -1;
+    var waiting_timer = null;
     $(document).ready(function(){
         // initialize query page
         // 1.step render complete crowdsource page
@@ -52,8 +61,22 @@
                 }
                 html_template.append(select_group_template)
                 $('#query_measure').append(html_template)
+
+                var html_template = $('<div class="dropdown"><button class="btn btn-default dropdown-toggle" type="button" id="select_list" data-toggle="dropdown">{item}<span class="caret"></span></button></div>'.format({item: response_content[0]}))
+                var select_group_template = $('<ul class="dropdown-menu" aria-labelledby="select_list"></ul>')
+                var select_item_template = '<li><a href="#">{item}</a></li>'
+                for(var k in response_content){
+                    select_item = select_item_template.format({item: response_content[k]})
+                    select_group_template.append(select_item)
+                }
+                html_template.append(select_group_template)
+                $('#query_measure_model').append(html_template)
+
+                // initialize
+                $('#hidden_content').text(response_content[0])
             }
             }).done(function(){
+              // click event
               $(function(){
                 $(".dropdown-menu li a").click(function(){
                    var id = $(this).parent().parent().attr('aria-labelledby');
@@ -67,7 +90,15 @@
         var start_query_data={'QUERY': 'START'}
         $.post('crowdsource/query', start_query_data, function(data){
             var data_obj = eval('('+data+')');
+            // is stop
+            if(data_obj['PAGE_STATUS'] == 'STOP'){
+                $('#stop_modal').modal({backdrop: 'static', keyboard: false});
+                return;
+            }
+
+            // user evaluation page
             var page_data = data_obj['PAGE_DATA'];
+            query_index = data_obj['QUERY_INDEX'];
             for(var k in page_data){
                var data = page_data[k];
                var data_content = data['DATA'];
@@ -77,63 +108,197 @@
                  $('#'+k).text(data_content);
                }
                else if(data_type == 'IMAGE'){
-                 $('#'+k).attr('src', data_content, alt=k);
+                 $('#'+k).attr('src', '/static/'+data_content, alt=k);
                }
                else if(data_type == 'SOUND'){
                }
             }
+            var waiting_time = data_obj['WAITING_TIME'] * 1000;
+            var remained_num = data_obj['REMAINED_NUM'];
+
+            var process_str = 'PROCESS: {now}/{total}'.format({now: query_index.toString(), total: (query_index + remained_num + 1).toString()})
+            $('#query_status').text(process_str)
+
+            if( waiting_time > 0){
+              // set waiting time
+              waiting_timer = setTimeout('waiting_triger()', waiting_time);
+            }
         })
+
 
         /*************************************************************
         ******          user submit click response              ******
         **************************************************************/
-        $('#user_submit').on('click', function(){
-            var response_type=response_data['TYPE']
-            var response_content = response_data['RESPONSE']
+        $('button[name=user_submit]').each(function(){
+            $(this).on('click', function(){
+                if(waiting_timer != null){
+                    clearTimeout(waiting_timer);
+                    waiting_timer = null;
+                }
 
-            var user_response_data = {}
-            if(response_type == 'SELECT'){
-                user_response_data = {'CLIENT_RESPONSE': $('#hidden_content').text()}
-            }
-            else if(response_type == 'RANK'){
-            }
-            else if(response_type == 'SCORE'){
-            }
+                var response_type=response_data['TYPE']
+                var response_content = response_data['RESPONSE']
 
-            $.post('crowdsource/query', user_response_data, function(data){
-                alert(data);
+                var user_response_data = {}
+                user_response_data['QUERY_STATUS'] = ''
+                user_response_data['QUERY'] = 'NEXT'
+                user_response_data['QUERY_INDEX'] = query_index
+                if(response_type == 'SELECT'){
+                    user_response_data['CLIENT_RESPONSE'] = $('#hidden_content').text()
+                }
+                else if(response_type == 'RANK'){
+                }
+                else if(response_type == 'SCORE'){
+                }
+
+                $.post('crowdsource/query', user_response_data, function(data){
+                    // clear modal (if existed)
+                    if(is_user_submit_modal_open){
+                        $('#user_submit_modal').modal('toggle')
+                        is_user_submit_modal_open = 0;
+                    }
+
+                    var data_obj = eval('('+data+')');
+                    if(data_obj['PAGE_STATUS'] == 'STOP'){
+                        $('#stop_modal').modal({backdrop: 'static', keyboard: false});
+                        return;
+                    }
+
+                    if(data_obj['PAGE_STATUS'] == 'GROUNDTRUTH'){
+                        $('#user_response_modal').modal({backdrop: 'static', keyboard: false})
+
+                        // render user_response_modal
+                        $('#user_response_groundtruth').empty()
+                        var page_data = data_obj['PAGE_DATA'];
+                        var groundtruth_table = ''
+
+                        $('#user_response_groundtruth').append(groundtruth_table);
+                        for(var k in page_data){
+                           var data = page_data[k];
+                           var data_content = data['DATA'];
+                           var data_type = data['TYPE'];
+
+                           if(data_type == 'TEXT'){
+                             $('#'+k).text(data_content);
+                           }
+                           else if(data_type == 'IMAGE'){
+                             $('#'+k).attr('src', '/static/'+data_content, alt=k);
+                           }
+                           else if(data_type == 'SOUND'){
+                           }
+                        }
+                        return;
+                    }
+
+                    var page_data = data_obj['PAGE_DATA'];
+                    query_index = data_obj['QUERY_INDEX'];
+                    for(var k in page_data){
+                       var data = page_data[k];
+                       var data_content = data['DATA'];
+                       var data_type = data['TYPE'];
+
+                       if(data_type == 'TEXT'){
+                         $('#'+k).text(data_content);
+                       }
+                       else if(data_type == 'IMAGE'){
+                         $('#'+k).attr('src', '/static/'+data_content, alt=k);
+                       }
+                       else if(data_type == 'SOUND'){
+                       }
+                    }
+                    var waiting_time = data_obj['WAITING_TIME'] * 1000;
+                    var remained_num = data_obj['REMAINED_NUM'];
+
+                    var process_str = 'PROCESS: {now}/{total}'.format({now: query_index.toString(), total: (query_index + remained_num + 1).toString()})
+                    $('#query_status').text(process_str)
+
+                    if( waiting_time > 0){
+                      // clear timer
+                      if(waiting_timer != null){
+                        clearTimeout(waiting_timer);
+                      }
+                      // set waiting time
+                      waiting_timer = setTimeout('waiting_triger()', waiting_time);
+                    }
+                })
             })
         })
     })
     </script>
+    <style>
+    </style>
 </head>
 <body>
-
 <div class="container">
 	<div class="jumbotron">
       <h1>Hello, MLTalker Contributer!</h1>
       <p>{{task["content"]}}</p>
       <p><a class="btn btn-primary btn-lg" href="#" role="button">Learn More</a></p>
     </div>
+    <div id="user_submit_modal" class="modal fade" tabindex="-1" role="dialog" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>What's Your Response?</h3>
+                </div>
+                <div class="modal-body">
+                    <div id="query_measure_model">User Response: </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-success"  type="button" name="user_submit">NEXT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="user_response_modal" class="modal fade" tabindex="-1" role="dialog" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>GROUNDTRUTH</h3>
+                </div>
+                <div class="modal-body" id="user_response_groundtruth">
+
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-success"  type="button">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="stop_modal" class="modal fade" tabindex="-1" role="dialog" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>STOP</h3>
+                </div>
+                <div class="modal-body">
+                    Your Evaluation Task Has been Finished!
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-success"  role="button" href="http://www.mltalker.com">EXIT</a>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="panel panel-info" id="query_block">
-        <div class="panel-heading" id="query_title">
+        <div class="panel-heading" id="query_title" style="height: 40px">
             <p style="float:right" id="query_status"></p>
         </div>
-      <div class="panel-body" id="custom_task_block">
+        <div class="panel-body" id="custom_task_block">
           {% raw task["html"] %}
-      </div>
-      <hr>
-      <div class="row" id="query_response_block">
-          <div class="col-lg-8">
-              <div id="query_measure">User Response: </div>
+          <p id="ID"></p>
+        </div>
+        <hr>
+        <div class="row" id="query_response_block">
+            <div class="col-lg-8">
+            <div id="query_measure">User Response: </div>
           </div>
           <div class="col-lg-4">
-              <button class="btn btn-default" type="button" style="float: right" id="user_submit">NEXT</button>
+            <button class="btn btn-success" type="button" style="float: right" name="user_submit">NEXT</button>
           </div>
           <p hidden id="hidden_content"></p>
-      </div>
+        </div>
     </div>
-
 </div>
 </body>
 </html>

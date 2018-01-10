@@ -332,24 +332,24 @@ class CycleGAN(object):
     
     # 1.step main model
     with tf.variable_scope("Model") as scope:
-      self.prob_real_a_is_real = discriminator(images_a, "d_A")
-      self.prob_real_b_is_real = discriminator(images_b, "d_B")
+      # self.prob_real_a_is_real = discriminator(images_a, "d_A")
+      # self.prob_real_b_is_real = discriminator(images_b, "d_B")
   
       self.fake_images_b = generator(images_a, output_nc=4, name="g_A", skip=self._skip)
-      self.fake_images_a = generator(images_b, output_nc=4, name="g_B", skip=self._skip)
-  
-      scope.reuse_variables()
-  
-      self.prob_fake_a_is_real = discriminator(self.fake_images_a, "d_A")
-      self.prob_fake_b_is_real = discriminator(self.fake_images_b, "d_B")
-  
-      self.cycle_images_a = generator(self.fake_images_b, output_nc=4, name="g_B", skip=self._skip)
-      self.cycle_images_b = generator(self.fake_images_a, output_nc=4, name="g_A", skip=self._skip)
-  
-      scope.reuse_variables()
-  
-      self.prob_fake_pool_a_is_real = discriminator(fake_pool_a, "d_A")
-      self.prob_fake_pool_b_is_real = discriminator(fake_pool_b, "d_B")
+      # self.fake_images_a = generator(images_b, output_nc=4, name="g_B", skip=self._skip)
+      #
+      # scope.reuse_variables()
+      #
+      # self.prob_fake_a_is_real = discriminator(self.fake_images_a, "d_A")
+      # self.prob_fake_b_is_real = discriminator(self.fake_images_b, "d_B")
+      #
+      # self.cycle_images_a = generator(self.fake_images_b, output_nc=4, name="g_B", skip=self._skip)
+      # self.cycle_images_b = generator(self.fake_images_a, output_nc=4, name="g_A", skip=self._skip)
+      #
+      # scope.reuse_variables()
+      #
+      # self.prob_fake_pool_a_is_real = discriminator(fake_pool_a, "d_A")
+      # self.prob_fake_pool_b_is_real = discriminator(fake_pool_b, "d_B")
       
   def model_loss(self):
     cycle_consistency_loss_a = \
@@ -522,19 +522,13 @@ def training_callback(data_source, dump_dir):
 ###################################################
 import cv2
 def infer_callback(data_source, dump_dir):
-  #################################################
-  data_queue = DatasetQueue(data_source, [tf.uint8], [(None, None, None)], max_queue_size=1)
-  a = data_queue.dequeue()
-  
-  # Preprocessing:
-  aa = tf.image.resize_images(a, [ctx.params.img_height, ctx.params.img_width])
-  aa = tf.subtract(tf.div(aa, 127.5), 1)
-  aa = tf.expand_dims(aa, 0)
-  aa.set_shape((1, 256, 256, 3))
-  
   ##########  1.step build model     ##############
   cycle_gan = CycleGAN(ctx.params.pool_size, ctx.params.lambda_a, ctx.params.lambda_b, ctx.params.base_lr)
+  # 1.1.step building input model
+  cycle_gan.model_input()
+  # 1.2.step building model main root
   cycle_gan.model_setup()
+
   init = (tf.global_variables_initializer(),
           tf.local_variables_initializer())
   saver = tf.train.Saver()
@@ -542,19 +536,13 @@ def infer_callback(data_source, dump_dir):
   with tf.Session() as sess:
     sess.run(init)
     # chkpt_fname = tf.train.latest_checkpoint('/home/mi/20180103.223432.634196/train/cyclegan-100')
-    chkpt_fname = '/home/mi/20180103.223432.634196/train/cyclegan-100'
+    chkpt_fname = '/home/mi/20180106.030544.522874/train/maskinggan-13'
     saver.restore(sess, chkpt_fname)
     
-    coord = tf.train.Coordinator()
-    custom_dataset_queue = tf.get_collection('CUSTOM_DATASET_QUEUE')
-    custom_dataset_queue[0].coord = coord
-    threads = custom_dataset_queue[0].start_threads(sess, 1)
-    queue_threads = tf.train.start_queue_runners(coord=coord)
-    threads.extend(queue_threads)
-    
-    for i in range(data_source.size):
-      # 1.step input a
-      aa_val = sess.run(aa)
+    count = 0
+    data_source._reset_iteration_state()
+    for no_smiling in data_source.iterator_value():
+      aa_val = sess.run(cycle_gan.aa, feed_dict={cycle_gan.a: no_smiling})
       # 2.step transfer to b
       bb_val = sess.run(cycle_gan.fake_images_b, feed_dict={cycle_gan.input_a: aa_val})
       
@@ -567,13 +555,22 @@ def infer_callback(data_source, dump_dir):
       # cv2.imshow('bb', img_bb)
       # cv2.waitKey()
       
-      ctx.recorder.record(img_bb)
-      cv2.imwrite('/home/mi/aa/%d-aa.png' % i, img_aa)
-      cv2.imwrite('/home/mi/aa/%d-bb.png' % i, img_bb)
-      print(i)
-    
-    coord.request_stop()
-    coord.join(threads)
+      img_aa_png = png_encode(img_aa)
+      with open('/home/mi/aa/%d-aa.png' % count, 'wb') as fp:
+        fp.write(img_aa_png)
+        
+      img_bb_png = png_encode(img_bb)
+      with open('/home/mi/aa/%d-bb.png' % count, 'wb') as fp:
+        fp.write(img_bb_png)
+        
+      # img_aa_3 = np.split(img_aa, 3, 2)
+      # img_aa = np.concatenate(img)
+      #
+      # ctx.recorder.record(img_bb)
+      # cv2.imwrite('/home/mi/aa/%d-aa.png' % count, img_aa)
+      # cv2.imwrite('/home/mi/aa/%d-bb.png' % count, img_bb)
+      count += 1
+
 
 
 ###################################################
@@ -622,7 +619,7 @@ class CustomDataset(Dataset):
         b = self.data_b_list[random_b_index]
         a_img = imread(a)
         b_img = imread(b)
-        yield [a_img, b_img]
+        yield [b_img, a_img]
 
 ###################################################
 ####### 6.step link training and infer ############

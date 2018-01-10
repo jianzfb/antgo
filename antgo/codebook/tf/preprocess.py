@@ -22,7 +22,7 @@ def tf_regular_augumentation(image,
   image = tf.image.random_hue(image, max_delta=hue_max_delta)
   image = tf.image.random_contrast(image, lower=contrast_lower, upper=contrast_upper)
 
-  # image = tf.clip_by_value(image, 0, 255)
+  image = tf.clip_by_value(image, 0, 255)
   return image
 
 
@@ -99,8 +99,12 @@ def tf_random_crop(image, label, crop_height, crop_width):
 
 def tf_random_rotate(image, label, max_angle=90.0):
   random_angle = (tf.to_float(tf.random_uniform([1]))[0] * 2 - 1) * max_angle / 180.0 * 3.14
+  image = tf.expand_dims(image, 0)
+  label = tf.expand_dims(label, 0)
   image = tf.contrib.image.rotate(image, random_angle)
   label = tf.contrib.image.rotate(label, random_angle)
+  image = tf.squeeze(image, 0)
+  label = tf.squeeze(label, 0)
   return image, label
 
 

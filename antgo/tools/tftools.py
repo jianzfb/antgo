@@ -126,10 +126,12 @@ def tftool_generate_image_records(data_dir,
   prepare_data_files = []
   prepare_label_files = []
   for f in label_files:
-    prefix = f.split('.')[0].lower().replace(label_flag, '')
+    prefix = f.split('.')[0].replace(label_flag, '')
     if prefix in kp_maps:
       prepare_data_files.append(kp_maps[prefix])
       prepare_label_files.append(os.path.join(label_dir, f))
+    else:
+      print(f)
   
   num_per_shard = int(np.math.ceil(len(prepare_data_files) / float(num_shards)))
   
@@ -159,10 +161,10 @@ def tftool_generate_image_records(data_dir,
           tfrecord_writer.write(example.SerializeToString())
           
           
-# tftool_generate_image_records('/home/mi/PycharmProjects/face2face-demo/landmarks',
-#                               '/home/mi/PycharmProjects/face2face-demo/original',
-#                               '/home/mi/sdf',
-#                               label_flag='', num_shards=400)
+tftool_generate_image_records('/home/mi/下载/portrait-dataset-stage-1',
+                              '/home/mi/下载/portrait-mask-stage-1',
+                              '/home/mi/pp',
+                              label_flag='-mask', num_shards=10)
 
 # from antgo.dataflow.dataset.tfrecordsreader import *
 # ss = TFRecordsReader('train', '/home/mi/antgo/antgo-dataset/tf-f2f')
