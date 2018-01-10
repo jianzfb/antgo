@@ -36,7 +36,9 @@ class AntCrowdsource(AntMeasure):
 
     self._task_html = getattr(task, 'html', '<img id="PREDICT">') # task html
     self._total_samples = 0
-    
+    self._client_query_html = ''
+    self._client_query_js = ''
+
     # {CLIENT_ID, {ID: [], RESPONSE: [], RESPONSE_TIME: [], START_TIME:, QUERY_INDEX:, IS_FINISHED:}}
     self._client_response_record = {}           # client response record
     self._sample_finished_count = {}
@@ -51,7 +53,21 @@ class AntCrowdsource(AntMeasure):
   @client_response_data.setter
   def client_response_data(self, val):
     self._client_response_data = val
-  
+
+  @property
+  def client_query_html(self):
+    return self._client_query_html
+  @client_query_html.setter
+  def client_query_html(self, val):
+    self._client_query_html = val
+
+  @property
+  def client_query_js(self):
+    return self._client_query_js
+  @client_query_js.setter
+  def client_query_js(self, val):
+    self._client_query_js = val
+
   @property
   def crowdsource_helper(self):
     return self._crowdsource_helper

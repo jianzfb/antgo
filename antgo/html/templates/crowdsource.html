@@ -33,6 +33,46 @@
         }
         return result;
     };
+		function LayoutTable(id, rows, cols){
+			var layout_table = {};
+			var _id = id;
+			var _rows = rows;
+			var _cols = cols;
+
+			layout_table.append = function (r,c,node) {
+				var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
+				// 1.step clear
+				$('#'+cell_id).empty();
+				// 2.step append
+				$('#'+cell_id).append(node);
+			}
+			layout_table.text = function (r, c, text){
+				var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
+				$('#'+cell_id).text(text);
+			}
+
+			layout_table.create = function(container) {
+				var table_div = $('<div id="{id}-layout"></div>'.format({id: _id}));
+				var table_div_body = $('<table class="table table-bordered"></table>');
+
+				var table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
+				for (var r = 0; r < _rows; ++r) {
+					var item = $('<tr></tr>');
+					for (var c = 0; c < _cols; ++c) {
+						item.append('<td id="table-{id}-{r}{c}" style="text-align: center;"></td>'.format({id: id, r: r, c: c}));
+					}
+
+					table_bbody.append(item);
+				}
+
+				table_div_body.append(table_bbody);
+				table_div.append(table_div_body);
+
+				container.append(table_div)
+			}
+
+			return layout_table
+		}
 
     var is_user_submit_modal_open = 0;
     function waiting_triger(){
