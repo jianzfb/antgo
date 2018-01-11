@@ -183,8 +183,9 @@
                 user_response_data['QUERY_STATUS'] = ''
                 user_response_data['QUERY'] = 'NEXT'
                 user_response_data['QUERY_INDEX'] = query_index
+	              user_response_data['CLIENT_RESPONSE']['WORKSITE'] = $('#custom_task_block').html()
                 if(response_type == 'SELECT'){
-                    user_response_data['CLIENT_RESPONSE'] = $('#hidden_content').text()
+                    user_response_data['CLIENT_RESPONSE']['CONCLUSION'] = $('#hidden_content').text()
                 }
                 else if(response_type == 'RANK'){
                 }

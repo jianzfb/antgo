@@ -29,8 +29,7 @@ class AntCrowdsource(AntMeasure):
     self._waiting_time_per_sample = getattr(task, 'waiting_time_per_sample', 5)               # unit: second (from task)
     self._max_time_in_session = getattr(task, 'max_time_in_session', -1)                      # unit: second (max time in one session) (from task)
     self._max_samples_in_session = getattr(task, 'max_samples_in_session', -1)                # max samples in one session  (from task)
-    self._client_query_data = getattr(task, 'query_data', {'QUERY': {'PREDICT_PREDICT': 'IMAGE'},
-                                                           'GROUNDTRUTH': {'GROUNDTRUTH_GT': 'IMAGE'}})
+    self._client_query_data = {}
     self._client_response_data = {}             # measure designer define (key(data id): value(data type))
                                                 # socre, list
 
@@ -69,6 +68,13 @@ class AntCrowdsource(AntMeasure):
     self._client_query_js = val
 
   @property
+  def client_query_data(self):
+    return self._client_query_data
+  @client_query_data.setter
+  def client_query_data(self, val):
+    self._client_query_data = val
+
+  @property
   def crowdsource_helper(self):
     return self._crowdsource_helper
   @crowdsource_helper.setter
@@ -90,17 +96,23 @@ class AntCrowdsource(AntMeasure):
       
     return True
 
+  def prepare_custom_response(self, client_id, query_index, record_db):
+    return {}
+
   def _prepare_ground_truth_page(self, client_id, query_index, record_db):
-    gt, _ = record_db.read(self._client_response_record[client_id]['ID'][query_index])
+    gt, predict = record_db.read(self._client_response_record[client_id]['ID'][query_index])
     response_data = {'PAGE_STATUS': 'GROUNDTRUTH', 'QUERY_INDEX': query_index}
     response_data['PAGE_DATA'] = {}
     # 2.1.step prepare page data
-    for k, v in self._client_query_data['GROUNDTRUTH'].items():
+    for k, v in self.client_query_data['GROUNDTRUTH'].items():
       # k is name, v is type(IMAGE, SOUND, TEXT)
       data = None
       if k.startswith('GROUNDTRUTH_'):
         k = k.replace('GROUNDTRUTH_', '')
         data = gt[k]
+      elif k.startswith('PREDICT_'):
+        k = k.replace('PREDICT_', '')
+        data = predict[k]
         
       if v == 'IMAGE':
         # save to .png
@@ -117,6 +129,8 @@ class AntCrowdsource(AntMeasure):
       else:
         response_data['PAGE_DATA'][k] = {'DATA': data, 'TYPE': 'TEXT'}
 
+    custom_response = self.prepare_custom_response(client_id, query_index, record_db)
+    response_data['PAGE_DATA'].update(custom_response)
     return response_data
 
   def _prepare_next_page(self, client_id, query_index,record_db):
@@ -133,7 +147,7 @@ class AntCrowdsource(AntMeasure):
     response_data = {}
     response_data['PAGE_DATA'] = {}
     # 2.1.step prepare page data
-    for k, v in self._client_query_data['QUERY'].items():
+    for k, v in self.client_query_data['QUERY'].items():
       # k is name, v is type(IMAGE, SOUND, TEXT)
       data = None
       if k.startswith('GROUNDTRUTH_'):
@@ -232,7 +246,7 @@ class AntCrowdsource(AntMeasure):
       response_data['PAGE_STATUS'] = 'PREDICT'
       response_data['PAGE_DATA'] = {}
       # 2.1.step prepare page data
-      for k, v in self._client_query_data['QUERY'].items():
+      for k, v in self.client_query_data['QUERY'].items():
         # k is name, v is type(IMAGE, SOUND, TEXT)
         data = None
         if k.startswith('GROUNDTRUTH_'):
