@@ -163,6 +163,12 @@ class AntChallenge(AntBase):
 
       with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
         for measure in running_ant_task.evaluation_measures:
+          if measure.crowdsource:
+            # start http server
+            measure.dump_dir = os.path.join(infer_dump_dir, measure.name, 'static')
+            measure.crowdsource_server(record_reader)
+          
+          # evaluation
           record_generator = record_reader.iterate_read('predict', 'groundtruth')
           result = measure.eva(record_generator, None)
           if measure.is_support_rank:

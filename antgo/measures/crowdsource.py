@@ -25,15 +25,14 @@ class AntCrowdsource(AntMeasure):
     self._server, self._client = Pipe()
 
     self._min_participants_per_sample = getattr(task, 'min_participants_per_sample', 1)       # (from task)
-    self._skip_sample_num = getattr(task, 'skip_sample_num', -1)                              # (from task)
-    self._waiting_time_per_sample = getattr(task, 'waiting_time_per_sample', 5)               # unit: second (from task)
+    self._skip_sample_num = getattr(task, 'skip_sample_num', 2)                               # (from task)
+    self._waiting_time_per_sample = getattr(task, 'waiting_time_per_sample', -1)               # unit: second (from task)
     self._max_time_in_session = getattr(task, 'max_time_in_session', -1)                      # unit: second (max time in one session) (from task)
     self._max_samples_in_session = getattr(task, 'max_samples_in_session', -1)                # max samples in one session  (from task)
     self._client_query_data = {}
     self._client_response_data = {}             # measure designer define (key(data id): value(data type))
                                                 # socre, list
 
-    self._task_html = getattr(task, 'html', '<img id="PREDICT">') # task html
     self._total_samples = 0
     self._client_query_html = ''
     self._client_query_js = ''
@@ -43,6 +42,7 @@ class AntCrowdsource(AntMeasure):
     self._sample_finished_count = {}
     self._dump_dir = ''
     
+    self._is_random_layout = False
     self._crowdsource_helper = 'welcome mltalker crowdsource evaluation'
     self.crowdsource = True
 
@@ -52,6 +52,13 @@ class AntCrowdsource(AntMeasure):
   @client_response_data.setter
   def client_response_data(self, val):
     self._client_response_data = val
+  
+  @property
+  def is_random_layout(self):
+    return self._is_random_layout
+  @is_random_layout.setter
+  def is_random_layout(self, val):
+    self._is_random_layout = val
 
   @property
   def client_query_html(self):
@@ -82,6 +89,13 @@ class AntCrowdsource(AntMeasure):
     self._crowdsource_helper = val
   
   @property
+  def dump_dir(self):
+    return self._dump_dir
+  @dump_dir.setter
+  def dump_dir(self, val):
+    self._dump_dir = val
+  
+  @property
   def _is_finished(self):
     if len(self._sample_finished_count) == 0:
       return False
@@ -96,40 +110,14 @@ class AntCrowdsource(AntMeasure):
       
     return True
 
-  def prepare_custom_response(self, client_id, query_index, record_db):
+  def prepare_custom_ground_truth_response(self, client_id, query_index, record_db):
     return {}
 
   def _prepare_ground_truth_page(self, client_id, query_index, record_db):
-    gt, predict = record_db.read(self._client_response_record[client_id]['ID'][query_index])
     response_data = {'PAGE_STATUS': 'GROUNDTRUTH', 'QUERY_INDEX': query_index}
     response_data['PAGE_DATA'] = {}
-    # # 2.1.step prepare page data
-    # for k, v in self.client_query_data['GROUNDTRUTH'].items():
-    #   # k is name, v is type(IMAGE, SOUND, TEXT)
-    #   data = None
-    #   if k.startswith('GROUNDTRUTH_'):
-    #     k = k.replace('GROUNDTRUTH_', '')
-    #     data = gt[k]
-    #   elif k.startswith('PREDICT_'):
-    #     k = k.replace('PREDICT_', '')
-    #     data = predict[k]
-    #
-    #   if v == 'IMAGE':
-    #     # save to .png
-    #     data_en = png_encode(data)
-    #     with open(os.path.join(self._dump_dir, '%d.png' % self._client_response_record['ID'][query_index]), 'wb') as fp:
-    #       fp.write(data_en)
-    #
-    #     response_data['PAGE_DATA'][k] = {'DATA': '%d.png' % self._client_response_record['ID'][query_index],
-    #                                      'TYPE': 'IMAGE'}
-    #     pass
-    #   elif v == 'SOUND':
-    #     # save
-    #     pass
-    #   else:
-    #     response_data['PAGE_DATA'][k] = {'DATA': data, 'TYPE': 'TEXT'}
 
-    custom_response = self.prepare_custom_response(client_id, query_index, record_db)
+    custom_response = self.prepare_custom_ground_truth_response(client_id, query_index, record_db)
     response_data['PAGE_DATA'].update(custom_response)
     return response_data
 
@@ -160,10 +148,10 @@ class AntCrowdsource(AntMeasure):
       if v == 'IMAGE':
         # save to .png
         data_en = png_encode(data)
-        with open(os.path.join(self._dump_dir, '%d.png' % self._client_response_record[client_id]['ID'][query_index]), 'wb') as fp:
+        with open(os.path.join(self.dump_dir, '%s-%d.png' % (k,self._client_response_record[client_id]['ID'][query_index])), 'wb') as fp:
           fp.write(data_en)
 
-        response_data['PAGE_DATA'][k] = {'DATA': '%d.png' % self._client_response_record[client_id]['ID'][query_index], 'TYPE': 'IMAGE'}
+        response_data['PAGE_DATA'][k] = {'DATA': '%s-%d.png' % (k,self._client_response_record[client_id]['ID'][query_index]), 'TYPE': 'IMAGE'}
         pass
       elif v == 'SOUND':
         # save
@@ -259,10 +247,10 @@ class AntCrowdsource(AntMeasure):
         if v == 'IMAGE':
           # save to .png
           data_en = png_encode(data)
-          with open(os.path.join(self._dump_dir, '%d.png'%client_record['ID'][0]), 'wb') as fp:
+          with open(os.path.join(self.dump_dir, '%s-%d.png'%(k, client_record['ID'][0])), 'wb') as fp:
             fp.write(data_en)
 
-          response_data['PAGE_DATA'][k] = {'DATA': '%d.png'%client_record['ID'][0], 'TYPE': 'IMAGE'}
+          response_data['PAGE_DATA'][k] = {'DATA': '%s-%d.png'%(k, client_record['ID'][0]), 'TYPE': 'IMAGE'}
           pass
         elif v == 'SOUND':
           # save
@@ -295,7 +283,7 @@ class AntCrowdsource(AntMeasure):
     # 1.step client response content
     query_index = client_query['QUERY_INDEX']
 
-    if client_query['QUERY_STATUS'] == 'NEXT_ECHO':
+    if client_query['QUERY_STATUS'] == 'CLOSE_ECHO':
       logger.info('prepare next page data')
       # enter next sample
       return self._prepare_next_page(client_id, query_index, record_db)
@@ -348,7 +336,7 @@ class AntCrowdsource(AntMeasure):
     # 2.3.step whether need skip first some samples (in first some samples, we must return ground truth)
     if self._skip_sample_num > 0:
       # user has been defined skip first some samples
-      if (query_index + 1) < self._skip_sample_num:
+      if query_index < self._skip_sample_num:
         # user would see the ground truth of his last judgement
         logger.info('prepare grouth truth page')
         return self._prepare_ground_truth_page(client_id, query_index, record_db)
@@ -388,18 +376,17 @@ class AntCrowdsource(AntMeasure):
 
     return True
 
-  def server(self, record_db, dump_dir):
-    # 0.step prepare dump dir
-    self._dump_dir = dump_dir
-
+  def crowdsource_server(self, record_db):
     # 1.step launch http server (independent process)
     process = multiprocessing.Process(target=crowdsrouce_server_start,
                                       args=(self._client,
-                                            self._dump_dir,
+                                            self.dump_dir,
                                             self.crowdsource_helper,
                                             self.name,
-                                            self._task_html,
-                                            self.client_response_data))
+                                            self.client_query_html,
+                                            self.client_query_js,
+                                            self.client_response_data,
+                                            self.is_random_layout))
     process.start()
 
     # 2.step listening client query
@@ -449,7 +436,11 @@ class AntCrowdsource(AntMeasure):
       except:
         logger.error('client_id %s unknow error'%client_id)
         self._server.send({})
-
+    
+    # save crowdsource client response
+    with open(os.path.join(self.dump_dir, 'crowdsource_record.txt'), 'w') as fp:
+      fp.write(json.dumps(self._client_response_record))
+      
     # kill crowdsrouce server process
     # waiting 10 minute
     time.sleep(10 * 60)

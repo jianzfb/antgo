@@ -105,7 +105,8 @@ def tftool_generate_image_records(data_dir,
                                   record_dir,
                                   label_flag='_label',
                                   train_or_test='train',
-                                  num_shards=20):
+                                  num_shards=20,
+                                  dataset_flag='antgo'):
   # 1.step search all files in data_dir
   data_files = os.listdir(data_dir)
   is_jpg = False
@@ -138,7 +139,7 @@ def tftool_generate_image_records(data_dir,
   # 2.step transform to tfrecord
   with tf.Session('') as sess:
     for shard_id in range(num_shards):
-      record_filename = _get_dataset_record_filename(record_dir, 'antgo', train_or_test, shard_id, num_shards)
+      record_filename = _get_dataset_record_filename(record_dir, dataset_flag, train_or_test, shard_id, num_shards)
 
       with tf.python_io.TFRecordWriter(record_filename) as tfrecord_writer:
         start_ndx = shard_id * num_per_shard
@@ -147,7 +148,7 @@ def tftool_generate_image_records(data_dir,
         for i in range(start_ndx, end_ndx):
           a_data = tf.gfile.FastGFile(prepare_data_files[i], 'rb').read()
           b_data = tf.gfile.FastGFile(prepare_label_files[i], 'rb').read()
-  
+          
           sys.stdout.write('\r>> Converting image %d/%d shard %d\n' % (i + 1, len(prepare_data_files), shard_id))
           sys.stdout.flush()
 
@@ -161,10 +162,10 @@ def tftool_generate_image_records(data_dir,
           tfrecord_writer.write(example.SerializeToString())
           
           
-tftool_generate_image_records('/home/mi/下载/portrait-dataset-stage-1',
-                              '/home/mi/下载/portrait-mask-stage-1',
-                              '/home/mi/pp',
-                              label_flag='-mask', num_shards=10)
+# tftool_generate_image_records('/home/mi/下载/portrait-dataset-stage-2',
+#                               '/home/mi/下载/portrait-mask-stage-2',
+#                               '/home/mi/rr',
+#                               label_flag='-mask', num_shards=40, dataset_flag='new')
 
 # from antgo.dataflow.dataset.tfrecordsreader import *
 # ss = TFRecordsReader('train', '/home/mi/antgo/antgo-dataset/tf-f2f')

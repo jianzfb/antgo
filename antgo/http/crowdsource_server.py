@@ -26,12 +26,20 @@ class BaseHandler(tornado.web.RequestHandler):
     return self.settings['client_pipe']
   
   @property
-  def task_html(self):
-    return self.settings['task_html']
+  def query_html(self):
+    return self.settings['query_html']
+  
+  @property
+  def query_js(self):
+    return self.settings['query_js']
   
   @property
   def task_name(self):
     return self.settings['task_name']
+  
+  @property
+  def is_random_layout(self):
+    return self.settings['is_random_layout']
   
   @property
   def crowdsource_helper(self):
@@ -44,7 +52,11 @@ class IndexHandler(BaseHandler):
     if self.get_secure_cookie('user') is None:
       self.set_secure_cookie('user', str(uuid.uuid4()))
     
-    task = {'content': self.crowdsource_helper, 'html': self.task_html, 'title': self.task_name}
+    task = {'content': self.crowdsource_helper,
+            'query_html': self.query_html,
+            'query_js': self.query_js,
+            'title': self.task_name,
+            'is_random_layout': 1 if self.is_random_layout else 0}
     self.render('crowdsource.html', task=task)
 
 
@@ -55,15 +67,15 @@ class CustomRender(BaseHandler):
 
 class ClientQuery(BaseHandler):
   def post(self):
-    print(self.get_current_user())
-    
     if self.get_current_user() is None:
       self.send_error(500)
     
     client_query = {}
     client_query['QUERY'] = self.get_argument('QUERY')
     client_query['CLIENT_ID'] = self.get_current_user().decode('utf-8')
-    client_query['CLIENT_RESPONSE'] = self.get_argument('CLIENT_RESPONSE', None)
+    client_query['CLIENT_RESPONSE'] = {}
+    client_query['CLIENT_RESPONSE']['WORKSITE'] = self.get_argument('CLIENT_RESPONSE_WORKSITE', None)
+    client_query['CLIENT_RESPONSE']['CONCLUSION'] = self.get_argument('CLIENT_RESPONSE_CONCLUSION', None)
     client_query['QUERY_INDEX'] = int(self.get_argument('QUERY_INDEX', -1))
     client_query['QUERY_STATUS'] = self.get_argument('QUERY_STATUS', '')
     
@@ -76,7 +88,14 @@ class ClientQuery(BaseHandler):
     self.write(json.dumps(server_response))
 
 
-def crowdsrouce_server_start(client_pipe, dump_dir, crowdsource_helper, task_name, task_html, custom_response_html):
+def crowdsrouce_server_start(client_pipe,
+                             dump_dir,
+                             crowdsource_helper,
+                             task_name,
+                             query_html,
+                             query_js,
+                             custom_response_html,
+                             is_random_layout):
   tornado.options.parse_command_line()
   static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
 
@@ -85,8 +104,10 @@ def crowdsrouce_server_start(client_pipe, dump_dir, crowdsource_helper, task_nam
             'client_pipe': client_pipe,
             'crowdsource_helper': crowdsource_helper,
             'task_name': task_name,
-            'task_html': task_html,
+            'query_html': query_html,
+            'query_js': query_js,
             'custom_response_html': custom_response_html,
+            'is_random_layout': is_random_layout,
             'cookie_secret': str(uuid.uuid4())}
   app = tornado.web.Application(handlers=[(r"/", IndexHandler),
                                           (r"/crowdsource/query", ClientQuery),
