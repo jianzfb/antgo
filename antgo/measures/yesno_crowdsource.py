@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.measures.crowdsource import *
-from BeautifulSoup import BeautifulSoup
+from bs4 import BeautifulSoup
 
 class AntYesNoCrowdsource(AntCrowdsource):
   def __init__(self, task, name):
@@ -29,11 +29,15 @@ class AntYesNoCrowdsource(AntCrowdsource):
     if type(element_id) != list:
       element_id = [element_id]
 
+    output = []
+    soup = BeautifulSoup(worksite)
     for element in element_id:
-      pass
+      element_node = soup.find(id=element)
+      container_id = element_node.parent.get('id')
+      xy = container_id.split('-')[-1]
+      output.append(xy)
 
-    return []
-
+    return output
 
   def prepare_custom_response(self, client_id, query_index, record_db):
     # CONCLUSION, WORKSITE
@@ -53,3 +57,9 @@ class AntYesNoCrowdsource(AntCrowdsource):
 
   def eva(self):
     pass
+
+
+ss = '<td id="table-{id}-{r}{c}" style="text-align: center;"><img src="static/hello.png" id="GT"></td>'
+soup = BeautifulSoup(ss)
+element_node = soup.find(id='GT')
+print(element_node)

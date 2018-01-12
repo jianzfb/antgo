@@ -33,6 +33,16 @@
         }
         return result;
     };
+    String.prototype.startwith=function(str){
+      var reg=new RegExp("^"+str);
+      return reg.test(this);
+    }
+
+    String.prototype.endwith=function(str){
+      var reg=new RegExp(str+"$");
+      return reg.test(this);
+    }
+
 		function LayoutTable(id, rows, cols){
 			var layout_table = {};
 			var _id = id;
@@ -80,11 +90,13 @@
         is_user_submit_modal_open = 1;
     }
 
+    var query_content_html = '{% raw task["html"] %}';
+    var query_content_js = '{% raw task["js"] %}';
+
     var response_data = null;
     var query_index = -1;
     var waiting_timer = null;
     $(document).ready(function(){
-        // initialize query page
         // 1.step render complete crowdsource page
         $.post('crowdsource/render', {}, function(data){
             data = eval('('+data+')')
@@ -126,7 +138,12 @@
               })
             })
 
-        // 2.step welcome page
+        // 2.step render query content and groundtruth content
+        if(query_content_html != '') {
+          $('#custom_task_block').append(query_content_html)
+        }
+
+        // 3.step start first query
         var start_query_data={'QUERY': 'START'}
         $.post('crowdsource/query', start_query_data, function(data){
             var data_obj = eval('('+data+')');
@@ -138,6 +155,29 @@
 
             // user evaluation page
             var page_data = data_obj['PAGE_DATA'];
+            if(query_content_html == ''){
+              // query content html not finished
+              var query_content_table = LayoutTable('query_content_layout', 1, len(page_data));
+              query_content_table.create('custom_task_block')
+              var count = 0;
+              for(var k in page_data){
+                var data = page_data[k];
+                var data_content = data['DATA'];
+                var data_type = data['TYPE'];
+
+                if(data_type == 'TEXT'){
+                   query_content_table.append(0,count,'<p id="{k}"></p>'.format({k: k}))
+                }
+                else if(data_type == 'IMAGE'){
+                  query_content_table.append(0,count,'<img id="{k}">'.format({k: k}))
+                }
+                else if(data_type == 'SOUND'){
+                }
+                count += 1
+              }
+            }
+
+            // fill query data
             query_index = data_obj['QUERY_INDEX'];
             for(var k in page_data){
                var data = page_data[k];
@@ -211,21 +251,38 @@
                         // render user_response_modal
                         $('#user_response_groundtruth').empty()
                         var page_data = data_obj['PAGE_DATA'];
-                        var groundtruth_table = ''
 
-                        $('#user_response_groundtruth').append(groundtruth_table);
+                        var layout_1_elem_num = 0;
+                        var layout_2_elem_num = 0;
                         for(var k in page_data){
-                           var data = page_data[k];
-                           var data_content = data['DATA'];
-                           var data_type = data['TYPE'];
+                          if(k.startwith('CUSTOM')){
+                            layout_2_elem_num += 1;
+                          }
+                          else{
+                            layout_1_elem_num += 1;
+                          }
+                        }
+                        var worksite = $('#custom_task_block').html()
+                        $('#user_response_groundtruth').append(worksite)
 
-                           if(data_type == 'TEXT'){
-                             $('#'+k).text(data_content);
-                           }
-                           else if(data_type == 'IMAGE'){
-                             $('#'+k).attr('src', '/static/'+data_content, alt=k);
-                           }
-                           else if(data_type == 'SOUND'){
+                        var layout = LayoutTable('layout',1, layout_2_elem_num);
+                        layout.create('user_response_groundtruth');
+
+                        var count = 0;
+                        for(var k in page_data){
+                           if(k.startwith('CUSTOM')){
+                             var data = page_data[k];
+                             var data_content = data['DATA'];
+                             var data_type = data['TYPE'];
+
+                             if(data_type == 'TEXT'){
+                               layout.append(0,count, "<p>{v}</p>".format({v: data_content}))
+                             }
+                             else if(data_type == 'IMAGE'){
+                               layout.append(0,count, '<img src="/static/{v}">'.format({v: data_content}))
+                             }
+                             else if(data_type == 'SOUND'){
+                             }
                            }
                         }
                         return;
@@ -326,8 +383,7 @@
             <p style="float:right" id="query_status"></p>
         </div>
         <div class="panel-body" id="custom_task_block">
-          {% raw task["html"] %}
-          <p id="ID"></p>
+
         </div>
         <hr>
         <div class="row" id="query_response_block">

@@ -103,31 +103,31 @@ class AntCrowdsource(AntMeasure):
     gt, predict = record_db.read(self._client_response_record[client_id]['ID'][query_index])
     response_data = {'PAGE_STATUS': 'GROUNDTRUTH', 'QUERY_INDEX': query_index}
     response_data['PAGE_DATA'] = {}
-    # 2.1.step prepare page data
-    for k, v in self.client_query_data['GROUNDTRUTH'].items():
-      # k is name, v is type(IMAGE, SOUND, TEXT)
-      data = None
-      if k.startswith('GROUNDTRUTH_'):
-        k = k.replace('GROUNDTRUTH_', '')
-        data = gt[k]
-      elif k.startswith('PREDICT_'):
-        k = k.replace('PREDICT_', '')
-        data = predict[k]
-        
-      if v == 'IMAGE':
-        # save to .png
-        data_en = png_encode(data)
-        with open(os.path.join(self._dump_dir, '%d.png' % self._client_response_record['ID'][query_index]), 'wb') as fp:
-          fp.write(data_en)
-
-        response_data['PAGE_DATA'][k] = {'DATA': '%d.png' % self._client_response_record['ID'][query_index],
-                                         'TYPE': 'IMAGE'}
-        pass
-      elif v == 'SOUND':
-        # save
-        pass
-      else:
-        response_data['PAGE_DATA'][k] = {'DATA': data, 'TYPE': 'TEXT'}
+    # # 2.1.step prepare page data
+    # for k, v in self.client_query_data['GROUNDTRUTH'].items():
+    #   # k is name, v is type(IMAGE, SOUND, TEXT)
+    #   data = None
+    #   if k.startswith('GROUNDTRUTH_'):
+    #     k = k.replace('GROUNDTRUTH_', '')
+    #     data = gt[k]
+    #   elif k.startswith('PREDICT_'):
+    #     k = k.replace('PREDICT_', '')
+    #     data = predict[k]
+    #
+    #   if v == 'IMAGE':
+    #     # save to .png
+    #     data_en = png_encode(data)
+    #     with open(os.path.join(self._dump_dir, '%d.png' % self._client_response_record['ID'][query_index]), 'wb') as fp:
+    #       fp.write(data_en)
+    #
+    #     response_data['PAGE_DATA'][k] = {'DATA': '%d.png' % self._client_response_record['ID'][query_index],
+    #                                      'TYPE': 'IMAGE'}
+    #     pass
+    #   elif v == 'SOUND':
+    #     # save
+    #     pass
+    #   else:
+    #     response_data['PAGE_DATA'][k] = {'DATA': data, 'TYPE': 'TEXT'}
 
     custom_response = self.prepare_custom_response(client_id, query_index, record_db)
     response_data['PAGE_DATA'].update(custom_response)
