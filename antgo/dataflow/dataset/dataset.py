@@ -541,8 +541,8 @@ class Dataset(BaseNode):
         dataset_url = os.path.join(dataset_url, self.train_or_test)
         is_mltalker = True
 
-      # validate http address
-      is_http = re.match('^((https|http|ftp|rtsp|mms)?://)', dataset_url)
+      # validate crowdsource address
+      is_http = re.match('^((https|crowdsource|ftp|rtsp|mms)?://)', dataset_url)
       if is_http is not None:
         # 3rdpart dataset
         if not os.path.exists(target_path):

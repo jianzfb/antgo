@@ -1,6 +1,6 @@
 # encoding=utf-8
 # @Time    : 17-5-8
-# @File    : html.py
+# @File    : resource.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -134,7 +134,7 @@ def everything_to_html(data, dump_dir):
     'compare': model_sig_diffs_visualization
   }
 
-  # to html
+  # to resource
   if not os.path.exists(dump_dir):
     os.makedirs(dump_dir)
 

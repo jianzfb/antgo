@@ -1,0 +1,64 @@
+{%extends "crowdsource.html"%}
+{%block show_block%}
+<table class="table table-bordered">
+    <tbody id="table-query_content_layout">
+    <tr>
+        <td id="table-query_content_layout-00" style="text-align: center;">
+            <img id="PREDICT" src="/static/PREDICT-0.png">
+        </td>
+        <td id="table-query_content_layout-01" style="text-align: center;">
+            <img id="GT" src="/static/GT-0.png">
+        </td>
+    </tr>
+    </tbody>
+</table>
+{%end%}
+
+{%block response_block%}
+<div class="dropdown">
+    <button class="btn btn-default dropdown-toggle" type="button" id="select_list" data-toggle="dropdown">
+        left<span class="caret"></span>
+    </button>
+    <ul class="dropdown-menu" aria-labelledby="select_list">
+        <li><a href="#">left</a></li>
+        <li><a href="#">right</a></li>
+    </ul>
+</div>
+{%end%}
+
+{%block js_block%}
+// 1.step bind user response click event ()
+$(".dropdown-menu li a").click(function(){
+   var id = $(this).parent().parent().attr('aria-labelledby');
+   $('#'+id + ':first-child').html('{content}<span class="caret"></span>'.format({content: $(this).text()}))
+
+   USER_CONCLUSION = $(this).text()
+})
+{%end%}
+
+
+{%block trigger_after_next%}
+var rr = Math.random()
+if(rr > 0.5){
+    // random layout
+    var elem_nodes = [];
+    var elem_nodes_parent = [];
+    for(var k in GLOBAL_DATA['PAGE_DATA']){
+        elem_nodes.push($('#'+k))
+        elem_nodes_parent.push($('#'+k).parent())
+    }
+
+    // shuffle layout
+    // 1.step clear parent content
+    for(var p in elem_nodes_parent){
+        elem_nodes_parent[p].empty();
+    }
+
+    // 2.step shuffle
+    elem_nodes = shuffle(elem_nodes)
+    // 3.step layout
+    for(var p in elem_nodes_parent){
+        elem_nodes_parent[p].append(elem_nodes[p])
+    }
+}
+{%end%}

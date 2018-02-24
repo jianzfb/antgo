@@ -32,7 +32,7 @@ class Daemon(object):
     """
     do the UNIX double-fork magic, see Stevens' "Advanced
     Programming in the UNIX Environment" for details (ISBN 0201563177)
-    http://www.erlenstar.demon.co.uk/unix/faq_2.html#SEC16
+    http://www.erlenstar.demon.co.uk/unix/faq_2.resource#SEC16
     """
     try:
       pid = os.fork()

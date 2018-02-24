@@ -10,7 +10,7 @@ def apk(actual, predicted, k=10):
     Computes the average precision at k. (only for Information Retrieval Task)
     This function computes the average prescision at k between two lists of
     items.
-    References: http://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-ranked-retrieval-results-1.html
+    References: http://nlp.stanford.edu/IR-book/resource/htmledition/evaluation-of-ranked-retrieval-results-1.resource
     Parameters
     ----------
     actual : list
@@ -46,7 +46,7 @@ def s_apk(actual,predicated_s,k=10):
     Computes the average precision at k. (only for Information Retrieval Task)
     This function computes the average prescision at k between two lists of
     items.
-    References: http://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-ranked-retrieval-results-1.html
+    References: http://nlp.stanford.edu/IR-book/resource/htmledition/evaluation-of-ranked-retrieval-results-1.resource
 
     Parameters
     ----------

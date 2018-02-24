@@ -16,7 +16,9 @@ import multiprocessing
 import json
 import time
 import signal
-from antgo.http.crowdsource_server import *
+import requests
+from antgo.crowdsource.crowdsource_server import *
+import zmq
 
 
 class AntCrowdsource(AntMeasure):
@@ -24,55 +26,34 @@ class AntCrowdsource(AntMeasure):
     super(AntCrowdsource, self).__init__(task, name)
     self._server, self._client = Pipe()
 
+    # regular crowdsource evaluation config
     self._min_participants_per_sample = getattr(task, 'min_participants_per_sample', 1)       # (from task)
     self._skip_sample_num = getattr(task, 'skip_sample_num', 2)                               # (from task)
-    self._waiting_time_per_sample = getattr(task, 'waiting_time_per_sample', -1)               # unit: second (from task)
+    self._waiting_time_per_sample = getattr(task, 'waiting_time_per_sample', -1)              # unit: second (from task)
     self._max_time_in_session = getattr(task, 'max_time_in_session', -1)                      # unit: second (max time in one session) (from task)
     self._max_samples_in_session = getattr(task, 'max_samples_in_session', -1)                # max samples in one session  (from task)
-    self._client_query_data = {}
-    self._client_response_data = {}             # measure designer define (key(data id): value(data type))
-                                                # socre, list
 
+    self._client_query_data = {}
     self._total_samples = 0
-    self._client_query_html = ''
-    self._client_query_js = ''
+    self._client_html_template = ''
 
     # {CLIENT_ID, {ID: [], RESPONSE: [], RESPONSE_TIME: [], START_TIME:, QUERY_INDEX:, IS_FINISHED:}}
     self._client_response_record = {}           # client response record
     self._sample_finished_count = {}
     self._dump_dir = ''
-    
-    self._is_random_layout = False
-    self._crowdsource_helper = 'welcome mltalker crowdsource evaluation'
+
+    # crowdsource measure flag
     self.crowdsource = True
 
-  @property
-  def client_response_data(self):
-    return self._client_response_data
-  @client_response_data.setter
-  def client_response_data(self, val):
-    self._client_response_data = val
-  
-  @property
-  def is_random_layout(self):
-    return self._is_random_layout
-  @is_random_layout.setter
-  def is_random_layout(self, val):
-    self._is_random_layout = val
+    self._app_token = None
+    self._experiment_id = None
 
   @property
-  def client_query_html(self):
-    return self._client_query_html
-  @client_query_html.setter
-  def client_query_html(self, val):
-    self._client_query_html = val
-
-  @property
-  def client_query_js(self):
-    return self._client_query_js
-  @client_query_js.setter
-  def client_query_js(self, val):
-    self._client_query_js = val
+  def client_html_template(self):
+    return self._client_html_template
+  @client_html_template.setter
+  def client_html_template(self, val):
+    self._client_html_template = val
 
   @property
   def client_query_data(self):
@@ -80,13 +61,6 @@ class AntCrowdsource(AntMeasure):
   @client_query_data.setter
   def client_query_data(self, val):
     self._client_query_data = val
-
-  @property
-  def crowdsource_helper(self):
-    return self._crowdsource_helper
-  @crowdsource_helper.setter
-  def crowdsource_helper(self, val):
-    self._crowdsource_helper = val
   
   @property
   def dump_dir(self):
@@ -94,7 +68,21 @@ class AntCrowdsource(AntMeasure):
   @dump_dir.setter
   def dump_dir(self, val):
     self._dump_dir = val
-  
+
+  @property
+  def app_token(self):
+    return self._app_token
+  @app_token.setter
+  def app_token(self, val):
+    self._app_token = val
+
+  @property
+  def experiment_id(self):
+    return self._experiment_id
+  @experiment_id.setter
+  def experiment_id(self, val):
+    self._experiment_id = val
+
   @property
   def _is_finished(self):
     if len(self._sample_finished_count) == 0:
@@ -110,14 +98,14 @@ class AntCrowdsource(AntMeasure):
       
     return True
 
-  def prepare_custom_ground_truth_response(self, client_id, query_index, record_db):
+  def ground_truth_response(self, client_id, query_index, record_db):
     return {}
 
   def _prepare_ground_truth_page(self, client_id, query_index, record_db):
     response_data = {'PAGE_STATUS': 'GROUNDTRUTH', 'QUERY_INDEX': query_index}
     response_data['PAGE_DATA'] = {}
 
-    custom_response = self.prepare_custom_ground_truth_response(client_id, query_index, record_db)
+    custom_response = self.ground_truth_response(client_id, query_index, record_db)
     response_data['PAGE_DATA'].update(custom_response)
     return response_data
 
@@ -377,19 +365,37 @@ class AntCrowdsource(AntMeasure):
     return True
 
   def crowdsource_server(self, record_db):
-    # 1.step launch http server (independent process)
+    # 1.step launch crowdsource server (independent process)
     process = multiprocessing.Process(target=crowdsrouce_server_start,
                                       args=(self._client,
+                                            self.experiment_id,
+                                            self.app_token,
                                             self.dump_dir,
-                                            self.crowdsource_helper,
                                             self.name,
-                                            self.client_query_html,
-                                            self.client_query_js,
-                                            self.client_response_data,
-                                            self.is_random_layout))
+                                            self.client_html_template))
     process.start()
 
-    # 2.step listening client query
+    # 2.step listening crowdsource server is OK
+    waiting_time = 1
+    is_connected = False
+    now_time = time.time()
+    while not is_connected and (time.time() - now_time) < 60 * 5:
+      # waiting crowdsource server in 5 minutes
+      try:
+        res = requests.get('http://127.0.0.1:8000/heartbeat')
+        heatbeat_content = json.loads(res.content)
+        if 'ALIVE' in heatbeat_content:
+          is_connected = True
+          break
+      except:
+        waiting_time = waiting_time * 10
+        time.sleep(waiting_time)
+
+    if not is_connected:
+      logger.error('fail to connect local crowdsource server, couldnt start crowdsource crowdsource server')
+      return False
+
+    # 2.step listening client query until crowdsource server is finished
     while not self._is_finished:
       client_id = ''
       try:
@@ -440,8 +446,11 @@ class AntCrowdsource(AntMeasure):
     # save crowdsource client response
     with open(os.path.join(self.dump_dir, 'crowdsource_record.txt'), 'w') as fp:
       fp.write(json.dumps(self._client_response_record))
-      
-    # kill crowdsrouce server process
-    # waiting 10 minute
-    time.sleep(10 * 60)
-    os.kill(process.pid, signal.SIGKILL)
+
+    # kill crowdsource server
+    # suspend 5 minutes, crowdsource abort suddenly
+    time.sleep(300)
+    # kill crowdsource server
+    os.kill(process.pid, signal.SIGTERM)
+
+    return True

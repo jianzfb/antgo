@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from antgo.html.html import *
+from antgo.resource.html import *
 from antgo.ant.base import *
 from antgo.dataflow.common import *
 from antgo.measures.statistic import *
@@ -17,7 +17,7 @@ from antgo.measures.deep_analysis import *
 import shutil
 import tarfile
 from datetime import datetime
-
+from antgo.measures.yesno_crowdsource import *
 
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
@@ -76,7 +76,18 @@ class AntChallenge(AntBase):
     # now time stamp
     # now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
     now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
-    
+
+    # ############
+    # ss = AntYesNoCrowdsource(running_ant_task, 'YESorNo')
+    # cc = RecordReader('/Users/jian/Downloads/pp')
+    # ss.dump_dir = "/Users/jian/Downloads/mm/static"
+    # ss.experiment_id = now_time_stamp
+    # ss.app_token = self.token
+    # ss.crowdsource_server(cc)
+    # ############
+    #
+    # time.sleep(100000)
+
     # 0.step warp model (main_file and main_param)
     self.stage = 'CHALLENGE-MODEL'
     # - backup in dump_dir
@@ -143,31 +154,41 @@ class AntChallenge(AntBase):
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(ant_test_dataset.size)
-      
+
       if self.is_non_mltalker_task:
         return
-      
+
       if not self.context.recorder.is_measure:
         # has no annotation to continue to meausre
         # notify
         self.context.job.send(
           {'DATA': {'REPORT': copy.deepcopy(task_running_statictic), 'RECORD': intermediate_dump_dir}})
-  
-        # generate report html
+
+        # generate report resource
         logger.info('generate model evaluation report')
         everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
         return
-    
+
       logger.info('start evaluation process')
       evaluation_measure_result = []
 
+      running_ant_task.evaluation_measures = []
       with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
         for measure in running_ant_task.evaluation_measures:
           if measure.crowdsource:
-            # start http server
+            # start crowdsource server
             measure.dump_dir = os.path.join(infer_dump_dir, measure.name, 'static')
-            measure.crowdsource_server(record_reader)
-          
+            if not os.path.exists(measure.dump_dir):
+              os.makedirs(measure.dump_dir)
+
+            measure.experiment_id = now_time_stamp
+            measure.app_token = self.token
+            logger.info('launch crowdsource evaluation server')
+            crowdsrouce_evaluation_status = measure.crowdsource_server(record_reader)
+            if not crowdsrouce_evaluation_status:
+              logger.error('couldnt finish crowdsource evaluation server')
+              continue
+
           # evaluation
           record_generator = record_reader.iterate_read('predict', 'groundtruth')
           result = measure.eva(record_generator, None)
@@ -427,6 +448,6 @@ class AntChallenge(AntBase):
       # notify
       self.context.job.send({'DATA': {'REPORT': copy.deepcopy(task_running_statictic), 'RECORD': intermediate_dump_dir}})
 
-      # generate report html
+      # generate report resource
       logger.info('generate model evaluation report')
       everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))

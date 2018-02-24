@@ -36,7 +36,7 @@ class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
     self.http_port = getattr(Config, 'server_port', '8999')
-    self.http_prefix = 'http'
+    self.http_prefix = 'crowdsource'
     self.ant_name = ant_name
     self.app_token = os.environ.get('APP_TOKEN', ant_token)
     self.app_connect = os.environ.get('APP_CONNECT', 'tcp://%s:%s' % (self.server_ip, '2345'))
@@ -280,7 +280,7 @@ class AntBase(object):
     if target_path is None:
       target_path = os.curdir
 
-    is_that = re.match('^((https|http|ftp|rtsp|mms)?://)', source_path)
+    is_that = re.match('^((https|crowdsource|ftp|rtsp|mms)?://)', source_path)
     if is_that is not None:
       download(source_path, target_path, fname=target_name)
 

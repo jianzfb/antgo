@@ -5,7 +5,7 @@ from antgo.measures.multic_task import *
 from antgo.measures.regression_task import *
 from antgo.measures.segmentation_task import *
 from antgo.measures.matting_task import *
-from antgo.html.html import *
+from antgo.resource.html import *
 from antgo.measures.significance import *
 from antgo.measures.pck import *
 import copy

@@ -10,6 +10,6 @@ pyzmq
 jinja2
 pyyaml
 requests
-python-rocksdb
-ipfsapi
 tornado
+beautifulsoup4
+python-rocksdb

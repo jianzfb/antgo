@@ -13,7 +13,7 @@ from antgo.ant.train import *
 from antgo.ant.deploy import *
 from antgo.ant.workflow import *
 from antgo.ant.utils import *
-from antgo.html.html import *
+from antgo.resource.html import *
 from antgo import config
 from antgo.task.task import *
 from antgo.measures.measure import *
@@ -166,7 +166,7 @@ class AntCmd(AntBase):
                     target_path=target_path,
                     target_name='%s' % experiment_name)
 
-      # read report and transform to html
+      # read report and transform to resource
       if os.path.exists(os.path.join(target_path,experiment_name)):
         fp = open(os.path.join(target_path,experiment_name), 'rb')
         report_data = fp.read()

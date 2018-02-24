@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>众包盲评-{{task['title']}}</title>
+    <link rel="icon" href="/static/antgo.ico" type="image/x-icon">
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+    <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script>
+    String.prototype.replaceAll = function(exp, newStr){
+        return this.replace(new RegExp(exp, 'gm'), newStr)
+    };
+    /**
+     * 原型：字符串格式化
+     * @param args 格式化参数值
+     */
+    String.prototype.format = function(args) {
+        var result = this;
+        if (arguments.length < 1) {
+            return result;
+        }
+
+        var data = arguments; // 如果模板参数是数组
+        if (arguments.length == 1 && typeof (args) == "object") {
+            // 如果模板参数是对象
+            data = args;
+        }
+        for ( var key in data) {
+            var value = data[key];
+            if (undefined != value) {
+                result = result.replaceAll("\\{" + key + "\\}", value);
+            }
+        }
+        return result;
+    };
+    String.prototype.startwith=function(str){
+      var reg=new RegExp("^"+str);
+      return reg.test(this);
+    }
+
+    String.prototype.endwith=function(str){
+      var reg=new RegExp(str+"$");
+      return reg.test(this);
+    }
+
+    var shuffle = function(v){
+        for(var j, x, i = v.length; i; j = parseInt(Math.random() * i), x = v[--i], v[i] = v[j], v[j] = x);
+        return v;
+    };
+
+
+    function LayoutTable(id, rows, cols){
+        var layout_table = {};
+        var _id = id;
+        var _rows = rows;
+        var _cols = cols;
+
+        layout_table.append = function (r,c,node) {
+            var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
+            // 1.step clear
+            $('#'+cell_id).empty();
+            // 2.step append
+            $('#'+cell_id).append(node);
+        }
+        layout_table.text = function (r, c, text){
+            var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
+            $('#'+cell_id).text(text);
+        }
+
+        layout_table.create = function(container) {
+            var table_div = $('<div id="{id}-layout"></div>'.format({id: _id}));
+            var table_div_body = $('<table class="table table-bordered"></table>');
+
+            var table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
+            for (var r = 0; r < _rows; ++r) {
+                var item = $('<tr></tr>');
+                for (var c = 0; c < _cols; ++c) {
+                    item.append('<td id="table-{id}-{r}{c}" style="text-align: center;"></td>'.format({id: id, r: r, c: c}));
+                }
+
+                table_bbody.append(item);
+            }
+
+            table_div_body.append(table_bbody);
+            table_div.append(table_div_body);
+
+            container.append(table_div)
+        }
+
+        return layout_table
+    }
+
+    var is_user_submit_modal_open = 0;
+    function waiting_triger(){
+        $('#user_submit_modal').modal({backdrop: 'static', keyboard: false})
+        is_user_submit_modal_open = 1;
+    }
+
+    var query_index = -1;
+    var waiting_timer = null;
+    var GLOBAL_DATA = {};
+    var USER_CONCLUSION = null;
+
+    function continue_next_sample(index, page_data, max_waitting_time, remained_num){
+        GLOBAL_DATA['PAGE_DATA'] = page_data;
+
+        // trigger custom code
+        {%block trigger_after_next%}
+        {%end%}
+
+        // record current sample index
+        query_index = index;
+
+        // bind data with page element
+        // 1.step bind evaluation data
+        for(var k in GLOBAL_DATA['PAGE_DATA']){
+           var data = GLOBAL_DATA['PAGE_DATA'][k];
+           var data_content = data['DATA'];
+           var data_type = data['TYPE'];
+
+           if(data_type == 'TEXT'){
+             $('#'+k).text(data_content);
+           }
+           else if(data_type == 'IMAGE'){
+             $('#'+k).attr('src', '/static/'+data_content, alt=k);
+           }
+           else if(data_type == 'SOUND'){
+           }
+        }
+
+        // 2.step bind evaluation process status
+        var process_str = 'PROCESS: {now}/{total}'.format({now: query_index.toString(), total: (query_index + remained_num + 1).toString()});
+        $('#query_status').text(process_str);
+
+        // 3.step bind waiting time
+        var waiting_time = max_waitting_time * 1000;
+        if( waiting_time > 0){
+          // clear timer
+          if(waiting_timer != null){
+            clearTimeout(waiting_timer);
+          }
+          // set waiting time
+          waiting_timer = setTimeout('waiting_triger()', waiting_time);
+        }
+
+    }
+
+    /*************************************************************
+    **********             main js block                **********
+    **************************************************************/
+    $(document).ready(function(){
+        /*************************************************************
+        **********             custom js block              **********
+        **************************************************************/
+        {%block js_block%}
+        {%end%}
+
+        /*************************************************************
+        ******            render launch page block              ******
+        **************************************************************/
+        // 2.step start first query
+        var start_query_data={'QUERY': 'START'}
+        $.post('crowdsource/query', start_query_data, function(data){
+            var data_obj = eval('('+data+')');
+            // is stop
+            if(data_obj['PAGE_STATUS'] == 'STOP'){
+                $('#stop_modal').modal({backdrop: 'static', keyboard: false});
+                return;
+            }
+
+            // record page data
+            GLOBAL_DATA['PAGE_DATA'] = data_obj['PAGE_DATA'];
+
+            // bind data with page element
+            // 1.step bind evaluation data
+            query_index = data_obj['QUERY_INDEX'];
+            for(var k in data_obj['PAGE_DATA']){
+               var data = data_obj['PAGE_DATA'][k];
+               var data_content = data['DATA'];
+               var data_type = data['TYPE'];
+
+               if(data_type == 'TEXT'){
+                 $('#'+k).text(data_content);
+               }
+               else if(data_type == 'IMAGE'){
+                 $('#'+k).attr('src', '/static/'+data_content, alt=k);
+               }
+               else if(data_type == 'SOUND'){
+               }
+            }
+            var waiting_time = data_obj['WAITING_TIME'] * 1000;
+            var remained_num = data_obj['REMAINED_NUM'];
+
+            // 2.step bind evaluation process status
+            var process_str = 'PROCESS: {now}/{total}'.format({now: query_index.toString(), total: (query_index + remained_num + 1).toString()})
+            $('#query_status').text(process_str);
+
+            // 3.step bind waiting time
+            if( waiting_time > 0){
+              // set waiting time
+              waiting_timer = setTimeout('waiting_triger()', waiting_time);
+            }
+        })
+
+        /*************************************************************
+        ******          user submit click response              ******
+        **************************************************************/
+        $('button[name=user_submit]').each(function(){
+            $(this).on('click', function(){
+                if(waiting_timer != null){
+                    clearTimeout(waiting_timer);
+                    waiting_timer = null;
+                }
+
+                var user_response_data = {};
+                user_response_data['QUERY_STATUS'] = '';
+                user_response_data['QUERY'] = 'NEXT';
+                user_response_data['QUERY_INDEX'] = query_index;
+
+                // worksite environment
+                user_response_data['CLIENT_RESPONSE_WORKSITE'] = $('#response_worksite').html();
+                // client conclusion
+                user_response_data['CLIENT_RESPONSE_CONCLUSION'] = USER_CONCLUSION;
+
+                // submit user response
+                $.post('crowdsource/query', user_response_data, function(data){
+                    // clear modal (if existed)
+                    if(is_user_submit_modal_open){
+                        $('#user_submit_modal').modal('toggle');
+                        is_user_submit_modal_open = 0;
+                    }
+
+                    // branch 1: parse server feedback data
+                    var data_obj = eval('('+data+')');
+                    if(data_obj['PAGE_STATUS'] == 'STOP'){
+                        // has complete evaluation task
+                        $('#stop_modal').modal({backdrop: 'static', keyboard: false});
+                        return;
+                    }
+
+                    // branch 2: allow client to glimps groundtruth
+                    if(data_obj['PAGE_STATUS'] == 'GROUNDTRUTH'){
+                        $('#user_response_modal').modal({backdrop: 'static', keyboard: false});
+
+                        // render user_response_modal
+                        $('#user_response_groundtruth').empty();
+                        var page_data = data_obj['PAGE_DATA'];
+
+                        var elem_num = 0;
+                        for(var k in page_data){
+                            elem_num += 1;
+                        }
+                        var worksite = $('#response_worksite').html();
+                        $('#user_response_groundtruth').append(worksite);
+
+                        var layout = LayoutTable('layout',1, elem_num);
+                        layout.create($('#user_response_groundtruth'));
+
+                        var count = 0;
+                        for(var k in page_data){
+                           if(k.startwith('CUSTOM')){
+                             var data = page_data[k];
+                             var data_content = data['DATA'];
+                             var data_type = data['TYPE'];
+
+                             if(data_type == 'TEXT'){
+                               layout.append(0,count, "<p>{v}</p>".format({v: data_content}))
+                             }
+                             else if(data_type == 'IMAGE'){
+                               layout.append(0,count, '<img src="/static/{v}">'.format({v: data_content}))
+                             }
+                             else if(data_type == 'SOUND'){
+                             }
+                           }
+                        }
+                        return;
+                    }
+
+                    // branch 3: continue next sample
+                    continue_next_sample(data_obj['QUERY_INDEX'],data_obj['PAGE_DATA'], data_obj['WAITING_TIME'], data_obj['REMAINED_NUM']);
+                })
+            })
+        })
+
+        /*************************************************************
+        ******          user close echo response                ******
+        **************************************************************/
+        $('#CLOSE_ECHO').on('click', function(){
+            // clear echo dialog
+            $('#user_response_groundtruth').empty()
+            $('#user_response_modal').modal('toggle')
+
+            // query server
+            query_data = {}
+            query_data['QUERY_STATUS'] = 'CLOSE_ECHO';
+            query_data['QUERY'] = 'NEXT';
+            query_data['QUERY_INDEX'] = query_index;
+
+            $.post('crowdsource/query', query_data, function(data){
+                // parse server feedback data
+                var data_obj = eval('('+data+')');
+
+                // continue next sample
+                continue_next_sample(data_obj['QUERY_INDEX'],
+                                        data_obj['PAGE_DATA'],
+                                        data_obj['WAITING_TIME'],
+                                        data_obj['REMAINED_NUM']);
+            })
+        })
+    })
+    </script>
+    <style>
+    </style>
+</head>
+<body>
+<div class="container">
+	<div class="jumbotron">
+      <h1>Hello, MLTalker Contributer!</h1>
+      <p>hello Im zhangjian</p>
+      <p><a class="btn btn-primary btn-lg" href="#" role="button">Learn More</a></p>
+    </div>
+    <div id="user_submit_modal" class="modal fade" tabindex="-1" role="dialog" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>What's Your Conclusion?</h3>
+                </div>
+                <div class="modal-body">
+                    <div id="query_measure_model">Conclusion: </div>
+                    {%block response_block%}
+                    {%end%}
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-success"  type="button" name="user_submit">NEXT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="user_response_modal" class="modal fade" tabindex="-1" role="dialog" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>GROUNDTRUTH</h3>
+                </div>
+                <div class="modal-body" id="user_response_groundtruth" style="zoom:0.3">
+
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-success"  type="button" id="CLOSE_ECHO">CLOSE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="stop_modal" class="modal fade" tabindex="-1" role="dialog" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>STOP</h3>
+                </div>
+                <div class="modal-body">
+                    Your Evaluation Task Has been Finished!
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-success"  role="button" href="http://www.mltalker.com">EXIT</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="panel panel-info">
+        <div class="panel-heading" style="height: 40px">
+            <p style="float:right" id="query_status"></p>
+        </div>
+        <div class="panel-body" id="response_worksite">
+            {%block show_block%}
+            {%end%}
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-lg-8">
+            <div id="query_measure">Conclusion: </div>
+                {%block response_block%}
+                {%end%}
+          </div>
+          <div class="col-lg-4">
+            <button class="btn btn-success" type="button" style="float: right" name="user_submit">NEXT</button>
+          </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
