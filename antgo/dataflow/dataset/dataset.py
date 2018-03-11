@@ -20,7 +20,7 @@ import tarfile
 import zipfile
 from antgo import config
 import subprocess
-from antgo.utils.p2p_data import *
+from antgo.utils.dht import *
 
 Config = config.AntConfig
 
@@ -542,7 +542,7 @@ class Dataset(BaseNode):
         is_mltalker = True
 
       # validate crowdsource address
-      is_http = re.match('^((https|crowdsource|ftp|rtsp|mms)?://)', dataset_url)
+      is_http = re.match('^((https|http|ftp|rtsp|mms)?://)', dataset_url)
       if is_http is not None:
         # 3rdpart dataset
         if not os.path.exists(target_path):
@@ -586,14 +586,14 @@ class Dataset(BaseNode):
                 logger.info('execute: %s' % shell)
                 subprocess.call(shell, shell=True, cwd=target_path)
                 
-      # validate ipfs address
-      is_ipfs = re.match('^(ipfs://)', dataset_url)
-      if is_ipfs:
-        dataset_name = os.path.normpath(target_path).split('/')[-1]
-        process = multiprocessing.Process(target=data_download_local, args=(dataset_name, dataset_url))
-        process.start()
-        process.join()
-        return
+      # # validate ipfs address
+      # is_ipfs = re.match('^(ipfs://)', dataset_url)
+      # if is_ipfs:
+      #   dataset_name = os.path.normpath(target_path).split('/')[-1]
+      #   process = multiprocessing.Process(target=data_download_local, args=(dataset_name, dataset_url))
+      #   process.start()
+      #   process.join()
+      #   return
 
       # validate shell (download and reorganize data manully)
       is_shell = re.match('^(shell:)', dataset_url)

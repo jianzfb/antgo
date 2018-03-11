@@ -13,10 +13,9 @@ from antgo.ant import flags
 from antgo.ant.cmd import *
 from antgo.ant.generate import *
 from antgo.ant.utils import *
-from antgo.dataflow.dataflow_server import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
-from antgo.utils.p2p_experiment import *
+from antgo.utils.dht import *
 import multiprocessing
 
 if sys.version > '3':
@@ -29,7 +28,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "compose", "deploy", "dataset", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "deploy", "dataset", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -39,6 +38,7 @@ flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dataset', None, 'dataset')
+flags.DEFINE_boolean('public', False, 'public or private')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
@@ -163,25 +163,12 @@ def main():
                                           FLAGS.tfrecords_train_or_test,
                                           FLAGS.tfrecords_shards)
     return
-    
+
   # 4.5 check main file
   main_file = FLAGS.main_file()
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
     logger.error('main executing file dont exist')
     sys.exit(-1)
-
-  # 5. step custom workflow
-  if ant_cmd == 'compose':
-    # user custom workflow
-    work_flow = WorkFlow(name,
-                         token,
-                         yaml.load(open(os.path.join(main_folder, FLAGS.main_param()), 'r')),
-                         main_file,
-                         main_folder,
-                         dump_dir,
-                         data_factory)
-    work_flow.start()
-    return
 
   # 6 step ant running
   # 6.1 step what is task
@@ -206,7 +193,7 @@ def main():
   if FLAGS.from_experiment() is not None:
     experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
     if not os.path.exists(experiment_path):
-      process = multiprocessing.Process(target=experiment_download_local,
+      process = multiprocessing.Process(target=experiment_download_dht,
                                         args=(dump_dir, FLAGS.from_experiment(), token, token))
       process.start()
       process.join()
@@ -265,7 +252,10 @@ def main():
     running_process = AntGenerate(ant_context,
                                   name,
                                   data_factory,
-                                  token)
+                                  dump_dir,
+                                  token,
+                                  dataset,
+                                  FLAGS.public())
     running_process.start()
 
   # 7.step clear context

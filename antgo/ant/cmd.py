@@ -11,7 +11,6 @@ from antgo.ant import flags
 from antgo.ant.challenge import *
 from antgo.ant.train import *
 from antgo.ant.deploy import *
-from antgo.ant.workflow import *
 from antgo.ant.utils import *
 from antgo.resource.html import *
 from antgo import config
@@ -240,30 +239,6 @@ class AntCmd(AntBase):
       logger.error('dataset name must be set')
       return
 
-    ########################## stage 1 - dataset create #############################
-    if FLAGS.task_name() is None:
-      # create dataset record at cloud
-      is_local = FLAGS.is_local()
-      if is_local:
-        if is_public:
-          logger.error('if set "public" attribute, dataset couldnt be stored local')
-          return
-
-      create_dataset_remote_api = 'hub/api/terminal/create/dataset'
-      response = self.remote_api_request(create_dataset_remote_api,
-                                         action='post',
-                                         data={'dataset-name': dataset_name,
-                                               'dataset-is-local': int(is_local),
-                                               'dataset-is-public': int(is_public)})
-
-      if response['status'] != 'OK':
-        logger.error('dataset name has been existed at cloud, please reset')
-        return
-
-      logger.info('register dataset in mltalker')
-      return
-
-    ########################## stage 2 - task create #############################
     # check task type
     task_type = FLAGS.task_type()
     if task_type is None:

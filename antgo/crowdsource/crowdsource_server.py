@@ -22,18 +22,16 @@ from antgo import config
 import signal
 import copy
 import shutil
+import socket
+import random
+import zmq
 
-define('port', default=8000, help="run on the given port", type=int)
 Config = config.AntConfig
 
 
 class BaseHandler(tornado.web.RequestHandler):
   def get_current_user(self):
     return self.get_secure_cookie('user')
-  
-  @property
-  def server_pipe(self):
-    return self.settings['client_pipe']
 
   @property
   def task_name(self):
@@ -42,6 +40,10 @@ class BaseHandler(tornado.web.RequestHandler):
   @property
   def html_template(self):
     return self.settings['html_template']
+
+  @property
+  def totem(self):
+    return self.settings['totem']
 
   
 class IndexHandler(BaseHandler):
@@ -72,12 +74,14 @@ class ClientQuery(BaseHandler):
     client_query['CLIENT_RESPONSE']['CONCLUSION'] = self.get_argument('CLIENT_RESPONSE_CONCLUSION', None)
     client_query['QUERY_INDEX'] = int(self.get_argument('QUERY_INDEX', -1))
     client_query['QUERY_STATUS'] = self.get_argument('QUERY_STATUS', '')
-    
-    # send client query to server backend
-    self.server_pipe.send(client_query)
-    # waiting server response
-    server_response = self.server_pipe.recv()
-    
+
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect('ipc://%s'%self.totem)
+    socket.send_json(client_query)
+    server_response = socket.recv_json()
+    socket.close()
+
     # return
     self.write(json.dumps(server_response))
 
@@ -89,18 +93,22 @@ class GracefulExitException(Exception):
 
 signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
 
-def crowdsrouce_server_start(client_pipe,
+
+def crowdsrouce_server_start(totem,
                              experiment_id,
                              app_token,
                              dump_dir,
                              task_name,
-                             html_template):
+                             html_template,
+                             server_port):
+  # 0.step define tornado http server port
+  define('port', default=server_port, help="run on the given port", type=int)
+  print('http server %d'%int(server_port))
+
+  # reverse tcp tunnel (inner net pass through)
   reverse_tcp_tunnel_process = None
   try:
     # 0.step prepare static resource to dump_dir
-    # if not os.path.exists(os.path.join(dump_dir, 'static')):
-    #   os.makedirs(os.path.join(dump_dir, 'static'))
-    #
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
     for static_file in os.listdir(os.path.join(static_folder, 'resource', 'static')):
       if static_file[0] == '.':
@@ -108,9 +116,7 @@ def crowdsrouce_server_start(client_pipe,
 
       shutil.copy(os.path.join(static_folder, 'resource', 'static', static_file), dump_dir)
 
-    # shutil.copytree(os.path.join(static_folder, 'resource', 'static'), dump_dir)
-
-    # 1.step request open port from mltalker
+    # 1.step request open reverse tcp tunnel port
     request_url = 'http://%s:%s/hub/api/crowdsource/evaluation/experiment/%s'%(Config.server_ip, Config.server_port, experiment_id)
     user_authorization = {'Authorization': "token " + app_token}
     if app_token is None:
@@ -128,17 +134,17 @@ def crowdsrouce_server_start(client_pipe,
       logger.error('fail to apply public port in mltalker')
       return
 
-    # 2.step build tcp tunnel
+    # 2.step launch reverse tcp tunnel
     master = '%s:%s'%(Config.server_ip, str(inner_port))
     reverse_tcp_tunnel_process = multiprocessing.Process(target=launch_slaver_proxy,
-                                                         args=(master, '127.0.0.1:8000'))
+                                                         args=(master, '127.0.0.1:%d'%server_port))
     reverse_tcp_tunnel_process.start()
 
-    # 3.step launch crowdsource server
+    # 3.step launch crowdsource server (http server)
     tornado.options.parse_command_line()
     settings={'template_path': os.path.join(static_folder, 'resource', 'templates'),
               'static_path': dump_dir,
-              'client_pipe': client_pipe,
+              'totem': totem,
               'task_name': task_name,
               'html_template':html_template,
               'cookie_secret': str(uuid.uuid4())}
@@ -160,7 +166,7 @@ def crowdsrouce_server_start(client_pipe,
 
     res = requests.delete(request_url, data=None, headers=user_authorization)
     content = json.loads(res.content)
-    inner_port = None
+
     if content['STATUS'] == 'SUCCESS':
       logger.info('success to delete crowdsource router in mltalker')
     else:

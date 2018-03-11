@@ -10,7 +10,7 @@ import os, sys
 from contextlib import contextmanager
 from antgo.utils.concurrency import *
 from antgo.utils import logger
-from antgo.utils.p2p_experiment import *
+from antgo.utils.dht import *
 import multiprocessing
 import time
 
@@ -31,7 +31,7 @@ def running_sandbox(*wargs, **kwargs):
                 'sandbox_experiment' in kwargs and \
                 'sandbox_user_token' in kwargs:
           # 1.step launch experiment save process
-          process = multiprocessing.Process(target=experiment_publish_dht,
+          process = multiprocessing.Process(target=experiment_upload_dht,
                                             args=(kwargs['sandbox_dump_dir'],
                                                   kwargs['sandbox_experiment'],
                                                   kwargs['sandbox_user_token'],
@@ -52,7 +52,7 @@ def running_sandbox(*wargs, **kwargs):
       sandbox_running_time = int(now_time - launch_time)
       if (sandbox_running_time+1) / 3600 == 0:
         # launch experiment save process
-        process = multiprocessing.Process(target=experiment_publish_dht,
+        process = multiprocessing.Process(target=experiment_upload_dht,
                                           args=(kwargs['sandbox_dump_dir'],
                                                 kwargs['sandbox_experiment'],
                                                 kwargs['sandbox_user_token'],
@@ -86,7 +86,7 @@ def running_sandbox(*wargs, **kwargs):
     sandbox_thread_kwargs['sandbox_time'] = running_time
 
   if len(sandbox_thread_kwargs) > 0:
-    timer_thread = TimerThread([lambda: _sandbox_thread(**sandbox_thread_kwargs)], periodic=2)
+    timer_thread = TimerThread([lambda: _sandbox_thread(**sandbox_thread_kwargs)], periodic=60)
     # start thread
     timer_thread.start()
 
@@ -97,7 +97,7 @@ def running_sandbox(*wargs, **kwargs):
     timer_thread.stop()
 
   # launch experiment save process
-  process = multiprocessing.Process(target=experiment_publish_dht,
+  process = multiprocessing.Process(target=experiment_upload_dht,
                                     args=(kwargs['sandbox_dump_dir'],
                                           kwargs['sandbox_experiment'],
                                           kwargs['sandbox_user_token'],

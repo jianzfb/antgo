@@ -21,11 +21,30 @@ from antgo.crowdsource.crowdsource_server import *
 import zmq
 
 
+def _is_open(check_ip, port):
+  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  try:
+    s.connect((check_ip, int(port)))
+    s.shutdown(2)
+    return True
+  except:
+    return False
+
+
+def _pick_idle_port(from_port=40000, to_port=50000, check_count=20):
+  check_port = None
+  while check_count:
+    check_port = random.randint(from_port, to_port)
+    if not _is_open('127.0.0.1', check_port):
+      break
+
+    check_count = check_count - 1
+
+  return check_port
+
 class AntCrowdsource(AntMeasure):
   def __init__(self, task, name):
     super(AntCrowdsource, self).__init__(task, name)
-    self._server, self._client = Pipe()
-
     # regular crowdsource evaluation config
     self._min_participants_per_sample = getattr(task, 'min_participants_per_sample', 1)       # (from task)
     self._skip_sample_num = getattr(task, 'skip_sample_num', 2)                               # (from task)
@@ -47,6 +66,11 @@ class AntCrowdsource(AntMeasure):
 
     self._app_token = None
     self._experiment_id = None
+
+    self._totem = str(uuid.uuid4())
+    self._backend = zmq.Context().socket(zmq.REP)
+    self._backend.bind('ipc://%s'%self._totem)
+
 
   @property
   def client_html_template(self):
@@ -365,14 +389,21 @@ class AntCrowdsource(AntMeasure):
     return True
 
   def crowdsource_server(self, record_db):
+    # 0.step search idel server port
+    idle_server_port = _pick_idle_port(from_port=40000, to_port=50000, check_count=20)
+    if idle_server_port is None:
+      logger.error('couldnt find idle port for crowdsoure server')
+      return False
+
     # 1.step launch crowdsource server (independent process)
     process = multiprocessing.Process(target=crowdsrouce_server_start,
-                                      args=(self._client,
+                                      args=(self._totem,
                                             self.experiment_id,
                                             self.app_token,
                                             self.dump_dir,
                                             self.name,
-                                            self.client_html_template))
+                                            self.client_html_template,
+                                            idle_server_port))
     process.start()
 
     # 2.step listening crowdsource server is OK
@@ -382,7 +413,7 @@ class AntCrowdsource(AntMeasure):
     while not is_connected and (time.time() - now_time) < 60 * 5:
       # waiting crowdsource server in 5 minutes
       try:
-        res = requests.get('http://127.0.0.1:8000/heartbeat')
+        res = requests.get('http://127.0.0.1:%d/heartbeat'%idle_server_port)
         heatbeat_content = json.loads(res.content)
         if 'ALIVE' in heatbeat_content:
           is_connected = True
@@ -395,22 +426,22 @@ class AntCrowdsource(AntMeasure):
       logger.error('fail to connect local crowdsource server, couldnt start crowdsource crowdsource server')
       return False
 
-    # 2.step listening client query until crowdsource server is finished
+    # 3.step listening client query until crowdsource server is finished
     while not self._is_finished:
       client_id = ''
       try:
         # 2.1 step receive request
-        client_query = self._server.recv()
+        client_query = self._backend.recv_json()
 
         # 2.2 step check query is legal
         if not self._query_is_legal(client_query):
           if self._client_response_record[client_query['CLIENT_ID']]['QUERY_INDEX'] == \
                   len(self._client_response_record[client_query['CLIENT_ID']]['ID']) - 1:
               # send stop page
-              self._server.send(self._prepare_stop_page())
+              self._backend.send_json(self._prepare_stop_page())
           else:
             # send unknown page
-            self._server.send({})
+            self._backend.send_json({})
           continue
           
         # client id
@@ -424,7 +455,7 @@ class AntCrowdsource(AntMeasure):
         if client_query['QUERY'] == 'START':
           logger.info('response client_id %s %s query'%(client_id, 'START'))
           response = self._start_click_branch(client_query, record_db)
-          self._server.send(response)
+          self._backend.send_json(response)
           continue
 
         ########################################################
@@ -433,15 +464,15 @@ class AntCrowdsource(AntMeasure):
         if client_query['QUERY'] == 'NEXT':
           logger.info('response client_id %s %s query'%(client_id, 'NEXT'))
           response = self._next_click_branch(client_query, record_db)
-          self._server.send(response)
+          self._backend.send_json(response)
           continue
 
         logger.error('client_id %s unknow error'%client_id)
-        self._server.send({})
+        self._backend.send_json({})
         continue
       except:
         logger.error('client_id %s unknow error'%client_id)
-        self._server.send({})
+        self._backend.send_json({})
     
     # save crowdsource client response
     with open(os.path.join(self.dump_dir, 'crowdsource_record.txt'), 'w') as fp:

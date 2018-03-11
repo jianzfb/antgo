@@ -18,6 +18,7 @@ except:
 from antgo import config
 from contextlib import contextmanager
 from antgo.utils import logger
+import multiprocessing
 
 class Sample(object):
   def __init__(self, **kwargs):
@@ -45,11 +46,21 @@ class RecordWriter(object):
   def close(self):
     pass
 
-  def write(self, sample):
+  def meta_write(self, key, data):
+    self._db.put(str(key).encode('utf-8'), str(data).encode('utf-8'))
+
+  def meta_read(self, key):
+    return self._db.get(str(key).encode('utf-8'))
+
+  def write(self, sample, sample_index=-1):
     count = self._db.get(str('attrib-count').encode('utf-8'))
     assert(count is not None)
     count = int(count)
-    self._db.put(str(count).encode('utf-8'), sample.serialize())
+
+    sample_key = str(count).encode('utf-8')
+    if sample_index > 0:
+      sample_key = str(sample_index).encode('utf-8')
+    self._db.put(sample_key, sample.serialize())
 
     count += 1
     self._db.put('attrib-count'.encode('utf-8'), str(count).encode('utf-8'))
@@ -78,13 +89,10 @@ def safe_recorder_manager(recorder):
 
 
 class RecordReader(object):
-  def __init__(self, record_path, daemon=False):
+  def __init__(self, record_path, read_only=True):
     # db
-    opts = rocksdb.Options(create_if_missing=False)
-
-    self._db = rocksdb.DB(record_path, opts, read_only=True)
-    # daemon
-    self._daemon = daemon
+    opts = rocksdb.Options(create_if_missing=False if read_only else True)
+    self._db = rocksdb.DB(record_path, opts, read_only=read_only)
 
     # db path
     self._record_path = record_path
@@ -110,6 +118,32 @@ class RecordReader(object):
 
   def record_attrs(self):
     return self._db_attrs
+
+  def bind_attrs(self, **kwargs):
+    # bind extra db attributes
+    for k, v in kwargs.items():
+      self._db.put(str('attrib-%s' % k).encode('utf-8'), str('attrib-%s' % v).encode('utf-8'))
+
+  def put(self, key, data):
+    self._db.put(str(key).encode('utf-8'), str(data).encode('utf-8'))
+
+  def get(self, key):
+    return self._db.get(str(key).encode('utf-8'))
+
+  def write(self, sample, sample_index=-1):
+    count = self._db.get(str('attrib-count').encode('utf-8'))
+    if count is None:
+      self._db.put(str('attrib-count').encode('utf-8'), b'0')
+      count = 0
+
+    count = int(count)
+    sample_key = str(count).encode('utf-8')
+    if sample_index >=0 :
+      sample_key = str(sample_index).encode('utf-8')
+    self._db.put(sample_key, sample.serialize())
+
+    count += 1
+    self._db.put('attrib-count'.encode('utf-8'), str(count).encode('utf-8'))
 
   def read(self, index, *args):
     try:

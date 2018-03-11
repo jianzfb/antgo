@@ -78,15 +78,15 @@ class AntChallenge(AntBase):
     now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
 
     # ############
-    # ss = AntYesNoCrowdsource(running_ant_task, 'YESorNo')
-    # cc = RecordReader('/Users/jian/Downloads/pp')
-    # ss.dump_dir = "/Users/jian/Downloads/mm/static"
-    # ss.experiment_id = now_time_stamp
-    # ss.app_token = self.token
-    # ss.crowdsource_server(cc)
-    # ############
-    #
-    # time.sleep(100000)
+    ss = AntYesNoCrowdsource(running_ant_task, 'YESorNo')
+    cc = RecordReader('/Users/jian/Downloads/pp')
+    ss.dump_dir = "/Users/jian/Downloads/mm/static"
+    ss.experiment_id = now_time_stamp
+    ss.app_token = self.token
+    ss.crowdsource_server(cc)
+    ############
+
+    time.sleep(100000)
 
     # 0.step warp model (main_file and main_param)
     self.stage = 'CHALLENGE-MODEL'

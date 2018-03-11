@@ -12,31 +12,69 @@ from antgo.dataflow.basic import *
 import numpy as np
 import copy
 import time
-
+from antgo.utils.dht import *
+import multiprocessing
 
 class Standard(Dataset):
+  is_complete = {}
+
   def __init__(self, train_or_test, dataset_dir=None, ext_params=None):
     dataset_name = dataset_dir.split('/')[-1]
     super(Standard, self).__init__(train_or_test, dataset_dir, ext_params, dataset_name)
 
-    if not os.path.exists(dataset_dir):
-      logger.info('download data from DHT')
-      self.download(dataset_dir)
+    # maybe dataset has not prepared now
+    if not os.path.exists(os.path.join(dataset_dir,train_or_test)):
+      os.makedirs(os.path.join(dataset_dir,train_or_test))
 
-    assert(os.path.exists(dataset_dir))
-    self._record_reader = RecordReader(os.path.join(dataset_dir, train_or_test))
-    for k, v in self._record_reader.record_attrs().items():
+    # data queue (provide data from another independent process)
+    self.data_queue = None
+    dataset_url = getattr(self, 'dataset_url', None)
+    if dataset_url is not None:
+      if '%s_%s'%(dataset_name, train_or_test) not in Standard.is_complete:
+        logger.info('download %s (%s dataset) from dht asynchronously'%(dataset_name, train_or_test))
+        # set complete flag
+        Standard.is_complete['%s_%s' % (dataset_name, train_or_test)] = False
+        # db reader
+        self._record_reader = RecordReader(os.path.join(dataset_dir, train_or_test),
+                                           read_only=False)
+
+        # launch independent process
+        dataset_url = dataset_url.replace('ipfs://','')
+        self.data_queue = multiprocessing.Queue()
+        dht_process = multiprocessing.Process(target=dataset_download_dht,
+                                              args=(dataset_dir,
+                                                    train_or_test,
+                                                    dataset_url,
+                                                    self.data_queue,
+                                                    self._record_reader,
+                                                    2))
+        dht_process.start()
+    else:
+      Standard.is_complete['%s_%s' % (dataset_name, train_or_test)] = True
+      # db reader
+      self._record_reader = RecordReader(os.path.join(dataset_dir, train_or_test),
+                                         read_only=True)
+
+    # dataset basic property
+    dataset_attrs = {}
+    if self.data_queue is not None:
+      dataset_attrs = self.data_queue.get()
+    else:
+      dataset_attrs = self._record_reader.record_attrs()
+
+    for k, v in dataset_attrs.items():
       setattr(self, k, v)
 
-    # dataset
-    self.ids = np.arange(0, int(self.count)).tolist()
+    # dataset index
+    self.ids = np.arange(0, int(self.size)).tolist()
+
+    if Standard.is_complete['%s_%s'%(dataset_name, train_or_test)]:
+      self.ok_ids = np.arange(0, int(self.size)).tolist()
+    else:
+      self.ok_ids = []
 
     # fixed seed
     self.seed = time.time()
-
-  def close(self):
-    self._record_reader.close()
-    self._record_reader = None
 
   def data_pool(self):
     self.epoch = 0
@@ -44,19 +82,50 @@ class Standard(Dataset):
       max_epoches = self.epochs if self.epochs is not None else 1
       if self.epoch >= max_epoches:
         break
-      self.epoch += 1
+
+      if not Standard.is_complete['%s_%s'%(self.name, self.train_or_test)]:
+        # for !train dataset, we have to wait until complete
+        while True:
+          # receive data list
+          data_list = self.data_queue.get()
+          for data in data_list:
+            if type(data) == tuple:
+              data_index, data_info, data_label, block_id = data
+              # record sample
+              self._record_reader.write(Sample(data=data_info, label=data_label), data_index)
+              # record block
+              self._record_reader.put(block_id, 'true')
+
+              # update ids (sample index)
+              self.ok_ids.append(data_index)
+            else:
+              # update ids (sample index)
+              self.ok_ids.append(int(data))
+
+          # check whether dataset is complete
+          if self.size == len(self.ok_ids):
+            Standard.is_complete['%s_%s' % (self.name, self.train_or_test)] = True
+            break
+
+          if self.train_or_test == 'train':
+            break
 
       ids = copy.copy(self.ids)
       if self.rng:
         self.rng.shuffle(ids)
-      
+
       # filter by ids
       filter_ids = getattr(self, 'filter', None)
       if filter_ids is not None:
         ids = [i for i in ids if i in filter_ids]
 
       for id in ids:
+        if not Standard.is_complete['%s_%s'%(self.name, self.train_or_test)]:
+          if id not in self.ok_ids:
+            continue
+
         data, label = self._record_reader.read(id, 'data', 'label')
+        print((id, data,label))
         # filter by condition
         if type(label) == dict:
           if 'category' in label and 'category_id' in label:
@@ -66,6 +135,9 @@ class Standard(Dataset):
           
           label['id'] = id
         yield [data, label]
+
+      # increment epoch
+      self.epoch += 1
 
   def split(self, split_params={}, split_method='holdout'):
     assert(self.train_or_test == 'train')
@@ -84,9 +156,8 @@ class Standard(Dataset):
 
     if split_method == 'holdout':
       if 'ratio' not in split_params:
-        train_dataset = Standard(self.train_or_test, self.dir, self.ext_params)
         val_dataset = Standard('val', self.dir, self.ext_params)
-        return train_dataset, val_dataset
+        return self, val_dataset
 
     if split_method == 'kfold':
       np.random.seed(np.int64(self.seed))
@@ -102,7 +173,7 @@ class Standard(Dataset):
 
   @property
   def size(self):
-    return len(self.ids)
+    return self.count
   
   def at(self, id):
     data, label = self._record_reader.read(id, 'data', 'label')
