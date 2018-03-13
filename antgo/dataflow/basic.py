@@ -46,12 +46,6 @@ class RecordWriter(object):
   def close(self):
     pass
 
-  def meta_write(self, key, data):
-    self._db.put(str(key).encode('utf-8'), str(data).encode('utf-8'))
-
-  def meta_read(self, key):
-    return self._db.get(str(key).encode('utf-8'))
-
   def write(self, sample, sample_index=-1):
     count = self._db.get(str('attrib-count').encode('utf-8'))
     assert(count is not None)

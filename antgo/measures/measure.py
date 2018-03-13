@@ -8,6 +8,7 @@ from antgo.measures.matting_task import *
 from antgo.resource.html import *
 from antgo.measures.significance import *
 from antgo.measures.pck import *
+from antgo.measures.yesno_crowdsource import *
 import copy
 
 
@@ -37,7 +38,8 @@ class AntMeasures():
                         AntMeanAccuracySeg(self.task),
                         AntMeanIOUSeg(self.task),
                         AntFrequencyWeightedIOUSeg(self.task),
-                        AntMeanIOUBoundary(self.task)]
+                        AntMeanIOUBoundary(self.task),
+                        AntYesNoCrowdsource(self.task)]
             elif self.task.task_type == 'INSTANCE-SEGMENTATION':
                 return []
             elif self.task.task_type == 'MATTING':

@@ -152,10 +152,20 @@ class AntCrowdsource(AntMeasure):
       data = None
       if k.startswith('GROUNDTRUTH_'):
         k = k.replace('GROUNDTRUTH_', '')
-        data = gt[k]
+        if type(gt) == dict:
+          data = gt[k]
+        else:
+          data = gt
+
+        # ###test code ####
+        # data = (data * 255).astype(np.uint8)
+        # #################
       elif k.startswith('PREDICT_'):
         k = k.replace('PREDICT_', '')
-        data = predict[k]
+        if type(predict) == dict:
+          data = predict[k]
+        else:
+          data = predict
 
       if v == 'IMAGE':
         # save to .png
@@ -185,7 +195,7 @@ class AntCrowdsource(AntMeasure):
 
   def _start_click_branch(self, client_query, record_db):
     client_id = client_query['CLIENT_ID']
-    if client_id in self._client_response_record:
+    if client_id in self._client_response_record and self._client_response_record[client_id]['QUERY_INDEX'] != 0:
       # contiue unfinished session
       logger.info('client id %s restart unfinished session'%client_id)
       # user reenter crowdsource evaluation
@@ -216,6 +226,7 @@ class AntCrowdsource(AntMeasure):
       else:
         self._client_response_record[client_id]['START_TIME'] = now_time - (last_active_time - first_sample_time)
       client_query['QUERY_INDEX'] = self._client_response_record[client_id]['QUERY_INDEX'] - 1
+      client_query['CLIENT_RESPONSE'] = None
       # client_query['QUERY_INDEX'] may be -1
       return self._next_click_branch(client_query, record_db)
     else:
@@ -251,10 +262,16 @@ class AntCrowdsource(AntMeasure):
         data = None
         if k.startswith('GROUNDTRUTH_'):
           k = k.replace('GROUNDTRUTH_', '')
-          data = gt[k]
+          if type(gt) == dict:
+            data = gt[k]
+          else:
+            data = gt
         elif k.startswith('PREDICT_'):
           k = k.replace('PREDICT_', '')
-          data = predict[k]
+          if type(predict) == dict:
+            data = predict[k]
+          else:
+            data = predict
           
         if v == 'IMAGE':
           # save to .png
@@ -480,8 +497,7 @@ class AntCrowdsource(AntMeasure):
 
     # kill crowdsource server
     # suspend 5 minutes, crowdsource abort suddenly
-    time.sleep(300)
+    time.sleep(30)
     # kill crowdsource server
     os.kill(process.pid, signal.SIGTERM)
-
     return True

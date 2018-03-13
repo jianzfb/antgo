@@ -44,6 +44,7 @@ def running_sandbox(*wargs, **kwargs):
         # exit globally
         os._exit(0)
 
+    # upload experiment record to dth every 1 hour
     if 'sandbox_dump_dir' in kwargs and \
             'sandbox_experiment' in kwargs and \
             'sandbox_user_token' in kwargs:
@@ -86,11 +87,12 @@ def running_sandbox(*wargs, **kwargs):
     sandbox_thread_kwargs['sandbox_time'] = running_time
 
   if len(sandbox_thread_kwargs) > 0:
-    timer_thread = TimerThread([lambda: _sandbox_thread(**sandbox_thread_kwargs)], periodic=60)
+    timer_thread = TimerThread([lambda: _sandbox_thread(**sandbox_thread_kwargs)], periodic=60*30)
     # start thread
     timer_thread.start()
 
   yield
+
 
   if timer_thread is not None:
     # stop thread

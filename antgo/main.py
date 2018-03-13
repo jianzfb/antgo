@@ -39,6 +39,7 @@ flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dataset', None, 'dataset')
 flags.DEFINE_boolean('public', False, 'public or private')
+flags.DEFINE_boolean('local', False, 'cloud or local')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
@@ -232,20 +233,17 @@ def main():
                                  time_stamp=time_stamp)
       running_process.start()
   elif ant_cmd == 'challenge':
-    with running_sandbox(sandbox_dump_dir=dump_dir,
-                         sandbox_experiment=name,
-                         sandbox_user_token=token):
-      running_process = AntChallenge(ant_context,
-                                     name,
-                                     data_factory,
-                                     dump_dir,
-                                     token,
-                                     task,
-                                     main_file=main_file,
-                                     main_folder=main_folder,
-                                     main_param=main_param,
-                                     time_stamp=time_stamp)
-      running_process.start()
+    running_process = AntChallenge(ant_context,
+                                   name,
+                                   data_factory,
+                                   dump_dir,
+                                   token,
+                                   task,
+                                   main_file=main_file,
+                                   main_folder=main_folder,
+                                   main_param=main_param,
+                                   time_stamp=time_stamp)
+    running_process.start()
   elif ant_cmd == "deploy":
     pass
   elif ant_cmd == 'dataset':
@@ -255,7 +253,8 @@ def main():
                                   dump_dir,
                                   token,
                                   dataset,
-                                  FLAGS.public())
+                                  FLAGS.public(),
+                                  FLAGS.local())
     running_process.start()
 
   # 7.step clear context

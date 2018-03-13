@@ -101,9 +101,11 @@ def crowdsrouce_server_start(totem,
                              task_name,
                              html_template,
                              server_port):
+  # log
+  logger.info('crowdsource server prepare serving on %d'%server_port)
+
   # 0.step define tornado http server port
   define('port', default=server_port, help="run on the given port", type=int)
-  print('http server %d'%int(server_port))
 
   # reverse tcp tunnel (inner net pass through)
   reverse_tcp_tunnel_process = None

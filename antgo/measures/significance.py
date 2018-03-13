@@ -11,7 +11,7 @@ import random
 
 
 def bootstrap_confidence_interval(data_source, seed, measure, replicas=50):
-  num = data_source.count
+  num = data_source.size
   random.seed(seed)
   bootstrap_samples = [[random.randint(0, num-1) for _ in range(num)] for _ in range(replicas)]
 
@@ -52,8 +52,8 @@ def bootstrap_direct_confidence_interval(bootstrap_estimated_measures):
 
 
 def bootstrap_ab_significance_compare(ab_data_source, seed, measure, replicas=50):
-  assert(ab_data_source[0].count == ab_data_source[1].count)
-  num = ab_data_source[0].count
+  assert(ab_data_source[0].size == ab_data_source[1].size)
+  num = ab_data_source[0].size
   random.seed(seed)
   bootstrap_samples = [[random.randint(0, num-1) for _ in range(num)] for _ in range(replicas)]
 

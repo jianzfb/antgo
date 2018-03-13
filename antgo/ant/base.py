@@ -280,7 +280,7 @@ class AntBase(object):
     if target_path is None:
       target_path = os.curdir
 
-    is_that = re.match('^((https|crowdsource|ftp|rtsp|mms)?://)', source_path)
+    is_that = re.match('^((https|http|ftp|rtsp|mms)?://)', source_path)
     if is_that is not None:
       download(source_path, target_path, fname=target_name)
 

@@ -39,8 +39,8 @@ class AntCmd(AntBase):
     flags.DEFINE_boolean('model', None, 'experiment main_file and main_param')
     flags.DEFINE_boolean('report', None, 'experiment report')
     flags.DEFINE_boolean('optimum', None, 'whether experiment is optimum')
-    flags.DEFINE_boolean('is_local', True, 'whether store in local')
-    flags.DEFINE_boolean('is_public',False, 'whether public in cloud')
+    flags.DEFINE_boolean('is_local', None, 'whether store in local')
+    flags.DEFINE_boolean('is_public',None, 'whether public in cloud')
     flags.DEFINE_string('dataset_name',None, 'dataset name')
     flags.DEFINE_string('dataset_path',None, 'dataset path')
     flags.DEFINE_string('dataset_url', None, 'dataset url')
@@ -234,6 +234,9 @@ class AntCmd(AntBase):
     # every task must be related with one dataset
     # 0.step check paramters
     is_public = FLAGS.is_public()
+    if is_public is None:
+      is_public = 0
+
     dataset_name = FLAGS.dataset_name()   # must be unique at cloud
     if dataset_name is None:
       logger.error('dataset name must be set')
@@ -369,54 +372,46 @@ class AntCmd(AntBase):
         return
 
   def process_update_command(self):
-    dataset_name = FLAGS.dataset_name()
     task_name = FLAGS.task_name()
     experiment_name = FLAGS.experiment_name()
 
-    if dataset_name is None and task_name is None and experiment_name is None:
-      logger.error('must set update object [%s]'%','.join(['dataset','task', 'experiment']))
+    if task_name is None and experiment_name is None:
+      logger.error('must set update object [%s]'%','.join(['task', 'experiment']))
       return
 
-    if dataset_name is not None:
-      dataset_url = FLAGS.dataset_url()
-      is_public = FLAGS.is_public()
+    if task_name is not None:
+      # update body
+      update_dict = {'task-name': task_name}
 
-      update_remote_api = 'hub/api/terminal/update/dataset'
-      response = self.remote_api_request(update_remote_api,
-                                         action='patch',
-                                         data={'dataset-name': dataset_name,
-                                               'dataset-url': dataset_url,
-                                               'dataset-is-public': 1 if is_public else 0})
-      if response is None:
-        logger.error('update error')
-        return
-    elif task_name is not None:
-      # check task type
+      # parameter-1: check task type
       task_type = FLAGS.task_type()
-      if task_type is None:
-        logger.error('must set task type')
-        return
-      if task_type not in AntTask.support_task_types():
-        logger.error('task type must be in [%s]' % ','.join(AntTask.support_task_types()))
-        return
+      if task_type is not None:
+        if task_type not in AntTask.support_task_types():
+          logger.error('task type must be in [%s]' % ','.join(AntTask.support_task_types()))
+          return
 
-      # check task measures
+        update_dict['task-type'] = task_type
+
+      # parameter-2: check task measures
       task_measures = FLAGS.task_measure()
       if task_measures is None:
         logger.error('must set task measure')
         return
 
-      task_measures = task_measures.split(',')
-      dummy_task = create_dummy_task(task_type)
-      dummy_task_measures = AntMeasures(dummy_task)
-      task_support_measures = [measure.name for measure in dummy_task_measures.measures()]
-      for measure in task_measures:
-        if measure not in task_support_measures:
-          logger.error('task measure %s not supported by "%s" task' % (measure, task_type))
-          return
-      task_measures = json.dumps(task_measures)
+      if task_measures is not None:
+        task_measures = task_measures.split(',')
+        dummy_task = create_dummy_task(task_type)
+        dummy_task_measures = AntMeasures(dummy_task)
+        task_support_measures = [measure.name for measure in dummy_task_measures.measures()]
+        for measure in task_measures:
+          if measure not in task_support_measures:
+            logger.error('task measure %s not supported by "%s" task' % (measure, task_type))
+            return
+        task_measures = json.dumps(task_measures)
 
-      # check task estimation procedure
+        update_dict['task-measures'] = task_measures
+
+      # parameter-3: check task estimation procedure
       task_est = FLAGS.task_est()
       if task_est is not None:
         if task_est not in ['holdout', 'repeated-holdout', 'bootstrap', 'kfold']:
@@ -424,11 +419,14 @@ class AntCmd(AntBase):
           task_est, ','.join(['holdout', 'repeated-holdout', 'bootstrap', 'kfold'])))
           return
 
-      # check task estimation procedure parameters
+        update_dict['task-estimation-procedure'] = task_est
+
+      # parameter-4: check task estimation procedure parameters
       task_est_params = FLAGS.task_est_params()
-      task_est_params_dict = {}
-      task_est_params_dict['params'] = {}
       if task_est_params is not None:
+        task_est_params_dict = {}
+        task_est_params_dict['params'] = {}
+
         task_est_params = task_est_params.split(',')
         for param in task_est_params:
           param_key_value = param.split(':')
@@ -437,12 +435,15 @@ class AntCmd(AntBase):
             return
           else:
             task_est_params_dict['params'][param_key_value[0]] = param_key_value[1]
-      task_est_params = json.dumps(task_est_params_dict)
 
-      # check task extent parameters(some closed measures different parameters)
+        task_est_params = json.dumps(task_est_params_dict)
+
+        update_dict['task-estimation-procedure-params'] = task_est_params
+
+      # parameter-5: check task extent parameters(some closed measures different parameters)
       task_params = FLAGS.task_params()
-      task_params_dict = {}
       if task_params is not None:
+        task_params_dict = {}
         task_params_splits = task_params.split(',')
         for param in task_params_splits:
           param_key_value = param.split(':')
@@ -452,10 +453,10 @@ class AntCmd(AntBase):
           else:
             task_params_dict[param_key_value[0]] = param_key_value[1]
         task_params = json.dumps(task_params_dict)
-      else:
-        task_params = {}
 
-      # check task class label
+        update_dict['task-params'] = task_params
+
+      # parameter-6: check task class label
       task_class_label = FLAGS.task_class_label()
       if task_class_label is not None:
         if ',' in task_class_label:
@@ -464,19 +465,17 @@ class AntCmd(AntBase):
           task_class_label = [i for i in range(int(task_class_label))]
           task_class_label = json.dumps(task_class_label)
 
+        update_dict['task-class-label'] = task_class_label
+
+      # parameter-7: check is public
       is_public = FLAGS.is_public()
+      if is_public is not None:
+        update_dict['task-is-public'] = 1 if is_public else 0
 
       remote_api = 'hub/api/terminal/update/task'
       response = self.remote_api_request(remote_api,
                                          action='patch',
-                                         data={'task-name': task_name,
-                                               'task-type': task_type,
-                                               'task-measures': task_measures,
-                                               'task-params': task_params,
-                                               'task-estimation-procedure': task_est,
-                                               'task-estimation-procedure-params': task_est_params,
-                                               'task-class-label': task_class_label,
-                                                'task-is-public': 1 if is_public else 0})
+                                         data=update_dict)
 
       if response is None:
         logger.error('update error')

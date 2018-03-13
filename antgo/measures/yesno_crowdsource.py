@@ -10,18 +10,17 @@ from bs4 import BeautifulSoup
 
 
 class AntYesNoCrowdsource(AntCrowdsource):
-  def __init__(self, task, name):
-    super(AntYesNoCrowdsource, self).__init__(task, name)
-
-    # set _client_response_data
-    self.client_response_data = {'RESPONSE': ['LEFT', 'RIGHT'], 'TYPE': 'SELECT'}
-
+  def __init__(self, task):
+    super(AntYesNoCrowdsource, self).__init__(task, 'YesorNo')
     # set _client_query_html
     self.client_html_template = 'yesno_crowdsource.html'
 
     # set _client_query_data
-    self.client_query_data = {'QUERY': {'PREDICT_PREDICT': 'IMAGE', 'GROUNDTRUTH_GT': 'IMAGE'}}
+    self.left_tag = getattr(self.task, 'yes_or_no_left', 'PREDICT')
+    self.right_tag = getattr(self.task, 'yes_or_no_right', 'GT')
 
+    self.client_query_data = {'QUERY': {'PREDICT_%s'%self.left_tag: 'IMAGE',
+                                        'GROUNDTRUTH_%s'%self.right_tag: 'IMAGE'}}
     self._is_support_rank = True
   
   def where_in_table(self, worksite, element_id):
@@ -33,8 +32,7 @@ class AntYesNoCrowdsource(AntCrowdsource):
     for element in element_id:
       element_node = soup.find(id=element)
       container_id = element_node.parent.get('id')
-      xy = container_id.split('-')[-1]
-      output.append(xy)
+      output.append(int(container_id))
 
     return output
 
@@ -43,10 +41,10 @@ class AntYesNoCrowdsource(AntCrowdsource):
     user_worksite = self._client_response_record[client_id]['RESPONSE'][query_index]['WORKSITE']
 
     # 'PREDICT','GT' position in table
-    xy = self.where_in_table(user_worksite, ['PREDICT', 'GT'])
+    xy = self.where_in_table(user_worksite, [self.left_tag, self.right_tag])
 
     user_gt_response = ''
-    if int(xy[0][1]) < int(xy[1][1]):
+    if int(xy[0]) < int(xy[1]):
       user_gt_response = 'RIGHT is REAL'
     else:
       user_gt_response = 'LEFT is REAL'
@@ -80,9 +78,9 @@ class AntYesNoCrowdsource(AntCrowdsource):
         client_worksite = client_data['WORKSITE']
         client_conclusion = client_data['CONCLUSION']
         
-        xy = self.where_in_table(client_worksite, ['PREDICT', 'GT'])
+        xy = self.where_in_table(client_worksite, [self.left_tag, self.right_tag])
         score_count[real_query_index, person_count] = 1.0
-        if int(xy[0][1]) < int(xy[1][1]):
+        if int(xy[0]) < int(xy[1]):
           if client_conclusion == 'RIGHT':
             score[real_query_index, person_count] = 1.0
           else:
@@ -99,4 +97,4 @@ class AntYesNoCrowdsource(AntCrowdsource):
     numerator_s = np.sum(score, axis=1)
     evaluation_score = np.mean(numerator_s / denominator_s)
     return {'statistic': {'name': self.name,
-                          'value': [{'name': self.name, 'value': float(evaluation_score), 'type': 'SCALAR'}]}, }
+                          'value': [{'name': self.name, 'value': float(evaluation_score), 'type': 'SCALAR', 'score_map': score_count}]}, }

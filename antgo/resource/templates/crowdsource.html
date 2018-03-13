@@ -106,7 +106,7 @@
         GLOBAL_DATA['PAGE_DATA'] = page_data;
 
         // trigger custom code
-        {%block trigger_after_next%}
+        {%block trigger_before_next%}
         {%end%}
 
         // record current sample index
@@ -143,17 +143,16 @@
           // set waiting time
           waiting_timer = setTimeout('waiting_triger()', waiting_time);
         }
-
     }
 
-    /*************************************************************
-    **********             main js block                **********
-    **************************************************************/
+    /*****************************************************************
+    *************             main block            ******************
+    ******************************************************************/
     $(document).ready(function(){
         /*************************************************************
-        **********             custom js block              **********
+        **********         custom trigger once              **********
         **************************************************************/
-        {%block js_block%}
+        {%block trigger_once%}
         {%end%}
 
         /*************************************************************
@@ -175,19 +174,29 @@
             // bind data with page element
             // 1.step bind evaluation data
             query_index = data_obj['QUERY_INDEX'];
+
+            var pos_index = 0;
             for(var k in data_obj['PAGE_DATA']){
                var data = data_obj['PAGE_DATA'][k];
                var data_content = data['DATA'];
                var data_type = data['TYPE'];
 
-               if(data_type == 'TEXT'){
-                 $('#'+k).text(data_content);
-               }
-               else if(data_type == 'IMAGE'){
-                 $('#'+k).attr('src', '/static/'+data_content, alt=k);
-               }
-               else if(data_type == 'SOUND'){
-               }
+                if($('#'+k).length == 0){
+                    $('#PLACEHOLDER_'+pos_index.toString()).attr('id',k);
+                }
+
+                if(data_type == 'TEXT'){
+                    $('#'+k).text(data_content);
+                }
+                else if(data_type == 'IMAGE'){
+                    $('#'+k).attr('src', '/static/'+data_content, alt=k);
+                }
+                else if(data_type == 'SOUND'){
+                }
+                else if(data_type == 'VIDEO'){
+                }
+
+                pos_index += 1;
             }
             var waiting_time = data_obj['WAITING_TIME'] * 1000;
             var remained_num = data_obj['REMAINED_NUM'];
@@ -212,6 +221,9 @@
                     clearTimeout(waiting_timer);
                     waiting_timer = null;
                 }
+
+                {%block trigger_before_submit%}
+                {%end%}
 
                 var user_response_data = {};
                 user_response_data['QUERY_STATUS'] = '';

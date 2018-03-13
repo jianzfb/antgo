@@ -74,19 +74,18 @@ class AntChallenge(AntBase):
     assert(running_ant_task is not None)
 
     # now time stamp
-    # now_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
     now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
 
+    # # ############
+    # ss = AntYesNoCrowdsource(running_ant_task, 'YESorNo')
+    # cc = RecordReader('/Users/jian/Downloads/pp')
+    # ss.dump_dir = "/Users/jian/Downloads/mm/static"
+    # ss.experiment_id = now_time_stamp
+    # ss.app_token = self.token
+    # ss.crowdsource_server(cc)
     # ############
-    ss = AntYesNoCrowdsource(running_ant_task, 'YESorNo')
-    cc = RecordReader('/Users/jian/Downloads/pp')
-    ss.dump_dir = "/Users/jian/Downloads/mm/static"
-    ss.experiment_id = now_time_stamp
-    ss.app_token = self.token
-    ss.crowdsource_server(cc)
-    ############
-
-    time.sleep(100000)
+    #
+    # time.sleep(100000)
 
     # 0.step warp model (main_file and main_param)
     self.stage = 'CHALLENGE-MODEL'
@@ -125,10 +124,7 @@ class AntChallenge(AntBase):
     ant_test_dataset = running_ant_task.dataset('test',
                                                 os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                 running_ant_task.dataset_params)
-        
-    # registry init func
-    # self.context.registry_init_callback(ant_test_dataset.init)
-    
+
     with safe_recorder_manager(ant_test_dataset):
       # split data and label
       data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
@@ -171,8 +167,6 @@ class AntChallenge(AntBase):
 
       logger.info('start evaluation process')
       evaluation_measure_result = []
-
-      running_ant_task.evaluation_measures = []
       with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
         for measure in running_ant_task.evaluation_measures:
           if measure.crowdsource:
@@ -189,13 +183,17 @@ class AntChallenge(AntBase):
               logger.error('couldnt finish crowdsource evaluation server')
               continue
 
-          # evaluation
-          record_generator = record_reader.iterate_read('predict', 'groundtruth')
-          result = measure.eva(record_generator, None)
-          if measure.is_support_rank:
-            # compute confidence interval
-            confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 50)
-            result['statistic']['value'][0]['interval'] = confidence_interval
+            # using crowdsource evaluation
+            result = measure.eva()
+            # TODO: support bootstrap confidence interval for crowdsource evaluation
+          else:
+            # evaluation
+            record_generator = record_reader.iterate_read('predict', 'groundtruth')
+            result = measure.eva(record_generator, None)
+            if measure.is_support_rank:
+              # compute confidence interval
+              confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 50)
+              result['statistic']['value'][0]['interval'] = confidence_interval
 
           evaluation_measure_result.append(result)
 
@@ -220,18 +218,20 @@ class AntChallenge(AntBase):
 
           if 'record' not in benchmark_model_data:
             benchmark_model_data['record'] = {}
-            benchmark_model_data['record'][benchmark_name] = benchmark_record
+          benchmark_model_data['record'][benchmark_name] = benchmark_record
 
           if 'report' not in benchmark_model_data:
             benchmark_model_data['report'] = {}
-            benchmark_model_data['report'][benchmark_name] = benchmark_report
+
+          for benchmark_experiment_name, benchmark_experiment_report in benchmark_report['CHALLENGE']['REPORT'].items():
+            benchmark_model_data['report'][benchmark_name] = benchmark_experiment_report
 
       if benchmark_model_data is not None and 'record' in benchmark_model_data:
         benchmark_model_record = benchmark_model_data['record']
 
         task_running_statictic[self.ant_name]['significant_diff'] = {}
         for measure in running_ant_task.evaluation_measures:
-          if measure.is_support_rank:
+          if measure.is_support_rank and not measure.crowdsource:
             significant_diff_score = []
             for benchmark_model_name, benchmark_model_address in benchmark_model_record.items():
               with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
@@ -239,6 +239,9 @@ class AntChallenge(AntBase):
                   s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 50)
                   significant_diff_score.append({'name': benchmark_model_name, 'score': s})
             task_running_statictic[self.ant_name]['significant_diff'][measure.name] = significant_diff_score
+          elif measure.is_support_rank and measure.crowdsource:
+            # TODO: support model significance compare for crowdsource evaluation
+            pass
 
       # deep analysis
       logger.info('start deep analysis')
@@ -292,25 +295,24 @@ class AntChallenge(AntBase):
             method_samples_list = [{'name': self.ant_name, 'data': category_measure_data}]
             if benchmark_model_statistic is not None:
               # extract statistic data from benchmark
-              for benchmark_model_data in benchmark_model_statistic:
-                for benchmark_name, benchmark_statistic_data in benchmark_model_data.items():
-                  # finding corresponding measure
-                  for benchmark_measure_result in benchmark_statistic_data['measure']:
-                    if benchmark_measure_result['statistic']['name'] == measure_name:
-                      benchmark_measure_data = benchmark_measure_result['info']
-                      
-                      # finding corresponding category
-                      sub_benchmark_measure_data = None
-                      if running_ant_task.class_label is not None and len(running_ant_task.class_label) > 1:
-                        sub_benchmark_measure_data = \
-                          [md for md in benchmark_measure_data if md['category'] == running_ant_task.class_label[category_id]]
-                      if sub_benchmark_measure_data is None:
-                        sub_benchmark_measure_data = benchmark_measure_data
-                      
-                      method_samples_list.append({'name': benchmark_name, 'data': sub_benchmark_measure_data})
-                      
-                      break
-                  break
+              for benchmark_name, benchmark_statistic_data in benchmark_model_statistic.items():
+                # finding corresponding measure
+                for benchmark_measure_result in benchmark_statistic_data['measure']:
+                  if benchmark_measure_result['statistic']['name'] == measure_name:
+                    benchmark_measure_data = benchmark_measure_result['info']
+
+                    # finding corresponding category
+                    sub_benchmark_measure_data = None
+                    if running_ant_task.class_label is not None and len(running_ant_task.class_label) > 1:
+                      sub_benchmark_measure_data = \
+                        [md for md in benchmark_measure_data if md['category'] == running_ant_task.class_label[category_id]]
+                    if sub_benchmark_measure_data is None:
+                      sub_benchmark_measure_data = benchmark_measure_data
+
+                    method_samples_list.append({'name': benchmark_name, 'data': sub_benchmark_measure_data})
+
+                    break
+                break
   
             # reorganize data as score matrix
             method_num = len(method_samples_list)
@@ -331,8 +333,9 @@ class AntChallenge(AntBase):
                 # record sample id
                 for sample_id, sample in enumerate(method_measure_data_order):
                   samples_map.append(sample)
-  
-              for sample_id, sample in enumerate(method_measure_data['data']):
+
+              # order consistent
+              for sample_id, sample in enumerate(samples_map):
                   method_measure_mat[method_id, sample_id] = sample['score']
   
             is_binary = False

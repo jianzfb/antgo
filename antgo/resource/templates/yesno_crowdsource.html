@@ -3,11 +3,11 @@
 <table class="table table-bordered">
     <tbody id="table-query_content_layout">
     <tr>
-        <td id="table-query_content_layout-00" style="text-align: center;">
-            <img id="PREDICT" src="/static/PREDICT-0.png">
+        <td id='0' style="text-align: center;">
+            <img id="PLACEHOLDER_0" src="" width="256px" height="256px">
         </td>
-        <td id="table-query_content_layout-01" style="text-align: center;">
-            <img id="GT" src="/static/GT-0.png">
+        <td id='1' style="text-align: center;">
+            <img id="PLACEHOLDER_1" src="" width="256px" height="256px">
         </td>
     </tr>
     </tbody>
@@ -16,28 +16,30 @@
 
 {%block response_block%}
 <div class="dropdown">
-    <button class="btn btn-default dropdown-toggle" type="button" id="select_list" data-toggle="dropdown">
-        left<span class="caret"></span>
+    <button class="btn btn-default dropdown-toggle" type="button" id="select_list" data-toggle="dropdown" conclusion="">
+        LEFT<span class="caret"></span>
     </button>
     <ul class="dropdown-menu" aria-labelledby="select_list">
-        <li><a href="#">left</a></li>
-        <li><a href="#">right</a></li>
+        <li><a href="#">LEFT</a></li>
+        <li><a href="#">RIGHT</a></li>
     </ul>
 </div>
 {%end%}
 
-{%block js_block%}
+{%block trigger_once%}
 // 1.step bind user response click event ()
 $(".dropdown-menu li a").click(function(){
    var id = $(this).parent().parent().attr('aria-labelledby');
-   $('#'+id + ':first-child').html('{content}<span class="caret"></span>'.format({content: $(this).text()}))
-
-   USER_CONCLUSION = $(this).text()
+   $('#'+id + ':first-child').html('{content}<span class="caret"></span>'.format({content: $(this).text()}));
+   $('#'+id).attr('conclusion', $(this).text());
 })
 {%end%}
 
+{%block trigger_before_submit%}
+USER_CONCLUSION = $('#select_list').attr('conclusion');
+{%end%}
 
-{%block trigger_after_next%}
+{%block trigger_before_next%}
 var rr = Math.random()
 if(rr > 0.5){
     // random layout

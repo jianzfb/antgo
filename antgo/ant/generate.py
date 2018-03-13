@@ -13,6 +13,8 @@ if sys.version > '3':
 else:
     PY3 = False
 
+Config = config.AntConfig
+
 
 class AntGenerate(AntBase):
   def __init__(self, ant_context,
@@ -21,12 +23,14 @@ class AntGenerate(AntBase):
                dump_dir,
                ant_token,
                dataset_name,
-               dataset_public=False):
+               dataset_public=False,
+               dataset_local=False):
     super(AntGenerate, self).__init__(ant_name, ant_context, ant_token)
     self.ant_data_folder = ant_data_folder
     self.ant_context.ant = self
     self.dataset_name = dataset_name
     self.dataset_is_public = dataset_public
+    self.dataset_is_local = dataset_local
     self.dump_dir = dump_dir
 
   def start(self):
@@ -36,34 +40,59 @@ class AntGenerate(AntBase):
       return
 
     if self.token is None:
-      logger.error('must give your token')
+      logger.error('must set your token')
       return
 
-    now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
-    if not os.path.exists(os.path.join(self.dump_dir, now_time_stamp)):
-      os.makedirs(os.path.join(self.dump_dir, now_time_stamp))
+    if self.dataset_name is None:
+      logger.error('must set dsataset name')
+      return
 
-    # preprocess data generator
-    categories = ['train', 'val', 'test', 'sample']
-    data_generators = {}
-    for category in categories:
-      if category not in self.context.params.content:
-        continue
+    dataset_url = ''
+    if not self.dataset_is_local:
+      now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
+      if not os.path.exists(os.path.join(self.dump_dir, now_time_stamp)):
+        os.makedirs(os.path.join(self.dump_dir, now_time_stamp))
 
-      data_generators[category] = {}
+      # preprocess data generator
+      categories = ['train', 'val', 'test', 'sample']
+      data_generators = {}
+      for category in categories:
+        if category not in self.context.params.content:
+          continue
 
-      # data sample generator
-      data_generators[category]['generator'] = self.context.data_generator(category)
-      # data sample number
-      data_generators[category]['num'] = self.context.params.content[category]['num']
-      data_generators[category]['block'] = self.context.params.content[category]['block']
+        data_generators[category] = {}
 
-    # publish at dht
-    dataset_hash_code = dataset_upload_dht(self.dataset_name,
-                                           data_generators,
-                                           os.path.join(self.dump_dir,now_time_stamp))
-    dataset_hash_url = 'ipfs://%s'%dataset_hash_code
-    # print(dataset_hash_code)
+        # data sample generator
+        data_generators[category]['generator'] = self.context.data_generator(category)
+        # data sample number
+        data_generators[category]['num'] = self.context.params.content[category]['num']
+        data_generators[category]['block'] = self.context.params.content[category]['block']
+
+      # publish at dht
+      dataset_hash_code = dataset_upload_dht(self.dataset_name,
+                                             data_generators,
+                                             os.path.join(self.dump_dir,now_time_stamp))
+      dataset_url = 'ipfs://%s'%dataset_hash_code
+      # print(dataset_hash_code)
+    else:
+      # build dataset in local
+      categories = ['train', 'val', 'test', 'sample']
+      for category in categories:
+        if category not in self.context.params.content:
+          continue
+
+        dataset_record_path = os.path.join(Config.data_factory, self.dataset_name, category)
+
+        if not os.path.exists(dataset_record_path):
+          os.makedirs(dataset_record_path)
+
+        data_writer = RecordWriter(dataset_record_path)
+        for data,label in self.context.data_generator(category):
+          data_writer.write(Sample(data=data, label=label))
+
+    # rectify is_public and is_local
+    if self.dataset_is_local:
+      self.dataset_is_public = False
 
     # create dataset on mltalker
     create_dataset_remote_api = 'hub/api/terminal/create/dataset'
@@ -71,7 +100,8 @@ class AntGenerate(AntBase):
                                        action='post',
                                        data={'dataset-name': self.dataset_name,
                                              'dataset-is-public': int(self.dataset_is_public),
-                                             'dataset-url': dataset_hash_url})
+                                             'dataset-is-local': int(self.dataset_is_local),
+                                             'dataset-url': dataset_url})
 
     if response['status'] != 'OK':
       logger.error('fail to synchronize (maybe dataset name not unique)')

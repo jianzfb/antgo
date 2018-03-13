@@ -125,7 +125,7 @@ class Standard(Dataset):
             continue
 
         data, label = self._record_reader.read(id, 'data', 'label')
-        print((id, data,label))
+        # print((id, data,label))
         # filter by condition
         if type(label) == dict:
           if 'category' in label and 'category_id' in label:
@@ -173,7 +173,7 @@ class Standard(Dataset):
 
   @property
   def size(self):
-    return self.count
+    return int(self.count)
   
   def at(self, id):
     data, label = self._record_reader.read(id, 'data', 'label')
