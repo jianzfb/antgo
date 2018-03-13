@@ -265,6 +265,8 @@ class _TransparantNode(Node):
     self.active_request = active_request
     self._buffer = queue.Queue()
 
+    self._model_val = None
+
   def set_value(self, new_value):
     self._buffer.put(new_value)
     self._set_value(new_value)
@@ -307,9 +309,13 @@ class _TransparantNode(Node):
         i._force_inputs_dirty()
       self._value = DIRTY
 
-  def model_branch_fn(self, *args, **kwargs):
+  @property
+  def model_fn(self):
     # dataset format - tfrecord
-    return self._positional_inputs[0].model_branch_fn(*args, **kwargs)
+    return self._model_val
+  @model_fn.setter
+  def model_fn(self, model_val):
+    self._model_val = model_val
 
 
 class DataAnnotationBranch(Node):
@@ -334,12 +340,9 @@ class DataAnnotationBranch(Node):
   def model_fn(self, *args, **kwargs):
     # dataset format - tfrecord
     x, self._y = self._positional_inputs[0].model_fn(*args, **kwargs)
+    self.annotation_branch.model_fn = self._y
     return x
-  
-  def model_branch_fn(self, *args, **kwargs):
-    # dataset format - tfrecord
-    return self._y
-  
+
   @property
   def size(self):
     return self._positional_inputs[0].size

@@ -58,12 +58,6 @@ class RecorderNode(Node):
       self._annotation_cache.put(copy.deepcopy(entry))
 
   def record(self, val, **kwargs):
-    if self._annotation_cache.qsize() == 0:
-      # sluggishness
-      if 'sess' in kwargs:
-        label_val = kwargs['sess'].run(self._positional_inputs[0].model_branch_fn())
-        self._annotation_cache.put(label_val)
-      
     if type(val) == list or type(val) == tuple:
       results = val
     else:
@@ -77,3 +71,6 @@ class RecorderNode(Node):
 
   def iterator_value(self):
     pass
+
+  def model_fn(self):
+    return self._positional_inputs[0].model_fn()

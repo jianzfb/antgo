@@ -454,11 +454,16 @@ class TFTrainer(Trainer):
       # increment
       self.iter_at += 1
       
-      # run
+      # forward process
       start_time = time.time()
       result = self.sess.run(self.val_ops, feed_dict=feed_dict if len(feed_dict) > 0 else None)
       elapsed_time = int((time.time() - start_time) * 100) / 100.0
-      
+
+      # push value passively
+      if self.ctx.recorder is not None:
+        if self.ctx.recorder.model_fn is not None:
+          self.ctx.recorder.action(self.sess.run(self.ctx.recorder.model_fn))
+
       # record elapsed time
       self.time_stat.add(elapsed_time)
       
