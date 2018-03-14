@@ -460,9 +460,9 @@ class TFTrainer(Trainer):
       elapsed_time = int((time.time() - start_time) * 100) / 100.0
 
       # push value passively
-      if self.ctx.recorder is not None:
-        if self.ctx.recorder.model_fn is not None:
-          self.ctx.recorder.action(self.sess.run(self.ctx.recorder.model_fn))
+      if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
+        self.ctx.recorder.action(result[-1])
+        result = result[:-1]
 
       # record elapsed time
       self.time_stat.add(elapsed_time)
@@ -595,7 +595,7 @@ class TFTrainer(Trainer):
               self.val_ops.extend(list(self.clones[0].outputs))
             else:
               self.val_ops.append(self.clones[0].outputs)
-
+        
         # Global initialization
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(tf.local_variables_initializer())
@@ -707,6 +707,12 @@ class TFTrainer(Trainer):
         self.val_ops = self.clones[0].outputs
         if type(self.val_ops) != list and type(self.val_ops) != tuple:
           self.val_ops = [self.val_ops]
+        if type(self.val_ops) == tuple:
+          self.val_ops = list(self.val_ops)
+        
+        # Append recorder model fn
+        if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
+          self.val_ops.append(self.ctx.recorder.model_fn)
         
   # 1.step deploy model on hardwares
   def deploy(self, model):

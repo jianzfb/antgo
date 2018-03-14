@@ -4,7 +4,7 @@ import os
 import os.path
 from .standard import *
 from .simpleimages import *
-from .csvs import *
+from .simplecsvs import *
 is_support_tf = True
 try:
   from .tfrecordsreader import *

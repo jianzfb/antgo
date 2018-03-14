@@ -71,6 +71,7 @@ class RecorderNode(Node):
 
   def iterator_value(self):
     pass
-
+  
+  @property
   def model_fn(self):
-    return self._positional_inputs[0].model_fn()
+    return self._positional_inputs[0].model_fn

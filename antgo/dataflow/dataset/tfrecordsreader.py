@@ -15,27 +15,15 @@ import sys
 class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
-    self._data_size = [700, 700, 3]
-    self._data_type = tf.uint8
-    self._label_size = [700, 700, 1]
-    self._label_type = tf.uint8
+    temp = getattr(self, '_data_size', '700,700,3')
+    self._data_size = [int(s) for s in temp.split(',')]
+    self._data_type = tf.as_dtype(getattr(self, '_data_type', 'uint8'))
+    temp = getattr(self, '_label_size', '700,700,1')
+    self._label_size = [int(s) for s in temp.split(',')]
+    self._label_type = tf.as_dtype(getattr(self, '_label_type', 'uint8'))
     self._num_samples = int(getattr(self, '_num_samples', 199600))
     self._pattern = getattr(self, '_pattern', '*.tfrecord?')
     self._has_format = bool(getattr(self, '_format', False))
-    
-  @property
-  def capacity(self):
-    return self._capacity
-  @capacity.setter
-  def capacity(self, val):
-    self._capacity = val
-  
-  @property
-  def min_after_dequeue(self):
-    return self._min_after_dequeue
-  @min_after_dequeue.setter
-  def min_after_dequeue(self, val):
-    self._min_after_dequeue = val
   
   @property
   def data_size(self):
@@ -120,8 +108,8 @@ class TFRecordsReader(Dataset):
         'label/format': tf.FixedLenFeature((), tf.string, default_value='png'),
       }
       items_to_handlers = {
-        'image': slim.tfexample_decoder.Image(),
-        'label': slim.tfexample_decoder.Image('label/encoded', 'label/format')
+        'image': slim.tfexample_decoder.Image('image/encoded', 'image/format', channels=self.data_size[-1]),
+        'label': slim.tfexample_decoder.Image('label/encoded', 'label/format', channels=self.label_size[-1])
       }
   
       decoder = slim.tfexample_decoder.TFExampleDecoder(keys_to_features, items_to_handlers)
