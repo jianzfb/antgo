@@ -89,7 +89,7 @@ def _configure_learning_rate(trainer_obj, num_samples_per_epoch, global_step):
   Raises:
     ValueError: if
   """
-  batch_size = getattr(trainer_obj, 'batch_size', 1)
+  batch_size = getattr(trainer_obj, 'batch_size', 1) * getattr(trainer_obj, 'num_clones', 1)
   num_epochs_per_decay = getattr(trainer_obj, 'num_epochs_per_decay', 10)
   decay_steps = int(num_samples_per_epoch / batch_size * num_epochs_per_decay)
 
