@@ -24,6 +24,7 @@ class RecorderNode(Node):
     self._dump_dir = None
     self._annotation_cache = queue.Queue()
     self._record_writer = None
+    self._is_none = False
   
   @property
   def is_measure(self):
@@ -31,6 +32,9 @@ class RecorderNode(Node):
       return False
     
     if self._record_writer.size == 0:
+      return False
+    
+    if self._is_none:
       return False
     
     return True
@@ -62,11 +66,15 @@ class RecorderNode(Node):
       results = val
     else:
       results = [val]
+    
     for _, result in enumerate(results):
       gt = None
       if self._annotation_cache.qsize() > 0:
         gt = self._annotation_cache.get()
-  
+      
+      if gt is None and not self._is_none:
+        self._is_none = True
+        
       self._record_writer.write(Sample(groundtruth=gt, predict=result))
 
   def iterator_value(self):

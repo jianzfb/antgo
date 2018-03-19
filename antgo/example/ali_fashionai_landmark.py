@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
-# @Time    : 17-12-27
-# @File    : Hourglass_face_landmark.py
+# @Time    : 18-03-19
+# @File    : ali_fashionai_landmark.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -16,6 +16,7 @@ from antgo.dataflow.imgaug.regular import *
 from antgo.annotation.image_tool import *
 from antgo.codebook.tf.dataset import *
 from antgo.codebook.tf.preprocess import *
+from antgo.utils._resize import resize
 
 ##################################################
 ######## 1.step global interaction handle ########
@@ -93,13 +94,16 @@ class HourglassModel(ModelDesc):
       return tf.nn.relu(tf.add(up_2, up_1), name='out_hg')
   
   def model_input(self, is_training, data_source):
-    resized_data = Resize(Node.inputs(data_source), shape=(64, 64))
-    reorganized_data = Node('reorganize', _data_reorganize, Node.inputs(resized_data))
+    warp_data = Node('warp', _data_warp, Node.inputs(data_source))
+    reorganized_data = Node('reorganize', _data_reorganize, Node.inputs(warp_data))
   
-    qq = DatasetQueue(reorganized_data, [tf.float32, tf.float32], [(64, 64, 3), (ctx.params.nstacks, 32, 32, 5)])
+    qq = DatasetQueue(reorganized_data,
+                      [tf.float32, tf.float32],
+                      [(ctx.params.input_size, ctx.params.input_size, 4),
+                       (ctx.params.nstacks, ctx.params.hm_size, ctx.params.hm_size, len(ctx.params.joints))])
     image, gtmap = qq.dequeue()
 
-    random_angle = (tf.to_float(tf.random_uniform([1]))[0] * 2 - 1) * 30.0 / 180.0 * 3.14
+    random_angle = (tf.to_float(tf.random_uniform([1]))[0] * 2 - 1) * 10.0 / 180.0 * 3.14
     # for image
     image = tf.expand_dims(image, 0)
     rotated_image = tf.contrib.image.rotate(image, random_angle)
@@ -108,11 +112,8 @@ class HourglassModel(ModelDesc):
     # for gtmap
     rotated_gtmap = tf.contrib.image.rotate(gtmap, random_angle)
 
-    # rotated_image = image
-    # rotated_gtmap = gtmap
-    #
     # make batch
-    rotated_images, rotated_gtmaps = tf.train.batch([rotated_image, rotated_gtmap], ctx.params.batch_size)
+    rotated_images, rotated_gtmaps = tf.train.batch([rotated_image, rotated_gtmap], ctx.params.batch_size, )
     data_queue = slim.prefetch_queue.prefetch_queue([rotated_images, rotated_gtmaps])
     return data_queue
   
@@ -132,14 +133,13 @@ class HourglassModel(ModelDesc):
     with slim.arg_scope(self.arg_scope(is_training)):
       with tf.variable_scope('model'):
         with tf.variable_scope('preprocessing'):
-          # inputs batch_size x 64 x 64 x 3
-          pad1 = tf.pad(inputs, [[0, 0], [2, 2], [2, 2], [0, 0]], name='pad_1')
-          # batch_size x 32 x 32 x 64
-          conv_1 = slim.conv2d(pad1, 64, [6, 6], stride=2, scope='conv_64_to_32', padding='VALID')
-          r1 = self._residual(conv_1, 128, name='r1')
-          # pool1 = slim.avg_pool2d(r1, kernel_size=[2,2],stride=2)
-          r2 = self._residual(r1, int(self._nfeat/2), name='r2')
-          r3 = self._residual(r2, self._nfeat, name='r3')
+          # inputs batch_size x 256 x 256 x 4
+          pad_1 = tf.pad(inputs, np.array([[0, 0], [2, 2], [2, 2], [0, 0]]))
+          conv_1 = slim.conv2d(pad_1, 64, [6, 6], stride=2, scope='256to128', padding='VALID')
+          res_1 = self._residual(conv_1, 128, name='r1')
+          pool_1 = tf.contrib.layers.max_pool2d(res_1, [2, 2], [2, 2], padding='VALID')
+          res_2 = self._residual(pool_1, 128, name='r2')
+          res_3 = self._residual(res_2, ctx.params.nfeat, name='r3')
         
         # storage table
         # root block
@@ -152,32 +152,32 @@ class HourglassModel(ModelDesc):
         sum_ = [None] * self._nstack
         with tf.variable_scope('stacks'):
           with tf.variable_scope('stage_0'):
-            hg[0] = self._hourglass(r3, self._nlow, self._nfeat, 'hourglass')
+            hg[0] = self._hourglass(res_3, self._nlow, self._nfeat, 'hourglass')
             drop[0] = slim.dropout(hg[0], keep_prob=self._dropout_rate, is_training=is_training)
             ll[0] = slim.conv2d(drop[0], self._nfeat, [1, 1], stride=1, scope='cc')
             ll_[0] = slim.conv2d(ll[0], self._nfeat, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='ll')
             
             out[0] = slim.conv2d(ll[0], self._output_dim, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
             out_[0] = slim.conv2d(out[0], self._nfeat, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='out_')
-            sum_[0] = tf.add_n([out_[0], r3, ll_[0]], name='merge')
+            sum_[0] = tf.add_n([out_[0], res_3, ll_[0]], name='merge')
           
           for i in range(1, self._nstack - 1):
             with tf.variable_scope('stage_'+str(i)):
               hg[i] = self._hourglass(sum_[i-1], self._nlow, self._nfeat, 'hourglass')
               drop[i] = slim.dropout(hg[i], keep_prob=self._dropout_rate, is_training=is_training)
               ll[i] = slim.conv2d(drop[i], self._nfeat, [1, 1], stride=1, scope='cc')
-              ll_[i] = slim.conv2d(ll[i], self._nfeat, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='ll')
+              ll_[i] = slim.conv2d(ll[i], self._nfeat, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='ll')
               
-              out[i] = slim.conv2d(ll[i], self._output_dim, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
-              out_[i] = slim.conv2d(out[i], self._nfeat, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='out_')
+              out[i] = slim.conv2d(ll[i], self._output_dim, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
+              out_[i] = slim.conv2d(out[i], self._nfeat, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='out_')
               sum_[i] = tf.add_n([out_[i], sum_[i-1], ll_[i]], name='merge')
               
           with tf.variable_scope('stage_'+str(self._nstack - 1)):
             hg[self._nstack - 1] = self._hourglass(sum_[self._nstack - 2], self._nlow, self._nfeat, 'hourglass')
             drop[self._nstack - 1] = slim.dropout(hg[self._nstack - 1], keep_prob=self._dropout_rate, is_training=is_training)
-            ll[self._nstack - 1] = slim.conv2d(drop[self._nstack - 1], self._nfeat, [1,1], stride=1, scope='cc')
+            ll[self._nstack - 1] = slim.conv2d(drop[self._nstack - 1], self._nfeat, [1, 1], stride=1, scope='cc')
             
-            out[self._nstack - 1] = slim.conv2d(ll[self._nstack - 1], self._output_dim, [1,1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
+            out[self._nstack - 1] = slim.conv2d(ll[self._nstack - 1], self._output_dim, [1, 1], stride=1, normalizer_fn=None, activation_fn=None, scope='out')
             
           output = tf.stack(out, axis=1, name='final_output')
 
@@ -222,23 +222,53 @@ def _generate_hm(height, width, joints, maxlength, weight):
   return hm
 
 
-def _data_reorganize(*args, **kwargs):
-  train_img = args[0][0]                        # 64 x 64 x 3
-  train_img_annotation = args[0][1]             # {}
+def _data_warp(*args, **kwargs):
+  data, label = args[0]
+  image, _ = data  # ignore category
+  return image, label
 
-  joints = train_img_annotation['landmark']
+
+def _data_reorganize(*args, **kwargs):
+  train_img = args[0][0]  # 64 x 64 x 4
+  train_img_annotation = args[0][1]  # {}
+  
+  category_dict = {'blouse': 0,
+                   'dress': 1,
+                   'outwear': 2,
+                   'skirt': 3,
+                   'trousers': 4}
+  
+  train_img = resize(train_img, [ctx.params.input_size, ctx.params.input_size])
+  train_img = train_img / 255.0
+  prior = category_dict[train_img_annotation['category']] * np.ones((ctx.params.input_size, ctx.params.input_size, 1))
+  prior = prior / float(len(category_dict))
+  train_img = np.concatenate((train_img, prior), axis=-1)
+  
+  landmarks = train_img_annotation['landmark']
+  joints = np.zeros((len(ctx.params.joints), 2))
+##################################################
+  visibles = -1 * np.ones((len(ctx.params.joints)))
+  for joint_index, joint_global_index, x, y, visible in landmarks:
+    joints[joint_global_index, 0] = x
+    joints[joint_global_index, 1] = y
+    
+    visibles[joint_global_index] = visible
+  
   info = train_img_annotation['info']
   old_height, old_width = info[0:2]
   joints = np.array(joints).reshape((-1, 2))
-  joints[:, 0] = joints[:, 0] / float(old_width) * 32.0
-  joints[:, 1] = joints[:, 1] / float(old_height) * 32.0
-  train_weight = np.ones((5), np.float32)
-  hm = _generate_hm(32, 32, joints, 32, train_weight)
+  joints[:, 0] = joints[:, 0] / float(old_width) * ctx.params.hm_size
+  joints[:, 1] = joints[:, 1] / float(old_height) * ctx.params.hm_size
+  
+  train_weight = np.zeros((len(ctx.params.joints)), np.float32)
+  train_weight[np.where(visibles == 1)] = 1
+  
+  hm = _generate_hm(ctx.params.hm_size, ctx.params.hm_size, joints, ctx.params.hm_size, train_weight)
   hm = np.expand_dims(hm, axis=0)
   hm = np.repeat(hm, ctx.params.nstacks, axis=0)
   
-  train_img = train_img / 255.0
   return train_img, hm
+
 
 def training_callback(data_source, dump_dir):
   ##########  2.step build model     ##############
@@ -247,8 +277,10 @@ def training_callback(data_source, dump_dir):
 
   iter = 0
   for epoch in range(ctx.params.max_epochs):
-    for _ in range(data_source.size):
+    rounds = int(float(data_source.size) / float(ctx.params.batch_size * ctx.params.num_clones))
+    for _ in range(rounds):
       _, loss_val, aa, bb = tf_trainer.run()
+      print(loss_val)
       iter = iter + 1
       
     # save
