@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>众包盲评-{{task['title']}}</title>
-    <link rel="icon" href="/static/antgo.ico" type="image/x-icon">
+    <link rel="icon" href="static/antgo.ico" type="image/x-icon">
     <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
     <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
     <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
@@ -123,7 +123,7 @@
              $('#'+k).text(data_content);
            }
            else if(data_type == 'IMAGE'){
-             $('#'+k).attr('src', '/static/'+data_content, alt=k);
+             $('#'+k).attr('src', 'static/'+data_content, alt=k);
            }
            else if(data_type == 'SOUND'){
            }
@@ -160,7 +160,7 @@
         **************************************************************/
         // 2.step start first query
         var start_query_data={'QUERY': 'START'}
-        $.post('crowdsource/query', start_query_data, function(data){
+        $.post('query', start_query_data, function(data){
             var data_obj = eval('('+data+')');
             // is stop
             if(data_obj['PAGE_STATUS'] == 'STOP'){
@@ -189,7 +189,7 @@
                     $('#'+k).text(data_content);
                 }
                 else if(data_type == 'IMAGE'){
-                    $('#'+k).attr('src', '/static/'+data_content, alt=k);
+                    $('#'+k).attr('src', 'static/'+data_content, alt=k);
                 }
                 else if(data_type == 'SOUND'){
                 }
@@ -236,7 +236,7 @@
                 user_response_data['CLIENT_RESPONSE_CONCLUSION'] = USER_CONCLUSION;
 
                 // submit user response
-                $.post('crowdsource/query', user_response_data, function(data){
+                $.post('query', user_response_data, function(data){
                     // clear modal (if existed)
                     if(is_user_submit_modal_open){
                         $('#user_submit_modal').modal('toggle');
@@ -280,7 +280,7 @@
                                layout.append(0,count, "<p>{v}</p>".format({v: data_content}))
                              }
                              else if(data_type == 'IMAGE'){
-                               layout.append(0,count, '<img src="/static/{v}">'.format({v: data_content}))
+                               layout.append(0,count, '<img src="static/{v}">'.format({v: data_content}))
                              }
                              else if(data_type == 'SOUND'){
                              }
@@ -309,7 +309,7 @@
             query_data['QUERY'] = 'NEXT';
             query_data['QUERY_INDEX'] = query_index;
 
-            $.post('crowdsource/query', query_data, function(data){
+            $.post('query', query_data, function(data){
                 // parse server feedback data
                 var data_obj = eval('('+data+')');
 

@@ -322,10 +322,10 @@ class AntBase(object):
         if response is None:
           return None
 
-        response_js = json.loads(response.content.decode())
-        if 'status' in response_js and response_js['status'] in [404, 500]:
+        if response.status_code != 200:
           return None
 
+        response_js = json.loads(response.content.decode())
         return response_js
     except:
         return None

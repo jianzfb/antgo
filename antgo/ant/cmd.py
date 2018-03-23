@@ -335,13 +335,44 @@ class AntCmd(AntBase):
 
     logger.info('task has been created successfully, please enjoy...')
 
+  def process_add_command(self):
+    task_type = FLAGS.task_type()
+    task_measure = FLAGS.task_measure()
+
+    if task_type is None or task_measure is None:
+      logger.error('need set task_type and task_measure simutaneously')
+      return
+
+    task_measures = task_measure.split(',')
+    task_measures = json.dumps(task_measures)
+
+    remote_api = 'hub/api/terminal/task/type/%s'%task_type
+    response = self.remote_api_request(remote_api,
+                                       action='post',
+                                       data={'task-measures': task_measures})
+
+    if response is None:
+      logger.error('fail to add task type')
+      return
+
+    logger.info('success to add task type')
+    print(response)
+
   def process_del_command(self):
     dataset_name = FLAGS.dataset_name()
     task_name = FLAGS.task_name()
     experiment_name = FLAGS.experiment_name()
+    task_type = FLAGS.task_type()
+    task_measure = FLAGS.task_measure()
 
-    if dataset_name is None and task_name is None and experiment_name is None:
-      logger.error('must set delete object [%s]' % ','.join(['dataset', 'task', 'experiment']))
+    if dataset_name is None and \
+            task_name is None and \
+            experiment_name is None and \
+            task_type is None:
+      logger.error('must set delete object [%s]' % ','.join(['dataset',
+                                                             'task',
+                                                             'experiment',
+                                                             'task-type']))
       return
 
     if dataset_name is not None:
@@ -370,6 +401,24 @@ class AntCmd(AntBase):
       if response['status'] != 'OK':
         logger.error('delete error, maybe experiment name not unique')
         return
+    elif task_type is not None:
+      data = {}
+      if task_measure is not None:
+        task_measures = task_measure.split(',')
+        task_measures = json.dumps(task_measures)
+        data['task-measures'] = task_measures
+
+      remote_api = 'hub/api/terminal/task/type/%s'%task_type
+      response = self.remote_api_request(remote_api,
+                                         action='delete',
+                                         data=data)
+
+      if response is None:
+        logger.error('fail to delete task type')
+        return
+
+      logger.info('success to delete task type')
+      print(response)
 
   def process_update_command(self):
     task_name = FLAGS.task_name()
@@ -499,23 +548,29 @@ class AntCmd(AntBase):
   def process_upload_command(self):
     # dataset name
     dataset_name = FLAGS.dataset_name()   # must be unique at cloud
-    if dataset_name is None:
-      logger.error('dataset name must be set')
+    dataset_is_local = FLAGS.is_local()
+    dataset_is_public = FLAGS.is_public()
+    if dataset_name is None or dataset_is_local is None or dataset_is_public is None:
+      logger.error('must set dataset_name, is_local and is_public')
       return
 
     ########################## stage 1 - lookup dataset #############################
     # lookup dataset record at cloud
-    create_dataset_remote_api = 'hub/api/terminal/dataset/name/%s'%dataset_name
-    response = self.remote_api_request(create_dataset_remote_api, action='get')
+    create_dataset_remote_api = 'hub/api/terminal/create/dataset'
+    response = self.remote_api_request(create_dataset_remote_api, data={'dataset-name': dataset_name,
+                                                                        'dataset-is-local': int(dataset_is_local),
+                                                                        'dataset-is-public': int(dataset_is_public)},action='post')
 
-    if 'dataset-name' not in response:
-      logger.error('dataset name has been existed at cloud, please reset')
+    if 'status' not in response:
+      logger.error('fail to create dataset')
+      return
+
+    if response['status'] != 'OK':
+      logger.error('fail to create dataset')
       return
 
     # dataset valid name (dataset name maybe added prefix automatically)
     dataset_name = response['dataset-name']
-    dataset_is_local = response['dataset-is-local']
-    dataset_is_public = response['dataset-is-public']
 
     ########################## stage 2 - upload dataset #############################
     # only public or self created dataset is allowed
@@ -694,36 +749,6 @@ class AntCmd(AntBase):
     # launch background process
     subprocess.call("nohup %s" % train_cmd, shell=True)
 
-
-  def process_compose_command(self):
-    token, name, main_file, main_folder, dump_dir, params, task = self._key_params()
-    compose_cmd = 'antgo compose'
-    if token is not None:
-      compose_cmd += ' --token=%s' % token
-
-    if name is not None:
-      compose_cmd += ' --name=%s' % name
-
-    if main_file is not None:
-      compose_cmd += ' --main_file=%s' % main_file
-
-    if main_folder is not None:
-      compose_cmd += ' --main_folder=%s' % main_folder
-
-    if params is not None:
-      compose_cmd += ' --main_param=%s' % params
-
-    if task is not None:
-      compose_cmd += ' --task=%s' % task
-
-    if dump_dir is not None:
-      compose_cmd += ' --dump=%s' % dump_dir
-
-    compose_cmd += ' > %s-compose.log 2>&1 &' % name
-
-    # launch background process
-    subprocess.call("nohup %s" % compose_cmd, shell=True)
-
   def process_cmd(self, command):
     try:
       if command == 'task':
@@ -736,6 +761,8 @@ class AntCmd(AntBase):
         self.process_apply_command()
       elif command == 'create':
         self.process_create_command()
+      elif command == 'add':
+        self.process_add_command()
       elif command == 'del':
         self.process_del_command()
       elif command == 'update':
@@ -746,8 +773,6 @@ class AntCmd(AntBase):
         self.process_challenge_command()
       elif command == 'train':
         self.process_train_command()
-      elif command == 'compose':
-        self.process_compose_command()
     except:
       logger.error('error response from server')
 
@@ -761,7 +786,17 @@ class AntCmd(AntBase):
     while cmd != 'quit':
       try:
         command = cmd.split(' ')
-        assert(command[0] in ['task', 'dataset', 'experiment', 'apply', 'create', 'del','update','upload','challenge', 'train', 'compose'])
+        assert(command[0] in ['task',
+                              'dataset',
+                              'experiment',
+                              'apply',
+                              'create',
+                              'del',
+                              'add',
+                              'update',
+                              'upload',
+                              'challenge',
+                              'train'])
 
         flags.cli_param_flags(command[1:])
 

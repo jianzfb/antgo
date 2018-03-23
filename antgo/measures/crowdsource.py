@@ -71,6 +71,13 @@ class AntCrowdsource(AntMeasure):
     self._backend = zmq.Context().socket(zmq.REP)
     self._backend.bind('ipc://%s'%self._totem)
 
+    self._complex_degree = 0                    # 0,1,2,3,4,5 (subclass define)
+    self._crowdsource_type = ''                 # (subclass define)
+    self._crowdsource_bonum = getattr(task, 'crowdsource_evaluation_bonus', 0)   # (task define)
+    self._crowdsource_start_time = time.time()  # (auto)
+    self._crowdsource_title = ''                # description (subclass define)
+    self._crowdsource_estimated_time = 0.0      # (auto)
+    self._crowdsource_complete_degree = 0       # (auto)
 
   @property
   def client_html_template(self):
@@ -109,9 +116,39 @@ class AntCrowdsource(AntMeasure):
 
   @property
   def _is_finished(self):
+    update_real_statistic = {}
+    if self._total_samples > 0:
+      # compute crowdsource complete degree
+      complete_degree = 0.0
+      for k,v in self._sample_finished_count.items():
+        complete_degree = complete_degree + v['COUNT']
+      complete_degree = complete_degree / float(self._total_samples * self._min_participants_per_sample + 1e-6)
+      complete_degree = min(max(complete_degree, 0.0), 1.0)
+      self._crowdsource_complete_degree = complete_degree
+      update_real_statistic['complete'] = self._crowdsource_complete_degree
+
+    # compute crodsource estimated time per client
+    estimated_time = []
+    for _, resposne_record in self._client_response_record.items():
+      cc = [c['STOP_TIME']-c['START_TIME'] for c in resposne_record['RESPONSE_TIME'] if c is not None and c['STOP_TIME'] > 0]
+      estimated_time.extend(cc)
+
+    if len(estimated_time) > 0:
+      estimated_time = np.median(estimated_time)
+      self._crowdsource_estimated_time = estimated_time
+      update_real_statistic['estimated_time'] = self._crowdsource_estimated_time
+
+    # notify api
+    if self.app_token is not None and len(update_real_statistic) > 0:
+      user_authorization = {'Authorization': "token " + self.app_token}
+      request_url = 'http://%s:%s/hub/api/crowdsource/evaluation/experiment/%s/info' % (Config.server_ip, Config.server_port, self.experiment_id)
+      requests.post(request_url, data=update_real_statistic, headers=user_authorization)
+
+    # check is over?
     if len(self._sample_finished_count) == 0:
       return False
-    
+
+    # check is over?
     if len(self._sample_finished_count) < self._total_samples:
       return False
     
@@ -119,7 +156,7 @@ class AntCrowdsource(AntMeasure):
     for k, v in self._sample_finished_count.items():
       if v['COUNT'] < self._min_participants_per_sample:
         return False
-      
+
     return True
 
   def ground_truth_response(self, client_id, query_index, record_db):
@@ -412,6 +449,15 @@ class AntCrowdsource(AntMeasure):
       logger.error('couldnt find idle port for crowdsoure server')
       return False
 
+    # select crowdsource info
+    crowdsource_info = {'title': self._crowdsource_title,
+                        'type': self._crowdsource_type,
+                        'complex': self._complex_degree,
+                        'time': self._crowdsource_start_time,
+                        'complete': 0.0,
+                        'bonus': self._crowdsource_bonum,
+                        'estimated_time':self._crowdsource_estimated_time}
+
     # 1.step launch crowdsource server (independent process)
     process = multiprocessing.Process(target=crowdsrouce_server_start,
                                       args=(self._totem,
@@ -420,7 +466,8 @@ class AntCrowdsource(AntMeasure):
                                             self.dump_dir,
                                             self.name,
                                             self.client_html_template,
-                                            idle_server_port))
+                                            idle_server_port,
+                                            crowdsource_info))
     process.start()
 
     # 2.step listening crowdsource server is OK

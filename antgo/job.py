@@ -212,8 +212,15 @@ class Job(threading.Thread):
   def create_chart(self, chart_channels, chart_title, chart_x_axis="x", chart_y_axis="y"):
     chart = Chart(chart_title, chart_x_axis, chart_y_axis)
     self.charts.append(chart)
+    channel_type = None
     for cc in chart_channels:
-        chart.bind_channel(cc)
+      if channel_type is None:
+        channel_type = cc.channel_type
+      else:
+        # assert channel has the same type
+        assert(channel_type == cc.channel_type)
+
+      chart.bind_channel(cc)
 
   @property
   def context(self):

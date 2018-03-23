@@ -25,14 +25,11 @@ import shutil
 import socket
 import random
 import zmq
-
+from antgo.crowdsource.utils import *
 Config = config.AntConfig
 
 
 class BaseHandler(tornado.web.RequestHandler):
-  def get_current_user(self):
-    return self.get_secure_cookie('user')
-
   @property
   def task_name(self):
     return self.settings['task_name']
@@ -42,18 +39,46 @@ class BaseHandler(tornado.web.RequestHandler):
     return self.settings['html_template']
 
   @property
+  def db(self):
+    return self.settings['db']
+
+  @property
   def totem(self):
     return self.settings['totem']
 
-  
+  @property
+  def port(self):
+    return self.settings['port']
+
+
 class IndexHandler(BaseHandler):
-  def get(self):
-    # client id
-    if self.get_secure_cookie('user') is None:
-      self.set_secure_cookie('user', str(uuid.uuid4()))
-    
-    task = {'title': self.task_name,}
-    self.render(self.html_template, task=task)
+  def get(self, experiment_id, user_id):
+    session_id = self.get_cookie('sessionid')
+    if session_id not in self.db['user']:
+      self.set_status(500)
+      self.finish()
+      return
+
+    if self.db['user'][session_id] != user_id:
+      self.set_status(500)
+      self.finish()
+      return
+
+    # render page
+    self.render(self.html_template, task={'title': self.task_name,})
+
+
+class RegisterHandler(BaseHandler):
+  def post(self):
+    sessionid = self.get_argument('sessionid', '')
+    contributer = self.get_argument('user')
+    if sessionid == '':
+      self.set_status(500)
+      self.finish()
+      return
+
+    self.db['user'][sessionid] = contributer
+    self.finish()
 
 
 class HeartBeatHandler(tornado.web.RequestHandler):
@@ -62,13 +87,15 @@ class HeartBeatHandler(tornado.web.RequestHandler):
 
 
 class ClientQuery(BaseHandler):
-  def post(self):
-    if self.get_current_user() is None:
-      self.send_error(500)
-    
+  def post(self, experiment_id, user_id):
+    if self.get_cookie('sessionid') not in self.db['user']:
+      self.set_status(500)
+      self.finish()
+      return
+
     client_query = {}
     client_query['QUERY'] = self.get_argument('QUERY')
-    client_query['CLIENT_ID'] = self.get_current_user().decode('utf-8')
+    client_query['CLIENT_ID'] = self.get_cookie('sessionid')
     client_query['CLIENT_RESPONSE'] = {}
     client_query['CLIENT_RESPONSE']['WORKSITE'] = self.get_argument('CLIENT_RESPONSE_WORKSITE', None)
     client_query['CLIENT_RESPONSE']['CONCLUSION'] = self.get_argument('CLIENT_RESPONSE_CONCLUSION', None)
@@ -86,6 +113,13 @@ class ClientQuery(BaseHandler):
     self.write(json.dumps(server_response))
 
 
+class PrefixRedirectHandler(BaseHandler):
+  def get(self):
+    static_pi = self.request.uri.find('static')
+    path = self.request.uri[static_pi:]
+    self.redirect('http://127.0.0.1:%d/%s'%(self.port, path), permanent=False)
+
+
 class GracefulExitException(Exception):
   @staticmethod
   def sigterm_handler(signum, frame):
@@ -100,7 +134,8 @@ def crowdsrouce_server_start(totem,
                              dump_dir,
                              task_name,
                              html_template,
-                             server_port):
+                             server_port,
+                             crowdsource_info={}):
   # log
   logger.info('crowdsource server prepare serving on %d'%server_port)
 
@@ -126,7 +161,8 @@ def crowdsrouce_server_start(totem,
       return
 
     time.sleep(5)
-    res = requests.post(request_url, data=None, headers=user_authorization)
+    # collect crowdsource basic information
+    res = requests.post(request_url, data=crowdsource_info, headers=user_authorization)
     content = json.loads(res.content)
     inner_port = None
     if content['STATUS'] == 'SUCCESS':
@@ -149,10 +185,14 @@ def crowdsrouce_server_start(totem,
               'totem': totem,
               'task_name': task_name,
               'html_template':html_template,
-              'cookie_secret': str(uuid.uuid4())}
-    app = tornado.web.Application(handlers=[(r"/", IndexHandler),
-                                            (r"/crowdsource/query", ClientQuery),
-                                            (r"/heartbeat", HeartBeatHandler),],
+              'cookie_secret': str(uuid.uuid4()),
+              'port':server_port,
+              'db': {'user':{}}}
+    app = tornado.web.Application(handlers=[(r"/crowdsource/([^/]+)/user/([^/]+)/", IndexHandler),
+                                            (r"/crowdsource/([^/]+)/user/([^/]+)/query", ClientQuery),
+                                            (r"/heartbeat", HeartBeatHandler),
+                                            (r"/register/", RegisterHandler),
+                                            (r"/.*/static/.*", PrefixRedirectHandler)],
                                   **settings)
     http_server = tornado.httpserver.HTTPServer(app)
 
