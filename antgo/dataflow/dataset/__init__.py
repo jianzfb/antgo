@@ -23,9 +23,11 @@ for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
   if not module_name.startswith('_'):
     if module_name == 'tfrecordsreader':
       continue
-   
-    global_import(module_name)
 
+    if module_name == 'dataset':
+      continue
+
+    global_import(module_name)
 
 def AntDataset(dataset_name, parse_flag=''):
   # absorb some small error
