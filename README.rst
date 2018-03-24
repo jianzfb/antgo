@@ -1,6 +1,8 @@
 ======================
 antgo
 ======================
+
+
 Target
 ----------------------
 antgo is a machine learning experiment manage platform, which has been integrated deeply with MLTalker.
@@ -9,6 +11,8 @@ of ML tasks.
 
 Based on amounts of statistical evaluation methods, antgo could give a fruitful evaluation report, which
 help researchers analyze and trade-off their model.
+
+Antgo tutorial is at `MLTalker Blog <http://www.mltalker.com/blog/>`__.
 
 Installation
 ----------------------
@@ -49,7 +53,7 @@ Register in `MLTalker <http://www.mltalker.com/>`__.
 
 All user experiment records would be managed by MLTalker in user's personal page.
 
-Example
+Quick Example
 -----------------------
 1.step Apply Task from mlalker.com::
 
