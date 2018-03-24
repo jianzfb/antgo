@@ -2,6 +2,8 @@
 antgo
 ======================
 
+.. image:: https://raw.githubusercontent.com/jianzfb/antgo/master/antgo/resource/static/card.png
+    :alt: Antgo
 
 Target
 ----------------------
