@@ -42,9 +42,10 @@ install antgo::
 
 Register
 -----------------------
-
+Register in `MLTalker <http://www.mltalker.com/>`__.
 .. image:: http://otcf1mj36.bkt.clouddn.com/18-3-24/11119143.jpg
 
+All user experiment records would be managed by MLTalker in user's personal page.
 
 Example
 -----------------------
