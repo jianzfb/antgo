@@ -13,8 +13,12 @@ VGGFACE_URL = 'http://www.robots.ox.ac.uk/~vgg/data/vgg_face/vgg_face_dataset.ta
 class VGGFace(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(VGGFace, self).__init__(train_or_test, dir)
-    assert(train_or_test == 'train')
-    
+    assert(train_or_test in ['train', 'sample'])
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
+
     # 0.step maybe download
     if not os.path.exists(os.path.join(self.dir, 'vgg_face_dataset.tar.gz')):
       self.download(self.dir, file_names=[], default_url=VGGFACE_URL, auto_untar=True, is_gz=True)
@@ -91,6 +95,15 @@ class VGGFace(Dataset):
     return len(self.ids)
   
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
@@ -114,6 +127,9 @@ class VGGFace(Dataset):
         yield person_image, person_annotation
   
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     person_file = self._persons_file[id]
     person_image = imread(person_file)
     person_id = self._persons_id[id]

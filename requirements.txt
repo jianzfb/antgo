@@ -1,7 +1,7 @@
 numpy
 scipy
 six
-cython
+cython>=0.20
 termcolor
 tqdm
 msgpack_numpy

@@ -21,6 +21,8 @@ import zipfile
 from antgo import config
 import subprocess
 from antgo.utils.dht import *
+from antgo.utils.serialize import *
+import copy
 
 Config = config.AntConfig
 
@@ -518,6 +520,25 @@ class Dataset(BaseNode):
           label['category_id'][obj_index] = transform_cls[obj]
 
     return label
+
+  def load_samples(self, sample_folder=None):
+    assert(self.train_or_test == 'sample')
+    sample_file = None
+    if sample_folder is None:
+      sample_folder = os.path.join(self.dir, self.train_or_test)
+
+    for file in os.listdir(sample_folder):
+      if file[0] == '.':
+        continue
+      if file.split('.')[-1].lower() == 'sample':
+        sample_file = os.path.join(sample_folder, file)
+        break
+
+    sample_data = []
+    if sample_file is not None:
+      with open(sample_file, 'rb') as fp:
+        sample_data = loads(fp.read())
+    return sample_data, list(range(len(sample_data)))
 
   def download(self, target_path,
                file_names=[],

@@ -15,7 +15,12 @@ IPHONE2DSLR_URL = ''
 class Iphone2Dslr(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(Iphone2Dslr, self).__init__(train_or_test, dir)
-    assert(train_or_test in ['train', 'test'])
+    assert(train_or_test in ['train', 'test', 'sample'])
+
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
 
     # 0.step maybe download
     if not os.path.exists(os.path.join(self.dir, 'iphone2dslr_flower')):
@@ -45,9 +50,18 @@ class Iphone2Dslr(Dataset):
 
   @property
   def size(self):
-    return len(self.data_a_list)
+    return len(self.ids)
   
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
@@ -68,6 +82,9 @@ class Iphone2Dslr(Dataset):
         yield [a_img, b_img]
 
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     a = self.data_a_list[id]
     random_b_index = np.random.randint(0, len(self.data_b_list), 1)[0]
     b = self.data_b_list[random_b_index]

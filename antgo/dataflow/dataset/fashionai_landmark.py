@@ -13,9 +13,12 @@ import numpy as np
 class FashionAILandmark(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(FashionAILandmark, self).__init__(train_or_test, dir)
-    
-    assert(train_or_test in ['train', 'test'])
-    
+    assert(train_or_test in ['train', 'test', 'sample'])
+
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
+
     if train_or_test == 'train':
       if not (os.path.exists(os.path.join(self.dir,'train','Images')) and
                 os.path.exists(os.path.join(self.dir, 'train','Annotations'))):
@@ -203,6 +206,15 @@ class FashionAILandmark(Dataset):
     return len(self.ids)
   
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
@@ -228,6 +240,9 @@ class FashionAILandmark(Dataset):
           yield [(image, category_id), None]
 
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     image_file, category_id = self.images[id]
     image_path = os.path.join(self.dir, self.train_or_test, image_file)
     image = imread(image_path)

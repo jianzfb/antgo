@@ -99,6 +99,11 @@ class ILSVRC12(Dataset):
     super(ILSVRC12, self).__init__(train_or_test, dataset_path)
     self.train_or_test = train_or_test
 
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
+
     # some meta info
     if not os.path.exists(os.path.join(self.dir, 'meta')):
       self.download(os.path.join(self.dir, 'meta'),
@@ -131,6 +136,8 @@ class ILSVRC12(Dataset):
         self.bblist, label_list = ILSVRC12.get_bbox(bbdir, self.imglist, self.train_or_test)
         self.imglist = [(self.imglist[k][0], self.inv_synset[label_list[k]]) for k in range(len(self.imglist))]
 
+    self.ids = list(range(len(self.imglist)))
+
   def get_train_image_list(self, name):
     """
     :param name: 'train'
@@ -158,13 +165,22 @@ class ILSVRC12(Dataset):
 
   @property
   def size(self):
-    return len(self.imglist)
+    return len(self.ids)
 
   def data_pool(self):
     """
     Produce original images of shape [h, w, 3], and label,
     and optionally a bbox of [xmin, ymin, xmax, ymax]
     """
+    if self.train_or_test == 'sample':
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
@@ -198,6 +214,9 @@ class ILSVRC12(Dataset):
           yield [im]
   
   def at(self, k):
+    if self.train_or_test == 'sample':
+      return self.data_samples[k]
+
     fname, label = self.imglist[k]
     fname = os.path.join(self.dir, self.train_or_test, fname)
     im = imread(fname.strip())
@@ -211,12 +230,12 @@ class ILSVRC12(Dataset):
       if bbox is None:
         bbox = np.array([0, 0, im.shape[1] - 1, im.shape[0] - 1])
     
-      yield [im, {'category_id': label,
+      return [im, {'category_id': label,
                   'bbox': bbox,
                   'id': k,
                   'info': (im.shape[0], im.shape[1], im.shape[2])}]
     else:
-      yield [im]
+      return [im]
 
   @staticmethod
   def get_bbox(bbox_dir, imglist, train_or_test):

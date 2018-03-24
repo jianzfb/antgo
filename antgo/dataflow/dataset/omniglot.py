@@ -18,9 +18,14 @@ OmniglotURL = 'https://github.com/brendenlake/omniglot/raw/master/python/'
 class Omniglot(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(Omniglot, self).__init__(train_or_test, dir)
-    assert(train_or_test in ['train','val'])
+    assert(train_or_test in ['train', 'val', 'sample'])
     self.train_or_test = train_or_test
     self.data_folder = dir       # data folder
+
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
 
     maybe_data_dir = maybe_here_fixed_3_hierarchy(os.path.join(self.data_folder, train_or_test), '.png')
     if maybe_data_dir is None:
@@ -68,6 +73,15 @@ class Omniglot(Dataset):
     return self, val_omniglot
 
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
@@ -84,6 +98,9 @@ class Omniglot(Dataset):
           yield [self.load_image(self.samples[k][2]), self.samples[k][1]]
 
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     return [self.load_image(self.samples[self.ids[id]][2]), self.samples[self.ids[id]][1]]
 
   @property

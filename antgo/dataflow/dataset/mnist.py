@@ -97,6 +97,11 @@ class Mnist(Dataset):
     assert(train_or_test != 'val')
     self.train_or_test = train_or_test
 
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
+
     # fixed seed
     self.seed = time.time()
 
@@ -142,10 +147,12 @@ class Mnist(Dataset):
 
   @property
   def size(self):
-      ds = self.train if self.train_or_test == 'train' else self.test
-      return ds.num_examples
+    return len(self.ids)
 
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     if self.train_or_test == 'train':
       img = self.train.images[id].reshape((28, 28))
       img = img[..., np.newaxis]
@@ -160,6 +167,15 @@ class Mnist(Dataset):
       return img, label
 
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     ds = None
     if self.train_or_test == 'train':
       ds = self.train

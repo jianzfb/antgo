@@ -14,7 +14,12 @@ CELEBA_URL = "http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html"
 class CelebA(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(CelebA, self).__init__(train_or_test, dir)
-    
+
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
+
     # 0.step maybe download
     if not (os.path.exists(os.path.join(self.dir, 'Img')) and
               os.path.exists(os.path.join(self.dir, 'Anno')) and
@@ -268,30 +273,42 @@ class CelebA(Dataset):
   
   @property
   def size(self):
-    return len(self._file_list)
+    return len(self.ids)
   
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      # self.sample_data_pool(self.data_samples, self.ids)
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
       if epoch >= max_epoches:
         break
       epoch += 1
-      
-      # idxs = np.arange(len(self.ids))
+
       idxs = copy.deepcopy(self.ids)
       if self.rng:
         self.rng.shuffle(idxs)
-        
+
       for k in idxs:
         image_file = self._file_list[k]
         file_name = image_file.split('/')[-1]
         image = imread(image_file)
-        
+
         self._annotations[file_name].update({'id': k, 'info': [image.shape[0], image.shape[1], image.shape[2]]})
         yield [image, self._annotations[file_name]]
-  
+
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     image_file = self._file_list[id]
     file_name = image_file.split('/')[-1]
     image = imread(image_file)

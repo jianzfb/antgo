@@ -31,6 +31,11 @@ class PascalBase(Dataset):
     self._image_set = image_set
     self._devkit_path = dir
 
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self._image_index = self.load_samples()
+      return
+
     if self._year == '2007':
       self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
       maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
@@ -88,13 +93,21 @@ class PascalBase(Dataset):
                    'min_size': 2}
 
     assert os.path.exists(self._data_path), 'path does not exist: {}'.format(self._data_path)
-    self.dataset_size = len(self._image_index)
 
   @property
   def size(self):
-    return self.dataset_size
+    return len(self._image_index)
 
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      sample_idxs = list(range(self.size))
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
@@ -128,6 +141,9 @@ class PascalBase(Dataset):
         yield [image, gt_roidb]
   
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     index = self._image_index[id]
     gt_roidb = self._load_roidb(index)
   
@@ -250,7 +266,7 @@ class PascalBase(Dataset):
 
 class Pascal2007(PascalBase):
   def __init__(self, train_or_test, dir=None, ext_params=None):
-    super(Pascal2007,self).__init__('2007', train_or_test, dir,ext_params)
+    super(Pascal2007,self).__init__('2007', train_or_test, dir, ext_params)
 
   def split(self, split_params={}, split_method='holdout'):
     assert (self.train_or_test == 'train')
@@ -262,7 +278,7 @@ class Pascal2007(PascalBase):
 
 class Pascal2012(PascalBase):
   def __init__(self, train_or_test, dir=None, ext_params=None):
-    super(Pascal2012,self).__init__('2012', train_or_test, dir,ext_params)
+    super(Pascal2012,self).__init__('2012', train_or_test, dir, ext_params)
 
   def split(self, split_params={}, split_method='holdout'):
     assert (self.train_or_test == 'train')

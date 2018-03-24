@@ -22,6 +22,11 @@ class Standard(Dataset):
     dataset_name = dataset_dir.split('/')[-1]
     super(Standard, self).__init__(train_or_test, dataset_dir, ext_params, dataset_name)
 
+    # read sample data
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
+
     # maybe dataset has not prepared now
     if not os.path.exists(os.path.join(dataset_dir,train_or_test)):
       os.makedirs(os.path.join(dataset_dir,train_or_test))
@@ -77,6 +82,15 @@ class Standard(Dataset):
     self.seed = time.time()
 
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     self.epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
@@ -173,8 +187,14 @@ class Standard(Dataset):
 
   @property
   def size(self):
+    if self.train_or_test == 'sample':
+      return len(self.ids)
+
     return int(self.count)
   
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
+
     data, label = self._record_reader.read(id, 'data', 'label')
     return data, label

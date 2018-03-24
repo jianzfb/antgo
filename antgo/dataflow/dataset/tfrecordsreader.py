@@ -15,6 +15,7 @@ import sys
 class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
+    assert(train_or_test in ['train', 'val', 'test'])
     temp = getattr(self, '_data_size', '700,700,3')
     self._data_size = [int(s) for s in temp.split(',')]
     self._data_type = tf.as_dtype(getattr(self, '_data_type', 'uint8'))

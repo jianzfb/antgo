@@ -65,12 +65,16 @@ class CifarBase(Dataset):
       image is 32x32x3 in the range [0,255]
   """
   def __init__(self, train_or_test, dir=None, params=None, cifar_classnum=10):
-    assert train_or_test in ['train', 'test']
+    assert train_or_test in ['train', 'test', 'sample']
     assert cifar_classnum == 10 or cifar_classnum == 100
     super(CifarBase,self).__init__(train_or_test,dir)
     self.train_or_test = train_or_test
     self.cifar_classnum = cifar_classnum
     self.dir = dir
+
+    if self.train_or_test == 'sample':
+      self.data_samples, self.ids = self.load_samples()
+      return
 
     # fixed seed
     self.seed = time.time()
@@ -104,12 +108,24 @@ class CifarBase(Dataset):
 
   @property
   def size(self):
-    return len(self.image)
+    return len(self.ids)
 
   def at(self, id):
+    if self.train_or_test == 'sample':
+      return self.data_samples[id]
     return self.image[id], self.label[id]
 
   def data_pool(self):
+    if self.train_or_test == 'sample':
+      # self.sample_data_pool(self.data_samples, self.ids)
+      sample_idxs = copy.deepcopy(self.ids)
+      if self.rng:
+        self.rng.shuffle(sample_idxs)
+
+      for index in sample_idxs:
+        yield self.data_samples[index]
+      return
+
     self.epoch = 0
     while True:
       max_epoches = self.epochs if self.epochs is not None else 1
