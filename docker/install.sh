@@ -10,7 +10,9 @@ export LIBRARY_PATH=${LIBRARY_PATH}:`pwd`
 cd ..
 
 # 2.step install ipfs
-
+wget -q https://raw.githubusercontent.com/ipfs/install-go-ipfs/master/install-ipfs.sh
+chmod +x install-ipfs.sh
+./install-ipfs.sh
 
 # 3.step install graphviz
 sudo apt-get install graphviz

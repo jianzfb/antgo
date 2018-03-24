@@ -8,17 +8,30 @@ antgo provides some easy cli commands to help ML researchers to manage, analyze,
 of ML tasks.
 
 Based on amounts of statistical evaluation methods, antgo could give a fruitful evaluation report, which
-help researchers analyze their model and users trade-off.
+help researchers analyze and trade-off their model.
 
 Installation
 ----------------------
 install 3rd software or packages::
 
-    1. rocksdb
-    2. ipfs
-        https://ipfs.io/
-    3. graphviz
-        http://www.graphviz.org/Download_linux_ubuntu.php
+    1. install rocksdb
+        sudo apt-get update
+        sudo apt-get install -y build-essential libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev
+        git clone https://github.com/facebook/rocksdb.git
+        cd rocksdb/
+        make shared_lib
+        export CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH}:`pwd`/include
+        export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:`pwd`
+        export LIBRARY_PATH=${LIBRARY_PATH}:`pwd`
+        cd ..
+
+    2. install ipfs (https://ipfs.io/)
+        wget -q https://raw.githubusercontent.com/ipfs/install-go-ipfs/master/install-ipfs.sh
+        chmod +x install-ipfs.sh
+        ./install-ipfs.sh
+
+    3. install graphviz (http://www.graphviz.org)
+        sudo apt-get install graphviz
 
 install antgo::
 
@@ -27,10 +40,51 @@ install antgo::
     3. pip install -r requirements.txt
     4. python setup.py build_ext install
 
+Register
+_______________________
+
+.. image:: http://otcf1mj36.bkt.clouddn.com/18-3-24/37946865.jpg
+
 
 Example
 -----------------------
-1. Run Train Task::
+1.step Apply Task from mlalker.com::
+
+    /**********************************************************************************/
+    /********************             enter antgo cli               *******************/
+    /**********************************************************************************/
+    antgo --token=<your token>
+
+    /**********************************************************************************/
+    /*************** list all public and your created private tasks   *****************/
+    /*** id    name       time                    dataset    applicants            ****/
+    /***  3    ***   2018-03-21 19:34:48            ***           1                ****/
+    /***  ...                                                                      ****/
+    /**********************************************************************************/
+    apply
+
+    /**********************************************************************************/
+    /*************               apply your interest task               ***************/
+    /**********************************************************************************/
+    apply --id=...
+
+    /**********************************************************************************/
+    /************************  list all your applied tasks   **************************/
+    /*** id   name        time          dataset  experiments    token              ****/
+    /***  3   ***   2018-03-21 19:08:08   ***         1     6ebb7***24743e1a       ****/
+    /***  ...                                                                      ****/
+    /**********************************************************************************/
+    task
+
+    /**********************************************************************************/
+    /*********************  list all experiments in your task     *********************/
+    /*** id     name                    time           optimum    report     model ****/
+    /*** 7  20180322.115607.896376 2018-03-22 11:56:07    0          0          0  ****/
+    /***  ...                                                                      ****/
+    /**********************************************************************************/
+    task --id=...
+
+2.step Run Train Task::
 
     (1) build running main file (eg. training_task.py)
         from antgo.context import *
@@ -41,16 +95,14 @@ Example
 
         # 2.step build visualization channel
         # curve channel
-        task12_loss_channel = ctx.job.create_channel("task12-loss","NUMERIC")
-        task1_loss_channel = ctx.job.create_channel("task1-loss","NUMERIC")
-        task2_loss_channel = ctx.job.create_channel("task2-loss","NUMERIC")
+        loss_channel = ctx.job.create_channel("loss","NUMERIC")
 
         # histogram channel
         histogram_channel = ctx.job.create_channel("Layer1-activation-histogram",'HISTOGRAM')
 
         # build chart (bind multi-channels)
-        ctx.job.create_chart([task12_loss_channel, task1_loss_channel, task2_loss_channel],"Loss Curve","step","value")
-        ctx.job.create_chart([histogram_channel],"Weight","value","frequence")
+        ctx.job.create_chart([loss_channel],"Loss Curve", "step", "value")
+        ctx.job.create_chart([histogram_channel], "Weight","value","frequence")
 
         # 3.step custom training process
         def training_callback(data_source,dump_dir):
@@ -64,13 +116,12 @@ Example
             for epoch in range(ctx.params.max_epochs):
                 for data, label in stack_batch.iterator_value():
                     # run once iterator
-                    loss, loss_1, loss_2, weight = your_training_model(data, label)
+                    loss, weight = your_training_model(data, label)
 
                     # send running information
-                    task12_loss_channel.send(x=iter, y=loss)
-                    task1_loss_channel.send(x=iter, y=loss_1)
-                    task2_loss_channel.send(x=iter, y=loss_2)
-
+                    # 1. loss value
+                    loss_channel.send(x=iter, y=loss)
+                    # 2. activation histogram
                     histogram_channel.send(x=iter, y=weight)
 
         # 4.step custom infer process
@@ -91,12 +142,9 @@ Example
         ctx.infer_process = infer_callback
 
     (2) call antgo cli at terminal
-        antgo run --main_file=challenge_task.py --task=yourtask.xml
-        # --task=yourtask.xml config your challenge task
-        # eg. segmentation_task.xml (antgo/antgo/example/task/segmentation_task.xml)
+        antgo run --main_file=challenge_task.py --main_param=challenge_task.yaml --token=<task token>
 
-
-2. Run Challenge Task::
+3.step Run Challenge Task::
 
     (1) build running main file (eg. challenge_task.py)
         from antgo.context import *
@@ -120,7 +168,5 @@ Example
         # bind infer_callback
         ctx.infer_process = infer_callback
     (2) call antgo cli at terminal
-    antgo challenge --main_file=challenge_task.py --task=yourtask.xml
-    # --task=yourtask.xml config your challenge task
-    # eg. segmentation_task.xml (antgo/antgo/example/task/segmentation_task.xml)
+    antgo challenge --main_file=challenge_task.py --main_param=challenge_task.yaml --token=<task token>
 
