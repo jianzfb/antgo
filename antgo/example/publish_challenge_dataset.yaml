@@ -1,0 +1,6 @@
+train: 
+  num: 50
+  block: 2
+test:
+  num: 60
+  block: 3
