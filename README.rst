@@ -41,9 +41,9 @@ install antgo::
     4. python setup.py build_ext install
 
 Register
-_______________________
+-----------------------
 
-.. image:: http://otcf1mj36.bkt.clouddn.com/18-3-24/37946865.jpg
+.. image:: http://otcf1mj36.bkt.clouddn.com/18-3-24/11119143.jpg
 
 
 Example
