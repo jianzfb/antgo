@@ -44,8 +44,8 @@ Register
 -----------------------
 Register in `MLTalker <http://www.mltalker.com/>`__.
 
-.. image:: http://otcf1mj36.bkt.clouddn.com/18-3-24/11119143.jpg
-    :alt: Flow Image
+.. image:: https://raw.githubusercontent.com/jianzfb/antgo/master/antgo/resource/static/register.png
+    :alt: Antgo and MLTalker
 
 All user experiment records would be managed by MLTalker in user's personal page.
 
