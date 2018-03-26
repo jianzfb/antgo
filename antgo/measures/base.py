@@ -16,6 +16,7 @@ class AntMeasure(object):
     else:
       self.name = AntMeasure.__class__.__name__
 
+    self._is_inverse = False
     self._is_support_rank = False
     self._crowdsource = False
 
@@ -26,6 +27,13 @@ class AntMeasure(object):
   @is_support_rank.setter
   def is_support_rank(self,val):
     self._is_support_rank = val
+
+  @property
+  def is_inverse(self):
+    return self._is_inverse
+  @is_inverse.setter
+  def is_inverse(self, val):
+    self._is_inverse = val
 
   @property
   def crowdsource(self):
