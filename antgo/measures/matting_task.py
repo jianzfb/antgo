@@ -11,7 +11,9 @@ from antgo.measures.base import *
 from antgo.dataflow.common import *
 from antgo.measures.error import *
 
-
+__all__ = {'AntSADMatting': ('MATTING-SAD', 'MATTING'),
+           'AntMSEMatting': ('MATTING-MSE', 'MATTING'),
+           'AntGradientMatting': ('MATTING-GRADIENT', 'MATTING')}
 class AntSADMatting(AntMeasure):
   def __init__(self, task):
     super(AntSADMatting, self).__init__(task, 'MATTING-SAD')
@@ -36,7 +38,7 @@ class AntSADMatting(AntMeasure):
     return {'statistic':{'name':self.name, 'value':[{'name':self.name, 'value': val, 'type': 'SCALAR'}]}}
 
 
-def AntMSEMatting(AntMeasure):
+class AntMSEMatting(AntMeasure):
   def __init__(self, task):
     super(AntMSEMatting, self).__init__(task, 'MATTING-MSE')
     assert (task.task_type == 'MATTING')
@@ -60,7 +62,7 @@ def AntMSEMatting(AntMeasure):
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]}}
 
 
-def AntGradientMatting(AntMeasure):
+class AntGradientMatting(AntMeasure):
   def __init__(self, task):
     # paper: Christoph Rhemann, etc. A Perceptually Motivated Online Benchmark for Image Matting
     super(AntGradientMatting, self).__init__(task, 'MATTING-GRADIENT')
@@ -88,7 +90,7 @@ def AntGradientMatting(AntMeasure):
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]}}
 
 
-def AntConnectivityMatting(AntMeasure):
+class AntConnectivityMatting(AntMeasure):
   def __init__(self, task):
     # paper: Christoph Rhemann, etc. A Perceptually Motivated Online Benchmark for Image Matting
     super(AntConnectivityMatting, self).__init__(task, 'MATTING-CONNECTIVITY')

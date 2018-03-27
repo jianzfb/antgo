@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 18-3-26
 # @File    : fashionai_attribute.py
-# @Author  : 
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
@@ -13,7 +13,7 @@ from antgo.dataflow.dataset import *
 __all__ = ['FashionAIAttribute']
 class FashionAIAttribute(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
-    super(FashionAIAttribute, self).__init__(train_or_test, dir)
+    super(FashionAIAttribute, self).__init__(train_or_test, dir, params)
     assert(train_or_test in ['train', 'test'])
     self.train_or_test = train_or_test
     
@@ -97,7 +97,7 @@ class FashionAIAttribute(Dataset):
     # data index list
     self.ids = list(range(len(self.images)))
     # fixed seed
-    self.seed = 0
+    self.seed = getattr(self, 'seed', 0)
   
   @property
   def size(self):

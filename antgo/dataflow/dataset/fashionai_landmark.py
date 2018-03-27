@@ -12,7 +12,7 @@ import numpy as np
 __all__ = ['FashionAILandmark']
 class FashionAILandmark(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
-    super(FashionAILandmark, self).__init__(train_or_test, dir)
+    super(FashionAILandmark, self).__init__(train_or_test, dir, params)
     
     assert(train_or_test in ['train', 'test'])
     if train_or_test == 'train':
@@ -114,7 +114,15 @@ class FashionAILandmark(Dataset):
                                 22:5,
                                 23:6
                               }}
-    
+
+    self.category_map = {
+      'blouse': 0,
+      'dress': 1,
+      'outwear': 2,
+      'skirt': 3,
+      'trousers': 4,
+    }
+
     self.annotation = []
     self.images = []
     if train_or_test == 'train':
@@ -125,13 +133,14 @@ class FashionAILandmark(Dataset):
         while content:
           key_terms = content.split(',')
           image_id = key_terms[0]
-          category_id = key_terms[1]
+          category = key_terms[1]
           # record image id
-          self.images.append((image_id, category_id))
+          self.images.append((image_id, category))
 
           # record annotation
           sample_annotation = {}
-          sample_annotation['category_id'] = category_id
+          sample_annotation['category'] = category
+          sample_annotation['category_id'] = self.category_map[category]
           sample_annotation['landmark'] = []
           sample_annotation['id'] = len(self.images)
           key_point_annotation = key_terms[2:]
@@ -141,8 +150,8 @@ class FashionAILandmark(Dataset):
             y = int(y)
             visible = int(visible)
 
-            if kp_index in self.category_landmark[category_id]:
-              sample_annotation['landmark'].append((self.category_landmark[category_id][kp_index], kp_index, x, y, visible))
+            if kp_index in self.category_landmark[category]:
+              sample_annotation['landmark'].append((self.category_landmark[category][kp_index], kp_index, x, y, visible))
 
           self.annotation.append(sample_annotation)
 
@@ -156,13 +165,14 @@ class FashionAILandmark(Dataset):
         while content:
           key_terms = content.split(',')
           image_id = key_terms[0]
-          category_id = key_terms[1]
+          category = key_terms[1]
           # record image id
-          self.images.append((image_id, category_id))
+          self.images.append((image_id, category))
     
           # record annotation
           sample_annotation = {}
-          sample_annotation['category_id'] = category_id
+          sample_annotation['category'] = category
+          sample_annotation['category_id'] = self.category_map[category]
           sample_annotation['landmark'] = []
           sample_annotation['id'] = len(self.images)
           key_point_annotation = key_terms[2:]
@@ -172,9 +182,9 @@ class FashionAILandmark(Dataset):
             y = int(y)
             visible = int(visible)
       
-            if kp_index in self.category_landmark[category_id]:
+            if kp_index in self.category_landmark[category]:
               sample_annotation['landmark'].append(
-                (self.category_landmark[category_id][kp_index], kp_index, x, y, visible))
+                (self.category_landmark[category][kp_index], kp_index, x, y, visible))
     
           self.annotation.append(sample_annotation)
     
@@ -189,9 +199,9 @@ class FashionAILandmark(Dataset):
         while content:
           key_terms = content.split(',')
           image_id = key_terms[0]
-          category_id = key_terms[1]
+          category = key_terms[1]
           # record image id
-          self.images.append((image_id, category_id))
+          self.images.append((image_id, category))
 
           # read next line
           content = fp.readline()
@@ -200,7 +210,7 @@ class FashionAILandmark(Dataset):
     # data index list
     self.ids = list(range(len(self.images)))
     # fixed seed
-    self.seed = 0
+    self.seed = getattr(self, 'seed', 0)
     
   @property
   def size(self):
@@ -219,22 +229,22 @@ class FashionAILandmark(Dataset):
         self.rng.shuffle(idxs)
     
       for k in idxs:
-        image_file, category_id = self.images[k]
+        image_file, category = self.images[k]
         image_path = os.path.join(self.dir, self.train_or_test, image_file)
         image = imread(image_path)
         
         if self.train_or_test == 'train':
           data_annotation = copy.deepcopy(self.annotation[k])
           data_annotation['info'] = [image.shape[0], image.shape[1], image.shape[2]]
-          yield [(image, category_id, image_file), data_annotation]
+          yield [(image, category, image_file), data_annotation]
         else:
-          yield [(image, category_id, image_file), None]
+          yield [(image, category, image_file), None]
 
   def at(self, id):
-    image_file, category_id = self.images[id]
+    image_file, category = self.images[id]
     image_path = os.path.join(self.dir, self.train_or_test, image_file)
     image = imread(image_path)
-    return (image, category_id, image_file)
+    return (image, category, image_file)
 
   def split(self, split_params={}, split_method='holdout'):
     assert(self.train_or_test == 'train')

@@ -1,10 +1,13 @@
 #  -*- coding: UTF-8 -*-
+# @Time    : 18-3-26
+# @File    : __init__.py
+# @Author  : jian<jian@mltalker.com>
 from pkgutil import walk_packages
 import os
 import os.path
-from .standard import *
-from .simpleimages import *
 from .simplecsvs import *
+from .simpleimages import *
+from .standard import *
 is_support_tf = True
 try:
   from .tfrecordsreader import *
@@ -12,45 +15,54 @@ try:
 except:
   is_support_tf = False
 
-def global_import(name):
-  p = __import__(name, globals(), locals(), level=1)
-  globals().pop(name)
-  lst = p.__all__ if '__all__' in dir(p) else dir(p)
-  for k in lst:
-    globals()[k] = p.__dict__[k]
 
-for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
-  if not module_name.startswith('_'):
-    if module_name == 'tfrecordsreader':
-      continue
+class AntDatasetFactory(object):
+  factory_dataset = {}
 
-    if module_name == 'dataset':
-      continue
+  @staticmethod
+  def dataset(name, parse_flag=''):
+    if 'CUSTOM' in AntDatasetFactory.factory_dataset:
+      return AntDatasetFactory.factory_dataset['CUSTOM']
 
-    global_import(module_name)
+    for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
+      if dataset_name.lower() == name.lower():
+        return dataset_obj
 
-def AntDataset(dataset_name, parse_flag=''):
-  # absorb some small error
-  if dataset_name in globals():
-    return globals()[dataset_name]
-  elif dataset_name.capitalize() in globals():
-    return globals()[dataset_name.capitalize()]
-  elif dataset_name.title() in globals():
-    return globals()[dataset_name.title()]
-  elif dataset_name.upper() in globals():
-    return globals()[dataset_name.upper()]
-  elif dataset_name.lower() in globals():
-    return globals()[dataset_name.lower()]
-  else:
     if parse_flag == 'csv':
       return CSV
     elif (parse_flag == 'tfrecord' or parse_flag == 'tfrecords') and is_support_tf:
       return TFRecordsReader
-    
-    if dataset_name.startswith('tf') and is_support_tf:
+
+    if name.startswith('tf') and is_support_tf:
       return TFRecordsReader
-    
-    if dataset_name.startswith('image'):
+    elif name.startswith('image'):
       return SimpleImages
-    
+
     return Standard
+
+  @staticmethod
+  def add_custom_dataset(custom_dataset):
+    for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
+      if dataset_obj == custom_dataset:
+        return
+
+    AntDatasetFactory.factory_dataset['CUSTOM'] = custom_dataset
+
+def _global_import(name):
+  p = __import__(name, globals(), locals(), level=1)
+  globals().pop(name)
+  lst = p.__all__ if '__all__' in dir(p) else dir(p)
+  for k in lst:
+    # add global varaible
+    globals()[k] = p.__dict__[k]
+
+    # register in Dataset Factory
+    AntDatasetFactory.factory_dataset[k] = p.__dict__[k]
+
+
+for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
+  if not module_name.startswith('_'):
+    if module_name in ['tfrecordsreader', 'dataset', 'simplecsvs', 'simpleimages', 'standard']:
+      continue
+
+    _global_import(module_name)

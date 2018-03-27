@@ -9,7 +9,7 @@ from antgo.task.task import *
 from antgo.measures.base import *
 import numpy as np
 
-
+__all__ = {'AntALIFashionLandmarkNE': ('FashionLandmarkNE', 'LANDMARK')}
 class AntALIFashionLandmarkNE(AntMeasure):
   def __init__(self, task):
     super(AntALIFashionLandmarkNE, self).__init__(task, 'FashionLandmarkNE')
@@ -34,35 +34,39 @@ class AntALIFashionLandmarkNE(AntMeasure):
       predict_landmarks, predict_category = predict
 
       gt_landmarks = gt['landmark']
-      gt_category = gt['category_id']
+      gt_category = gt['category']
       id = gt['id']
 
       assert(predict_category == gt_category)
       
       # normalized parameter
-      sk = 1.0
+      sk = 0.0
       if gt_category in ['blouse', 'outwear', 'dress']:
         # 衬衫，外套，连衣裙
-        armpit_left_px = gt_landmarks[5][2]
-        armpit_left_py = gt_landmarks[5][3]
+        if gt_landmarks[5][4] in [0, 1] and gt_landmarks[6][4] in [0, 1]:
+          armpit_left_px = gt_landmarks[5][2]
+          armpit_left_py = gt_landmarks[5][3]
 
-        armpit_right_px = gt_landmarks[6][2]
-        armpit_right_py = gt_landmarks[6][3]
-        
-        sk = np.sqrt(np.power(armpit_left_px - armpit_right_px,2)+
-                     np.power(armpit_left_py - armpit_right_py,2))
+          armpit_right_px = gt_landmarks[6][2]
+          armpit_right_py = gt_landmarks[6][3]
+
+          sk = np.sqrt(np.power(armpit_left_px - armpit_right_px,2)+
+                       np.power(armpit_left_py - armpit_right_py,2)) + 1e-6
       else:
         # 裤子，半身裙
-        armpit_left_px = gt_landmarks[15][2]
-        armpit_left_py = gt_landmarks[15][3]
+        if gt_landmarks[15][4] in [0, 1] and gt_landmarks[16][4] in [0, 1]:
+          waistband_left_px = gt_landmarks[15][2]
+          waistband_left_py = gt_landmarks[15][3]
 
-        armpit_right_px = gt_landmarks[16][2]
-        armpit_right_py = gt_landmarks[16][3]
+          waistband_right_px = gt_landmarks[16][2]
+          waistband_right_py = gt_landmarks[16][3]
 
-        sk = np.sqrt(np.power(armpit_left_px - armpit_right_px, 2) +
-                     np.power(armpit_left_py - armpit_right_py, 2))
+          sk = np.sqrt(np.power(waistband_left_px - waistband_right_px, 2) +
+                       np.power(waistband_left_py - waistband_right_py, 2)) + 1e-6
 
-      
+      if sk < 1e-5:
+        continue
+
       denominator = 1e-6
       numerator = 0.0
       for predict_landmark, gt_landmark in zip(predict_landmarks, gt_landmarks):

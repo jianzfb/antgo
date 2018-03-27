@@ -62,7 +62,6 @@ class Context(object):
 
     self.training_process_callback = None
     self.infer_process_callback = None
-    self.dataset_factory_callback = AntDataset
     self.running_recorder = None
     self.context_params = None
     
@@ -109,8 +108,7 @@ class Context(object):
     self.training_process_callback = None
     self.infer_process_callback = None
     self._data_generator = None
-    
-    self.dataset_factory_callback = AntDataset
+
     self.running_recorder = None
     self.context_params = None
     self.context_ant = None
@@ -212,13 +210,6 @@ class Context(object):
   def params(self, val):
     self.context_params = Params(val)
 
-  @property
-  def dataset_factory(self):
-    return self.dataset_factory_callback
-  @dataset_factory.setter
-  def dataset_factory(self, val):
-    self.dataset_factory_callback = val
-  
   def registry_trainer_callback(self, key, value, condition, func):
     # condition: equal, less, greater or mod
     self.trainer_callbacks.append((key, value, condition, func))

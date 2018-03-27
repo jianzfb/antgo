@@ -5,7 +5,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.dataflow.dataset import *
+from antgo.dataflow.dataset.dataset import *
 import os
 import copy
 

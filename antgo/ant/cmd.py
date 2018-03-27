@@ -15,7 +15,8 @@ from antgo.ant.utils import *
 from antgo.resource.html import *
 from antgo import config
 from antgo.task.task import *
-from antgo.measures.measure import *
+from antgo.measures import *
+from antgo.measures.repeat_statistic import *
 from antgo.utils import logger
 from multiprocessing import Process
 import subprocess
@@ -45,6 +46,7 @@ class AntCmd(AntBase):
     flags.DEFINE_string('dataset_path',None, 'dataset path')
     flags.DEFINE_string('dataset_url', None, 'dataset url')
     flags.DEFINE_string('dataset_train_or_test', 'train', 'dataset train or test')
+    flags.DEFINE_string('dataset_params', None, 'dataset parse parameter')
     flags.DEFINE_string('task_name',None,'task name')
     flags.DEFINE_string('task_type',None, 'task type')
     flags.DEFINE_string('task_measure',None, 'task measure')
@@ -53,7 +55,6 @@ class AntCmd(AntBase):
     flags.DEFINE_string('task_params', None, 'task extent parameter')
     flags.DEFINE_string('task_class_label',None, 'classification task label')
     flags.DEFINE_string('experiment_name', None, 'experiment name')
-    flags.DEFINE_string('new_experiment_name',None, 'new experiment name')
 
     super(AntCmd, self).__init__('CMD', ant_token=ant_token)
 
@@ -259,7 +260,7 @@ class AntCmd(AntBase):
 
     task_measures = task_measures.split(',')
     dummy_task = create_dummy_task(task_type)
-    dummy_task_measures = AntMeasures(dummy_task)
+    dummy_task_measures = AntMeasuresFactory(dummy_task)
     task_support_measures = [measure.name for measure in dummy_task_measures.measures()]
     for measure in task_measures:
       if measure not in task_support_measures:
@@ -450,7 +451,7 @@ class AntCmd(AntBase):
       if task_measures is not None:
         task_measures = task_measures.split(',')
         dummy_task = create_dummy_task(task_type)
-        dummy_task_measures = AntMeasures(dummy_task)
+        dummy_task_measures = AntMeasuresFactory(dummy_task)
         task_support_measures = [measure.name for measure in dummy_task_measures.measures()]
         for measure in task_measures:
           if measure not in task_support_measures:
@@ -554,7 +555,7 @@ class AntCmd(AntBase):
       logger.error('must set dataset_name, is_local and is_public')
       return
 
-    ########################## stage 1 - lookup dataset #############################
+    #################### stage 1 - lookup and create dataset ########################
     # lookup dataset record at cloud
     create_dataset_remote_api = 'hub/api/terminal/create/dataset'
     response = self.remote_api_request(create_dataset_remote_api, data={'dataset-name': dataset_name,
@@ -572,36 +573,48 @@ class AntCmd(AntBase):
     # dataset valid name (dataset name maybe added prefix automatically)
     dataset_name = response['dataset-name']
 
-    ########################## stage 2 - upload dataset #############################
+    ################# stage 2 - upload and update dataset config #####################
     # only public or self created dataset is allowed
     if dataset_is_local:
       # copy dataset to local datafactory
       data_factory = getattr(Config, 'data_factory', None)
       dataset_path = FLAGS.dataset_path()
-      dataset_url = FLAGS.dataset_url()
-      if dataset_path is None and dataset_url is None:
-        logger.error('dataset_path or dataset_url must be set')
+      if dataset_path is None:
+        logger.error('dataset_path must be set')
         return
 
-      if dataset_path is not None:
-        if not os.path.exists(dataset_path):
-          logger.error('dataset path dont exist')
-          return
+      if not os.path.exists(dataset_path):
+        logger.error('dataset path dont exist')
+        return
 
-        if not os.path.isdir(dataset_path):
-          logger.error('dataset path must be folder')
-          return
+      if not os.path.isdir(dataset_path):
+        logger.error('dataset path must be folder')
+        return
 
       if os.path.exists(os.path.join(data_factory, dataset_name)):
         logger.error('dataset has existed')
         return
 
-      if dataset_path is not None:
-        # move dataset to datafactory
-        shutil.copytree(dataset_path, os.path.join(data_factory, dataset_name))
-        return
+      # 1.step config dataset parameter
+      dataset_params = FLAGS.dataset_params()
+      dataset_params_dict = {}
+      if dataset_params is not None:
+        for kv_pair in dataset_params.split(','):
+          k, v = kv_pair.split(':')
+          dataset_params_dict[k] = v
 
-      logger.error('dont support dataset url for local storage')
+      if len(dataset_params_dict) > 0:
+        create_dataset_remote_api = 'hub/api/terminal/update/dataset'
+        response = self.remote_api_request(create_dataset_remote_api,
+                                           action='patch',
+                                           data={'dataset-name': dataset_name,
+                                                 'dataset-param': json.dumps(dataset_params_dict)})
+        if response['status'] != 'OK':
+          logger.error('fail to update dataset parameter')
+          return
+
+      # 2.step move dataset to datafactory physically
+      shutil.copytree(dataset_path, os.path.join(data_factory, dataset_name))
       return
     else:
       # upload dataset to cloud
@@ -610,14 +623,6 @@ class AntCmd(AntBase):
 
       if dataset_url is None and dataset_path is None:
         logger.error('must set dataset url or dataset local path')
-        return
-
-      # dataset train or test ('train, test, val or sample)
-      dataset_train_or_test = FLAGS.dataset_train_or_test()
-      if not PY3:
-        dataset_train_or_test = unicode(dataset_train_or_test)
-      if dataset_train_or_test not in ['train', 'test', 'val', 'sample']:
-        logger.error('dataset_train_or_test must be in "%s"'%",".join(['train', 'test', 'val', 'sample']))
         return
 
       if dataset_url is not None:
@@ -637,18 +642,42 @@ class AntCmd(AntBase):
           logger.error('only support single file')
           return
 
-        # dataset is uploaded
+        # dataset train or test ('train, test, val or sample)
+        dataset_train_or_test = FLAGS.dataset_train_or_test()
+        if not PY3:
+          dataset_train_or_test = unicode(dataset_train_or_test)
+        if dataset_train_or_test not in ['train', 'test', 'val', 'sample']:
+          logger.error('dataset_train_or_test must be in "%s"' % ",".join(['train', 'test', 'val', 'sample']))
+          return
+
+        # 1.step config dataset parameter
+        dataset_params = FLAGS.dataset_params()
+        dataset_params_dict = {}
+        if dataset_params is not None:
+          for kv_pair in dataset_params.split(','):
+            k, v = kv_pair.split(':')
+            dataset_params_dict[k] = v
+
+        if len(dataset_params_dict) > 0:
+          create_dataset_remote_api = 'hub/api/terminal/update/dataset'
+          response = self.remote_api_request(create_dataset_remote_api,
+                                             action='patch',
+                                             data={'dataset-name': dataset_name,
+                                                   'dataset-param': json.dumps(dataset_params_dict)})
+          if response['status'] != 'OK':
+            logger.error('fail to update dataset parameter')
+            return
+
+        # 2.step upload dataset file
         dataset_path = dataset_path.replace('\\','/')
         file_name = dataset_path.split('/')[-1]
         if not PY3:
           dataset_path = unicode(dataset_path)
           file_name = unicode(file_name)
-
         flag = self.send_file(dataset_path, dataset_name, dataset_train_or_test, 'DATASET-FILE', file_name)
-        if flag:
-          logger.info('dataset uploaded successfully')
-        else:
+        if not flag:
           logger.error('dataset uploaded error')
+          return
 
   def _key_params(self):
     # related parameters

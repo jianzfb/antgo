@@ -10,7 +10,12 @@ from antgo.task.task import *
 from antgo.measures.base import *
 from antgo.dataflow.common import *
 
-
+__all__ = {'AntPixelAccuracySeg': ('PixelAccuracy', 'SEGMENTATION'),
+           'AntMeanAccuracySeg': ('MeanAccuracy', 'SEGMENTATION'),
+           'AntMeanIOUSeg': ('MeanIOU', 'SEGMENTATION'),
+           'AntFrequencyWeightedIOUSeg': ('FrequencyWeightedIOU', 'SEGMENTATION'),
+           'AntMeanIOUBoundary': ('MeanIOUBoundary', 'SEGMENTATION'),
+           }
 class AntPixelAccuracySeg(AntMeasure):
   def __init__(self, task):
     # paper: Jonathan Long, Evan Shelhamer, etc. Fully Convolutional Networks for Semantic Segmentation

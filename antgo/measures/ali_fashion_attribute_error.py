@@ -10,6 +10,7 @@ from antgo.measures.base import *
 import numpy as np
 
 
+__all__ = {'AntALIFashionAttributeError': ('FashionAttributeError', 'CLASSIFICATION')}
 class AntALIFashionAttributeError(AntMeasure):
   def __init__(self, task):
     super(AntALIFashionAttributeError, self).__init__('FashionAttributeError')
@@ -32,21 +33,21 @@ class AntALIFashionAttributeError(AntMeasure):
     :param label:
     :return:
     '''
-
-    if label is not None:
-      data = zip(data, label)
-
     # traverse all attrib
     mean_ap = []
     for cloth_attrib in self.cloth_attribs:
       max_attr_value_prob_list = []
-      for predict, gt in data:
+      zip_data = data if label is None else zip(data, label)
+      for predict, gt in zip_data:
         # filter
         if gt['category'] != cloth_attrib:
           continue
 
-        max_attr_value_prob = np.max(predict)
-        max_attr_value_index = np.argmax(predict)
+        predict_prob, predict_cloth_attrib = predict
+        assert(predict_cloth_attrib == cloth_attrib)
+
+        max_attr_value_prob = np.max(predict_prob)
+        max_attr_value_index = np.argmax(predict_prob)
 
         if gt['category_id'][max_attr_value_index] == 1:
           max_attr_value_prob_list.append((max_attr_value_prob, 1))
@@ -68,6 +69,8 @@ class AntALIFashionAttributeError(AntMeasure):
         val = float(predict_correct_count) / float(predict_count)
         val_list.append(val)
 
+      if len(val_list) == 0:
+        print('sdf')
       ap = np.mean(val_list)
       mean_ap.append(ap)
 

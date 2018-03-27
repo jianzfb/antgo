@@ -39,6 +39,7 @@ def imresize(image,size):
 
 class Dataset(BaseNode):
   __metaclass__ = ABCMeta
+  _BASE_DATASET = True
 
   def __init__(self, train_or_test="train", dir=None, ext_params=None, name=None):
     super(Dataset, self).__init__(name)

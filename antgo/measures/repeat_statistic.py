@@ -1,73 +1,14 @@
-from __future__ import unicode_literals
+# -*- coding: UTF-8 -*-
+# @Time    : 18-3-26
+# @File    : repeat_statistic.py
+# @Author  : jian<jian@mltalker.com>
 from __future__ import division
-from antgo.measures.objdect_task import *
-from antgo.measures.multic_task import *
-from antgo.measures.regression_task import *
-from antgo.measures.segmentation_task import *
-from antgo.measures.matting_task import *
+from __future__ import unicode_literals
+from __future__ import print_function
+import numpy as np
+import copy
 from antgo.resource.html import *
 from antgo.measures.significance import *
-from antgo.measures.pck import *
-from antgo.measures.yesno_crowdsource import *
-import copy
-
-
-class AntMeasures():
-    def __init__(self, task):
-        self.task = task
-
-    def _supported_measures(self):
-        if self.task.task_type is not None:
-            if self.task.task_type == 'CLASSIFICATION':
-                return [AntAccuracyMultiC(self.task),
-                        AntConfusionMatrixMultiC(self.task)]
-            elif self.task.task_type == 'OBJECT-DETECTION':
-                return [AntVOCDet(self.task),
-                        AntCOCODet(self.task),
-                        AntROCandAUCDet(self.task),
-                        AntPRDet(self.task),
-                        AntAPRFDet(self.task),
-                        AntTFTFDet(self.task)]
-            elif self.task.task_type == 'REGRESSION':
-                return [AntMAPERegression(self.task),
-                        AntAlmostCRegression(self.task)]
-            elif self.task.task_type == 'RETRIEVAL':
-                return []
-            elif self.task.task_type == 'SEGMENTATION':
-                return [AntPixelAccuracySeg(self.task),
-                        AntMeanAccuracySeg(self.task),
-                        AntMeanIOUSeg(self.task),
-                        AntFrequencyWeightedIOUSeg(self.task),
-                        AntMeanIOUBoundary(self.task),
-                        AntYesNoCrowdsource(self.task)]
-            elif self.task.task_type == 'INSTANCE-SEGMENTATION':
-                return []
-            elif self.task.task_type == 'MATTING':
-                return [AntSADMatting(self.task),
-                        AntMSEMatting(self.task),
-                        AntGradientMatting(self.task)]
-            elif self.task.task_type == 'LANDMARK':
-              return [AntPCK(self.task)]
-            
-            return []
-        else:
-            # return all
-            return []
-
-    def measures(self, measure_names=None):
-        all_measures = self._supported_measures()
-        if measure_names is not None:
-            if type(measure_names) != list:
-                measure_names = [measure_names]
-
-            applied_measures = []
-            for measure in all_measures:
-                if measure.name in measure_names:
-                    applied_measures.append(measure)
-            return applied_measures
-        else:
-            return all_measures
-
 
 def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'):
   # time

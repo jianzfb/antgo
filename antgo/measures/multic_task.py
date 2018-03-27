@@ -12,6 +12,8 @@ from antgo.measures.confusion_matrix import *
 import numpy as np
 
 
+__all__ = {'AntAccuracyMultiC': ('ACCURACY', 'CLASSIFICATION'),
+           'AntConfusionMatrixMultiC': ('CONFUSION-MATRIX', 'CLASSIFICATION')}
 class AntAccuracyMultiC(AntMeasure):
   def __init__(self, task):
     super(AntAccuracyMultiC, self).__init__(task, 'ACCURACY')

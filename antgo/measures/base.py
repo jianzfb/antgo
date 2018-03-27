@@ -9,6 +9,8 @@ from antgo.task.task import *
 
 
 class AntMeasure(object):
+  _BASE_MEASURE=True
+
   def __init__(self, task,name=None):
     self.task = task
     if name != None:
