@@ -65,11 +65,15 @@ Config = config.AntConfig
 
 
 def main():
+  # 1.step print antgo logo
+  antgo_logo()
+
+  # 2.step check support command
   if len(sys.argv) == 1:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
     sys.exit(-1)
 
-  # 0.step antgo global config
+  # 3.step antgo global config
   config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'config.xml')
   Config.parse_xml(config_xml)
 
@@ -91,25 +95,18 @@ def main():
   if not os.path.exists(task_factory):
     os.makedirs(task_factory)
 
-  # 1.step parse running params
+  # 4.step parse running params
   if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
     flags.cli_param_flags(sys.argv[1:])
   else:
     flags.cli_param_flags(sys.argv[2:])
 
-  # 2.step
-  # 2.1 step key 1: antgo token (secret)
+  # 5.step antgo token (secret)
   token = FLAGS.token()
   if not PY3 and token is not None:
     token = unicode(token)
 
-  # 2.2 step key 2: antgo daemon (data server)
-  # dataflow_server_host = getattr(Config, 'dataflow_server_host', 'tcp://127.0.0.1:9999')
-  # dataflow_server_threads = getattr(Config, 'dataflow_server_threads', 1)
-  # dfs_daemon = DataflowServerDaemon(int(dataflow_server_threads), dataflow_server_host, 'antgo-data-server.pid')
-  # dfs_daemon.start()
-
-  # 3.step parse execute command
+  # 6.step parse execute command
   if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
     # interactive control
     cmd_process = AntCmd(token)
@@ -122,30 +119,26 @@ def main():
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
     return
 
-  # # 4.step check related params
-  # # 4.1 step check name, if None, set it as current time automatically
-  # name = FLAGS.name()
-  # if name is None:
-  #   name = datetime.now().strftime('%Y%m%d.%H%M%S.%f')
-  # time_stamp = datetime.now().timestamp()
+  # 7.step check related params
+  # 7.1 step check name, if None, set it as current time automatically
   time_stamp = timestamp()
   name = datetime.fromtimestamp(time_stamp).strftime('%Y%m%d.%H%M%S.%f')
   if not PY3:
     name = unicode(name)
   
-  # 4.2 check main folder (all related model code, includes main_file and main_param)
+  # 7.2 check main folder (all related model code, includes main_file and main_param)
   main_folder = FLAGS.main_folder()
   if main_folder is None:
     main_folder = os.path.abspath(os.curdir)
   
-  # 4.3 check dump dir (all running data is stored here)
+  # 7.3 check dump dir (all running data is stored here)
   dump_dir = FLAGS.dump()
   if dump_dir is None:
     dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
 
-  # 4.4. step tools (option)
+  # 7.4. step tools (option)
   if ant_cmd == 'tools/tffrozen':
     # tensorflow tools
     import antgo.tools.tftools as tftools
@@ -165,14 +158,14 @@ def main():
                                           FLAGS.tfrecords_shards)
     return
 
-  # 4.5 check main file
+  # 7.5 check main file
   main_file = FLAGS.main_file()
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
     logger.error('main executing file dont exist')
     sys.exit(-1)
 
-  # 6 step ant running
-  # 6.1 step what is task
+  # 8 step ant running
+  # 8.1 step what is task
   task = FLAGS.task()
   if task is not None:
     task = os.path.join(task_factory, task)
@@ -189,7 +182,7 @@ def main():
       fp.write(task_content)
     task = os.path.join(task_factory, '%s.xml'%name)
   
-  # 6.2 step load ant context
+  # 8.2 step load ant context
   ant_context = main_context(main_file, main_folder)
   if FLAGS.from_experiment() is not None:
     experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
@@ -208,7 +201,7 @@ def main():
     else:
       ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
 
-  # 6.3 step load model config
+  # 8.3 step load model config
   main_param = FLAGS.main_param()
   if main_param is not None:
     main_config_path = os.path.join(main_folder, main_param)
@@ -257,7 +250,7 @@ def main():
                                   FLAGS.local())
     running_process.start()
 
-  # 7.step clear context
+  # 9.step clear context
   ant_context.wait_until_clear()
 
 if __name__ == '__main__':
