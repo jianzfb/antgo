@@ -35,7 +35,7 @@ def main_context(main_file, source_paths):
   return module.get_global_context()
 
 
-def antgo_logo():
+def main_logo():
   logo_str='''
 
    ,---.      .-._        ,--.--------.     _,---.     _,.---._     

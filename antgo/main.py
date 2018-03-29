@@ -28,7 +28,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "deploy", "dataset", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "deploy", "dataset", "config", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -45,6 +45,8 @@ flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
 flags.DEFINE_string('sandbox_time', None, 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
+flags.DEFINE_string('data_factory', None, '')
+flags.DEFINE_string('task_factory', None, '')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -65,55 +67,73 @@ Config = config.AntConfig
 
 
 def main():
-  # 1.step print antgo logo
-  antgo_logo()
+  # 1.step antgo logo
+  main_logo()
 
-  # 2.step check support command
+  # 2.step check antgo support command
   if len(sys.argv) == 1:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
     sys.exit(-1)
 
-  # 3.step antgo global config
-  config_xml = os.path.join(os.path.split(os.path.realpath(__file__))[0], 'config.xml')
-  Config.parse_xml(config_xml)
-
-  # check data_factory and task_factory config
-  data_factory = getattr(Config, 'data_factory', None)
-  task_factory = getattr(Config, 'task_factory', None)
-
-  if data_factory is None:
-    logger.error('must set data factory in config.xml')
-    sys.exit(-1)
-
-  if task_factory is None:
-    logger.error('must set task factory in config.xml')
-    sys.exit(-1)
-  
-  if not os.path.exists(data_factory):
-    os.makedirs(data_factory)
-
-  if not os.path.exists(task_factory):
-    os.makedirs(task_factory)
-
-  # 4.step parse running params
+  # 3.step parse antgo running params
   if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
     flags.cli_param_flags(sys.argv[1:])
   else:
     flags.cli_param_flags(sys.argv[2:])
 
-  # 5.step antgo token (secret)
+  if sys.argv[1] == 'config':
+    data_factory = FLAGS.data_factory()
+    task_factory = FLAGS.task_factory()
+    config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-2]), 'config.xml')
+    Config.write_xml(config_xml, {'data_factory': data_factory,
+                                  'task_factory': task_factory})
+    logger.info('success to update config.xml')
+    return
+
+  # 4.step load antgo global config
+  config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-2]), 'config.xml')
+  Config.parse_xml(config_xml)
+
+  # 4.1.step check data_factory
+  data_factory = getattr(Config, 'data_factory', None)
+  if data_factory is None or data_factory == '':
+    # give tip
+    logger.warn('please antgo config --data_factory=... --data_factory=... in root authority')
+    # plan B
+    home_folder = os.environ['HOME']
+    data_factory = os.path.join(home_folder, 'antgo', 'antgo-dataset')
+    Config.data_factory = data_factory
+
+  if not os.path.exists(data_factory):
+    os.makedirs(data_factory)
+
+  # 4.2.step check task_factory
+  task_factory = getattr(Config, 'task_factory', None)
+  if task_factory is None or task_factory == '':
+    # give tip
+    logger.warn('please antgo config --data_factory=... --data_factory=... in root authority')
+    # plan B
+    home_folder = os.environ['HOME']
+    task_factory = os.path.join(home_folder, 'antgo', 'antgo-task')
+    Config.task_factory = task_factory
+
+  if not os.path.exists(task_factory):
+    os.makedirs(task_factory)
+
+  # 5.step parse antgo running token (secret)
   token = FLAGS.token()
   if not PY3 and token is not None:
     token = unicode(token)
 
-  # 6.step parse execute command
+  # 6.step parse antgo execute command
+  # 6.1.step interactive control context
   if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
     # interactive control
     cmd_process = AntCmd(token)
     cmd_process.start()
     return
 
-  # other command (train, challenge, compose, deploy, server)
+  # 6.2.step other command (train, challenge, compose, deploy, server)
   ant_cmd = sys.argv[1]
   if ant_cmd not in _ant_support_commands:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
@@ -138,7 +158,7 @@ def main():
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
 
-  # 7.4. step tools (option)
+  # 7.4.step tools (option)
   if ant_cmd == 'tools/tffrozen':
     # tensorflow tools
     import antgo.tools.tftools as tftools

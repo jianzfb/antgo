@@ -1,6 +1,0 @@
-<antgo>
-    <data_factory>/Users/jian/Downloads/antgo/antgo-dataset</data_factory>
-    <task_factory>/Users/jian/Downloads/antgo/antgo-task</task_factory>
-    <server_ip>www.mltalker.com</server_ip>
-    <server_port>8999</server_port>
-</antgo>

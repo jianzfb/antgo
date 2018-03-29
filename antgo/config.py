@@ -13,14 +13,28 @@ except ImportError:
 
 class _Config(object):
   def __init__(self):
-    pass
-    
+    self._attribs = {}
+
   def parse_xml(self, config_xml):
     tree = ET.ElementTree(file=config_xml)
     root = tree.getroot()
 
     for child in root:
-      setattr(self, child.tag, child.text.strip())
+      val = child.text.strip() if child.text is not None else None
+      setattr(self, child.tag, val)
+      self._attribs[child.tag] = val
+
+  def write_xml(self, config_xml, attribs={}):
+    all_attribs = attribs
+    all_attribs.update(self._attribs)
+
+    tree = ET.ElementTree(file=config_xml)
+    root = tree.getroot()
+    for child in root:
+      if child.tag in all_attribs:
+        child.text = all_attribs[child.tag]
+
+    tree.write(config_xml, encoding="utf-8",xml_declaration=True)
 
 
 AntConfig = _Config()

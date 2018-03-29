@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<antgo>
+    <data_factory></data_factory>
+    <task_factory></task_factory>
+    <server_ip>www.mltalker.com</server_ip>
+    <server_port>8999</server_port>
+</antgo>

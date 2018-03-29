@@ -5,11 +5,6 @@ import numpy as np
 import os
 import subprocess
 
-try:
-    import xml.etree.cElementTree as ET
-except ImportError:
-    import xml.etree.ElementTree as ET
-
 # install: python setup.py build_ext install -r requirements.txt (from github)
 ext_modules = [
     Extension('antgo.utils._mask',
