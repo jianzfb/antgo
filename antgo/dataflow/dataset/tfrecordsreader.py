@@ -16,14 +16,14 @@ class TFRecordsReader(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super(TFRecordsReader, self).__init__(train_or_test, dir, params)
     assert(train_or_test in ['train', 'val', 'test'])
-    temp = getattr(self, 'tf_data_size', '700_700_3')
-    self._data_size = [int(s) for s in temp.split('_')]
+    temp = getattr(self, 'tf_data_size', '700,700,3')
+    self._data_size = [int(s) for s in temp.split(',')]
     self._data_type = tf.as_dtype(getattr(self, 'tf_data_type', 'uint8'))
-    temp = getattr(self, 'tf_label_size', '700_700_1')
-    self._label_size = [int(s) for s in temp.split('_')]
+    temp = getattr(self, 'tf_label_size', '700,700,1')
+    self._label_size = [int(s) for s in temp.split(',')]
     self._label_type = tf.as_dtype(getattr(self, 'tf_label_type', 'uint8'))
     self._num_samples = int(getattr(self, 'tf_num_samples', 199600))
-    self._pattern = getattr(self, 'tf_pattern', '*.tfrecord?')
+    self._pattern = getattr(self, 'tf_pattern', '*.tfrecord')
     self._has_format = bool(getattr(self, 'tf_format', False))
   
   @property

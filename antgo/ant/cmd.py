@@ -280,11 +280,11 @@ class AntCmd(AntBase):
     task_est_params_dict = {}
     task_est_params_dict['params'] = {}
     if task_est_params is not None:
-      task_est_params = task_est_params.split(',')
+      task_est_params = task_est_params.split(';')
       for param in task_est_params:
         param_key_value = param.split(':')
         if len(param_key_value) != 2:
-          logger.error('task estimation procedure params must be format like "key:value,key:value,..."')
+          logger.error('task estimation procedure params must be format like "key:value;key:value;..."')
           return
         else:
           task_est_params_dict['params'][param_key_value[0]] = param_key_value[1]
@@ -294,11 +294,11 @@ class AntCmd(AntBase):
     task_params = FLAGS.task_params()
     task_params_dict = {}
     if task_params is not None:
-      task_params_splits = task_params.split(',')
+      task_params_splits = task_params.split(';')
       for param in task_params_splits:
         param_key_value = param.split(':')
         if len(param_key_value) != 2:
-          logger.error('task extent params must be format like "key:value,key:value,..."')
+          logger.error('task extent params must be format like "key:value;key:value;..."')
           return
         else:
           task_params_dict[param_key_value[0]] = param_key_value[1]
@@ -477,11 +477,11 @@ class AntCmd(AntBase):
         task_est_params_dict = {}
         task_est_params_dict['params'] = {}
 
-        task_est_params = task_est_params.split(',')
+        task_est_params = task_est_params.split(';')
         for param in task_est_params:
           param_key_value = param.split(':')
           if len(param_key_value) != 2:
-            logger.error('task estimation procedure params must be format like "key:value,key:value,..."')
+            logger.error('task estimation procedure params must be format like "key:value;key:value;..."')
             return
           else:
             task_est_params_dict['params'][param_key_value[0]] = param_key_value[1]
@@ -494,11 +494,11 @@ class AntCmd(AntBase):
       task_params = FLAGS.task_params()
       if task_params is not None:
         task_params_dict = {}
-        task_params_splits = task_params.split(',')
+        task_params_splits = task_params.split(';')
         for param in task_params_splits:
           param_key_value = param.split(':')
           if len(param_key_value) != 2:
-            logger.error('task extent params must be format like "key:value,key:value,..."')
+            logger.error('task extent params must be format like "key:value;key:value;..."')
             return
           else:
             task_params_dict[param_key_value[0]] = param_key_value[1]
@@ -599,8 +599,13 @@ class AntCmd(AntBase):
       dataset_params = FLAGS.dataset_params()
       dataset_params_dict = {}
       if dataset_params is not None:
-        for kv_pair in dataset_params.split(','):
-          k, v = kv_pair.split(':')
+        for kv_pair in dataset_params.split(';'):
+          param_key_value = kv_pair.split(':')
+          if len(param_key_value) != 2:
+            logger.error('task extent params must be format like "key:value;key:value;..."')
+            return
+
+          k, v = param_key_value
           dataset_params_dict[k] = v
 
       if len(dataset_params_dict) > 0:
@@ -654,8 +659,13 @@ class AntCmd(AntBase):
         dataset_params = FLAGS.dataset_params()
         dataset_params_dict = {}
         if dataset_params is not None:
-          for kv_pair in dataset_params.split(','):
-            k, v = kv_pair.split(':')
+          for kv_pair in dataset_params.split(';'):
+            param_key_value = kv_pair.split(':')
+            if len(param_key_value) != 2:
+              logger.error('task extent params must be format like "key:value;key:value;..."')
+              return
+
+            k, v = param_key_value
             dataset_params_dict[k] = v
 
         if len(dataset_params_dict) > 0:
