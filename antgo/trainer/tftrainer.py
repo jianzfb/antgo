@@ -689,7 +689,13 @@ class TFTrainer(Trainer):
         
         self.coord = tf.train.Coordinator()
         self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
-        
+
+        custom_dataset_queue = tf.get_collection('CUSTOM_DATASET_QUEUE')
+        if len(custom_dataset_queue) > 0:
+          custom_dataset_queue[0].coord = self.coord
+          custom_threads = custom_dataset_queue[0].start_threads(self.sess)
+          self.threads.extend(custom_threads)
+
         # Restore from checkpoint
         restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
         if restore_fns is not None:

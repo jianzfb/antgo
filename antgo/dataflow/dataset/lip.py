@@ -20,9 +20,9 @@ class LIP(Dataset):
       return
 
     self.data_list = []
-    parse_file = os.path.join(self.dir, '%s' % 'train_id.txt' if self.train_or_test == 'train' else 'val_id.txt')
-    image_folder = os.path.join(self.dir, '%s_images' % 'train' if self.train_or_test == 'train' else 'val')
-    label_folder = os.path.join(self.dir, '%s_segmentations' % 'train' if self.train_or_test == 'train' else 'val')
+    parse_file = os.path.join(self.dir, '%s' % ('train_id.txt' if self.train_or_test == 'train' else 'val_id.txt'))
+    image_folder = os.path.join(self.dir, '%s_images' % ('train' if self.train_or_test == 'train' else 'val'))
+    label_folder = os.path.join(self.dir, '%s_segmentations' % ('train' if self.train_or_test == 'train' else 'val'))
     with open(parse_file, 'r') as fp:
       content = fp.readline()
       while content:
@@ -144,7 +144,7 @@ class LIP(Dataset):
     image_file, label_file = self.data_list[id]
     image = imread(image_file)
     label = imread(label_file)
-    return [image, {'segmentation': label, 'segmentation_map': label, 'id': k}]
+    return [image, {'segmentation': label, 'segmentation_map': label, 'id': id}]
 
   def split(self, split_params={}, split_method='holdout'):
     assert (self.train_or_test == 'train')
