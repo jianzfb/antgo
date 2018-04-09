@@ -18,14 +18,16 @@ class SimpleImages(Dataset):
 
     self.data_files = []
     self.label_files = []
+    label_flag = getattr(self, 'flag', None)
     if os.path.exists(os.path.join(self.dir, self.train_or_test, 'data')) and \
         os.path.exists(os.path.join(self.dir, self.train_or_test, 'label')):
       # data , label (only support images)
       for data_file in os.listdir(os.path.join(self.dir, self.train_or_test, 'data')):
         if data_file.lower().split('.')[-1] in ['png', 'jpg', 'bmp', 'jpeg']:
-          if os.path.exists(os.path.join(self.dir, self.train_or_test, 'label', data_file)):
+          label_file = data_file if label_flag is None else '%s%s.%s'%(data_file.split('.')[0],label_flag,data_file.split('.')[-1])
+          if os.path.exists(os.path.join(self.dir, self.train_or_test, 'label', label_file)):
             data_file_path = os.path.join(self.dir, self.train_or_test, 'data', data_file)
-            label_file_path = os.path.join(self.dir, self.train_or_test, 'label', data_file)
+            label_file_path = os.path.join(self.dir, self.train_or_test, 'label', label_file)
             self.data_files.append(data_file_path)
             self.label_files.append(label_file_path)
       

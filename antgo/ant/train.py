@@ -85,7 +85,7 @@ class AntTrain(AntBase):
     # 0.step warp model (main_file and main_param)
     self.stage = 'MODEL'
     # - backup in dump_dir
-    main_folder = FLAGS.main_folder()
+    main_folder = self.main_folder
     main_param = FLAGS.main_param()
     main_file = FLAGS.main_file()
 
