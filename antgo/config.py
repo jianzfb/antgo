@@ -9,7 +9,7 @@ try:
   import xml.etree.cElementTree as ET
 except ImportError:
   import xml.etree.ElementTree as ET
-
+import os
 
 class _Config(object):
   def __init__(self):
@@ -22,6 +22,11 @@ class _Config(object):
     for child in root:
       val = child.text.strip() if child.text is not None else None
       setattr(self, child.tag, val)
+
+      if child.tag == 'factory':
+        setattr(self, 'data_factory', os.path.join(val, 'antgo-dataset'))
+        setattr(self, 'task_factory', os.path.join(val, 'antgo-task'))
+
       self._attribs[child.tag] = val
 
   def write_xml(self, config_xml, attribs={}):

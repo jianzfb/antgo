@@ -28,7 +28,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "deploy", "dataset", "config", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "deploy", "dataset", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -45,9 +45,8 @@ flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
 flags.DEFINE_string('sandbox_time', None, 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
-flags.DEFINE_string('data_factory', None, '')
-flags.DEFINE_string('task_factory', None, '')
-flags.DEFINE_string('f', None, 'config file')
+flags.DEFINE_string('factory', None, '')
+flags.DEFINE_string('config', None, 'config file')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -82,41 +81,39 @@ def main():
   else:
     flags.cli_param_flags(sys.argv[2:])
 
-  if sys.argv[1] == 'config':
-    data_factory = FLAGS.data_factory()
-    task_factory = FLAGS.task_factory()
-    config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml')
-    Config.write_xml(config_xml, {'data_factory': data_factory,
-                                  'task_factory': task_factory})
-    logger.info('success to update config.xml')
-    return
-
   # 4.step load antgo global config
-  if FLAGS.f() is not None:
-    Config.parse_xml(FLAGS.f())
+  if FLAGS.config() is not None:
+    # 1.step parse config.xml
+    Config.parse_xml(FLAGS.config())
+    # 2.step try copy to system
+    try:
+      shutil.copy(FLAGS.config(), os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'))
+    except:
+      logger.warn('perhaps you want to set default config.xml, please in root authority')
+      pass
   else:
     config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml')
     Config.parse_xml(config_xml)
 
-  # 4.1.step check data_factory
-  data_factory = getattr(Config, 'data_factory', None)
-  task_factory = getattr(Config, 'task_factory', None)
-  if (data_factory is None or data_factory == '') or \
-      (task_factory is None or task_factory == ''):
+  # 4.1.step check factory
+  factory = getattr(Config, 'factory', None)
+  if factory is None or factory == '':
     # give tip
-    logger.warn('please antgo config --data_factory=... --data_factory=... in root authority')
+    logger.warn('please antgo -config=... in root authority')
+
     # plan B
     home_folder = os.environ['HOME']
-    data_factory = os.path.join(home_folder, 'antgo', 'antgo-dataset')
-    task_factory = os.path.join(home_folder, 'antgo', 'antgo-task')
-    Config.data_factory = data_factory
-    Config.task_factory = task_factory
+    Config.data_factory = os.path.join(home_folder, 'antgo', 'antgo-dataset')
+    Config.task_factory = os.path.join(home_folder, 'antgo', 'antgo-task')
     
-  if not os.path.exists(data_factory):
-    os.makedirs(data_factory)
+  if not os.path.exists(Config.data_factory):
+    os.makedirs(Config.data_factory)
 
-  if not os.path.exists(task_factory):
-    os.makedirs(task_factory)
+  if not os.path.exists(Config.task_factory):
+    os.makedirs(Config.task_factory)
+
+  task_factory = Config.task_factory
+  data_factory = Config.data_factory
 
   # 5.step parse antgo running token (secret)
   token = FLAGS.token()
