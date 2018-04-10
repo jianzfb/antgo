@@ -1,8 +1,8 @@
+cython>=0.20
 numpy
 Pillow
 scipy
 six
-cython>=0.20
 termcolor
 tqdm
 msgpack_numpy
