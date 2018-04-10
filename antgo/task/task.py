@@ -1,8 +1,7 @@
 from __future__ import unicode_literals
 from __future__ import division
-from antgo.dataflow.dataset.standard import Standard
-from antgo.measures import *
 from antgo.dataflow.dataset import *
+from antgo.measures import *
 from antgo.utils import logger
 from antgo import config
 

@@ -40,12 +40,13 @@ def infer_callback(data_source, dump_dir):
   # Then, we can use again a convenient built-in function to import a graph_def into the
   # current default Graph
   with tf.Graph().as_default() as graph:
-    tf.import_graph_def(graph_def,
-                        input_map=None,
-                        return_elements=None,
-                        name="prefix",
-                        op_dict=None,
-                        producer_op_list=None)
+    with tf.device('/device:GPU:0' if ctx.params.on_gpu else '/device:CPU:0'):
+      tf.import_graph_def(graph_def,
+                          input_map=None,
+                          return_elements=None,
+                          name="prefix",
+                          op_dict=None,
+                          producer_op_list=None)
   
     # 2.2.step access input and output nodes
     # We access the input and output nodes
@@ -65,7 +66,7 @@ def infer_callback(data_source, dump_dir):
       count = 0
       for data in data_source.iterator_value():
         if ctx.params.preprocess['type'] == 'MEAN-VAR':
-          data, = data
+          data = data
           height, width = data.shape[0:2]
          
           data = data[:, :, 0:3]

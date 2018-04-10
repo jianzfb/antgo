@@ -1,3 +1,0 @@
-Multiclass log loss
-Lift
-mutual information

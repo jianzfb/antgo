@@ -28,8 +28,6 @@ Config = config.AntConfig
 
 def imread(file):
   img = scipy.misc.imread(file)
-  if len(img.shape) == 2:
-    img = np.dstack((img,img,img))
   return img
 
 

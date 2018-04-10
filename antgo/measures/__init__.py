@@ -61,5 +61,3 @@ def _global_import(name):
 for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
   if not module_name.startswith('_'):
     _global_import(module_name)
-
-

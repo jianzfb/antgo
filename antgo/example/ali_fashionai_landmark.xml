@@ -1,0 +1,12 @@
+<task>
+    <task_name>AliFashionAILandmark</task_name>
+    <task_type>Landmark</task_type>
+    <input>
+        <source_data>
+            <data_set_name>FashionAILandmark</data_set_name>
+        </source_data>
+        <evaluation_measures>
+            <evaluation_measure>NE</evaluation_measure>
+        </evaluation_measures>
+    </input>
+</task>

@@ -5,9 +5,9 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.dataflow.dataset import Dataset
+from . import Dataset
 import tensorflow as tf
-slim = tf.contrib.slim
+import tensorflow.contrib.slim as slim
 import os
 import sys
 

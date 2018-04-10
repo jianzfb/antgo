@@ -9,6 +9,9 @@ from antgo.measures.crowdsource import *
 from bs4 import BeautifulSoup
 
 
+__all__ = {'AntYesNoCrowdsource': ('YesorNo', '')}
+
+
 class AntYesNoCrowdsource(AntCrowdsource):
   def __init__(self, task):
     super(AntYesNoCrowdsource, self).__init__(task, 'YesorNo')

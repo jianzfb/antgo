@@ -47,6 +47,7 @@ flags.DEFINE_string('sandbox_time', None, 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('data_factory', None, '')
 flags.DEFINE_string('task_factory', None, '')
+flags.DEFINE_string('f', None, 'config file')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -84,38 +85,35 @@ def main():
   if sys.argv[1] == 'config':
     data_factory = FLAGS.data_factory()
     task_factory = FLAGS.task_factory()
-    config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-2]), 'config.xml')
+    config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml')
     Config.write_xml(config_xml, {'data_factory': data_factory,
                                   'task_factory': task_factory})
     logger.info('success to update config.xml')
     return
 
   # 4.step load antgo global config
-  config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-2]), 'config.xml')
-  Config.parse_xml(config_xml)
+  if FLAGS.f() is not None:
+    Config.parse_xml(FLAGS.f())
+  else:
+    config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml')
+    Config.parse_xml(config_xml)
 
   # 4.1.step check data_factory
   data_factory = getattr(Config, 'data_factory', None)
-  if data_factory is None or data_factory == '':
+  task_factory = getattr(Config, 'task_factory', None)
+  if (data_factory is None or data_factory == '') or \
+      (task_factory is None or task_factory == ''):
     # give tip
     logger.warn('please antgo config --data_factory=... --data_factory=... in root authority')
     # plan B
     home_folder = os.environ['HOME']
     data_factory = os.path.join(home_folder, 'antgo', 'antgo-dataset')
+    task_factory = os.path.join(home_folder, 'antgo', 'antgo-task')
     Config.data_factory = data_factory
-
+    Config.task_factory = task_factory
+    
   if not os.path.exists(data_factory):
     os.makedirs(data_factory)
-
-  # 4.2.step check task_factory
-  task_factory = getattr(Config, 'task_factory', None)
-  if task_factory is None or task_factory == '':
-    # give tip
-    logger.warn('please antgo config --data_factory=... --data_factory=... in root authority')
-    # plan B
-    home_folder = os.environ['HOME']
-    task_factory = os.path.join(home_folder, 'antgo', 'antgo-task')
-    Config.task_factory = task_factory
 
   if not os.path.exists(task_factory):
     os.makedirs(task_factory)

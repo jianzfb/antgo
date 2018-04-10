@@ -2,8 +2,6 @@ from setuptools import setup
 from Cython.Build import cythonize
 from distutils.extension import Extension
 import numpy as np
-import os
-import subprocess
 
 # install: python setup.py build_ext install -r requirements.txt (from github)
 ext_modules = [

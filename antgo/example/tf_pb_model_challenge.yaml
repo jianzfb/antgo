@@ -13,3 +13,4 @@ input_nodes:
 output_nodes:
 - output_node
 pb: ''
+on_gpu: true

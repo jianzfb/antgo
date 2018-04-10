@@ -12,7 +12,7 @@ import numpy as np
 __all__ = ['FashionAILandmark']
 class FashionAILandmark(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
-    super(FashionAILandmark, self).__init__(train_or_test, dir, params)
+    super(FashionAILandmark, self).__init__(train_or_test, dir)
     
     assert(train_or_test in ['train', 'test'])
     if train_or_test == 'train':
@@ -122,7 +122,7 @@ class FashionAILandmark(Dataset):
       'skirt': 3,
       'trousers': 4,
     }
-
+    
     self.annotation = []
     self.images = []
     if train_or_test == 'train':
@@ -210,7 +210,7 @@ class FashionAILandmark(Dataset):
     # data index list
     self.ids = list(range(len(self.images)))
     # fixed seed
-    self.seed = getattr(self, 'seed', 0)
+    self.seed = 0
     
   @property
   def size(self):
@@ -241,10 +241,10 @@ class FashionAILandmark(Dataset):
           yield [(image, category, image_file), None]
 
   def at(self, id):
-    image_file, category = self.images[id]
+    image_file, category_id = self.images[id]
     image_path = os.path.join(self.dir, self.train_or_test, image_file)
     image = imread(image_path)
-    return (image, category, image_file)
+    return (image, category_id, image_file)
 
   def split(self, split_params={}, split_method='holdout'):
     assert(self.train_or_test == 'train')

@@ -14,10 +14,10 @@ from antgo.task.task import *
 from antgo.utils import logger
 from antgo.dataflow.recorder import *
 from antgo.measures.deep_analysis import *
+from antgo.measures.significance import *
 import shutil
 import tarfile
 from datetime import datetime
-from antgo.measures.yesno_crowdsource import *
 
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
@@ -151,9 +151,6 @@ class AntChallenge(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(ant_test_dataset.size)
 
-      if self.is_non_mltalker_task:
-        return
-
       if not self.context.recorder.is_measure:
         # has no annotation to continue to meausre
         # notify
@@ -198,6 +195,12 @@ class AntChallenge(AntBase):
           evaluation_measure_result.append(result)
 
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+      
+      if self.is_non_mltalker_task:
+        # generate report resource
+        logger.info('generate model evaluation report')
+        everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
+        return
 
       # compare statistic
       logger.info('deep significance difference compare')

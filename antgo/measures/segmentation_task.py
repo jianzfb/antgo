@@ -43,7 +43,7 @@ class AntPixelAccuracySeg(AntMeasure):
 
         id = gt['id']
         gt = gt['segmentation_map']
-      
+
       gt_labels = set(gt.flatten())
       for l in gt_labels:
         l = int(l)
@@ -56,7 +56,7 @@ class AntPixelAccuracySeg(AntMeasure):
         predicted_l = predict[p]
         nii = len(np.where(predicted_l == l)[0])
         sum_nii[l] += nii
-        
+
         if id is not None:
           sample_scores.append({'id': id, 'score': float(nii) / float(len(p[0])), 'category': l})
 
@@ -115,7 +115,7 @@ class AntMeanAccuracySeg(AntMeasure):
 
         id = gt['id']
         gt = gt['segmentation_map']
-        
+
       gt_labels = set(gt.flatten())
       for l in gt_labels:
         l = int(l)
@@ -128,7 +128,7 @@ class AntMeanAccuracySeg(AntMeasure):
         predicted_l = predict[p]
         nii = len(np.where(predicted_l == l)[0])
         sum_nii[l] += nii
-        
+
         if id is not None:
           sample_scores.append({'id': id, 'score': float(nii) / float(len(p[0])), 'category': l})
 
@@ -165,7 +165,7 @@ class AntMeanIOUSeg(AntMeasure):
 
         id = gt['id']
         gt = gt['segmentation_map']
-  
+
       gt_labels = set(gt.flatten())
       for l in gt_labels:
         l = int(l)
@@ -179,7 +179,7 @@ class AntMeanIOUSeg(AntMeasure):
         sum_nii[l] += nii
 
         sum_ji[l] += len(np.where(predict == l)[0])
-        
+
     val = np.mean(sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6))
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]}}
 
@@ -212,7 +212,7 @@ class AntFrequencyWeightedIOUSeg(AntMeasure):
 
         id = gt['id']
         gt = gt['segmentation_map']
-  
+
       gt_labels = set(gt.flatten())
       for l in gt_labels:
         l = int(l)
@@ -229,7 +229,6 @@ class AntFrequencyWeightedIOUSeg(AntMeasure):
 
     val = np.sum(sum_ti * sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6)) / (np.sum(sum_ti) + 1e-6)
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]}}
-
 
 class AntMeanIOUBoundary(AntMeasure):
   def __init__(self, task):
@@ -255,7 +254,7 @@ class AntMeanIOUBoundary(AntMeasure):
 
     if label is not None:
         data = zip(data, label)
-    
+
     sample_scores = []
     for predict, gt in data:
       id = None
@@ -265,7 +264,7 @@ class AntMeanIOUBoundary(AntMeasure):
 
         id = gt['id']
         gt = gt['segmentation_map']
-      
+
       gt_labels = set(gt.flatten())
       rows, cols = gt.shape[:2]
       # generate trimap for objects (predict)
@@ -283,8 +282,9 @@ class AntMeanIOUBoundary(AntMeasure):
 
       for l in gt_labels:
         l = int(l)
-        # if l == 0:
-        #   continue
+        if l == 0:
+          continue
+
         # generate trimap for object (gt)
         obj_map = np.zeros((rows, cols), dtype=np.uint32)
         obj_map[np.where(gt == l)] = 1
@@ -309,13 +309,16 @@ class AntMeanIOUBoundary(AntMeasure):
         predicted_l = predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
         nii = len(np.where(predicted_l == l)[0])
         sum_nii[l] += nii
-        
+
         vv = len(np.where(predict_trimap == l)[0])
         sum_ji[l] += vv
-        
+
         if id is not None:
           sample_scores.append({'id': id, 'score': float(nii) / float(len(gt_band_index[0]) + vv - nii), 'category': l})
-
+    
+    sum_nii = sum_nii[1:]
+    sum_ti = sum_ti[1:]
+    sum_ji = sum_ji[1:]
     val = np.mean(sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6))
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]},
             'info': sample_scores}

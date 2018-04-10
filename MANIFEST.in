@@ -4,10 +4,10 @@ include antgo/resource/templates/statistic-report.html
 include antgo/resource/templates/crowdsource.html
 include antgo/resource/templates/yesno_crowdsource.html
 include antgo/resource/static/antgo.ico
-include antgo/resource/card.png
-include antgo/resource/crowdsource.js
-include antgo/resource/register.png
-include config.xml
+include antgo/resource/static/card.png
+include antgo/resource/static/crowdsource.js
+include antgo/resource/static/register.png
+include antgo/config.xml
 include requirements.txt
 include README.rst
 include roadmap.txt
