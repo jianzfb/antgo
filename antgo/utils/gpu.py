@@ -34,10 +34,10 @@ def get_gpus():
 
 def gpu_running_info(pid=None):
     try:
-        content = subprocess.check_output('nvidia-smi')
+        content = subprocess.check_output('nvidia-smi').decode('utf-8')
     except:
         return None
-
+      
     driver_version = re.findall('(?<=Driver Version: )[\d.]+', content)[0]
     gpu_basic_info = re.findall('(?<=\|)[ ]+\d+%[ ]+\d+C[]+\w+\d+W / /d+W[ ]+(?=\|)', content)
     gpu_num = len(gpu_basic_info)
@@ -81,3 +81,5 @@ def gpu_running_info(pid=None):
             'gpu_pwr_usage': gpu_pwr_usage, 'gpu_pwr_cap': gpu_pwr_cap,
             'gpu_mem_usage': gpu_mem_usage, 'gpu_mem_max': gpu_mem_max,
             'gpu_util': gpu_util, 'occupy_gpus': occupy_gpus}
+
+print(gpu_running_info())
