@@ -38,13 +38,14 @@ def gpu_running_info(pid=None):
     except:
         return None
 
-    driver_version = re.findall('(?<=Driver Version: )[\d.]+',content)[0]
-    gpu_basic_info = re.findall('(?<=\|)[ ]+\d[ ]+\w+ \w+ \w+[ ]+\w+[ ]+(?=\|)',content)
+    driver_version = re.findall('(?<=Driver Version: )[\d.]+', content)[0]
+    gpu_basic_info = re.findall('(?<=\|)[ ]+\d+%[ ]+\d+C[]+\w+\d+W / /d+W[ ]+(?=\|)', content)
     gpu_num = len(gpu_basic_info)
     gpus=[]
+
     for gpu_index in range(gpu_num):
-        result = re.split('\s+',gpu_basic_info[gpu_index])
-        gpus.append(''.join([result[1],' ',result[2],' ',result[3]]))
+        result = re.split('\s+', gpu_basic_info[gpu_index].strip())
+        gpus.append(result[2])
 
     gpu_pwr_info = re.findall('\d+W / \d+W',content)
     gpu_pwr_usage=[]

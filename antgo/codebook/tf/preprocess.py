@@ -22,7 +22,7 @@ def tf_regular_augumentation(image,
   image = tf.image.random_hue(image, max_delta=hue_max_delta)
   image = tf.image.random_contrast(image, lower=contrast_lower, upper=contrast_upper)
 
-  image = tf.clip_by_value(image, 0, 255)
+  #image = tf.clip_by_value(image, 0, 255)
   return image
 
 
