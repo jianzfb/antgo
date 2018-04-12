@@ -175,8 +175,25 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
       if latest_checkpoint is not None:
         variables_to_restore = {}
         model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+
+        exclusions = []
+        checkpoint_exclude_scopes = getattr(trainer_obj, 'checkpoint_exclude_scopes', None)
+        if checkpoint_exclude_scopes is not None:
+          exclusions = [scope.strip()
+                        for scope in checkpoint_exclude_scopes.split(',')]
+
         for var in model_variables:
           var_name = var.op.name
+
+          excluded = False
+          for exclusion in exclusions:
+            if var_name.startswith(exclusion):
+              excluded = True
+              break
+              
+          if excluded:
+            continue
+          
           variables_to_restore[var_name] = var
     
         return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
@@ -190,6 +207,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
     latest_checkpoint = tf.train.latest_checkpoint(dump_dir)
     variables_to_restore = {}
     model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+
     for var in model_variables:
       var_name = var.op.name
       variables_to_restore[var_name] = var

@@ -13,7 +13,7 @@ __all__ = ['change_gpu', 'get_nr_gpu', 'get_gpus','gpu_running_info']
 
 
 def change_gpu(val):
-    return change_env('CUDA_VISIBLE_DEVICES', str(val))
+  return change_env('CUDA_VISIBLE_DEVICES', str(val))
 
 
 def get_nr_gpu():
@@ -37,9 +37,14 @@ def gpu_running_info(pid=None):
         content = subprocess.check_output('nvidia-smi').decode('utf-8')
     except:
         return None
-      
+
     driver_version = re.findall('(?<=Driver Version: )[\d.]+', content)[0]
     gpu_basic_info = re.findall('(?<=\|)[ ]+\d+%[ ]+\d+C[]+\w+\d+W / /d+W[ ]+(?=\|)', content)
+    is_plan_b = False
+    if len(gpu_basic_info) == 0:
+        gpu_basic_info = re.findall('(?<=\|)[ ]+N/A[ ]+\d+C[]+\w+\d+W / /d+W[ ]+(?=\|)', content)
+        is_plan_b = True
+    
     gpu_num = len(gpu_basic_info)
     gpus=[]
 
@@ -69,6 +74,8 @@ def gpu_running_info(pid=None):
 
     gpu_util = re.findall('\d+(?=%)',content)
     gpu_util = [int(util) for util in gpu_util]
+    if not is_plan_b:
+        gpu_util = [int(util) for id, util in enumerate(gpu_util) if id % 2 == 1]
 
     occupy_gpus = []
     if pid is not None:
@@ -77,9 +84,11 @@ def gpu_running_info(pid=None):
         for term in terms:
             occupy_gpus.append(int(term))
 
-    return {'gpus': gpus, 'driver-version': driver_version,
-            'gpu_pwr_usage': gpu_pwr_usage, 'gpu_pwr_cap': gpu_pwr_cap,
-            'gpu_mem_usage': gpu_mem_usage, 'gpu_mem_max': gpu_mem_max,
-            'gpu_util': gpu_util, 'occupy_gpus': occupy_gpus}
-
-print(gpu_running_info())
+    return {'gpus': gpus,
+            'driver-version': driver_version,
+            'gpu_pwr_usage': gpu_pwr_usage,
+            'gpu_pwr_cap': gpu_pwr_cap,
+            'gpu_mem_usage': gpu_mem_usage,
+            'gpu_mem_max': gpu_mem_max,
+            'gpu_util': gpu_util,
+            'occupy_gpus': occupy_gpus}
