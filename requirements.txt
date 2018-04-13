@@ -5,6 +5,7 @@ scipy
 six
 termcolor
 tqdm
+msgpack
 msgpack_numpy
 psutil
 pyzmq

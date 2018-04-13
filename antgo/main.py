@@ -188,7 +188,7 @@ def main():
   if task is None and dataset is not None:
     # build default task
     with open(os.path.join(task_factory, '%s.xml'%name), 'w') as fp:
-      task_content = '<task><task-name>%s</task-name>' \
+      task_content = '<task><task_name>%s</task_name>' \
                      '<input>' \
                      '<source_data><data_set_name>%s</data_set_name>' \
                      '</source_data>' \
