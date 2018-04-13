@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import unicode_literals
 
 import os
-from abc import abstractmethod, ABCMeta
 import random
 import scipy.misc
 import numpy as np
@@ -36,7 +35,6 @@ def imresize(image,size):
 
 
 class Dataset(BaseNode):
-  __metaclass__ = ABCMeta
   _BASE_DATASET = True
 
   def __init__(self, train_or_test="train", dir=None, ext_params=None, name=None):
@@ -261,12 +259,12 @@ class Dataset(BaseNode):
 
     return train_idx, validation_idx
 
-  @abstractmethod
   def data_pool(self):
     '''
     
     :return:
     '''
+    raise NotImplementedError
 
   def make_data(self, data, label=None, support=None,transform_func=None):
     # data: [[],[],[],...]
