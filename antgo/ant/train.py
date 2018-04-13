@@ -18,6 +18,7 @@ from antgo.measures.statistic import *
 from antgo.task.task import *
 from antgo.utils.net import *
 from antgo.utils.serialize import *
+from antgo.resource.html import *
 
 if sys.version > '3':
     PY3 = True
