@@ -270,13 +270,13 @@ class AntTrain(AntBase):
 
     self.stage = 'EVALUATION-HOLDOUT-EVALUATION'
     with safe_recorder_manager(self.context.recorder):
-      with running_statistic(self.ant_name):
+      with performance_statistic_region(self.ant_name):
         self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
     # clear
     self.context.recorder = None
 
-    task_running_statictic = get_running_statistic(self.ant_name)
+    task_running_statictic = get_performance_statistic(self.ant_name)
     task_running_statictic = {self.ant_name: task_running_statictic}
     task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
     task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
@@ -323,13 +323,13 @@ class AntTrain(AntBase):
 
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-EVALUATION-%d' % repeat
       with safe_recorder_manager(self.context.recorder):
-        with running_statistic(self.ant_name):
+        with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
       # clear
       self.context.recorder = None
 
-      task_running_statictic = get_running_statistic(self.ant_name)
+      task_running_statictic = get_performance_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
@@ -377,13 +377,13 @@ class AntTrain(AntBase):
 
       self.stage = 'EVALUATION-BOOTSTRAP-EVALUATION-%d' % bootstrap_i
       with safe_recorder_manager(self.context.recorder):
-        with running_statistic(self.ant_name):
+        with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
       # clear
       self.context.recorder = None
 
-      task_running_statictic = get_running_statistic(self.ant_name)
+      task_running_statictic = get_performance_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
@@ -429,13 +429,13 @@ class AntTrain(AntBase):
 
       self.stage = 'EVALUATION-KFOLD-EVALUATION-%d' % k
       with safe_recorder_manager(self.context.recorder):
-        with running_statistic(self.ant_name):
+        with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
 
       # clear
       self.context.recorder = None
 
-      task_running_statictic = get_running_statistic(self.ant_name)
+      task_running_statictic = get_performance_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \

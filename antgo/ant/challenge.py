@@ -142,10 +142,10 @@ class AntChallenge(AntBase):
       intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'record')
       with safe_recorder_manager(self.context.recorder):
         self.context.recorder.dump_dir = intermediate_dump_dir
-        with running_statistic(self.ant_name):
+        with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), infer_dump_dir)
 
-      task_running_statictic = get_running_statistic(self.ant_name)
+      task_running_statictic = get_performance_statistic(self.ant_name)
       task_running_statictic = {self.ant_name: task_running_statictic}
       task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \

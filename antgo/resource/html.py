@@ -57,14 +57,53 @@ def everything_to_html(data, dump_dir):
       mem_mean_util = ant_info['cpu']['mem_mean_usage']
       mem_median_util = ant_info['cpu']['mem_median_usage']
 
-      memory_statistic = {'statistic': {'name': 'memory',
+      memory_statistic = {'statistic': {'name': 'cpu memory',
                                         'value': [
-                                            {'name': 'memory info',
+                                            {'name': 'memory',
                                              'value': [['memory', 'max util', 'mean util', 'median util'],
                                                        ['-', mem_max_util, mem_mean_util, mem_median_util]],
                                              'type': "TABLE"}]}}
       everything_statistics.append(memory_statistic)
-
+    
+    # 1.step gpu statistic
+    if 'gpu' in ant_info:
+      gpu_model = ant_info['gpu']['gpu_model']
+      gpu_max_util = ant_info['gpu']['gpu_max_usage']
+      gpu_mean_util = ant_info['gpu']['gpu_mean_usage']
+      gpu_median_util = ant_info['gpu']['gpu_median_usage']
+      
+      value_list = [['gpu', 'max util', 'mean util','median util']]
+      for gpu_i in range(len(gpu_max_util)):
+        value_list.append(['%d'%gpu_i,
+                           '%0.4f'%gpu_max_util[gpu_i],
+                           '%0.4f'%gpu_mean_util[gpu_i],
+                           '%0.4f'%gpu_median_util[gpu_i]])
+      
+      gpu_statistic = {'statistic': {'name': 'gpu',
+                                     'value': [
+                                       {'name': gpu_model,
+                                        'value': value_list,
+                                        'type': "TABLE"}]}}
+      everything_statistics.append(gpu_statistic)
+      
+      gpu_mem_max_util = ant_info['gpu']['gpu_mem_max_usage']
+      gpu_mem_mean_util = ant_info['gpu']['gpu_mem_mean_usage']
+      gpu_mem_median_util = ant_info['gpu']['gpu_mem_median_usage']
+      
+      value_list = [['memory', 'max util', 'mean util', 'median util']]
+      for gpu_i in range(len(gpu_mem_max_util)):
+        value_list.append(['%d'%gpu_i,
+                           '%0.4f'%gpu_mem_max_util[gpu_i],
+                           '%0.4f'%gpu_mem_mean_util[gpu_i],
+                           '%0.4f'%gpu_mem_median_util[gpu_i]])
+      
+      gpu_memory_statistic = {'statistic': {'name': 'memory',
+                                            'value': [
+                                              {'name': 'gpu memory',
+                                               'value': value_list,
+                                               'type': "TABLE"}]}}
+      everything_statistics.append(gpu_memory_statistic)
+    
     # 2.step time statistic
     if 'time' in ant_info:
       elapsed_time_per_sample = '-'
