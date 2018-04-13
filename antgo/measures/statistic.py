@@ -53,7 +53,6 @@ def performance_statistic_region(running_block):
 
   # now gpu status
   now_gpu_status = gpu_running_info(pid)
-  print(now_gpu_status)
   gpu_model = [now_gpu_status['gpus']] if now_gpu_status is not None else []
   gpu_driver_version = [now_gpu_status['driver-version']] if now_gpu_status is not None else []
   

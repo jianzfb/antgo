@@ -77,12 +77,14 @@ def gpu_running_info(pid=None):
     if not is_plan_b:
         gpu_util = [int(util) for id, util in enumerate(gpu_util) if id % 2 == 1]
 
-    occupy_gpus = []
-    if pid is not None:
-        pattern = '\d\s+(?={pid})'.format(pid=pid)
-        terms = re.findall(pattern,content)
-        for term in terms:
-            occupy_gpus.append(int(term))
+    # occupy_gpus = []
+    # if pid is not None:
+    #     pattern = '\d\s+(?={pid})'.format(pid=pid)
+    #     terms = re.findall(pattern,content)
+    #     for term in terms:
+    #         occupy_gpus.append(int(term))
+
+    occupy_gpus = list(range(len(gpus)))
 
     return {'gpus': gpus,
             'driver-version': driver_version,
