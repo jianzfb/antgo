@@ -12,7 +12,10 @@ class AntMeasuresFactory(object):
   factory_measures = {}
   def __init__(self, task):
     self.task = task
-    self.support_measures = AntMeasuresFactory.factory_measures[self.task.task_type]
+    self.support_measures = []
+    if self.task.task_type is not None and self.task.task_type != '':
+      self.support_measures = AntMeasuresFactory.factory_measures[self.task.task_type]
+
     if 'CUSTOM' in AntMeasuresFactory.factory_measures:
       self.support_measures.extend(AntMeasuresFactory.factory_measures['CUSTOM'])
 
