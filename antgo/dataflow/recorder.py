@@ -51,6 +51,19 @@ class RecorderNode(Node):
   @dump_dir.setter
   def dump_dir(self, val):
     self._dump_dir = val
+    
+    if self._dump_dir is None:
+      self.close()
+      return
+      
+    # remove existed dump_dir
+    if os.path.exists(self._dump_dir):
+      shutil.rmtree(self._dump_dir)
+    
+    # mkdir
+    os.makedirs(self._dump_dir)
+    
+    # set record workspace
     self._record_writer = RecordWriter(self._dump_dir)
 
   def action(self, *args, **kwargs):

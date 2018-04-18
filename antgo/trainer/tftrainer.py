@@ -636,20 +636,6 @@ class TFTrainer(Trainer):
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
-
-        # ###########################
-        # # Kicks off the training. #
-        # ###########################
-        # slim.learning.train(
-        #   self.val_ops[0],
-        #   logdir=self.dump_dir,
-        #   master='',
-        #   is_chief=True,
-        #   init_fn=restore_fns[0],
-        #   number_of_steps=2000,
-        #   log_every_n_steps=1,
-        #   save_interval_secs=600,
-        #   sync_optimizer=None)
   
   def infer_deploy(self, model):
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -724,8 +710,8 @@ class TFTrainer(Trainer):
         model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
         self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
 
-        # snapshot
-        self.snapshot(0)
+        # # snapshot
+        # self.snapshot(0)
 
         # Value ops
         self.val_ops = self.clones[0].outputs

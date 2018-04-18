@@ -85,6 +85,9 @@ def safe_recorder_manager(recorder):
 class RecordReader(object):
   def __init__(self, record_path, read_only=True):
     # db
+    if os.path.exists(os.path.join(record_path, 'record')):
+      record_path = os.path.join(record_path, 'record')
+      
     opts = rocksdb.Options(create_if_missing=False if read_only else True)
     self._db = rocksdb.DB(record_path, opts, read_only=read_only)
 

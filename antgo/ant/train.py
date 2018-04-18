@@ -19,6 +19,7 @@ from antgo.task.task import *
 from antgo.utils.net import *
 from antgo.utils.serialize import *
 from antgo.resource.html import *
+from antgo.utils.concurrency import *
 
 if sys.version > '3':
     PY3 = True
@@ -27,6 +28,75 @@ else:
 
 FLAGS = flags.AntFLAGS
 
+
+class EvaluationProcess(multiprocessing.Process):
+  def __init__(self, validation_dataset, evaluation_measures, dump_dir, ctx, name, interval=3600):
+    super(EvaluationProcess, self).__init__()
+    self._validation_dataset = validation_dataset
+    self._ctx = ctx
+    self._dump_dir = dump_dir
+    self._name = name
+    self._evaluation_measures = evaluation_measures
+    
+    self._evaluation_interval = interval
+    self.daemon = True
+    self._queue = multiprocessing.Queue()
+  
+  @property
+  def last_running_statistic(self):
+    return self._queue.get(timeout=self._evaluation_interval)
+  
+  def run(self):
+    # split data and label
+    data_annotation_branch = DataAnnotationBranch(Node.inputs(self._validation_dataset))
+    self._ctx.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+    
+    # start evaluating afer self._evaluation_interval second
+    time.sleep(self._evaluation_interval)
+    
+    while True:
+      self.stage = 'EVALUATION-HOLDOUT-EVALUATION'
+      with safe_recorder_manager(self._ctx.recorder):
+        with performance_statistic_region(self._name):
+          try:
+            self._ctx.call_infer_process(data_annotation_branch.output(0), self._dump_dir)
+          except:
+            logger.error('couldnt start evaluation process, maybe model has not been generated')
+            time.sleep(self._evaluation_interval)
+            continue
+  
+      task_running_statictic = get_performance_statistic(self._name)
+      task_running_statictic = {self._name: task_running_statictic}
+      task_running_elapsed_time = task_running_statictic[self._name]['time']['elapsed_time']
+      task_running_statictic[self._name]['time']['elapsed_time_per_sample'] = \
+          task_running_elapsed_time / float(self._validation_dataset.size)
+  
+      logger.info('start evaluation process')
+      evaluation_measure_result = []
+  
+      with safe_recorder_manager(RecordReader(self._dump_dir)) as record_reader:
+        for measure in self._evaluation_measures:
+          record_generator = record_reader.iterate_read('predict', 'groundtruth')
+          result = measure.eva(record_generator, None)
+          evaluation_measure_result.append(result)
+        task_running_statictic[self._name]['measure'] = evaluation_measure_result
+      
+      # enqueue
+      self._queue.put(task_running_statictic)
+      if self._queue.qsize() > 1:
+        # dequeue head
+        self._queue.get(block=False)
+
+      now_time = datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d %H:%M:%S')
+      if not os.path.exists(os.path.join(self._dump_dir, now_time)):
+        os.makedirs(os.path.join(self._dump_dir, now_time))
+      
+      # generate experiment report
+      everything_to_html(task_running_statictic, os.path.join(self._dump_dir, now_time))
+      
+      # waiting, start new round evaluating after self._evaluation_interval seconds
+      time.sleep(self._evaluation_interval)
+      
 
 class AntTrain(AntBase):
   def __init__(self, ant_context,
@@ -146,7 +216,21 @@ class AntTrain(AntBase):
                                                               ablation_experiments_devices)
         for ablation_experiment in ablation_experiments:
           ablation_experiment.start()
-    #
+
+        # join (waiting until all experiments stop)
+        if len(ablation_experiments) > 0:
+          for ablation_experiment in ablation_experiments:
+            ablation_experiment.join()
+        else:
+          if ablation_blocks is not None:
+            self.start_ablation_train_proc(ant_train_dataset,
+              running_ant_task,
+              ablation_blocks,
+              train_time_stamp)
+            
+        return
+    
+    is_early_stop = False
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None and \
@@ -157,15 +241,16 @@ class AntTrain(AntBase):
         estimation_procedure_params = running_ant_task.estimation_procedure_params
         evaluation_measures = running_ant_task.evaluation_measures
 
-        evaluation_statistic = None
         if estimation_procedure == 'holdout':
           evaluation_statistic = self._holdout_validation(ant_train_dataset, evaluation_measures, train_time_stamp)
-
-          logger.info('generate model evaluation report')
-          self.stage = 'EVALUATION-HOLDOUT-REPORT'
-          # send statistic report
-          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
-          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
+          
+          if evaluation_statistic is not None and len(evaluation_statistic) > 0:
+            logger.info('generate model evaluation report')
+            self.stage = 'EVALUATION-HOLDOUT-REPORT'
+            # send statistic report
+            self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
+            everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
+          is_early_stop = True
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 2              # default value
           is_stratified_sampling = True   # default value
@@ -212,87 +297,41 @@ class AntTrain(AntBase):
           self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
 
-      # 3.step model training
-      self.stage = "TRAIN"
-      train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
-      if not os.path.exists(train_dump_dir):
-          os.makedirs(train_dump_dir)
-
-      logger.info('start training process')
-      ant_train_dataset.reset_state()
-      self.context.call_training_process(ant_train_dataset, train_dump_dir)
-
-      # # 4.step mdoel graph
-      # test_graph = Graph(name='testnet')
-      # test_graph.add_node(name='conv', label='hello')
-      # test_graph.add_node(name='pool', label='world')
-      # test_graph.add_node(name='input', label='www')
-      # test_graph.add_node(name='ssd', label='hhh')
-      # test_graph.add_link('conv','pool',Link('ab',''))
-      # test_graph.add_link('input','conv',Link('bd',''))
-      # test_graph.add_link('input','ssd',Link('ac',''))
-      #
-      # ss = Encoder().encode(test_graph)
-      # print(ss)
-      # dd = Decoder().decode(ss)
-      # graph_content = graph_net_visualization(dd, '/Users/zhangken/Downloads/testnet.svg')
-      # self.context.job.send({'DATA': {'GRAPH': graph_content}})
-
-    # join (waiting until all experiments stop)
-    if len(ablation_experiments) > 0:
-      for ablation_experiment in ablation_experiments:
-        ablation_experiment.join()
-    else:
-      if ablation_blocks is not None:
-        self.start_ablation_train_proc(ant_train_dataset,
-                                       running_ant_task,
-                                       ablation_blocks,
-                                       train_time_stamp)
-
+      # 3.step model training (whole dataset)
+      if not is_early_stop:
+        # if estimation procedure is 'holdout', dont need train again
+        self.stage = "TRAIN"
+        train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
+        if not os.path.exists(train_dump_dir):
+            os.makedirs(train_dump_dir)
+  
+        logger.info('start training process')
+        ant_train_dataset.reset_state()
+        self.context.call_training_process(ant_train_dataset, train_dump_dir)
 
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
     # 1.step split train set and validation set
-    part_train_dataset, part_validation_dataset = train_dataset.split(split_method='holdout')
+    part_train_dataset, part_validation_dataset = train_dataset.split(split_params={}, split_method='holdout')
     part_train_dataset.reset_state()
 
     # dump_dir
-    dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train', 'holdout-evaluation')
+    dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train')
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
-
+    
+    # launch evaluation process
+    evaluation_process = EvaluationProcess(part_validation_dataset,
+                                           evaluation_measures,
+                                           dump_dir,
+                                           self.ant_context,
+                                           self.ant_name)
+    evaluation_process.start()
+    
     # 2.step training model
     self.stage = 'EVALUATION-HOLDOUT-TRAIN'
     self.context.call_training_process(part_train_dataset, dump_dir)
 
-    # 3.step evaluation measures
-    # split data and label
-    data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
-    self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-
-    self.stage = 'EVALUATION-HOLDOUT-EVALUATION'
-    with safe_recorder_manager(self.context.recorder):
-      with performance_statistic_region(self.ant_name):
-        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-
-    # clear
-    self.context.recorder = None
-
-    task_running_statictic = get_performance_statistic(self.ant_name)
-    task_running_statictic = {self.ant_name: task_running_statictic}
-    task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
-    task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
-        task_running_elapsed_time / float(part_validation_dataset.size)
-
-    logger.info('start evaluation process')
-    evaluation_measure_result = []
-
-    with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
-      for measure in evaluation_measures:
-        record_generator = record_reader.iterate_read('predict', 'groundtruth')
-        result = measure.eva(record_generator, None)
-        evaluation_measure_result.append(result)
-      task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-
+    task_running_statictic = evaluation_process.last_running_statistic
     return task_running_statictic
 
   def _repeated_holdout_validation(self, repeats,

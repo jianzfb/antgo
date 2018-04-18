@@ -160,14 +160,20 @@ class Context(object):
     self.training_process_callback = callback
 
   def call_training_process(self, data_source, dump_dir):
+    is_inner_set = False
     if self.recorder is not None and self.recorder.dump_dir == None:
-      self.recorder.dump_dir = dump_dir
+      self.recorder.dump_dir = os.path.join(dump_dir, 'record')
+      is_inner_set = True
     
     self.data_source = data_source
     self.training_process(data_source, dump_dir)
 
     # clone charts
     self.job.clone_charts()
+    
+    if self.recorder is not None:
+      if self.recorder.dump_dir is not None and is_inner_set:
+        self.recorder.dump_dir = None
 
   @property
   def infer_process(self):
@@ -178,14 +184,19 @@ class Context(object):
     self.infer_process_callback = callback
 
   def call_infer_process(self, data_source, dump_dir):
+    is_inner_set = False
     if self.recorder is not None and self.recorder.dump_dir == None:
-      self.recorder.dump_dir = dump_dir
+      self.recorder.dump_dir = os.path.join(dump_dir, 'record')
+      is_inner_set = True
       
     self.data_source = data_source
     self.infer_process(data_source, dump_dir)
 
     # clone charts
     self.job.clone_charts()
+    
+    if self.recorder.dump_dir is not None and is_inner_set:
+      self.recorder.dump_dir = None
   
   @property
   def data_generator(self):

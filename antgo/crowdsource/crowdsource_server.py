@@ -125,8 +125,6 @@ class GracefulExitException(Exception):
   def sigterm_handler(signum, frame):
     raise GracefulExitException()
 
-signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
-
 
 def crowdsrouce_server_start(totem,
                              experiment_id,
@@ -136,6 +134,9 @@ def crowdsrouce_server_start(totem,
                              html_template,
                              server_port,
                              crowdsource_info={}):
+  # register sig
+  signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
+  
   # log
   logger.info('crowdsource server prepare serving on %d'%server_port)
 

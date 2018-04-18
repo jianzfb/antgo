@@ -28,7 +28,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "deploy", "dataset", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "deploy", "dataset", "template", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -132,6 +132,13 @@ def main():
   ant_cmd = sys.argv[1]
   if ant_cmd not in _ant_support_commands:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
+    return
+  
+  if ant_cmd == 'template':
+    tt = AntTemplate(dump_dir= os.path.abspath(os.curdir) if FLAGS.dump() is None else FLAGS.dump(),
+                    main_file= FLAGS.main_file(),
+                    main_param= FLAGS.main_param())
+    tt.start()
     return
 
   # 7.step check related params

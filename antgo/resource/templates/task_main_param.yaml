@@ -1,0 +1,21 @@
+# simplization config version
+# set batch size
+batch_size: 1
+# set how many model clone (every clone run on one device)
+num_clones: 1
+# set max run epoches
+max_epochs: 200
+# learning rate decay type
+learning_rate_decay_type: 'exponential'
+# learning rate decay factor
+learning_rate_decay_factor: 0.9
+# runing how many epochs every decay
+num_epochs_per_decay: 2
+# optimization algorithm
+optimizer: 'rmsprop'
+# initial learning rate
+learning_rate: 0.00005
+# model path
+checkpoint_path: ''
+# exclude some scopes from model
+checkpoint_exclude_scopes: ''
