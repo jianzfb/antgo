@@ -181,7 +181,9 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
         if checkpoint_exclude_scopes is not None:
           exclusions = [scope.strip()
                         for scope in checkpoint_exclude_scopes.split(',')]
-
+          
+          logger.info('exclude scope %s from the latest checkpoint'%(','.join(exclusions)))
+          
         for var in model_variables:
           var_name = var.op.name
 

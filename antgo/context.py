@@ -32,7 +32,7 @@ def get_global_context():
   return global_context
 
 
-class Block(object):
+class _Block(object):
   def __init__(self, name):
     self._name = name
     self._activate = True
@@ -244,7 +244,7 @@ class Context(object):
     self._stoppable_threads.append(stoppable_thread)
   
   def block(self, name):
-    model_block = Block(name)
+    model_block = _Block(name)
     self._blocks.append(model_block)
     model_block.activate = True
     if name in self._blocks_status and not self._blocks_status[name]:
@@ -256,8 +256,8 @@ class Context(object):
     
   def activate_block(self, name):
     self._blocks_status[name] = True
+    
   def deactivate_block(self, name):
-    self._blocks_status = {}
     self._blocks_status[name] = False
   
   @property

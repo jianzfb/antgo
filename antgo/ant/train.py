@@ -20,6 +20,8 @@ from antgo.utils.net import *
 from antgo.utils.serialize import *
 from antgo.resource.html import *
 from antgo.utils.concurrency import *
+from antgo.measures.statistic import *
+from antgo.measures.repeat_statistic import *
 
 if sys.version > '3':
     PY3 = True
@@ -190,46 +192,52 @@ class AntTrain(AntBase):
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
-    # add init func
-    # self.context.registry_init_callback(ant_train_dataset.init)
     
     # user custom devices
     apply_devices = getattr(self.context.params, 'devices', [])
-    # user model clones
-    num_clones = getattr(self.context.params, 'num_clones', 1)
-
-    # ablation train (parallel execute if device is OK)
-    ablation_experiments = []
+    # ablation experiment
     ablation_blocks = getattr(self.context.params, 'ablation', None)
     if ablation_blocks is not None:
-      if len(apply_devices) > num_clones and \
-                  len(apply_devices) - num_clones >= len(ablation_blocks):
-        ablation_experiments_devices = apply_devices[num_clones:]
-        apply_devices = apply_devices[:num_clones]
-
-        self.context.params.devices = apply_devices
+      if len(apply_devices) >= len(ablation_blocks) + 1:
+        ablation_experiments_devices = apply_devices[:len(ablation_blocks)]
+        apply_devices = apply_devices[len(ablation_blocks):]
+        
         # assign device to every ablation experiment
         ablation_experiments = self.start_ablation_train_proc(ant_train_dataset,
                                                               running_ant_task,
                                                               ablation_blocks,
                                                               train_time_stamp,
                                                               ablation_experiments_devices)
+        # launch all ablation experiments
+        logger.info('waiting until all ablation experiments finish')
         for ablation_experiment in ablation_experiments:
           ablation_experiment.start()
+        
+        # launch complete model training process
+        self.context.params.devices = apply_devices
+        num_clones = getattr(self.context.params, 'num_clones', None)
+        if num_clones is not None:
+          self.context.params.num_clones = len(apply_devices) - len(ablation_blocks)
 
+        self.stage = "TRAIN"
+        train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
+        if not os.path.exists(train_dump_dir):
+          os.makedirs(train_dump_dir)
+
+        logger.info('start training process with complete model')
+        with safe_recorder_manager(ant_train_dataset):
+          ant_train_dataset.reset_state()
+          self.context.call_training_process(ant_train_dataset, train_dump_dir)
+        logger.info('main training process stop')
+        
         # join (waiting until all experiments stop)
-        if len(ablation_experiments) > 0:
-          for ablation_experiment in ablation_experiments:
-            ablation_experiment.join()
-        else:
-          if ablation_blocks is not None:
-            self.start_ablation_train_proc(ant_train_dataset,
-              running_ant_task,
-              ablation_blocks,
-              train_time_stamp)
-            
+        for ablation_experiment in ablation_experiments:
+          ablation_experiment.join()
+        logger.info('all ablation experiments complete')
         return
-    
+      
+      logger.warn('couldnt enable ablation experiment until set devices in *.yaml')
+      
     is_early_stop = False
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
@@ -254,7 +262,7 @@ class AntTrain(AntBase):
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 2              # default value
           is_stratified_sampling = True   # default value
-          split_ratio = 0.6               # default value
+          split_ratio = 0.7               # default value (andrew ng, machine learning yearning)
           if estimation_procedure_params is not None:
             number_repeats = int(estimation_procedure_params.get('number_repeats', number_repeats))
             is_stratified_sampling = int(estimation_procedure_params.get('stratified_sampling', is_stratified_sampling))
@@ -308,6 +316,7 @@ class AntTrain(AntBase):
         logger.info('start training process')
         ant_train_dataset.reset_state()
         self.context.call_training_process(ant_train_dataset, train_dump_dir)
+        logger.info('stop training process')
 
   def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
     # 1.step split train set and validation set
@@ -340,12 +349,18 @@ class AntTrain(AntBase):
                                    is_stratified_sampling,
                                    evaluation_measures,
                                    nowtime):
+    
+    from_experiment = getattr(self.context, 'from_experiment', None)
+    if from_experiment is not None:
+      self.context.from_experiment = None
+      
     repeated_running_statistic = []
     for repeat in range(repeats):
       # 1.step split train set and validation set
-      part_train_dataset, part_validation_dataset = train_dataset.split(split_params={'ratio': split_ratio,
-                                                                                      'is_stratified': is_stratified_sampling},
-                                                                        split_method='repeated-holdout')
+      part_train_dataset, part_validation_dataset = \
+        train_dataset.split(split_params={'ratio': split_ratio,
+                                          'is_stratified': is_stratified_sampling},
+                            split_method='repeated-holdout')
       part_train_dataset.reset_state()
       # dump_dir
       dump_dir = os.path.join(self.ant_dump_dir, nowtime, 'train', 'repeated-holdout-evaluation', 'repeat-%d'%repeat)
@@ -354,18 +369,24 @@ class AntTrain(AntBase):
 
       # 2.step training model
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-TRAIN-%d' % repeat
+      self.context.from_experiment = from_experiment
+      logger.info('start training process at repeathold %d round'%repeat)
       self.context.call_training_process(part_train_dataset, dump_dir)
-
+      logger.info('stop training process at repeathold %d round' % repeat)
+      
       # 3.step evaluation measures
       # split data and label
+      logger.info('start infer process at repeathold %d round' % repeat)
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-
+      
+      self.context.from_experiment = None
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-EVALUATION-%d' % repeat
       with safe_recorder_manager(self.context.recorder):
         with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-
+      logger.info('start infer process at repeathold %d round' % repeat)
+      
       # clear
       self.context.recorder = None
 
@@ -375,7 +396,7 @@ class AntTrain(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(part_validation_dataset.size)
 
-      logger.info('start evaluation process')
+      logger.info('start evaluation process at repeathold %d round'%repeat)
       evaluation_measure_result = []
 
       with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
@@ -384,7 +405,8 @@ class AntTrain(AntBase):
           result = measure.eva(record_generator, None)
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-
+      
+      logger.info('stop evaluation process at repeathold %d round'%repeat)
       repeated_running_statistic.append(task_running_statictic)
 
     evaluation_result = multi_repeats_measures_statistic(repeated_running_statistic, method='repeated-holdout')
@@ -392,6 +414,10 @@ class AntTrain(AntBase):
 
   def _bootstrap_validation(self, bootstrap_rounds, train_dataset, evaluation_measures, nowtime):
     bootstrap_running_statistic = []
+    from_experiment = getattr(self.context, 'from_experiment', None)
+    if from_experiment is not None:
+      self.context.from_experiment = None
+      
     for bootstrap_i in range(bootstrap_rounds):
       # 1.step split train set and validation set
       part_train_dataset, part_validation_dataset = train_dataset.split(split_params={},
@@ -408,18 +434,23 @@ class AntTrain(AntBase):
 
       # 2.step training model
       self.stage = 'EVALUATION-BOOTSTRAP-TRAIN-%d' % bootstrap_i
+      self.context.from_experiment = from_experiment
+      logger.info('start training process at bootstrap %d round'%bootstrap_i)
       self.context.call_training_process(part_train_dataset, dump_dir)
-
+      logger.info('stop training process at bootstrap %d round' % bootstrap_i)
+      
       # 3.step evaluation measures
       # split data and label
+      logger.info('start infer process at bootstrap %d round' % bootstrap_i)
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-
+      self.context.from_experiment = None
       self.stage = 'EVALUATION-BOOTSTRAP-EVALUATION-%d' % bootstrap_i
       with safe_recorder_manager(self.context.recorder):
         with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-
+      logger.info('stop infer process at bootstrap %d round' % bootstrap_i)
+      
       # clear
       self.context.recorder = None
 
@@ -429,7 +460,7 @@ class AntTrain(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(part_validation_dataset.size)
 
-      logger.info('start evaluation process')
+      logger.info('start evaluation process at bootstrap %d round' % bootstrap_i)
       evaluation_measure_result = []
 
       with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
@@ -438,15 +469,21 @@ class AntTrain(AntBase):
           result = measure.eva(record_generator, None)
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-
+      
+      logger.info('stop evaluation process at bootstrap %d round' % bootstrap_i)
+      
       bootstrap_running_statistic.append(task_running_statictic)
 
     evaluation_result = multi_repeats_measures_statistic(bootstrap_running_statistic, method='bootstrap')
     return evaluation_result
 
   def _kfold_cross_validation(self, kfolds, train_dataset, evaluation_measures, nowtime):
-    assert (kfolds in [5, 10])
+    # assert (kfolds in [5, 10])
     kfolds_running_statistic = []
+    from_experiment = getattr(self.context, 'from_experiment', None)
+    if from_experiment is not None:
+      self.context.from_experiment = None
+
     for k in range(kfolds):
       # 1.step split train set and validation set
       part_train_dataset, part_validation_dataset = train_dataset.split(split_params={'kfold': kfolds,
@@ -460,18 +497,24 @@ class AntTrain(AntBase):
 
       # 2.step training model
       self.stage = 'EVALUATION-KFOLD-TRAIN-%d' % k
+      logger.info('start training process at kfold %d round'%k)
+      self.context.from_experiment = from_experiment
       self.context.call_training_process(part_train_dataset, dump_dir)
+      logger.info('stop training process at kfold %d round'%k)
 
       # 3.step evaluation measures
       # split data and label
+      logger.info('start infer process at kfold %d round'%k)
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-
+      self.context.from_experiment = None
+      
       self.stage = 'EVALUATION-KFOLD-EVALUATION-%d' % k
       with safe_recorder_manager(self.context.recorder):
         with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-
+      
+      logger.info('stop infer process at kfold %d round'%k)
       # clear
       self.context.recorder = None
 
@@ -481,7 +524,7 @@ class AntTrain(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(part_validation_dataset.size)
 
-      logger.info('start evaluation process')
+      logger.info('start evaluation process at kfold %d round'%k)
       evaluation_measure_result = []
 
       with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
@@ -490,7 +533,8 @@ class AntTrain(AntBase):
           result = measure.eva(record_generator, None)
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-
+      logger.info('stop evaluation process at kfold %d round'%k)
+      
       kfolds_running_statistic.append(task_running_statictic)
 
     evaluation_result = multi_repeats_measures_statistic(kfolds_running_statistic, method='kfold')
@@ -498,31 +542,41 @@ class AntTrain(AntBase):
 
   def start_ablation_train_proc(self, data_source, challenge_task, ablation_blocks, time_stamp, spare_devices=None):
     # child func
-    def proc_func(handle, experiment_data_source, experiment_challenge_task, ablation_block, root_time_stamp, spare_device):
-      # perhaps proc_func is running in a new process
-      handle.flash()
+    def proc_func(handle,
+                  experiment_data_source,
+                  experiment_challenge_task,
+                  ablation_block,
+                  root_time_stamp,
+                  spare_device):
+      # 1.step proc_func is running in a independent process (clone running environment)
+      handle.clone()
 
       # reassign running device
       handle.context.params.devices = [spare_device]
       # only one clone
       handle.context.params.num_clones = 1
 
-      part_train_dataset, part_validation_dataset = experiment_data_source.split(split_method='holdout')
+      part_train_dataset, part_validation_dataset = \
+                                      experiment_data_source.split(split_params={}, split_method='holdout')
       part_train_dataset.reset_state()
-
-      handle.context.deactivate_block(ablation_block)
-      logger.info('start ablation experiment %s' % ablation_block)
+      
+      # deactivate ablation_block
+      if type(ablation_block) == list or type(ablation_block) == tuple:
+        for bb in ablation_block:
+          handle.context.deactivate_block(bb)
+        ablation_block = ablation_block[-1]
+      logger.info('start ablation experiment %s on device %s' % (ablation_block, str(spare_device)))
 
       # dump_dir for ablation experiment
       ablation_dump_dir = os.path.join(handle.ant_dump_dir, root_time_stamp, 'train', 'ablation', ablation_block)
       if not os.path.exists(ablation_dump_dir):
         os.makedirs(ablation_dump_dir)
 
-      # 2.step training model
+      # 2.step start training process
       handle.stage = 'ABLATION-%s-TRAIN' % ablation_block
       handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
 
-      # 3.step evaluation measures
+      # 3.step start evaluation process
       # split data and label
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       handle.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
@@ -553,15 +607,18 @@ class AntTrain(AntBase):
       handle.context.wait_until_clear()
 
     ablation_experiments = []
+    accumulate_blocks = []
     for block_i, block in enumerate(ablation_blocks):
-      if spare_devices is not None:
-        # apply independent process
-        block_ablation_process = Process(target=proc_func,
-                                         args=(self, data_source, challenge_task, block, time_stamp, spare_devices[block_i]),
-                                         name='%s_ablation_block_%s'%(self.ant_name, block))
-        ablation_experiments.append(block_ablation_process)
-      else:
-        # process sequentially in main process
-        proc_func(self, data_source, challenge_task, block, time_stamp, 0)
-
+      # apply independent process
+      accumulate_blocks.append(block)
+      block_ablation_process = Process(target=proc_func,
+                                       args=(self,
+                                             data_source,
+                                             challenge_task,
+                                             copy.deepcopy(accumulate_blocks),
+                                             time_stamp,
+                                             spare_devices[block_i]),
+                                       name='%s_ablation_block_%s'%(self.ant_name, block))
+      ablation_experiments.append(block_ablation_process)
+    
     return ablation_experiments

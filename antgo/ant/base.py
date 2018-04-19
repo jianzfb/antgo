@@ -361,7 +361,7 @@ class AntBase(object):
   def time_stamp(self):
     return self._time_stamp
   
-  def flash(self):
+  def clone(self):
     if self.pid != str(os.getpid()):
       # reset process pid
       self.pid = str(os.getpid())
