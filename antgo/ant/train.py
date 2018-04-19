@@ -197,15 +197,25 @@ class AntTrain(AntBase):
     apply_devices = getattr(self.context.params, 'devices', [])
     # ablation experiment
     ablation_blocks = getattr(self.context.params, 'ablation', None)
+    ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
+    assert(ablation_method in ['regular', 'accumulate', 'any'])
     if ablation_blocks is not None:
-      if len(apply_devices) >= len(ablation_blocks) + 1:
-        ablation_experiments_devices = apply_devices[:len(ablation_blocks)]
-        apply_devices = apply_devices[len(ablation_blocks):]
+      ablation_experiments_devices_num = 0
+      if ablation_method in ['regular', 'accumulate']:
+        ablation_experiments_devices_num = len(ablation_blocks)
+      else:
+        for i in range(len(ablation_blocks)):
+          ablation_experiments_devices_num += len(list(itertools.combinations(ablation_blocks, i + 1)))
+      
+      if len(apply_devices) >= ablation_experiments_devices_num + 1:
+        ablation_experiments_devices = apply_devices[:ablation_experiments_devices_num]
+        apply_devices = apply_devices[ablation_experiments_devices_num:]
         
         # assign device to every ablation experiment
         ablation_experiments = self.start_ablation_train_proc(ant_train_dataset,
                                                               running_ant_task,
                                                               ablation_blocks,
+                                                              ablation_method,
                                                               train_time_stamp,
                                                               ablation_experiments_devices)
         # launch all ablation experiments
@@ -217,7 +227,7 @@ class AntTrain(AntBase):
         self.context.params.devices = apply_devices
         num_clones = getattr(self.context.params, 'num_clones', None)
         if num_clones is not None:
-          self.context.params.num_clones = len(apply_devices) - len(ablation_blocks)
+          self.context.params.num_clones = len(apply_devices)
 
         self.stage = "TRAIN"
         train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
@@ -228,7 +238,7 @@ class AntTrain(AntBase):
         with safe_recorder_manager(ant_train_dataset):
           ant_train_dataset.reset_state()
           self.context.call_training_process(ant_train_dataset, train_dump_dir)
-        logger.info('main training process stop')
+        logger.info('stop main training process with complete model')
         
         # join (waiting until all experiments stop)
         for ablation_experiment in ablation_experiments:
@@ -540,7 +550,12 @@ class AntTrain(AntBase):
     evaluation_result = multi_repeats_measures_statistic(kfolds_running_statistic, method='kfold')
     return evaluation_result
 
-  def start_ablation_train_proc(self, data_source, challenge_task, ablation_blocks, time_stamp, spare_devices=None):
+  def start_ablation_train_proc(self, data_source, challenge_task, ablation_blocks, ablation_method, time_stamp, spare_devices=None):
+    if ablation_method is None:
+      ablation_method = 'regular'
+    # check ablation method
+    assert(ablation_method in ['regular', 'accumulate', 'any'])
+    
     # child func
     def proc_func(handle,
                   experiment_data_source,
@@ -564,7 +579,10 @@ class AntTrain(AntBase):
       if type(ablation_block) == list or type(ablation_block) == tuple:
         for bb in ablation_block:
           handle.context.deactivate_block(bb)
-        ablation_block = ablation_block[-1]
+        ablation_block = '_'.join(ablation_block)
+      else:
+        handle.context.deactivate_block(ablation_block)
+        
       logger.info('start ablation experiment %s on device %s' % (ablation_block, str(spare_device)))
 
       # dump_dir for ablation experiment
@@ -605,20 +623,39 @@ class AntTrain(AntBase):
       everything_to_html(ablation_running_statictic, ablation_dump_dir)
 
       handle.context.wait_until_clear()
-
+    
+    if ablation_method is None:
+      ablation_method = 'regular'
+    
+    traverse_ablation_blocks = []
+    if ablation_method == 'regular':
+      traverse_ablation_blocks.extend(ablation_blocks)
+    elif ablation_method == 'accumulate':
+      accumulate_blocks = []
+      for block in ablation_blocks:
+        accumulate_blocks.append(block)
+        traverse_ablation_blocks.append(copy.deepcopy(accumulate_blocks))
+    else:
+      for i in range(len(ablation_blocks)):
+        aa = list(itertools.combinations(ablation_blocks, i+1))
+        traverse_ablation_blocks.extend(aa)
+      
+      traverse_ablation_blocks = [list(m) for m in traverse_ablation_blocks]
+      
     ablation_experiments = []
-    accumulate_blocks = []
-    for block_i, block in enumerate(ablation_blocks):
+    for try_i, try_ablation_blocks in enumerate(traverse_ablation_blocks):
       # apply independent process
-      accumulate_blocks.append(block)
+      if type(try_ablation_blocks) != list and type(try_ablation_blocks) != tuple:
+        try_ablation_blocks = [try_ablation_blocks]
+        
       block_ablation_process = Process(target=proc_func,
                                        args=(self,
                                              data_source,
                                              challenge_task,
-                                             copy.deepcopy(accumulate_blocks),
+                                             copy.deepcopy(try_ablation_blocks),
                                              time_stamp,
-                                             spare_devices[block_i]),
-                                       name='%s_ablation_block_%s'%(self.ant_name, block))
+                                             spare_devices[try_i]),
+                                       name='%s_ablation_block_%s'%(self.ant_name, '_'.join(copy.deepcopy(try_ablation_blocks))))
       ablation_experiments.append(block_ablation_process)
     
     return ablation_experiments
