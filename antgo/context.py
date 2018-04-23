@@ -244,6 +244,10 @@ class Context(object):
     self._stoppable_threads.append(stoppable_thread)
   
   def block(self, name):
+    for b in self._blocks:
+      if name == b.name:
+        return b
+  
     model_block = _Block(name)
     self._blocks.append(model_block)
     model_block.activate = True
