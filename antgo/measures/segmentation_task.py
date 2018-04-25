@@ -9,6 +9,8 @@ import numpy as np
 from antgo.task.task import *
 from antgo.measures.base import *
 from antgo.dataflow.common import *
+from antgo.utils._resize import *
+from scipy import signal
 
 __all__ = {'AntPixelAccuracySeg': ('PixelAccuracy', 'SEGMENTATION'),
            'AntMeanAccuracySeg': ('MeanAccuracy', 'SEGMENTATION'),
@@ -230,6 +232,7 @@ class AntFrequencyWeightedIOUSeg(AntMeasure):
     val = np.sum(sum_ti * sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6)) / (np.sum(sum_ti) + 1e-6)
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]}}
 
+
 class AntMeanIOUBoundary(AntMeasure):
   def __init__(self, task):
     # paper: Liang-Chieh Chen, etc. Semantic Image Segmentation with Deep Convolutional Nets and Fully Connected CRFs
@@ -237,9 +240,10 @@ class AntMeanIOUBoundary(AntMeasure):
 
     super(AntMeanIOUBoundary, self).__init__(task, 'MeanIOUBoundary')
     assert(task.task_type == 'SEGMENTATION')
-
+    self._weight_with_texture = bool(getattr(self.task, 'MeanIOUBoundary_weight', 0))
+    self._texture_size = int(getattr(self.task, 'MeanIOUBoundary_texture_size', 25))
     self.is_support_rank = True
-
+  
   def eva(self, data, label):
     classes_num = len(self.task.class_label)
 
@@ -247,7 +251,7 @@ class AntMeanIOUBoundary(AntMeasure):
     sum_ti = np.zeros((classes_num))
     sum_ji = np.zeros((classes_num))
 
-    trimap_width = int(getattr(self.task, 'trimap_width', 3))
+    trimap_width = int(getattr(self.task, 'MeanIOUBoundary_trimap_width', 3))
     offset_x, offset_y = np.meshgrid(np.arange(-trimap_width, trimap_width + 1),
                                      np.arange(-trimap_width, trimap_width + 1))
     offset = np.column_stack((offset_x.flatten(), offset_y.flatten()))
@@ -267,18 +271,6 @@ class AntMeanIOUBoundary(AntMeasure):
 
       gt_labels = set(gt.flatten())
       rows, cols = gt.shape[:2]
-      # generate trimap for objects (predict)
-      predict_boundary = np.where((predict[0:-1, 0:-1] - predict[1:, 1:]) != 0)
-      predict_boundary = np.column_stack(predict_boundary)
-      predict_band_boundary = np.expand_dims(predict_boundary, 1) + offset
-      predict_band_boundary = predict_band_boundary.reshape(-1, 2)
-      index = np.where((predict_band_boundary[:, 0] > 0) &
-                       (predict_band_boundary[:, 1] > 0) &
-                       (predict_band_boundary[:, 0] < rows) &
-                       (predict_band_boundary[:, 1] < cols))
-      predict_trimap = np.zeros((rows, cols), dtype=np.int32)
-      predict_trimap[predict_band_boundary[index, 0], predict_band_boundary[index, 1]] = \
-          predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
 
       for l in gt_labels:
         l = int(l)
@@ -286,7 +278,7 @@ class AntMeanIOUBoundary(AntMeasure):
           continue
 
         # generate trimap for object (gt)
-        obj_map = np.zeros((rows, cols), dtype=np.uint32)
+        obj_map = np.zeros((rows, cols), dtype=np.int32)
         obj_map[np.where(gt == l)] = 1
 
         gt_boundary = np.where((obj_map[0:-1, 0:-1] - obj_map[1:, 1:]) != 0)
@@ -297,6 +289,11 @@ class AntMeanIOUBoundary(AntMeasure):
                                  (gt_band_boundary[:, 1] > 0) &
                                  (gt_band_boundary[:, 0] < rows) &
                                  (gt_band_boundary[:, 1] < cols))
+        
+        # generate predict_trimap
+        predict_trimap = np.zeros((rows, cols), dtype=np.int32)
+        predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
+          predict[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
 
         # trimap = np.zeros((rows, cols), dtype=np.int32)
         # trimap[gt_band_boundary[gt_band_index,0],gt_band_boundary[gt_band_index,1]] = 1
@@ -304,18 +301,47 @@ class AntMeanIOUBoundary(AntMeasure):
         # cv2.imshow("ZZ", (gt * 255).astype(np.uint8))
         # cv2.waitKey(0)
 
-        sum_ti[l] += len(gt_band_index[0])
+        if self._weight_with_texture:
+          obj_texture = obj_map[0:-1, 0:-1] - obj_map[1:, 1:]
+          obj_texture = np.pad(obj_texture, [0,1], 'constant')
+          obj_texture = np.fabs(obj_texture)
 
-        predicted_l = predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
-        nii = len(np.where(predicted_l == l)[0])
-        sum_nii[l] += nii
+          small_obj_texture = resize(obj_texture, (256, 256))
+          hot_kernel = np.ones((self._texture_size, self._texture_size))
+          weight_map = signal.convolve2d(small_obj_texture, hot_kernel, boundary='symm', mode='same')
+          
+          weight_map = weight_map / (np.max(weight_map) + 1e-6)
+          weight_map = resize(weight_map, (rows,cols))
+          
+          focus_weight = weight_map[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
+          sum_ti[l] += np.sum(focus_weight)
 
-        vv = len(np.where(predict_trimap == l)[0])
-        sum_ji[l] += vv
+          predicted_l = predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
+          nii_index = np.where(predicted_l == l)
+          nii = np.sum(focus_weight[nii_index])
+          sum_nii[l] += nii
+          
+          vv_index = np.where(predict_trimap == l)
+          vv = np.sum(weight_map[vv_index])
+          sum_ji[l] += vv
+          
+          if id is not None:
+            sample_scores.append(
+              {'id': id, 'score': float(nii) / float(np.sum(focus_weight) + vv - nii), 'category': l})
+        else:
+          sum_ti[l] += len(gt_band_index[0])
+  
+          predicted_l = predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
+          nii = len(np.where(predicted_l == l)[0])
+          sum_nii[l] += nii
+  
+          vv = len(np.where(predict_trimap == l)[0])
+          sum_ji[l] += vv
 
-        if id is not None:
-          sample_scores.append({'id': id, 'score': float(nii) / float(len(gt_band_index[0]) + vv - nii), 'category': l})
-    
+          if id is not None:
+            sample_scores.append(
+              {'id': id, 'score': float(nii) / float(len(gt_band_index[0]) + vv - nii), 'category': l})
+      
     sum_nii = sum_nii[1:]
     sum_ti = sum_ti[1:]
     sum_ji = sum_ji[1:]
