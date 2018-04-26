@@ -26,12 +26,14 @@ class AntChallenge(AntBase):
                ant_dump_dir,
                ant_token,
                ant_task_config=None,
+               ant_task_benchmark=None,
                **kwargs):
     super(AntChallenge, self).__init__(ant_name, ant_context, ant_token, **kwargs)
     self.ant_data_source = ant_data_folder
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
+    self.ant_task_benchmark = ant_task_benchmark
 
   def start(self):
     # 0.step loading challenge task
@@ -206,6 +208,12 @@ class AntChallenge(AntBase):
         logger.info('generate model evaluation report')
         everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
         return
+
+      # TODO
+      # if self.token is not None:
+      #   pass
+      # else:
+      #   pass
 
       # significance statistic
       logger.info('deep significance difference compare')

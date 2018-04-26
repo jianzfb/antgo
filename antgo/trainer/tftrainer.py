@@ -505,10 +505,10 @@ class TFTrainer(Trainer):
           loss_val = result
         
         if self.iter_at % self.log_every_n_steps == 0:
-          logger.info('INFO: loss %f lr %f at iterator %d (%f sec/step)'%
-                      (loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
+          logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)'%
+                      (str(os.getpid()), loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
       else:
-        logger.info('INFO: (%f sec/step)'%float(self.time_stat.get()))
+        logger.info('(PID: %s) INFO: (%f sec/step)'%(str(os.getpid()), float(self.time_stat.get())))
       
       return result
 

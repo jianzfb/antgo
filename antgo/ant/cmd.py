@@ -56,6 +56,8 @@ class AntCmd(AntBase):
     flags.DEFINE_string('task_params', None, 'task extent parameter')
     flags.DEFINE_string('task_class_label',None, 'classification task label')
     flags.DEFINE_string('experiment_name', None, 'experiment name')
+    flags.DEFINE_string('group', None, 'group name')
+    flags.DEFINE_string('user', None, 'user name')
 
     super(AntCmd, self).__init__('CMD', ant_token=ant_token)
 
@@ -233,6 +235,25 @@ class AntCmd(AntBase):
       print('task (id=%d) has been applied successfully (token = %s), now challenge go!!'%(task_id, response['token']))
 
   def process_create_command(self):
+    ################################################
+    ###########   stage.1 create group #############
+    ################################################
+    if FLAGS.group() is not None and FLAGS.task_name() is None:
+      # creat group
+      res = self.remote_api_request('hub/api/terminal/groups/%s'%str(FLAGS.group()), None, 'post')
+      if res is not None:
+        logger.info('success to create %s group'%str(FLAGS.group()))
+      else:
+        logger.error('fail to create %s group'%str(FLAGS.group()))
+      return
+
+    ################################################
+    ###########   stage.2 crate task   #############
+    ################################################
+    if  FLAGS.task_name() is None:
+      logger.error('if you want to create task, you must set task name')
+      return
+
     # every task must be related with one dataset
     # 0.step check paramters
     is_public = FLAGS.is_public()
@@ -317,7 +338,7 @@ class AntCmd(AntBase):
         task_class_label = json.dumps(task_class_label)
 
     # create task binded with dataset
-    task_name = '-' if FLAGS.task_name() is None else FLAGS.task_name()
+    task_name = FLAGS.task_name()
     remote_api = 'hub/api/terminal/create/task'
     response = self.remote_api_request(remote_api,
                                        action='post',
@@ -329,7 +350,8 @@ class AntCmd(AntBase):
                                              'task-estimation-procedure-params':task_est_params,
                                              'task-params':task_params,
                                              'task-class-label':task_class_label,
-                                             'task-is-public':int(is_public)})
+                                             'task-is-public':int(is_public),
+                                             'group':FLAGS.group()})
 
     if response['status'] != 'OK':
       logger.error('task name has been existed at cloud, please reset')
@@ -338,6 +360,24 @@ class AntCmd(AntBase):
     logger.info('task has been created successfully, please enjoy...')
 
   def process_add_command(self):
+    ######################################################
+    ############  stage.1 add user  ######################
+    ######################################################
+    if FLAGS.user() is not None and FLAGS.group() is not None:
+      users_info = {'users': [FLAGS.user()]}
+      res = self.remote_api_request('hub/api/terminal/groups/%s'%str(FLAGS.group()),
+                                   json.dumps(users_info),
+                                   'patch')
+      if res is not None:
+        logger.info('add user into group %s'%str(FLAGS.group()))
+      else:
+        logger.error('fail to add user')
+      return
+
+    ######################################################
+    ############  stage.2 add new task type   ############
+    ############  and task measure            ############
+    ######################################################
     task_type = FLAGS.task_type()
     task_measure = FLAGS.task_measure()
 
@@ -366,6 +406,28 @@ class AntCmd(AntBase):
     experiment_name = FLAGS.experiment_name()
     task_type = FLAGS.task_type()
     task_measure = FLAGS.task_measure()
+    group_name = FLAGS.group()
+    user_name = FLAGS.user()
+
+    if group_name is not None and user_name is not None:
+      # delete user from group
+      users_info = {'users': [user_name]}
+      res = self.remote_api_request('hub/api/terminal/groups/%s'%str(group_name),
+                                   json.dumps(users_info),
+                                   'delete')
+      if res is not None:
+        logger.info('success to del user %s from group %s'%(str(user_name),str(group_name)))
+      else:
+        logger.error('fail to del user %s from group %s'%(str(user_name),str(group_name)))
+      return
+
+    if group_name is not None and user_name is None:
+      # detele group
+      logger.error('dont support del group')
+      return
+
+    if user_name is not None:
+      logger.warn('ignore user_name set')
 
     if dataset_name is None and \
             task_name is None and \

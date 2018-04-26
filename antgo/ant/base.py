@@ -322,7 +322,7 @@ class AntBase(object):
         if response is None:
           return None
 
-        if response.status_code != 200:
+        if response.status_code != 200 and response.status_code != 201:
           return None
 
         response_js = json.loads(response.content.decode())

@@ -47,6 +47,7 @@ flags.DEFINE_string('sandbox_time', None, 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
+flags.DEFINE_string('benchmark', None, 'benchmark experiments')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -256,6 +257,7 @@ def main():
                                    dump_dir,
                                    token,
                                    task,
+                                   FLAGS.benchmark(),
                                    main_file=main_file,
                                    main_folder=main_folder,
                                    main_param=main_param,
