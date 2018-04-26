@@ -203,9 +203,18 @@ def main():
                      '</task>'%('default-task', dataset)
       fp.write(task_content)
     task = os.path.join(task_factory, '%s.xml'%name)
-  
+
   # 8.2 step load ant context
   ant_context = main_context(main_file, main_folder)
+  
+  # 8.3 step load model config
+  main_param = FLAGS.main_param()
+  if main_param is not None:
+    main_config_path = os.path.join(main_folder, main_param)
+    params = yaml.load(open(main_config_path, 'r'))
+    ant_context.params = params
+  
+  # 8.4 step load experiment
   if FLAGS.from_experiment() is not None:
     experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
     if not os.path.exists(experiment_path):
@@ -223,13 +232,6 @@ def main():
     else:
       ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
 
-  # 8.3 step load model config
-  main_param = FLAGS.main_param()
-  if main_param is not None:
-    main_config_path = os.path.join(main_folder, main_param)
-    params = yaml.load(open(main_config_path, 'r'))
-    ant_context.params = params
-  
   if ant_cmd == "train":
     sandbox_time = FLAGS.sandbox_time()
     with running_sandbox(sandbox_time=sandbox_time,

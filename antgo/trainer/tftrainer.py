@@ -158,6 +158,16 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   # 1.step load from experiment
   if ctx is not None:
     if ctx.from_experiment is not None:
+      no_activate_blocks = []
+      for b in ctx.blocks():
+        if not b.activate:
+          no_activate_blocks.append(b.name)
+
+      ablation_folder = '_'.join(sorted(no_activate_blocks))
+      
+      if len(ablation_folder) > 0:
+        ctx.from_experiment = os.path.join(ctx.from_experiment, 'ablation', ablation_folder)
+      print(ctx.from_experiment)
       logger.info('load model from experiment %s' % ctx.from_experiment.split('/')[-2])
       latest_checkpoint = None
       try:
@@ -557,11 +567,11 @@ class TFTrainer(Trainer):
             
             # 2.step transfer to local graph net
             logger.info('build model graph svg')
-            svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
-                                              self.dump_dir,
-                                              ['input'])
-            if svg_graph is not None:
-              self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+            # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
+            #                                   self.dump_dir,
+            #                                   ['input'])
+            # if svg_graph is not None:
+            #   self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
           return res
   
         #######################

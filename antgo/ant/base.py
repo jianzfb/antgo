@@ -378,4 +378,7 @@ class AntBase(object):
         params = yaml.load(open(main_config_path, 'r'))
         ctx.params = params
       
+      if self.context.from_experiment is not None:
+        ctx.from_experiment = self.context.from_experiment
+      
       self.context = ctx

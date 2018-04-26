@@ -187,6 +187,10 @@ class Context(object):
     is_inner_set = False
     if self.recorder is not None and self.recorder.dump_dir == None:
       self.recorder.dump_dir = os.path.join(dump_dir, 'record')
+      if os.path.exists(self.recorder.dump_dir):
+        shutil.rmtree(self.recorder.dump_dir)
+        os.makedirs(self.recorder.dump_dir)
+        
       is_inner_set = True
       
     self.data_source = data_source

@@ -46,6 +46,9 @@ class AntPixelAccuracySeg(AntMeasure):
         id = gt['id']
         gt = gt['segmentation_map']
 
+      # #临时代码
+      # predict = resize(predict, (gt.shape[0], gt.shape[1]))
+      #
       gt_labels = set(gt.flatten())
       for l in gt_labels:
         l = int(l)
@@ -268,10 +271,24 @@ class AntMeanIOUBoundary(AntMeasure):
 
         id = gt['id']
         gt = gt['segmentation_map']
-
+      
       gt_labels = set(gt.flatten())
       rows, cols = gt.shape[:2]
+      
+      # generate trimap for objects (predict)
+      predict_boundary = np.where((predict[0:-1, 0:-1] - predict[1:, 1:]) != 0)
+      predict_boundary = np.column_stack(predict_boundary)
+      predict_band_boundary = np.expand_dims(predict_boundary, 1) + offset
+      predict_band_boundary = predict_band_boundary.reshape(-1, 2)
+      index = np.where((predict_band_boundary[:, 0] > 0) &
+                       (predict_band_boundary[:, 1] > 0) &
+                       (predict_band_boundary[:, 0] < rows) &
+                       (predict_band_boundary[:, 1] < cols))
+      predict_trimap = np.zeros((rows, cols), dtype=np.int32)
+      predict_trimap[predict_band_boundary[index, 0], predict_band_boundary[index, 1]] = \
+          predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
 
+      
       for l in gt_labels:
         l = int(l)
         if l == 0:
@@ -289,11 +306,6 @@ class AntMeanIOUBoundary(AntMeasure):
                                  (gt_band_boundary[:, 1] > 0) &
                                  (gt_band_boundary[:, 0] < rows) &
                                  (gt_band_boundary[:, 1] < cols))
-        
-        # generate predict_trimap
-        predict_trimap = np.zeros((rows, cols), dtype=np.int32)
-        predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
-          predict[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
 
         # trimap = np.zeros((rows, cols), dtype=np.int32)
         # trimap[gt_band_boundary[gt_band_index,0],gt_band_boundary[gt_band_index,1]] = 1

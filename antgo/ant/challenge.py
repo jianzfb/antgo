@@ -142,6 +142,11 @@ class AntChallenge(AntBase):
       intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'record')
       with safe_recorder_manager(self.context.recorder):
         self.context.recorder.dump_dir = intermediate_dump_dir
+        # from ablation experiment
+        ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
+        for b in ablation_blocks:
+          self.ant_context.deactivate_block(b)
+          
         with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), infer_dump_dir)
 
@@ -202,7 +207,7 @@ class AntChallenge(AntBase):
         everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
         return
 
-      # compare statistic
+      # significance statistic
       logger.info('deep significance difference compare')
       # benchmark record
       benchmark_info = self.rpc("TASK-BENCHMARK")
@@ -246,8 +251,8 @@ class AntChallenge(AntBase):
             # TODO: support model significance compare for crowdsource evaluation
             pass
 
-      # deep analysis
-      logger.info('start deep analysis')
+      # error analysis
+      logger.info('start error analysis')
       # benchmark report
       benchmark_model_statistic = None
       if benchmark_model_data is not None and 'report' in benchmark_model_data:
@@ -278,9 +283,10 @@ class AntChallenge(AntBase):
           # independent analysis per category for classification problem
           measure_data_list = []
           if running_ant_task.class_label is not None and len(running_ant_task.class_label) > 1:
-            for cl in running_ant_task.class_label:
-              measure_data_list.append([md for md in measure_data if md['category'] == cl])
-          
+            if running_ant_task.class_label is not None:
+              for cl_i, cl in enumerate(running_ant_task.class_label):
+                measure_data_list.append([md for md in measure_data if md['category'] == cl or md['category'] == cl_i])
+            
           if len(measure_data_list) == 0:
             measure_data_list.append(measure_data)
           

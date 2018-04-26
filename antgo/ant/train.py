@@ -22,7 +22,8 @@ from antgo.resource.html import *
 from antgo.utils.concurrency import *
 from antgo.measures.statistic import *
 from antgo.measures.repeat_statistic import *
-
+from antgo.measures.deep_analysis import *
+import signal
 if sys.version > '3':
     PY3 = True
 else:
@@ -42,11 +43,6 @@ class EvaluationProcess(multiprocessing.Process):
     
     self._evaluation_interval = interval
     self.daemon = True
-    self._queue = multiprocessing.Queue()
-  
-  @property
-  def last_running_statistic(self):
-    return self._queue.get(timeout=self._evaluation_interval)
   
   def run(self):
     # split data and label
@@ -83,12 +79,6 @@ class EvaluationProcess(multiprocessing.Process):
           evaluation_measure_result.append(result)
         task_running_statictic[self._name]['measure'] = evaluation_measure_result
       
-      # enqueue
-      self._queue.put(task_running_statictic)
-      if self._queue.qsize() > 1:
-        # dequeue head
-        self._queue.get(block=False)
-
       now_time = datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d %H:%M:%S')
       if not os.path.exists(os.path.join(self._dump_dir, now_time)):
         os.makedirs(os.path.join(self._dump_dir, now_time))
@@ -113,6 +103,245 @@ class AntTrain(AntBase):
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
+  
+  def error_analysis(self, running_ant_task, running_ant_dataset, task_running_statictic):
+    # error analysis
+    logger.info('start error analysis')
+    # task_running_statictic={self.ant_name:
+    #                           {'measure':[
+    #                             {'statistic': {'name': 'MESR',
+    #                                            'value': [{'name': 'MESR', 'value': 0.4, 'type':'SCALAR'}]},
+    #                                            'info': [{'id':0,'score':0.8,'category':1},
+    #                                                     {'id':1,'score':0.3,'category':1},
+    #                                                     {'id':2,'score':0.9,'category':1},
+    #                                                     {'id':3,'score':0.5,'category':1},
+    #                                                     {'id':4,'score':1.0,'category':1}]},
+    #                             {'statistic': {'name': "SE",
+    #                                            'value': [{'name': 'SE', 'value': 0.5, 'type': 'SCALAR'}]},
+    #                                            'info': [{'id':0,'score':0.4,'category':1},
+    #                                                     {'id':1,'score':0.2,'category':1},
+    #                                                     {'id':2,'score':0.1,'category':1},
+    #                                                     {'id':3,'score':0.5,'category':1},
+    #                                                     {'id':4,'score':0.23,'category':1}]}]}}
+    
+    # stage-1 error statistic analysis
+    for measure_result in task_running_statictic[self.ant_name]['measure']:
+      if 'info' in measure_result and len(measure_result['info']) > 0:
+        measure_name = measure_result['statistic']['name']
+        measure_data = measure_result['info']
+    
+        # independent analysis per category for classification problem
+        measure_data_list = []
+        if running_ant_task.class_label is not None and len(running_ant_task.class_label) > 1:
+          if running_ant_task.class_label is not None:
+            for cl_i, cl in enumerate(running_ant_task.class_label):
+              measure_data_list.append([md for md in measure_data if md['category'] == cl or md['category'] == cl_i])
+      
+        if len(measure_data_list) == 0:
+          measure_data_list.append(measure_data)
+    
+        for category_id, category_measure_data in enumerate(measure_data_list):
+          if len(category_measure_data) == 0:
+            continue
+      
+          if 'analysis' not in task_running_statictic[self.ant_name]:
+            task_running_statictic[self.ant_name]['analysis'] = {}
+      
+          if measure_name not in task_running_statictic[self.ant_name]['analysis']:
+            task_running_statictic[self.ant_name]['analysis'][measure_name] = {}
+      
+          # reorganize as list
+          method_samples_list = [{'name': self.ant_name, 'data': category_measure_data}]
+
+          # reorganize data as score matrix
+          method_num = len(method_samples_list)
+          # samples_num are the same among methods
+          samples_num = len(method_samples_list[0]['data'])
+          # samples_num = ant_test_dataset.size
+          method_measure_mat = np.zeros((method_num, samples_num))
+          samples_map = []
+      
+          for method_id, method_measure_data in enumerate(method_samples_list):
+            # reorder data by index
+            order_key = 'id'
+            if 'index' in method_measure_data['data'][0]:
+              order_key = 'index'
+            method_measure_data_order = sorted(method_measure_data['data'], key=lambda x: x[order_key])
+        
+            if method_id == 0:
+              # record sample id
+              for sample_id, sample in enumerate(method_measure_data_order):
+                samples_map.append(sample)
+        
+            # order consistent
+            for sample_id, sample in enumerate(samples_map):
+              method_measure_mat[method_id, sample_id] = sample['score']
+      
+          is_binary = False
+          # collect all score
+          test_score = [td['score'] for td in method_samples_list[0]['data']
+                        if td['score'] > -float("inf") and td['score'] < float("inf")]
+          hist, x_bins = np.histogram(test_score, 100)
+          if len(np.where(hist > 0.0)[0]) <= 2:
+            is_binary = True
+      
+          # score matrix analysis
+          if not is_binary:
+            s, ri, ci, lr_samples, mr_samples, hr_samples = \
+              continuous_multi_model_measure_analysis(method_measure_mat, samples_map, running_ant_dataset)
+        
+            analysis_tag = 'Global'
+            if len(measure_data_list) > 1:
+              analysis_tag = 'Global-Category-' + str(running_ant_task.class_label[category_id])
+        
+            model_name_ri = [method_samples_list[r]['name'] for r in ri]
+            task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
+              {'value': s,
+               'type': 'MATRIX',
+               'x': ci,
+               'y': model_name_ri,
+               'sampling': [{'name': 'High Score Region', 'data': hr_samples},
+                            {'name': 'Middle Score Region', 'data': mr_samples},
+                            {'name': 'Low Score Region', 'data': lr_samples}]}
+        
+            # group by tag
+            tags = getattr(running_ant_dataset, 'tag', None)
+            if tags is not None:
+              for tag in tags:
+                g_s, g_ri, g_ci, g_lr_samples, g_mr_samples, g_hr_samples = \
+                  continuous_multi_model_measure_analysis(method_measure_mat,
+                    samples_map,
+                    running_ant_dataset,
+                    filter_tag=tag)
+            
+                analysis_tag = 'Group'
+                if len(measure_data_list) > 1:
+                  analysis_tag = 'Group-Category-' + str(running_ant_task.class_label[category_id])
+            
+                if analysis_tag not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                  task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
+            
+                model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
+                tag_data = {'value': g_s,
+                            'type': 'MATRIX',
+                            'x': g_ci,
+                            'y': model_name_ri,
+                            'sampling': [{'name': 'High Score Region', 'data': g_hr_samples},
+                                         {'name': 'Middle Score Region', 'data': g_mr_samples},
+                                         {'name': 'Low Score Region', 'data': g_lr_samples}]}
+            
+                task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
+          else:
+            s, ri, ci, region_95, region_52, region_42, region_13, region_one, region_zero = \
+              discrete_multi_model_measure_analysis(method_measure_mat,
+                samples_map,
+                running_ant_dataset)
+        
+            analysis_tag = 'Global'
+            if len(measure_data_list) > 1:
+              analysis_tag = 'Global-Category-' + str(running_ant_task.class_label[category_id])
+        
+            model_name_ri = [method_samples_list[r]['name'] for r in ri]
+            task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
+              {'value': s,
+               'type': 'MATRIX',
+               'x': ci,
+               'y': model_name_ri,
+               'sampling': [{'name': '95%', 'data': region_95},
+                            {'name': '52%', 'data': region_52},
+                            {'name': '42%', 'data': region_42},
+                            {'name': '13%', 'data': region_13},
+                            {'name': 'best', 'data': region_one},
+                            {'name': 'zero', 'data': region_zero}]}
+        
+            # group by tag
+            tags = getattr(running_ant_dataset, 'tag', None)
+            if tags is not None:
+              for tag in tags:
+                g_s, g_ri, g_ci, g_region_95, g_region_52, g_region_42, g_region_13, g_region_one, g_region_zero = \
+                  discrete_multi_model_measure_analysis(method_measure_mat,
+                    samples_map,
+                    running_ant_dataset,
+                    filter_tag=tag)
+                # if 'group' not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                #   task_running_statictic[self.ant_name]['analysis'][measure_name]['group'] = []
+                #
+                analysis_tag = 'Group'
+                if len(measure_data_list) > 1:
+                  analysis_tag = 'Group-Category-' + str(running_ant_task.class_label[category_id])
+            
+                if analysis_tag not in task_running_statictic[self.ant_name]['analysis'][measure_name]:
+                  task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
+            
+                model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
+                tag_data = {'value': g_s,
+                            'type': 'MATRIX',
+                            'x': g_ci,
+                            'y': model_name_ri,
+                            'sampling': [{'name': '95%', 'data': region_95},
+                                         {'name': '52%', 'data': region_52},
+                                         {'name': '42%', 'data': region_42},
+                                         {'name': '13%', 'data': region_13},
+                                         {'name': 'best', 'data': region_one},
+                                         {'name': 'zero', 'data': region_zero}]}
+            
+                task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
+    
+    # stage-2 error eye analysis (all or subset in wrong samples)
+    custom_score_threshold = getattr(running_ant_task, 'badscore', 0.5)
+    eye_analysis_set_size = getattr(running_ant_task, 'eyeball', 100)
+    
+    for measure_result in task_running_statictic[self.ant_name]['measure']:
+      # analyze measure result
+      measure_name = None
+      measure_data = None
+      if 'info' in measure_result and len(measure_result['info']) > 0:
+        measure_name = measure_result['statistic']['name']
+        measure_data = measure_result['info']
+      
+      if measure_name is None or measure_data is None:
+        continue
+
+      eye_analysis_error = []
+      eye_analysis_all = []
+      for sample_result_info in measure_data:
+        sample_id = sample_result_info['id']
+        sample_score = sample_result_info['score']
+        sample_category = sample_result_info['category'] if 'category' in sample_result_info else '-'
+        
+        if sample_score > custom_score_threshold:
+          continue
+          
+        eye_analysis_all.append((sample_id, sample_score, sample_category))
+      
+      if len(eye_analysis_all) == 0:
+        continue
+      
+      eye_analysis_all_sort = sorted(eye_analysis_all, key=lambda x: x[1])
+      eye_analysis_set = eye_analysis_all_sort[0:eye_analysis_set_size]
+      
+      for id, score, category in eye_analysis_set:
+        data_attribute_info = {}
+        data_attribute_info['id'] = id
+        data_attribute_info['category'] = category
+        data_attribute_info['score'] = score
+        
+        data_attribute_info['tag'] = []
+        _, label = running_ant_dataset.at(int(id))
+        if 'tag' in label:
+          if type(label['tag']) == list or type(label['tag']) == tuple:
+            data_attribute_info['tag'].extend(list(label['tag']))
+          else:
+            data_attribute_info['tag'].append(label['tag'])
+        
+        eye_analysis_error.append(data_attribute_info)
+      
+      if 'eye' not in task_running_statictic[self.ant_name]:
+          task_running_statictic[self.ant_name]['eye'] = {}
+
+      task_running_statictic[self.ant_name]['eye'][measure_name] = eye_analysis_error
+    
+    return task_running_statictic
     
   def start(self):
     # 0.step loading challenge task
@@ -240,6 +469,51 @@ class AntTrain(AntBase):
           self.context.call_training_process(ant_train_dataset, train_dump_dir)
         logger.info('stop main training process with complete model')
         
+        # start evaluation and error analysis
+        logger.info('start evaluation process with complete model')
+        try:
+          _, validation_dataset = ant_train_dataset.split(split_params={}, split_method='holdout')
+          data_annotation_branch = DataAnnotationBranch(Node.inputs(validation_dataset))
+          self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+
+          intermediate_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'record')
+          with safe_recorder_manager(self.context.recorder):
+            self.context.recorder.dump_dir = intermediate_dump_dir
+            with performance_statistic_region(self.ant_name):
+              self.context.call_infer_process(data_annotation_branch.output(0), train_dump_dir)
+
+          task_running_statictic = get_performance_statistic(self.ant_name)
+          task_running_statictic = {self.ant_name: task_running_statictic}
+          task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
+          task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
+            task_running_elapsed_time / float(validation_dataset.size)
+
+          evaluation_measure_result = []
+          with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
+            for measure in running_ant_task.evaluation_measures:
+              if not measure.crowdsource:
+                # evaluation
+                record_generator = record_reader.iterate_read('predict', 'groundtruth')
+                result = measure.eva(record_generator, None)
+                if measure.is_support_rank:
+                  evaluation_measure_result.append(result)
+
+            task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+          
+          # error analysis
+          task_running_statictic = self.error_analysis(running_ant_task, validation_dataset, task_running_statictic)
+          
+          if task_running_statictic is not None and len(task_running_statictic) > 0:
+            logger.info('generate model evaluation report')
+            self.stage = 'EVALUATION-HOLDOUT-REPORT'
+            # send statistic report
+            self.context.job.send({'DATA': {'REPORT': task_running_statictic}})
+            everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, train_time_stamp))
+          
+          logger.info('stop evaluation process with complete model')
+        except:
+          logger.warn('could not find val dataset, and finish evaluation and error analysis')
+        
         # join (waiting until all experiments stop)
         for ablation_experiment in ablation_experiments:
           ablation_experiment.join()
@@ -247,8 +521,7 @@ class AntTrain(AntBase):
         return
       
       logger.warn('couldnt enable ablation experiment until set devices in *.yaml')
-      
-    is_early_stop = False
+    
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None and \
@@ -260,7 +533,7 @@ class AntTrain(AntBase):
         evaluation_measures = running_ant_task.evaluation_measures
 
         if estimation_procedure == 'holdout':
-          evaluation_statistic = self._holdout_validation(ant_train_dataset, evaluation_measures, train_time_stamp)
+          evaluation_statistic = self._holdout_validation(ant_train_dataset,running_ant_task, train_time_stamp)
           
           if evaluation_statistic is not None and len(evaluation_statistic) > 0:
             logger.info('generate model evaluation report')
@@ -268,7 +541,9 @@ class AntTrain(AntBase):
             # send statistic report
             self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
             everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
-          is_early_stop = True
+          
+          return
+
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 2              # default value
           is_stratified_sampling = True   # default value
@@ -316,19 +591,18 @@ class AntTrain(AntBase):
           everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
 
       # 3.step model training (whole dataset)
-      if not is_early_stop:
-        # if estimation procedure is 'holdout', dont need train again
-        self.stage = "TRAIN"
-        train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
-        if not os.path.exists(train_dump_dir):
-            os.makedirs(train_dump_dir)
-  
-        logger.info('start training process')
-        ant_train_dataset.reset_state()
-        self.context.call_training_process(ant_train_dataset, train_dump_dir)
-        logger.info('stop training process')
+      # if estimation procedure is 'holdout', dont need train again
+      self.stage = "TRAIN"
+      train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
+      if not os.path.exists(train_dump_dir):
+          os.makedirs(train_dump_dir)
 
-  def _holdout_validation(self, train_dataset, evaluation_measures, now_time):
+      logger.info('start training process')
+      ant_train_dataset.reset_state()
+      self.context.call_training_process(ant_train_dataset, train_dump_dir)
+      logger.info('stop training process')
+
+  def _holdout_validation(self, train_dataset, running_ant_task, now_time):
     # 1.step split train set and validation set
     part_train_dataset, part_validation_dataset = train_dataset.split(split_params={}, split_method='holdout')
     part_train_dataset.reset_state()
@@ -340,7 +614,7 @@ class AntTrain(AntBase):
     
     # launch evaluation process
     evaluation_process = EvaluationProcess(part_validation_dataset,
-                                           evaluation_measures,
+                                           running_ant_task.evaluation_measures,
                                            dump_dir,
                                            self.ant_context,
                                            self.ant_name)
@@ -349,8 +623,41 @@ class AntTrain(AntBase):
     # 2.step training model
     self.stage = 'EVALUATION-HOLDOUT-TRAIN'
     self.context.call_training_process(part_train_dataset, dump_dir)
+    
+    # 3.step complete evaluation and error analysis
+    # kill all evaluation process
+    os.kill(evaluation_process.pid, signal.SIGTERM)
+    
+    data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
+    self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
 
-    task_running_statictic = evaluation_process.last_running_statistic
+    intermediate_dump_dir = os.path.join(self.ant_dump_dir, dump_dir, 'record')
+    
+    with safe_recorder_manager(self.context.recorder):
+      self.context.recorder.dump_dir = intermediate_dump_dir
+      with performance_statistic_region(self.ant_name):
+        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
+
+    task_running_statictic = get_performance_statistic(self.ant_name)
+    task_running_statictic = {self.ant_name: task_running_statictic}
+    task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
+    task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
+      task_running_elapsed_time / float(part_validation_dataset.size)
+
+    evaluation_measure_result = []
+    with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
+      for measure in running_ant_task.evaluation_measures:
+        if not measure.crowdsource:
+          # evaluation
+          record_generator = record_reader.iterate_read('predict', 'groundtruth')
+          result = measure.eva(record_generator, None)
+          if measure.is_support_rank:
+            evaluation_measure_result.append(result)
+  
+      task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+
+    # error analysis
+    task_running_statictic = self.error_analysis(running_ant_task, part_validation_dataset, task_running_statictic)
     return task_running_statictic
 
   def _repeated_holdout_validation(self, repeats,
@@ -565,14 +872,20 @@ class AntTrain(AntBase):
                   spare_device):
       # 1.step proc_func is running in a independent process (clone running environment)
       handle.clone()
-
       # reassign running device
       handle.context.params.devices = [spare_device]
       # only one clone
       handle.context.params.num_clones = 1
 
-      part_train_dataset, part_validation_dataset = \
-                                      experiment_data_source.split(split_params={}, split_method='holdout')
+      part_train_dataset = experiment_data_source
+      part_validation_dataset = None
+      try:
+        part_train_dataset, part_validation_dataset = \
+                                        experiment_data_source.split(split_params={}, split_method='holdout')
+      except:
+        logger.warn('could not find val dataset for ablation experiment')
+      
+      # shuffle
       part_train_dataset.reset_state()
       
       # deactivate ablation_block
@@ -595,32 +908,33 @@ class AntTrain(AntBase):
       handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
 
       # 3.step start evaluation process
-      # split data and label
-      data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
-      handle.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-
-      handle.stage = 'ABLATION-%s-EVALUATION' % ablation_block
-      with safe_recorder_manager(handle.context.recorder):
-        handle.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
-
-      # clear
-      handle.context.recorder = None
-
-      ablation_running_statictic = {handle.ant_name: {}}
-      ablation_evaluation_measure_result = []
-
-      with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
-        for measure in experiment_challenge_task.evaluation_measures:
-          record_generator = record_reader.iterate_read('predict', 'groundtruth')
-          result = measure.eva(record_generator, None)
-          ablation_evaluation_measure_result.append(result)
-
-      ablation_running_statictic[handle.ant_name]['measure'] = ablation_evaluation_measure_result
-      handle.stage = 'ABLATION-%s-REPORT' % ablation_block
-
-      # send statistic report
-      handle.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
-      everything_to_html(ablation_running_statictic, ablation_dump_dir)
+      if part_validation_dataset is not None:
+        # split data and label
+        data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
+        handle.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+  
+        handle.stage = 'ABLATION-%s-EVALUATION' % ablation_block
+        with safe_recorder_manager(handle.context.recorder):
+          handle.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
+  
+        # clear
+        handle.context.recorder = None
+  
+        ablation_running_statictic = {handle.ant_name: {}}
+        ablation_evaluation_measure_result = []
+  
+        with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
+          for measure in experiment_challenge_task.evaluation_measures:
+            record_generator = record_reader.iterate_read('predict', 'groundtruth')
+            result = measure.eva(record_generator, None)
+            ablation_evaluation_measure_result.append(result)
+  
+        ablation_running_statictic[handle.ant_name]['measure'] = ablation_evaluation_measure_result
+        handle.stage = 'ABLATION-%s-REPORT' % ablation_block
+  
+        # send statistic report
+        handle.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
+        everything_to_html(ablation_running_statictic, ablation_dump_dir)
 
       handle.context.wait_until_clear()
     
@@ -647,7 +961,9 @@ class AntTrain(AntBase):
       # apply independent process
       if type(try_ablation_blocks) != list and type(try_ablation_blocks) != tuple:
         try_ablation_blocks = [try_ablation_blocks]
-        
+      
+      try_ablation_blocks = sorted(try_ablation_blocks)
+      
       block_ablation_process = Process(target=proc_func,
                                        args=(self,
                                              data_source,

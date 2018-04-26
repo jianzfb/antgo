@@ -38,7 +38,12 @@ class Flip(Node):
   def action(self, *args, **kwargs):
     assert(len(args) == 1)
     is_flip = self.rng.uniform(0, 1) < self.prob
-    image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+    is_single = True
+    if type(args[0]) == tuple or type(args[0]) == list:
+      is_single = False
+
+    image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
+    
     annotation = copy.deepcopy(annotation)
     if is_flip:
       # for image
@@ -82,7 +87,7 @@ class Flip(Node):
           resized_obj_seg.append(temp)
         annotation['segmentation'] = resized_obj_seg
 
-    return (image, annotation)
+    return (image, annotation) if not is_single else image
 
 
 class Resize(Node):
@@ -92,7 +97,11 @@ class Resize(Node):
 
   def action(self, *args, **kwargs):
     assert (len(args) == 1)
-    image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+    is_single = True
+    if type(args[0]) == tuple or type(args[0]) == list:
+      is_single = False
+      
+    image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
     # for image
     image = scipy.misc.imresize(image, self.shape)
     annotation = copy.deepcopy(annotation)
@@ -114,7 +123,7 @@ class Resize(Node):
         resized_obj_seg.append(temp.reshape(temp.shape[0],temp.shape[1],1))
       annotation['segmentation'] = resized_obj_seg
 
-    return (image, annotation)
+    return (image, annotation) if not is_single else image
 
 
 class Subtract(Node):
@@ -124,12 +133,16 @@ class Subtract(Node):
 
   def action(self, *args, **kwargs):
     assert(len(args) == 1)
-    image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+    is_single = True
+    if type(args[0]) == tuple or type(args[0]) == list:
+      is_single = False
+
+    image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
 
     # for image
     image = image - np.array(self._mean_value)
 
-    return (image, annotation)
+    return (image, annotation) if not is_single else image
 
 
 class DisturbChannels(Node):
@@ -138,7 +151,12 @@ class DisturbChannels(Node):
 
   def action(self, *args, **kwargs):
     assert(len(args) == 1)
-    image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+    is_single = True
+    if type(args[0]) == tuple or type(args[0]) == list:
+      is_single = False
+
+    image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
+    
     if len(image.shape) < 3:
       return [image, annotation]
 
@@ -147,7 +165,7 @@ class DisturbChannels(Node):
     image_pieces = np.split(image, len(channles), axis=2)
     image = np.concatenate([image_pieces[i] for i in channles], axis=2)
 
-    return (image, annotation)
+    return (image, annotation) if not is_single else image
 
 
 class DisturbRotation(Node):
@@ -167,7 +185,11 @@ class DisturbRotation(Node):
 
   def action(self, *args, **kwargs):
     assert(len(args) == 1)
-    image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+    is_single = True
+    if type(args[0]) == tuple or type(args[0]) == list:
+      is_single = False
+
+    image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
 
     deg = self.rng.uniform(-self._max_deg, self._max_deg)
     center_x = image.shape[1] / 2.0
@@ -233,7 +255,7 @@ class DisturbRotation(Node):
                                           output=np.uint8), axis=2))
 
       annotation_cpy['segmentation'] = obj_segs
-    return image, annotation_cpy
+    return (image, annotation_cpy) if not is_single else image
 
 
 class DisturbLighting(Node):
@@ -244,11 +266,16 @@ class DisturbLighting(Node):
 
   def action(self, *args, **kwargs):
     assert(len(args) == 1)
-    image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+    is_single = True
+    if type(args[0]) == tuple or type(args[0]) == list:
+      is_single = False
+
+    image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
+    
     light = self.rng.uniform(-self._max_lighting, self._max_lighting)
     image_cpy = image.copy() + light
 
-    return image_cpy, annotation
+    return (image_cpy, annotation) if not is_single else image_cpy
 
 
 class DisturbNoise(Node):
@@ -259,11 +286,16 @@ class DisturbNoise(Node):
 
   def action(self, *args, **kwargs):
     assert(len(args) == 1)
-    image, annotation = args[0] if len(args[0]) == 2 else (args[0], {})
+    is_single = True
+    if type(args[0]) == tuple or type(args[0]) == list:
+      is_single = False
+
+    image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
+    
     height = image.shape[0]
     width = image.shape[1]
     channels = image.shape[2]
     noise = (np.random.random((height, width, channels)) * 2 - 1) * self._sigma
     image_cpy = image.copy() + noise
 
-    return image_cpy, annotation
+    return (image_cpy, annotation) if not is_single else image_cpy
