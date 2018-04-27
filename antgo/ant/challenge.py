@@ -252,8 +252,7 @@ class AntChallenge(AntBase):
               with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
                 with safe_recorder_manager(RecordReader(benchmark_model_address)) as benchmark_record_reader:
                   s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 50)
-                  print(s)
-                  
+
                   significant_diff_score.append({'name': benchmark_model_name, 'score': s})
             task_running_statictic[self.ant_name]['significant_diff'][measure.name] = significant_diff_score
           elif measure.is_support_rank and measure.crowdsource:
