@@ -301,7 +301,9 @@ class AntTrain(AntBase):
       
       if measure_name is None or measure_data is None:
         continue
-
+      
+      measure_obj, = running_ant_task.evaluation_measure(measure_name)
+      
       eye_analysis_error = []
       eye_analysis_all = []
       for sample_result_info in measure_data:
@@ -309,8 +311,14 @@ class AntTrain(AntBase):
         sample_score = sample_result_info['score']
         sample_category = sample_result_info['category'] if 'category' in sample_result_info else '-'
         
-        if sample_score > custom_score_threshold:
-          continue
+        if not measure_obj.is_inverse:
+          # larger is good
+          if sample_score > custom_score_threshold:
+            continue
+        else:
+          # smaller is good
+          if sample_score < custom_score_threshold:
+            continue
           
         eye_analysis_all.append((sample_id, sample_score, sample_category))
       

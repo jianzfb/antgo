@@ -63,7 +63,6 @@ class AntChallenge(AntBase):
         logger.error('unknow error')
         exit(-1)
     
-    self.is_non_mltalker_task = False
     if running_ant_task is None:
       # 0.step load custom task
       custom_task = create_task_from_xml(self.ant_task_config, self.context)
@@ -71,7 +70,6 @@ class AntChallenge(AntBase):
         logger.error('couldnt load custom task')
         exit(0)
       running_ant_task = custom_task
-      self.is_non_mltalker_task = True
       
     assert(running_ant_task is not None)
 
@@ -203,45 +201,46 @@ class AntChallenge(AntBase):
 
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
       
-      if self.is_non_mltalker_task:
-        # generate report resource
-        logger.info('generate model evaluation report')
-        everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
-        return
-
-      # TODO
-      # if self.token is not None:
-      #   pass
-      # else:
-      #   pass
+      # if self.is_non_mltalker_task:
+      #   # generate report resource
+      #   logger.info('generate model evaluation report')
+      #   everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
+      #   return
 
       # significance statistic
-      logger.info('deep significance difference compare')
+      logger.info('significance difference compare and rank')
       # benchmark record
-      benchmark_info = self.rpc("TASK-BENCHMARK")
       benchmark_model_data = {}
-      if benchmark_info is not None:
-        for bmd in benchmark_info:
-          benchmark_name = bmd['benchmark_name']
-          benchmark_record = bmd['benchmark_record']
-          benchmark_report = bmd['benchmark_report']
-
-          # download benchmark record from url
-          benchmark_record = self.download(benchmark_record,
-                                           target_path=os.path.join(self.ant_dump_dir, now_time_stamp, 'benchmark'),
-                                           target_name='%s.tar.gz'%benchmark_name,
-                                           archive=benchmark_name)
-
-          if 'record' not in benchmark_model_data:
-            benchmark_model_data['record'] = {}
-          benchmark_model_data['record'][benchmark_name] = benchmark_record
-
-          if 'report' not in benchmark_model_data:
-            benchmark_model_data['report'] = {}
-
-          for benchmark_experiment_name, benchmark_experiment_report in benchmark_report['CHALLENGE']['REPORT'].items():
-            benchmark_model_data['report'][benchmark_name] = benchmark_experiment_report
-
+      if self.token is not None:
+        benchmark_info = self.rpc("TASK-BENCHMARK")
+        if benchmark_info is not None:
+          for bmd in benchmark_info:
+            benchmark_name = bmd['benchmark_name']
+            benchmark_record = bmd['benchmark_record']
+            benchmark_report = bmd['benchmark_report']
+  
+            # download benchmark record from url
+            benchmark_record = self.download(benchmark_record,
+                                             target_path=os.path.join(self.ant_dump_dir, now_time_stamp, 'benchmark'),
+                                             target_name='%s.tar.gz'%benchmark_name,
+                                             archive=benchmark_name)
+  
+            if 'record' not in benchmark_model_data:
+              benchmark_model_data['record'] = {}
+            benchmark_model_data['record'][benchmark_name] = benchmark_record
+  
+            if 'report' not in benchmark_model_data:
+              benchmark_model_data['report'] = {}
+  
+            for benchmark_experiment_name, benchmark_experiment_report in benchmark_report['CHALLENGE']['REPORT'].items():
+              benchmark_model_data['report'][benchmark_name] = benchmark_experiment_report
+      elif self.ant_task_benchmark is not None:
+        for experiment in self.ant_task_benchmark.split(','):
+          if os.path.exists(os.path.join(self.ant_dump_dir, experiment)):
+            if 'record' not in benchmark_model_data:
+              benchmark_model_data['record'] = {}
+            benchmark_model_data['record'][experiment] = os.path.join(self.ant_dump_dir, experiment, 'record')
+        
       if benchmark_model_data is not None and 'record' in benchmark_model_data:
         benchmark_model_record = benchmark_model_data['record']
 
@@ -253,6 +252,8 @@ class AntChallenge(AntBase):
               with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
                 with safe_recorder_manager(RecordReader(benchmark_model_address)) as benchmark_record_reader:
                   s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 50)
+                  print(s)
+                  
                   significant_diff_score.append({'name': benchmark_model_name, 'score': s})
             task_running_statictic[self.ant_name]['significant_diff'][measure.name] = significant_diff_score
           elif measure.is_support_rank and measure.crowdsource:
@@ -260,7 +261,7 @@ class AntChallenge(AntBase):
             pass
 
       # error analysis
-      logger.info('start error analysis')
+      logger.info('error analysis')
       # benchmark report
       benchmark_model_statistic = None
       if benchmark_model_data is not None and 'report' in benchmark_model_data:
