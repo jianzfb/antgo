@@ -438,8 +438,11 @@ class AntTrain(AntBase):
     assert(ablation_method in ['regular', 'inregular','accumulate', 'any'])
     if ablation_blocks is not None:
       ablation_experiments_devices_num = 0
-      if ablation_method in ['regular', 'inregular','accumulate']:
+      if ablation_method in ['regular', 'inregular', 'accumulate']:
         ablation_experiments_devices_num = len(ablation_blocks)
+        if ablation_method == 'inregular' and len(ablation_blocks) == 1:
+          logger.warn('only exists one ablation block %s, couldnt set inregular ablation method' % ablation_blocks[0])
+          ablation_method = 'regular'
       else:
         for i in range(len(ablation_blocks)):
           ablation_experiments_devices_num += len(list(itertools.combinations(ablation_blocks, i + 1)))

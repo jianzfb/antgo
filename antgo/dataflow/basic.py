@@ -35,13 +35,17 @@ class Sample(object):
 class RecordWriter(object):
   def __init__(self, record_path):
     self._record_path = record_path
-    opts = rocksdb.Options()
-    opts.create_if_missing = True
-    self._db = rocksdb.DB(record_path, opts)
     
-    count = self._db.get(str('attrib-count').encode('utf-8'))
-    if count is None:
-      self._db.put(str('attrib-count').encode('utf-8'), b'0')
+    try:
+      opts = rocksdb.Options()
+      opts.create_if_missing = True
+      self._db = rocksdb.DB(record_path, opts)
+    
+      count = self._db.get(str('attrib-count').encode('utf-8'))
+      if count is None:
+        self._db.put(str('attrib-count').encode('utf-8'), b'0')
+    except:
+      logger.error('couldnt open rocksdb')
     
   def close(self):
     pass
@@ -87,28 +91,31 @@ class RecordReader(object):
     # db
     if os.path.exists(os.path.join(record_path, 'record')):
       record_path = os.path.join(record_path, 'record')
-      
-    opts = rocksdb.Options(create_if_missing=False if read_only else True)
-    self._db = rocksdb.DB(record_path, opts, read_only=read_only)
-
-    # db path
-    self._record_path = record_path
-
-    # db attributes
-    self._db_attrs = {}
     
-    # attrib
-    it = self._db.iteritems()
-    it.seek('attrib-'.encode('utf-8'))
-    for attrib_item in it:
-      key, value = attrib_item
-      key = key.decode('utf-8')
-      value = value.decode('utf-8')
-      if key.startswith('attrib-'):
-        key = key.replace('attrib-', '')
-        value = value.replace('attrib-', '')
-        self._db_attrs[key] = value
-        setattr(self, key, value)
+    try:
+      opts = rocksdb.Options(create_if_missing=False if read_only else True)
+      self._db = rocksdb.DB(record_path, opts, read_only=read_only)
+  
+      # db path
+      self._record_path = record_path
+  
+      # db attributes
+      self._db_attrs = {}
+      
+      # attrib
+      it = self._db.iteritems()
+      it.seek('attrib-'.encode('utf-8'))
+      for attrib_item in it:
+        key, value = attrib_item
+        key = key.decode('utf-8')
+        value = value.decode('utf-8')
+        if key.startswith('attrib-'):
+          key = key.replace('attrib-', '')
+          value = value.replace('attrib-', '')
+          self._db_attrs[key] = value
+          setattr(self, key, value)
+    except:
+      logger.error('couldnt open rocksdb')
 
   def close(self):
     pass

@@ -75,7 +75,7 @@ def training_callback(data_source, dump_dir):
     rounds = int(float(data_source.size) / float(ctx.params.batch_size * ctx.params.num_clones))
     for _ in range(rounds):
       # execute training process
-      _, loss_val = ...
+      # _, loss_val = ...
       
       # increment 1
       iter = iter + 1
@@ -87,7 +87,7 @@ def training_callback(data_source, dump_dir):
 def infer_callback(data_source, dump_dir):
   for _ in range(data_source.size):
     # execute infer process
-    logits = ...
+    # logits = ...
     
     # record
     ctx.recorder.record(logits)
