@@ -1,11 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{demo_name} Demo</title>
+<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="/static/antgo.ico">
+
+    <title>Cover Template for Bootstrap</title>
+
+    <link rel="icon" href="static/antgo.ico" type="image/x-icon">
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+    <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="https://cdn.bootcss.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+      <script src="https://cdn.bootcss.com/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <style>
+        .banner {
+        background: url(/static/bann1.jpg)no-repeat;
+        min-height: 300px;
+        background-size: cover;
+        position: relative;
+    }
+        .logo h1 {
+            font-size: 3.5em;
+            font-family: 'Aladin', cursive;
+            color: #ffffff;
+        }
+    </style>
 </head>
-<body>
+
+  <body style="">
+
+<div class="banner">
+ 	<div class="container">
+ 		<div class="banner-main">
+ 			 <div class="logo wow bounceInLeft animated" data-wow-delay="0.1s" style="visibility: visible; animation-delay: 0.1s; animation-name: bounceInLeft;">
+ 			 	<h1>{{demo['name']}}</h1>
+ 			 </div>
+            <div class="wqdelementEditBox wqdAnimatedos" style="visibility: visible;" data-emptytexttemplate="title3">
+                <h2 class="wqd-text-title2" style="text-align: center;">
+                    <font color="#ffffff" style="size: 40px">Antgo 助力AI前行</font>
+                </h2>
+            </div>
+ 		  <div class="clearfix"> </div>
+ 		</div>
 
 
+ 	</div>
+ </div>
 </body>
 </html>

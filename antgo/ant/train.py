@@ -435,10 +435,10 @@ class AntTrain(AntBase):
     # ablation experiment
     ablation_blocks = getattr(self.context.params, 'ablation', None)
     ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
-    assert(ablation_method in ['regular', 'accumulate', 'any'])
+    assert(ablation_method in ['regular', 'inregular','accumulate', 'any'])
     if ablation_blocks is not None:
       ablation_experiments_devices_num = 0
-      if ablation_method in ['regular', 'accumulate']:
+      if ablation_method in ['regular', 'inregular','accumulate']:
         ablation_experiments_devices_num = len(ablation_blocks)
       else:
         for i in range(len(ablation_blocks)):
@@ -952,6 +952,9 @@ class AntTrain(AntBase):
     traverse_ablation_blocks = []
     if ablation_method == 'regular':
       traverse_ablation_blocks.extend(ablation_blocks)
+    elif ablation_method == 'inregular':
+      for b in ablation_blocks:
+        traverse_ablation_blocks.append([m for m in ablation_blocks if m != b])
     elif ablation_method == 'accumulate':
       accumulate_blocks = []
       for block in ablation_blocks:

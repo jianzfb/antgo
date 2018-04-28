@@ -43,8 +43,8 @@ class BaseHandler(tornado.web.RequestHandler):
 
 class IndexHandler(BaseHandler):
   def get(self):
-    # self.render(self.html_template, demo={'name': self.demo_name, 'type': self.demo_type})
-    self.write('hello the world')
+    self.render(self.html_template, demo={'name': self.demo_name, 'type': self.demo_type})
+    # self.write('hello the world')
 
 
 class ClientQuery(BaseHandler):
@@ -69,17 +69,35 @@ def demo_server_start(demo_name, demo_type, demo_dump_dir, html_template, server
   # 0.step define http server port
   define('port', default=server_port, help='run on port')
 
+  # 1.step prepare static resource
   static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
+  demo_static_dir = os.path.join(demo_dump_dir, 'static')
+  if not os.path.exists(demo_static_dir):
+    os.makedirs(demo_static_dir)
+
   for static_file in os.listdir(os.path.join(static_folder, 'resource', 'static')):
     if static_file[0] == '.':
       continue
   
-    shutil.copy(os.path.join(static_folder, 'resource', 'static', static_file), demo_dump_dir)
+    shutil.copy(os.path.join(static_folder, 'resource', 'static', static_file), demo_static_dir)
+
+  # 2.step prepare html template
+  demo_tempate_dir = os.path.join(demo_dump_dir, 'templates')
+
+  if not os.path.exists(demo_tempate_dir):
+    os.makedirs(demo_tempate_dir)
+
+  if html_template is None:
+    html_template = 'demo.html'
+
+  if not os.path.exists(os.path.join(demo_tempate_dir, html_template)):
+    assert(os.path.exists(os.path.join(static_folder, 'resource', 'templates',html_template)))
+    shutil.copy(os.path.join(static_folder, 'resource', 'templates',html_template), demo_tempate_dir)
 
   tornado.options.parse_command_line()
   settings = {
-    'template_path': os.path.join(static_folder, 'resource', 'templates'),
-    'static_path': demo_dump_dir,
+    'template_path': demo_tempate_dir,
+    'static_path': demo_static_dir,
     'html_template': html_template,
     'port': server_port,
     'demo_dump': demo_dump_dir,
@@ -96,4 +114,4 @@ def demo_server_start(demo_name, demo_type, demo_dump_dir, html_template, server
   http_server.listen(options.port)
   tornado.ioloop.IOLoop.instance().start()
   
-demo_server_start('world','SEG','/home/mi','',6990)
+demo_server_start('world','IMAGE_SEGMENTATION','/Users/jian/Downloads/ww',None,6990)
