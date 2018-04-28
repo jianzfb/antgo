@@ -872,7 +872,7 @@ class AntTrain(AntBase):
     if ablation_method is None:
       ablation_method = 'regular'
     # check ablation method
-    assert(ablation_method in ['regular', 'accumulate', 'any'])
+    assert(ablation_method in ['regular', 'inregular', 'accumulate', 'any'])
     
     # child func
     def proc_func(handle,
