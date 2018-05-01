@@ -210,3 +210,4 @@ class RecordReader(object):
 
     count = int(count)
     return count
+

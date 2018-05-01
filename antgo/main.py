@@ -12,6 +12,7 @@ from antgo import config
 from antgo.ant import flags
 from antgo.ant.cmd import *
 from antgo.ant.generate import *
+from antgo.ant.demo import *
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
@@ -28,7 +29,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "deploy", "dataset", "template", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "deploy", "dataset", "template", "demo", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -48,6 +49,11 @@ flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
+flags.DEFINE_string('port', None, 'port')
+flags.DEFINE_string('html_template',None, 'html template')
+flags.DEFINE_indicator('support_user_upload', '')
+flags.DEFINE_indicator('support_user_input', '')
+flags.DEFINE_indicator('support_user_interaction', '')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -265,6 +271,20 @@ def main():
     running_process.start()
   elif ant_cmd == "deploy":
     pass
+  elif ant_cmd == "demo":
+    running_process = AntDemo(ant_context,
+                              name,
+                              dump_dir,
+                              token,
+                              task,
+                              html_template=FLAGS.html_template(),
+                              port=FLAGS.port(),
+                              time_stamp=time_stamp,
+                              support_user_upload=FLAGS.support_user_upload(),
+                              support_user_input=FLAGS.support_user_input(),
+                              support_user_interaction=FLAGS.support_user_interaction())
+
+    running_process.start()
   elif ant_cmd == 'dataset':
     running_process = AntGenerate(ant_context,
                                   name,

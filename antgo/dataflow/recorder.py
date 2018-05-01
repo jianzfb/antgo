@@ -14,6 +14,7 @@ try:
   import queue
 except:
   import Queue as queue
+import multiprocessing
 from antgo.task.task import *
 from antgo.dataflow.basic import *
 
@@ -96,3 +97,62 @@ class RecorderNode(Node):
   @property
   def model_fn(self):
     return self._positional_inputs[0].model_fn
+
+
+class QueueRecorderNode(Node):
+  def __init__(self, inputs):
+    super(QueueRecorderNode, self).__init__(name=None, action=self.action, inputs=inputs,auto_trigger=True)
+
+    self._annotation_cache = queue.Queue()
+    self._record_writer = multiprocessing.Queue()
+    self._dump_dir = None
+    self._is_none = False
+
+  def record(self, val, **kwargs):
+    if type(val) == list or type(val) == tuple:
+      results = val
+    else:
+      results = [val]
+
+    for _, result in enumerate(results):
+      gt = None
+      if self._annotation_cache.qsize() > 0:
+        gt = self._annotation_cache.get()
+
+      if gt is None and not self._is_none:
+        self._is_none = True
+
+      self.writer_queue.put((gt, result))
+
+  def action(self, *args, **kwargs):
+    value = copy.deepcopy(args[0])
+    if type(value) != list:
+      value = [value]
+
+    for entry in value:
+      self._annotation_cache.put(copy.deepcopy(entry))
+
+  @property
+  def dump_dir(self):
+    return self._dump_dir
+
+  @dump_dir.setter
+  def dump_dir(self, val):
+    self._dump_dir = val
+
+  @property
+  def is_measure(self):
+    if self._record_writer is None:
+      return False
+
+    if self._is_none:
+      return False
+
+    return True
+
+  @property
+  def writer_queue(self):
+    return self._record_writer
+
+  def iterator_value(self):
+    pass

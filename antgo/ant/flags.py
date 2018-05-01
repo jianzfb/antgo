@@ -13,28 +13,32 @@ _options = {}
 class _FLAGS(object):
   def __init__(self):
     self._flags = []
-    pass
+    self._flags_name = []
 
   def add(self, flag):
     setattr(self, flag.name, lambda: flag.value)
-    self._flags.append(flag.name)
+    self._flags.append(flag)
+    self._flags_name.append(flag.name)
 
   @property
   def shortopts(self):
-    return ':'.join(self._flags)
+    return ':'.join(self._flags_name)
 
   @property
   def longopts(self):
-    return [name + "=" for name in self._flags]
+    a =  [f.name + "=" for f in self._flags if f.has_value]
+    a.extend([f.name for f in self._flags if not f.has_value])
+    return a
 
 AntFLAGS = _FLAGS()
 
 
 class VarFlag(object):
-  def __init__(self, name, default, var_help):
+  def __init__(self, name, default, var_help, has_value=True):
     self._name = name
     self._var_help = var_help
     self._default = default
+    self._has_value = has_value
 
   @property
   def name(self):
@@ -45,6 +49,9 @@ class VarFlag(object):
   @property
   def default(self):
     return self._default
+  @property
+  def has_value(self):
+    return self._has_value
 
   @property
   def value(self):
@@ -129,6 +136,25 @@ class _BooleanFlag(VarFlag):
 def DEFINE_boolean(name, default, var_help):
   global AntFLAGS
   AntFLAGS.add(_BooleanFlag(name, default, var_help))
+
+
+class _IndicatorFlag(VarFlag):
+  def __init__(self, name, var_help):
+    super(_IndicatorFlag, self).__init__(name, '', var_help, False)
+
+  @property
+  def value(self):
+    global _options
+    if '--' + self.name in _options:
+      return True
+    elif '-' + self.name in _options:
+      return True
+
+    return False
+
+def DEFINE_indicator(name, var_help):
+  global AntFLAGS
+  AntFLAGS.add(_IndicatorFlag(name, var_help))
 
 
 def cli_param_flags(cmd_str=None):
