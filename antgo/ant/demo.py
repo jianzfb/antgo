@@ -56,7 +56,8 @@ class AntDemo(AntBase):
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
-
+    self.ant_context.ant = self
+    
     self.html_template = kwargs.get('html_template', None)
     self.demo_port = kwargs.get('port', None)
     self.demo_port = int(self.demo_port) if self.demo_port is not None else None
@@ -140,5 +141,8 @@ class AntDemo(AntBase):
 
     # 4.step listening queue, wait client requery data
     logger.info('start model infer background process')
+    ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
+    for b in ablation_blocks:
+      self.ant_context.deactivate_block(b)
     self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
 

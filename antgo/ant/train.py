@@ -103,7 +103,7 @@ class AntTrain(AntBase):
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
-  
+    
   def error_analysis(self, running_ant_task, running_ant_dataset, task_running_statictic):
     # error analysis
     logger.info('start error analysis')

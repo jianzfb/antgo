@@ -107,6 +107,8 @@ class QueueRecorderNode(Node):
     self._record_writer = multiprocessing.Queue()
     self._dump_dir = None
     self._is_none = False
+    
+    setattr(self,'model_fn', None)
 
   def record(self, val, **kwargs):
     if type(val) == list or type(val) == tuple:

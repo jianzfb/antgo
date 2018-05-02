@@ -21,19 +21,18 @@ class DatasetQueue(object):
     # Change the shape of the input data here with the parameter shapes.
     self.wait_time = wait_time
     self.max_queue_size = max_queue_size
-    self.queue = tf.PaddingFIFOQueue(max_queue_size, dtype, shapes=shape)
-    self.queue_size = self.queue.size()
+    self.dtype_list = dtype
+    self.shape_list = shape
+
     self.threads = []
     self._coord = None
     self.sample_placeholder = []
-    for i in range(len(dtype)):
-      self.sample_placeholder.append(tf.placeholder(dtype=dtype[i], shape=None))
-      
-    self.enqueue = self.queue.enqueue(self.sample_placeholder)
     self.datasource = datasource
-    
-    tf.add_to_collection('CUSTOM_DATASET_QUEUE', self)
-    
+  
+  @property
+  def size(self):
+    return self.datasource.size
+  
   @property
   def coord(self):
     return self._coord
@@ -41,10 +40,17 @@ class DatasetQueue(object):
   def coord(self, val):
     self._coord = val
     
-  def dequeue_many(self, num_elements):
-    return self.queue.dequeue_many(num_elements)
-  
   def dequeue(self):
+    return self.model_fn()
+
+  def model_fn(self):
+    self.queue = tf.PaddingFIFOQueue(self.max_queue_size, self.dtype_list, shapes=self.shape_list)
+    self.queue_size = self.queue.size()
+    for i in range(len(self.dtype_list)):
+      self.sample_placeholder.append(tf.placeholder(dtype=self.dtype_list[i], shape=None))
+    self.enqueue = self.queue.enqueue(self.sample_placeholder)
+    tf.add_to_collection('CUSTOM_DATASET_QUEUE', self)
+    
     return self.queue.dequeue()
   
   def thread_main(self, sess):

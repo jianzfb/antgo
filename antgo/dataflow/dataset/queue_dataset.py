@@ -10,7 +10,7 @@ from antgo.dataflow.dataset.dataset import Dataset
 import os
 import copy
 import multiprocessing
-
+import sys
 
 class QueueDataset(Dataset):
   def __init__(self):
@@ -19,7 +19,7 @@ class QueueDataset(Dataset):
 
   @property
   def size(self):
-    return 10000000000
+    return sys.maxsize
 
   @property
   def data_queue(self):

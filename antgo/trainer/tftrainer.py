@@ -552,7 +552,7 @@ class TFTrainer(Trainer):
         ####    define model input ##
         #############################
         with tf.variable_scope('input'):
-          data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
+          data_queue = self.ctx.model.model_input(self.is_training)
         
         #############################
         ####    define model       ##
@@ -675,7 +675,7 @@ class TFTrainer(Trainer):
         ####    define model input ##
         #############################
         with tf.variable_scope('input'):
-          data_queue = self.ctx.model.model_input(self.is_training, self.ctx.data_source)
+          data_queue = self.ctx.model.model_input(self.is_training)
         
         #############################
         ####    define model       ##
