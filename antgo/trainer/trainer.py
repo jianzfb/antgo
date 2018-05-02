@@ -122,13 +122,14 @@ class Trainer(object):
 class ModelDesc(object):
   __metaclass__ = ABCMeta
 
-  def __init__(self, model_name=None):
+  def __init__(self, model_name=None, model_data_source=None):
     if model_name is not None:
       self.model_name = model_name
     else:
       self.model_name = self.__class__.__name__
   
     self._ctx = None
+    self._data_source = model_data_source
 
   @property
   def name(self):
@@ -150,8 +151,12 @@ class ModelDesc(object):
   @need_feed.setter
   def need_feed(self, val):
     self._need_feed = val
-    
-  def model_input(self, is_training, data_source):
+  
+  @property
+  def data_source(self):
+    return self._data_source
+  
+  def model_input(self, is_training, *args, **kwargs):
     return None
   
   @abstractmethod
