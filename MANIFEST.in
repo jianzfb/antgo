@@ -7,6 +7,8 @@ include antgo/resource/static/antgo.ico
 include antgo/resource/static/card.png
 include antgo/resource/static/crowdsource.js
 include antgo/resource/static/register.png
+include antgo/resource/static/banner.png
+include antgo/resource/static/holder.min.js
 include antgo/config.xml
 include requirements.txt
 include README.rst
