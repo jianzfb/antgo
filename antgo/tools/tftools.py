@@ -13,42 +13,47 @@ from tensorflow.python.platform import gfile
 from antgo.ant.utils import *
 slim = tf.contrib.slim
 from antgo.utils import logger
-from antgo.dataflow.dataset.dataset import *
+from antgo.dataflow.dataset.empty_dataset import *
 from antgo.ant import flags
+from datetime import datetime
 import yaml
 FLAGS = flags.AntFLAGS
 
 
-def tftool_frozen_graph(dump_dir,
-                        experiment_name,
+def tftool_frozen_graph(ctx,
+                        dump_dir,
+                        time_stamp,
                         input_node_names,
                         output_node_names):
-  # 1.step experiment
-  checkpoint_main_folder = os.path.join(dump_dir, experiment_name, 'inference')
-  if not os.path.isdir(checkpoint_main_folder):
-    logger.error('dont exist experiment')
-    return
-
+  # 1.step build inference model
+  now_time_stamp = datetime.fromtimestamp(time_stamp).strftime('%Y%m%d.%H%M%S.%f')
+  dump_dir = os.path.join(dump_dir, now_time_stamp)
+  if not os.path.exists(dump_dir):
+    os.makedirs(dump_dir)
+    
+  empty_datasource = EmptyDataset('test', '')
+  ctx.call_infer_process(empty_datasource, dump_dir)
+  
   # 2.step check input_node_names and output_node_names
   if input_node_names == '' or output_node_names == '':
     logger.error('must set input_nodes and output_nodes')
     return
 
   # 3.step check infer_graph.pbtxt in experiment
-  if not os.path.exists(os.path.join(checkpoint_main_folder, 'infer_graph.pbtxt')):
+  if not os.path.exists(os.path.join(dump_dir, 'infer_graph.pbtxt')):
     logger.error('dont exist graph file')
     return
 
   # 4.step build frozen graph
   # We retrieve our checkpoint fullpath
-  checkpoint = tf.train.get_checkpoint_state(checkpoint_main_folder)
+  checkpoint = tf.train.get_checkpoint_state(dump_dir)
   input_checkpoint = checkpoint.model_checkpoint_path
 
   # We precise the file fullname of our freezed graph
-  input_checkpoint_path = os.path.join(checkpoint_main_folder, input_checkpoint.split('/')[-1])
+  input_checkpoint_path = os.path.join(dump_dir, input_checkpoint.split('/')[-1])
 
-  input_graph_path = os.path.join(checkpoint_main_folder, 'infer_graph.pbtxt')
-  output_graph_path = os.path.join(checkpoint_main_folder, "frozen_model.pb")
+  input_graph_path = os.path.join(dump_dir, 'infer_graph.pbtxt')
+  output_graph_path = os.path.join(dump_dir, "frozen_model.pb")
 
   input_saver_path = ""
   input_binary = False
@@ -80,7 +85,7 @@ def tftool_frozen_graph(dump_dir,
                                                                        output_node_names.split(','),
                                                                        tf.float32.as_datatype_enum)
 
-  optimized_path = os.path.join(checkpoint_main_folder, "optimized_model.pb")
+  optimized_path = os.path.join(dump_dir, "optimized_model.pb")
   f = tf.gfile.FastGFile(optimized_path, "w")
   f.write(output_graph_def.SerializeToString())
 

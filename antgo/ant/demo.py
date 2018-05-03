@@ -137,6 +137,7 @@ class AntDemo(AntBase):
                                             self.demo_port,
                                             demo_dataset.data_queue,
                                             self.context.recorder.writer_queue))
+    process.daemon = True
     process.start()
 
     # 4.step listening queue, wait client requery data
@@ -144,5 +145,10 @@ class AntDemo(AntBase):
     ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
     for b in ablation_blocks:
       self.ant_context.deactivate_block(b)
-    self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
+
+    try:
+      self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
+    except:
+      os.kill(process.pid, signal.SIGKILL)
+      logger.error('model infer error, exit')
 

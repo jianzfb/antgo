@@ -103,6 +103,7 @@ class AntTrain(AntBase):
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
+    self.skip_training = kwargs.get('skip_training', False)
     
   def error_analysis(self, running_ant_task, running_ant_dataset, task_running_statictic):
     # error analysis
@@ -463,6 +464,10 @@ class AntTrain(AntBase):
         for ablation_experiment in ablation_experiments:
           ablation_experiment.start()
         
+        if ablation_method == 'inregular':
+          for b in ablation_blocks:
+            self.ant_context.deactivate_block(b)
+        
         # launch complete model training process
         self.context.params.devices = apply_devices
         num_clones = getattr(self.context.params, 'num_clones', None)
@@ -473,13 +478,14 @@ class AntTrain(AntBase):
         train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
         if not os.path.exists(train_dump_dir):
           os.makedirs(train_dump_dir)
-
-        logger.info('start training process with complete model')
-        with safe_recorder_manager(ant_train_dataset):
-          ant_train_dataset.reset_state()
-          self.context.call_training_process(ant_train_dataset, train_dump_dir)
-        logger.info('stop main training process with complete model')
         
+        if not self.skip_training:
+          logger.info('start training process with complete model')
+          with safe_recorder_manager(ant_train_dataset):
+            ant_train_dataset.reset_state()
+            self.context.call_training_process(ant_train_dataset, train_dump_dir)
+          logger.info('stop main training process with complete model')
+          
         # start evaluation and error analysis
         logger.info('start evaluation process with complete model')
         try:
@@ -623,21 +629,22 @@ class AntTrain(AntBase):
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
     
-    # launch evaluation process
-    evaluation_process = EvaluationProcess(part_validation_dataset,
-                                           running_ant_task.evaluation_measures,
-                                           dump_dir,
-                                           self.ant_context,
-                                           self.ant_name)
-    evaluation_process.start()
-    
-    # 2.step training model
-    self.stage = 'EVALUATION-HOLDOUT-TRAIN'
-    self.context.call_training_process(part_train_dataset, dump_dir)
-    
-    # 3.step complete evaluation and error analysis
-    # kill all evaluation process
-    os.kill(evaluation_process.pid, signal.SIGTERM)
+    if not self.skip_training:
+      # launch evaluation process
+      evaluation_process = EvaluationProcess(part_validation_dataset,
+                                             running_ant_task.evaluation_measures,
+                                             dump_dir,
+                                             self.ant_context,
+                                             self.ant_name)
+      evaluation_process.start()
+      
+      # 2.step training model
+      self.stage = 'EVALUATION-HOLDOUT-TRAIN'
+      self.context.call_training_process(part_train_dataset, dump_dir)
+      
+      # 3.step complete evaluation and error analysis
+      # kill all evaluation process
+      os.kill(evaluation_process.pid, signal.SIGTERM)
     
     data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
     self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
@@ -880,7 +887,8 @@ class AntTrain(AntBase):
                   experiment_challenge_task,
                   ablation_block,
                   root_time_stamp,
-                  spare_device):
+                  spare_device,
+                  skip_training):
       # 1.step proc_func is running in a independent process (clone running environment)
       handle.clone()
       # reassign running device
@@ -916,7 +924,8 @@ class AntTrain(AntBase):
 
       # 2.step start training process
       handle.stage = 'ABLATION-%s-TRAIN' % ablation_block
-      handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
+      if not skip_training:
+        handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
 
       # 3.step start evaluation process
       if part_validation_dataset is not None:
@@ -984,7 +993,8 @@ class AntTrain(AntBase):
                                              challenge_task,
                                              copy.deepcopy(try_ablation_blocks),
                                              time_stamp,
-                                             spare_devices[try_i]),
+                                             spare_devices[try_i],
+                                             self.skip_training),
                                        name='%s_ablation_block_%s'%(self.ant_name, '_'.join(copy.deepcopy(try_ablation_blocks))))
       ablation_experiments.append(block_ablation_process)
     

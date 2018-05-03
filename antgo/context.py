@@ -198,10 +198,11 @@ class Context(object):
 
     # clone charts
     self.job.clone_charts()
+
+    if self.recorder is not None:
+      if self.recorder.dump_dir is not None and is_inner_set:
+        self.recorder.dump_dir = None
     
-    if self.recorder.dump_dir is not None and is_inner_set:
-      self.recorder.dump_dir = None
-  
   @property
   def data_generator(self):
     return self._data_generator

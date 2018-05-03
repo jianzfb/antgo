@@ -456,7 +456,7 @@ table th {
 
             return layout_table
         }
-        function show_demo_response(container, data, data_type) {
+        function show_demo_response(container, data) {
             $('#'+container).html("");
 
             var key_num = 0;
@@ -466,30 +466,44 @@ table th {
             var kv_table = LayoutTable('feature_table', key_num, 2);
             kv_table.create($('#'+container));
             var count = 0;
+            var data_type = data['RESULT']['TYPE']
             if(data_type == 'IMAGE'){
                 kv_table.append(count, 0, 'RESULT');
-                kv_table.append(count, 1, '<img src="{0}" width="128" height="128" name="feature_image">'.format(data['RESULT']));
+                kv_table.append(count, 1, '<img src="{0}" width="128" height="128" name="feature_image">'.format(data['RESULT']['DATA']));
             }
             else if(data_type == 'AUDIO'){
                 kv_table.append(count, 0, 'RESULT');
-                kv_table.append(count, 1, '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(data['RESULT']));
+                kv_table.append(count, 1, '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(data['RESULT']['DATA']));
             }
             else if(data_type == 'VIDEO'){
                 kv_table.append(count, 0, 'RESULT');
-                kv_table.append(count, 1, '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(data['RESULT'],data['RESULT']));
+                kv_table.append(count, 1, '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(data['RESULT']['DATA'],data['RESULT']['DATA']));
             }
             else if(data_type == 'STRING'){
                 kv_table.append(count, 0, 'RESULT');
-                kv_table.append(count, 1, '<p>{0}</p>'.format(data['RESULT']));
+                kv_table.append(count, 1, '<p>{0}</p>'.format(data['RESULT']['DATA']));
             }
 
             count += 1;
             for (var k in data){
                 if(k != 'RESULT'){
                     kv_table.append(count,0,'<p>{0}</p>'.format(k));
-                    kv_table.append(count,1,'<p>{0}</p>'.format(data[k]));
+
+                    if(data[k]['TYPE'] == 'IMAGE'){
+                        kv_table.append(count, 1, '<img src="{0}" width="128" height="128" name="feature_image">'.format(data[k]['DATA']));
+                    }
+                    else if(data[k]['TYPE'] == 'AUDIO'){
+                        kv_table.append(count, 1, '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(data[k]['DATA']));
+                    }
+                    else if(data[k]['TYPE'] == 'VIDEO'){
+                        kv_table.append(count, 1, '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(data[k]['DATA'],data[k]['DATA']));
+                    }
+                    else if(data[k]['TYPE'] == 'STRING'){
+                        kv_table.append(count, 1, '<p>{0}</p>'.format(data[k]['DATA']));
+                    }
+
+                    count += 1;
                 }
-                count += 1;
             }
 
              $('img[name=feature_image]').each(function () {
@@ -506,8 +520,7 @@ table th {
                 $("#demo_submit_form").ajaxSubmit(function(data){
                     var demo_response = eval('('+data+')');
                     show_demo_response('feature-table',
-                        demo_response['DATA'],
-                        demo_response['DATA_TYPE']);
+                        demo_response['DATA']);
 
                     if(demo_response['INPUT_TYPE'] == 'IMAGE'){
                         $('#demo_input_image').attr('src', demo_response['INPUT']);
@@ -535,8 +548,7 @@ table th {
                     if(status == 'success'){
                         var demo_response = eval('('+data+')');
                         show_demo_response('feature-table',
-                            demo_response['DATA'],
-                            demo_response['DATA_TYPE']);
+                            demo_response['DATA']);
 
                         if(demo_response['INPUT_TYPE'] == 'IMAGE'){
                             $('#demo_input_image').attr('src', demo_response['INPUT']);
@@ -554,8 +566,7 @@ table th {
                         if(status == 'success'){
                             var demo_response = eval('('+data+')');
                             show_demo_response('feature-table',
-                                demo_response['DATA'],
-                                demo_response['DATA_TYPE']);
+                                demo_response['DATA']);
 
                             if(demo_response['INPUT_TYPE'] == 'IMAGE'){
                                 $('#demo_input_image').attr('src', demo_response['INPUT']);
@@ -649,6 +660,11 @@ table th {
 
   </div>
   <div class="container">
+      <div class="demo-box">
+          <p class="centered-text-with-hr text-heading6">
+              <span>History</span>
+          </p>
+      </div>
       <div id="owl-demo" class="owl-carousel owl-theme">
           {%for image_url in demo['image_history']%}
             <a href="javascript:void(0)" class="item" name="history_demo_item" path="{{image_url}}"><img src="{{image_url}}"></a>

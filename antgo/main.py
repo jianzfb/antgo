@@ -50,10 +50,11 @@ flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
 flags.DEFINE_string('port', None, 'port')
-flags.DEFINE_string('html_template',None, 'html template')
+flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_indicator('support_user_upload', '')
 flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
+flags.DEFINE_indicator('skip_training', '')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -167,27 +168,7 @@ def main():
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
 
-  # 7.4.step tools (option)
-  if ant_cmd == 'tools/tffrozen':
-    # tensorflow tools
-    import antgo.tools.tftools as tftools
-    tftools.tftool_frozen_graph(dump_dir,
-                                FLAGS.from_experiment(),
-                                FLAGS.tffrozen_input_nodes(),
-                                FLAGS.tffrozen_output_nodes())
-    return
-  elif ant_cmd == 'tools/tfrecords':
-    # tensorflwo tools
-    import antgo.tools.tftools as tftools
-    tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir,
-                                          FLAGS.tfrecords_label_dir,
-                                          FLAGS.tfrecords_record_dir,
-                                          FLAGS.tfrecords_label_suffix,
-                                          FLAGS.tfrecords_train_or_test,
-                                          FLAGS.tfrecords_shards)
-    return
-
-  # 7.5 check main file
+  # 7.4 check main file
   main_file = FLAGS.main_file()
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
     logger.error('main executing file dont exist')
@@ -238,7 +219,28 @@ def main():
       ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
     else:
       ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
-
+  
+  # tools
+  if ant_cmd == 'tools/tffrozen':
+    # tensorflow tools
+    import antgo.tools.tftools as tftools
+    tftools.tftool_frozen_graph(ant_context,
+                                dump_dir,
+                                time_stamp,
+                                FLAGS.tffrozen_input_nodes(),
+                                FLAGS.tffrozen_output_nodes())
+    return
+  elif ant_cmd == 'tools/tfrecords':
+    # tensorflwo tools
+    import antgo.tools.tftools as tftools
+    tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir,
+                                          FLAGS.tfrecords_label_dir,
+                                          FLAGS.tfrecords_record_dir,
+                                          FLAGS.tfrecords_label_suffix,
+                                          FLAGS.tfrecords_train_or_test,
+                                          FLAGS.tfrecords_shards)
+    return
+  
   if ant_cmd == "train":
     sandbox_time = FLAGS.sandbox_time()
     with running_sandbox(sandbox_time=sandbox_time,
@@ -254,7 +256,8 @@ def main():
                                  main_file=main_file,
                                  main_folder=main_folder,
                                  main_param=main_param,
-                                 time_stamp=time_stamp)
+                                 time_stamp=time_stamp,
+                                 skip_training=FLAGS.skip_training())
       running_process.start()
   elif ant_cmd == 'challenge':
     running_process = AntChallenge(ant_context,

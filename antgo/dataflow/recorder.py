@@ -76,20 +76,36 @@ class RecorderNode(Node):
       self._annotation_cache.put(copy.deepcopy(entry))
 
   def record(self, val, **kwargs):
+    results = []
+    results_label = []
     if type(val) == list or type(val) == tuple:
-      results = val
+      for aa in val:
+        if type(aa) == dict:
+          results.append(aa['RESULT'])
+          aa.pop('RESULT')
+          results_label.append(aa)
+        else:
+          results.append(aa)
     else:
-      results = [val]
+      if type(val) == dict:
+        results.append(val['RESULT'])
+        val.pop('RESULT')
+        results_label.append(val)
+      else:
+        results = [val]
     
-    for _, result in enumerate(results):
+    for index, result in enumerate(results):
       gt = None
       if self._annotation_cache.qsize() > 0:
         gt = self._annotation_cache.get()
       
       if gt is None and not self._is_none:
         self._is_none = True
-        
-      self._record_writer.write(Sample(groundtruth=gt, predict=result))
+      
+      if len(results_label) > 0:
+        self._record_writer.write(Sample(groundtruth=gt, predict=result, predict_label=results_label[index]))
+      else:
+        self._record_writer.write(Sample(groundtruth=gt, predict=result, predict_label=[]))
 
   def iterator_value(self):
     pass
@@ -111,20 +127,36 @@ class QueueRecorderNode(Node):
     setattr(self,'model_fn', None)
 
   def record(self, val, **kwargs):
+    results = []
+    results_label = []
     if type(val) == list or type(val) == tuple:
-      results = val
+      for aa in val:
+        if type(aa) == dict:
+          results.append(aa['RESULT'])
+          aa.pop('RESULT')
+          results_label.append(aa)
+        else:
+          results.append(aa)
     else:
-      results = [val]
+      if type(val) == dict:
+        results.append(val['RESULT'])
+        val.pop('RESULT')
+        results_label.append(val)
+      else:
+        results = [val]
 
-    for _, result in enumerate(results):
+    for index, result in enumerate(results):
       gt = None
       if self._annotation_cache.qsize() > 0:
         gt = self._annotation_cache.get()
 
       if gt is None and not self._is_none:
         self._is_none = True
-
-      self.writer_queue.put((gt, result))
+      
+      if len(results_label) > 0:
+        self.writer_queue.put((gt, (result, results_label[index])))
+      else:
+        self.writer_queue.put((gt, result))
 
   def action(self, *args, **kwargs):
     value = copy.deepcopy(args[0])

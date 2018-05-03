@@ -167,7 +167,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
       
       if len(ablation_folder) > 0:
         ctx.from_experiment = os.path.join(ctx.from_experiment, 'ablation', ablation_folder)
-      print(ctx.from_experiment)
+      # print(ctx.from_experiment)
       logger.info('load model from experiment %s' % ctx.from_experiment.split('/')[-2])
       latest_checkpoint = None
       try:
@@ -722,8 +722,8 @@ class TFTrainer(Trainer):
         model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
         self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
 
-        # # snapshot
-        # self.snapshot(0)
+        # snapshot
+        self.snapshot(0)
 
         # Value ops
         self.val_ops = self.clones[0].outputs

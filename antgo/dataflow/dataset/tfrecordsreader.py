@@ -22,7 +22,9 @@ class TFRecordsReader(Dataset):
     temp = getattr(self, 'tf_label_size', '700,700,1')
     self._label_size = [int(s) for s in temp.split(',')]
     self._label_type = tf.as_dtype(getattr(self, 'tf_label_type', 'uint8'))
-    self._num_samples = int(getattr(self, 'tf_num_samples', 199600))
+    self._train_num = int(getattr(self, 'tf_train_num', 199600))
+    self._val_num = int(getattr(self, 'tf_val_num', 10000))
+    self._test_num = int(getattr(self, 'tf_test_num', 10000))
     self._pattern = getattr(self, 'tf_pattern', '*.tfrecord')
     self._has_format = bool(getattr(self, 'tf_format', False))
   
@@ -55,13 +57,6 @@ class TFRecordsReader(Dataset):
     self._label_type = val
   
   @property
-  def num_samples(self):
-    return self._num_samples
-  @num_samples.setter
-  def num_samples(self, val):
-    self._num_samples = val
-  
-  @property
   def file_pattern(self):
     return self._pattern
   @file_pattern.setter
@@ -86,7 +81,14 @@ class TFRecordsReader(Dataset):
   
   @property
   def size(self):
-    return self.num_samples
+    if self.train_or_test == 'train':
+      return self._train_num
+    elif self.train_or_test == 'val':
+      return self._val_num
+    elif self.train_or_test == 'test':
+      return self._test_num
+    
+    return self._train_num
     
   def model_fn(self, *args, **kwargs):
     # 1.step candidate data file list

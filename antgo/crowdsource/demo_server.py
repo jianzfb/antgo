@@ -22,7 +22,7 @@ from antgo.utils.fs import *
 from antgo.utils.encode import *
 from PIL import Image
 import uuid
-
+import signal
 
 class BaseHandler(tornado.web.RequestHandler):
   @property
@@ -74,7 +74,44 @@ class BaseHandler(tornado.web.RequestHandler):
   @property
   def demo_result_queue(self):
     return self.settings['demo_result_queue']
-
+  
+  def _transfer_data(self, data, uuid_flag):
+    # 5.step postprocess demo predict result
+    demo_response = {'DATA': {}}
+    for k, v in data.items():
+      if type(v) == np.ndarray:
+        # transform to image and save
+        if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
+          os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
+      
+        if len(v.shape) == 2:
+          image = ((v - np.min(v)) / (np.max(v) - np.min(v)) * 255).astype(np.uint8)
+        elif len(v.shape) == 3:
+          image = v.astype(np.uint8)
+        else:
+          # TODO support muti images (gif)
+          continue
+        
+        if k == 'RESULT':
+          with open(os.path.join(self.demo_dump, 'static', 'output', '%s.png' % uuid_flag), 'wb') as fp:
+            fp.write(png_encode(image))
+        
+          demo_response['DATA'].update({'RESULT': {'DATA': '/static/output/%s.png' % uuid_flag, 'TYPE': 'IMAGE'}})
+        else:
+          with open(os.path.join(self.demo_dump, 'static', 'output', '%s_%s.png' % (uuid_flag, str(k))), 'wb') as fp:
+            fp.write(png_encode(image))
+  
+          demo_response['DATA'].update({str(k): {'DATA': '/static/output/%s_%s.png' % (uuid_flag, str(k)), 'TYPE': 'IMAGE'}})
+      elif type(v) == str:
+        demo_response['DATA'].update({k: {'DATA':v, 'TYPE': 'STRING'}})
+      else:
+        pass
+      
+    demo_response['DEMO_TYPE'] = self.demo_type
+    demo_response['DEMO_NAME'] = self.demo_name
+  
+    return demo_response
+  
   def dispatch_prepare_data(self, data, data_type):
     data_path = None
     data_name = None
@@ -116,39 +153,12 @@ class BaseHandler(tornado.web.RequestHandler):
         demo_predict_label = {}
     else:
       demo_predict = demo_result
-
-    # 5.step postprocess demo predict result
-    demo_response = {}
-    if type(demo_predict) == np.ndarray:
-      # transform to image and save
-      if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
-        os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
-
-      if len(demo_predict.shape) == 2:
-        image = ((demo_predict - np.min(demo_predict))/(np.max(demo_predict)-np.min(demo_predict)) * 255).astype(np.uint8)
-      else:
-        image = demo_predict.astype(np.uint8)
-
-      with open(os.path.join(self.demo_dump, 'static', 'output', uuid_flag), 'wb') as fp:
-        fp.write(png_encode(image))
-
-      demo_response['DATA'] = {'RESULT': '/static/output/%s'%uuid_flag}
-      demo_response['DATA'].update(demo_predict_label)
-      demo_response['DATA_TYPE'] = 'IMAGE'
-    elif type(demo_predict) == str:
-      demo_response['DATA'] = {'RESULT': demo_predict}
-      demo_response['DATA'].update(demo_predict_label)
-      demo_response['DATA_TYPE'] = 'STRING'
-    elif type(demo_predict) == dict:
-      demo_response['DATA'] = demo_predict
-      demo_response['DATA'].update(demo_predict_label)
-      demo_response['DATA_TYPE'] = 'TABLE'
-
-    demo_response['DEMO_TYPE'] = self.demo_type
-    demo_response['DEMO_NAME'] = self.demo_name
-
+    
+    demo_predict_label['RESULT'] = demo_predict
+    demo_response = self._transfer_data(demo_predict_label, uuid_flag)
     return demo_response
-
+    
+    
 class IndexHandler(BaseHandler):
   def get(self):
     image_history_data = []
@@ -267,6 +277,12 @@ class PrefixRedirectHandler(BaseHandler):
     self.redirect('http://127.0.0.1:%d/%s'%(self.port, path), permanent=False)
 
 
+class GracefulExitException(Exception):
+  @staticmethod
+  def sigterm_handler(signum, frame):
+    raise GracefulExitException()
+
+
 def demo_server_start(demo_name,
                       demo_type,
                       support_user_upload,
@@ -277,61 +293,68 @@ def demo_server_start(demo_name,
                       server_port,
                       demo_data_queue,
                       demo_result_queue):
-  # 0.step define http server port
-  define('port', default=server_port, help='run on port')
-
-  # 1.step prepare static resource
-  static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
-  demo_static_dir = os.path.join(demo_dump_dir, 'static')
-  if not os.path.exists(demo_static_dir):
-    os.makedirs(demo_static_dir)
-
-  for static_file in os.listdir(os.path.join(static_folder, 'resource', 'static')):
-    if static_file[0] == '.':
-      continue
+  # register sig
+  signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
   
-    shutil.copy(os.path.join(static_folder, 'resource', 'static', static_file), demo_static_dir)
-
-  # 2.step prepare html template
-  demo_tempate_dir = os.path.join(demo_dump_dir, 'templates')
-
-  if not os.path.exists(demo_tempate_dir):
-    os.makedirs(demo_tempate_dir)
-
-  if html_template is None:
-    html_template = 'demo.html'
-
-  if not os.path.exists(os.path.join(demo_tempate_dir, html_template)):
-    assert(os.path.exists(os.path.join(static_folder, 'resource', 'templates',html_template)))
-    shutil.copy(os.path.join(static_folder, 'resource', 'templates',html_template), demo_tempate_dir)
-
-  tornado.options.parse_command_line()
-  settings = {
-    'template_path': demo_tempate_dir,
-    'static_path': demo_static_dir,
-    'html_template': html_template,
-    'port': server_port,
-    'demo_dump': demo_dump_dir,
-    'demo_name': demo_name,
-    'demo_type': demo_type,
-    'demo_data_queue': demo_data_queue,
-    'demo_result_queue': demo_result_queue,
-    'support_user_upload': support_user_upload,
-    'support_user_input': support_user_input,
-    'support_user_interaction': support_user_interaction,
-  }
-  app = tornado.web.Application(handlers=[(r"/", IndexHandler),
-                                          (r"/demo", IndexHandler),
-                                          (r"/api/query/", ClientQueryHandler),
-                                          (r"/api/comment/", ClientCommentHandler),
-                                          (r"/submit/", ClientFileUploadAndProcessHandler),
-                                          (r"/.*/static/.*", PrefixRedirectHandler)],
-    **settings)
-  http_server = tornado.httpserver.HTTPServer(app)
-  http_server.listen(options.port)
-
-  logger.info('demo is providing server on port %d'%server_port)
-  tornado.ioloop.IOLoop.instance().start()
-  logger.info('demo stop server')
+  try:
+    # 0.step define http server port
+    define('port', default=server_port, help='run on port')
   
+    # 1.step prepare static resource
+    static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
+    demo_static_dir = os.path.join(demo_dump_dir, 'static')
+    if not os.path.exists(demo_static_dir):
+      os.makedirs(demo_static_dir)
+  
+    for static_file in os.listdir(os.path.join(static_folder, 'resource', 'static')):
+      if static_file[0] == '.':
+        continue
+    
+      shutil.copy(os.path.join(static_folder, 'resource', 'static', static_file), demo_static_dir)
+  
+    # 2.step prepare html template
+    demo_tempate_dir = os.path.join(demo_dump_dir, 'templates')
+  
+    if not os.path.exists(demo_tempate_dir):
+      os.makedirs(demo_tempate_dir)
+  
+    if html_template is None:
+      html_template = 'demo.html'
+  
+    if not os.path.exists(os.path.join(demo_tempate_dir, html_template)):
+      assert(os.path.exists(os.path.join(static_folder, 'resource', 'templates',html_template)))
+      shutil.copy(os.path.join(static_folder, 'resource', 'templates',html_template), demo_tempate_dir)
+  
+    tornado.options.parse_command_line()
+    settings = {
+      'template_path': demo_tempate_dir,
+      'static_path': demo_static_dir,
+      'html_template': html_template,
+      'port': server_port,
+      'demo_dump': demo_dump_dir,
+      'demo_name': demo_name,
+      'demo_type': demo_type,
+      'demo_data_queue': demo_data_queue,
+      'demo_result_queue': demo_result_queue,
+      'support_user_upload': support_user_upload,
+      'support_user_input': support_user_input,
+      'support_user_interaction': support_user_interaction,
+    }
+    app = tornado.web.Application(handlers=[(r"/", IndexHandler),
+                                            (r"/demo", IndexHandler),
+                                            (r"/api/query/", ClientQueryHandler),
+                                            (r"/api/comment/", ClientCommentHandler),
+                                            (r"/submit/", ClientFileUploadAndProcessHandler),
+                                            (r"/.*/static/.*", PrefixRedirectHandler)],
+      **settings)
+    http_server = tornado.httpserver.HTTPServer(app)
+    http_server.listen(options.port)
+  
+    logger.info('demo is providing server on port %d'%server_port)
+    tornado.ioloop.IOLoop.instance().start()
+    logger.info('demo stop server')
+  except GracefulExitException:
+    logger.info('demo server exit')
+    sys.exit(0)
+    
 # demo_server_start('world','IMAGE_SEGMENTATION','/Users/jian/Downloads/ww',None,6990)
