@@ -167,10 +167,92 @@ def everything_to_html(data, dump_dir):
   analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis)
   model_sig_diffs_visualization = _transform_significant_to_visualization(model_sig_diffs)
   
+  # 6.step model eye analysys
+  eye={'eye_measures': []}
+  for ant_name, ant_info in data.items():
+    if 'eye' in ant_info:
+      if not os.path.exists(os.path.join(dump_dir, 'eye_analysis')):
+        os.makedirs(os.path.join(dump_dir, 'eye_analysis'))
+      
+      for measure_name, eye_data in ant_info['eye'].items():
+        eye_measure = {'NAME': measure_name}
+        eye_tags = set()
+        eye_samples = []
+        for sample_index, sample in enumerate(eye_data):
+          sample_id = sample['id']
+          sample_category = sample['category']
+          sample_score = sample['score']
+          sample_tag = sample['tag']
+          sample_data = sample['data']
+          eye_tags.update(sample_tag)
+          
+          # 1.step warp to eye sample
+          eye_sample = {}
+          eye_sample['ID'] = sample_index
+          eye_sample['TAGS'] = sample_tag
+          eye_sample['SCORE'] = sample_score
+          # 2.step warp data to eye sample
+          if type(sample_data) == np.ndarray:
+            if len(sample_data.shape) == 2:
+              image = ((sample_data - np.min(sample_data)) / (np.max(sample_data) - np.min(sample_data)) * 255).astype(np.uint8)
+
+              with open(os.path.join(dump_dir, 'eye_analysis', '%s.png'%str(sample_id)), 'wb') as fp:
+                fp.write(png_encode(image))
+              eye_sample['DATA'] = './eye_analysis/%s.png'%str(sample_id)
+              eye_sample['DATA_TYPE'] = 'IMAGE'
+            elif len(sample_data.shape) == 3:
+              image = sample_data.astype(np.uint8)
+              with open(os.path.join(dump_dir, 'eye_analysis','%s.png'%str(sample_id)), 'wb') as fp:
+                fp.write(png_encode(image))
+              eye_sample['DATA'] = './eye_analysis/%s.png'%str(sample_id)
+              eye_sample['DATA_TYPE'] = 'IMAGE'
+            else:
+              # TODO support multi images (gif)
+              pass
+          elif type(sample_data) == str:
+            eye_sample['DATA'] = sample_data
+            eye_sample['DATA_TYPE'] = 'STRING'
+            
+          # 3.step warp gt to eye sample
+          if type(sample_category) == np.ndarray:
+            if len(sample_category.shape) == 2:
+              image = ((sample_category - np.min(sample_category)) / (np.max(sample_category) - np.min(sample_category)) * 255).astype(np.uint8)
+              
+              with open(os.path.join(dump_dir, 'eye_analysis', '%s_gt.png'%str(sample_id)), 'wb') as fp:
+                fp.write(png_encode(image))
+              eye_sample['GT'] = './eye_analysis/%s_gt.png'%str(sample_id)
+              eye_sample['GT_TYPE'] = 'IMAGE'
+            elif len(sample_category.shape) == 3:
+              image = sample_category.astype(np.uint8)
+              with open(os.path.join(dump_dir, 'eye_analysis','%s_gt.png'%str(sample_id)), 'wb') as fp:
+                fp.write(png_encode(image))
+              eye_sample['GT'] = './eye_analysis/%s_gt.png'%str(sample_id)
+              eye_sample['GT_TYPE'] = 'IMAGE'
+            else:
+              # TODO support multi images (gif)
+              pass
+          elif type(sample_data) == str:
+            eye_sample['GT'] = sample_data
+            eye_sample['GT_TYPE'] = 'STRING'
+          else:
+            continue
+
+          eye_samples.append(eye_sample)
+        
+        eye_tags_list = []
+        for tt_i, tt in enumerate(eye_tags):
+          eye_tags_list.append({'NAME': tt, 'ID': tt_i})
+
+        eye_measure['eye_tags'] = eye_tags_list
+        eye_measure['eye_samples'] = eye_samples
+        
+        eye['eye_measures'].append(eye_measure)
+  
   context = {
     'measures': statistic_visualization,
     'analysis': analysis_visualization,
-    'compare': model_sig_diffs_visualization
+    'compare': model_sig_diffs_visualization,
+    'eye': eye,
   }
 
   # to resource
@@ -365,6 +447,19 @@ if __name__ == '__main__':
                                'value': [{'name': 'image', 'value': random_img, 'type': 'IMAGE'}]}}
 
   experiment_1_statis['aa']['measure'] = [voc_measure, roc_auc_measure, pr_f1_measure, confusion_m, image_m]
+  experiment_1_statis['aa']['eye'] = {}
+  experiment_1_statis['aa']['eye']['MM'] = [{'id': 0, 'category': 'hello', 'score':0.2, 'tag':['A','B'], 'data': 'mma'},
+                                            {'id': 3, 'category': 'miao', 'score': 0.4, 'tag':['C'], 'data': 'yYU'},
+                                            {'id': 1, 'category': 'world', 'score':1.0, 'tag':['A'], 'data': 'UUI'}]
+  #
+  # import cv2
+  # mm = cv2.imread('/home/mi/1.png')
+  # mm = mm[...,::-1]
+  #
+  # experiment_1_statis['aa']['eye']['NN'] = [{'id': 0, 'category': mm, 'score':0.2, 'tag':['A','B'], 'data': mm},
+  #                                           {'id': 3, 'category': mm, 'score': 0.4, 'tag':['C'], 'data': mm},
+  #                                           {'id': 1, 'category': mm, 'score':1.0, 'tag':['A'], 'data': mm}]
+  
   # # experiment 2
   # experiment_2_statis = {}
   # experiment_2_statis['aa'] = {}
@@ -407,4 +502,4 @@ if __name__ == '__main__':
   # experiment_2_statis['aa']['measure'] = [voc_measure, roc_auc_measure, pr_f1_measure, confusion_m]
 
   # ss = multi_repeats_measures_statistic([experiment_1_statis, experiment_2_statis])
-  everything_to_html(experiment_1_statis, '/Users/zhangken/Downloads/')
+  everything_to_html(experiment_1_statis, '/home/mi/HQA')

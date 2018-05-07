@@ -8,6 +8,28 @@
     <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
 </head>
 <script>
+String.prototype.replaceAll = function(exp, newStr){
+    return this.replace(new RegExp(exp, 'gm'), newStr)
+};
+String.prototype.format = function(args) {
+    var result = this;
+    if (arguments.length < 1) {
+        return result;
+    }
+
+    var data = arguments; // 如果模板参数是数组
+    if (arguments.length == 1 && typeof (args) == "object") {
+        // 如果模板参数是对象
+        data = args;
+    }
+    for ( var key in data) {
+        var value = data[key];
+        if (undefined != value) {
+            result = result.replaceAll("\\{" + key + "\\}", value);
+        }
+    }
+    return result;
+};
 
 function matrix_chart(canvas_id){
     var _chart = {}
@@ -1001,6 +1023,142 @@ $(document).ready( function () {
     }
 
 } );
+
+$(document).ready(function(){
+    <!--$('a[name="add_row"]').on('click',function(){-->
+        <!--var parent_layer = $(this).parent();-->
+        <!--var cn = 0;-->
+        <!--parent_layer.find("tbody tr:first").find("td").each(function(){-->
+            <!--cn = cn + 1;-->
+        <!--})-->
+        <!---->
+        <!--var new_row = $('<td></td><td><input placeholder="comment"></td>')       -->
+        <!--for(var i = 1; i<cn-1; i++){-->
+
+        <!--}-->
+        <!---->
+        <!--parent_layer.find("tbody tr").eq(-2).after('')-->
+    <!--})-->
+    <!--$('a[name="subtract_row"]').on('click', function(){-->
+        <!--var parent_layer = $(this).parent();-->
+        <!--parent_layer.find("tbody tr").eq(-2).remove();-->
+    <!--})-->
+
+    $('a[name="add_col"]').on('click', function(){
+        var parent_layer = $(this).parent();
+        parent_layer.find("thead tr").find("th").eq(-3).after('<th><input placeholder="TAG"></th>')
+        var rows_num = 0;
+        parent_layer.find("tbody tr").each(function(i){
+            rows_num = rows_num+1;
+        })
+
+        parent_layer.find("tbody tr").each(function(i){
+            var col_num = 0;
+            $(this).find('td').each(function(){
+                col_num = col_num + 1;
+            })
+
+            if(i < (rows_num - 1)){
+                var is_it_checkbox = $('<td col={0}><input type=checkbox name=is_it></td>'.format(col_num))
+                $(this).find('td').eq(-3).after(is_it_checkbox);
+                is_it_checkbox.find('input:first').on('change', function(){
+                    var col_parent = $(this).parent();
+                    var col_grandpa = col_parent.parent().parent();
+                    var checked_box = 0;
+                    var total_rows = 0;
+
+                    col_grandpa.find('tr').each(function(n){
+                        $(this).find('td').each(function(m){
+                            if($(this).attr('col') == col_parent.attr('col')){
+                                if($(this).find('input:first').is(':checked')){
+                                    checked_box = checked_box + 1;
+                                }
+                                total_rows = total_rows + 1
+                            }
+                        })
+                    })
+
+                    col_grandpa.find('tr:last').find('td').each(function(m){
+                        if($(this).attr('col') == col_parent.attr('col')){
+                            $(this).text('{0}%'.format(Math.round(parseFloat(checked_box / (total_rows - 1))*100)))
+                        }
+                    })
+                })
+            }
+            else{
+                $(this).find('td').eq(-3).after('<td col={0}>0%</td>'.format(col_num))
+            }
+        })
+    })
+    $('a[name="subtract_col"]').on('click', function(){
+        var parent_layer = $(this).parent();
+        var col_num = 0;
+        parent_layer.find("thead tr").find('th').each(function(i){
+            col_num = col_num + 1;
+        })
+        if(col_num <= 4){
+            return
+        }
+
+        parent_layer.find("thead tr").find('th').eq(-3).remove();
+        parent_layer.find("tbody tr").each(function(){
+            $(this).find("td").eq(-3).remove();
+        })
+    })
+
+    $('#error_analysis_save').on('click', function(){
+
+    })
+
+    // initialize eye analysis statistic
+    $('input[name="is_it"]').each(function(){
+        $(this).on('change',function(){
+            var col_parent = $(this).parent();
+            var col_grandpa = col_parent.parent().parent();
+            var checked_box = 0;
+            var total_rows = 0;
+
+            col_grandpa.find('tr').each(function(n){
+                $(this).find('td').each(function(m){
+                    if($(this).attr('col') == col_parent.attr('col')){
+                        if($(this).find('input:first').is(':checked')){
+                            checked_box = checked_box + 1;
+                        }
+                        total_rows = total_rows + 1
+                    }
+                })
+            })
+
+            col_grandpa.find('tr:last').find('td').each(function(m){
+                if($(this).attr('col') == col_parent.attr('col')){
+                    $(this).text('{0}%'.format(Math.round(parseFloat(checked_box / (total_rows - 1))*100)))
+                }
+            })
+        })
+        var col_parent = $(this).parent();
+        var col_grandpa = col_parent.parent().parent();
+        var checked_box = 0;
+        var total_rows = 0;
+
+        col_grandpa.find('tr').each(function(n){
+            $(this).find('td').each(function(m){
+                if($(this).attr('col') == col_parent.attr('col')){
+                    if($(this).find('input:first').is(':checked')){
+                        checked_box = checked_box + 1;
+                    }
+                    total_rows = total_rows + 1
+                }
+            })
+        })
+
+        col_grandpa.find('tr:last').find('td').each(function(m){
+            if($(this).attr('col') == col_parent.attr('col')){
+                $(this).text('{0}%'.format(Math.round(parseFloat(checked_box / (total_rows - 1))*100)))
+            }
+        })
+    })
+})
+
 </script>
 <style>
 .cardtable {
@@ -1298,6 +1456,106 @@ button {
     fill: steelblue;
 }
 
+        .eye_error_analysis{
+
+        }
+        .eye_error_analysis td{
+            text-align: center
+        }
+        .eye_error_analysis th{
+            text-align: center
+        }
+        .eye_error_analysis input{
+            text-align: center
+        }
+                .btn-white-to-blue{
+    -webkit-box-flex: 0;
+    -webkit-flex: 0 0 auto;
+    -ms-flex: 0 0 auto;
+    flex: 0 0 auto;
+    font-family: 'Atlas Grotesk',sans-serif;
+    color: #6F7175;
+    font-weight: bolder;
+    font-size: 15px;
+    text-decoration: none;
+    padding: 5px 10px;
+    background-color: #FFF;
+    border: 1px solid #DEDFE0;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing:0px;
+    text-align: center;
+}
+.btn-white-to-blue:hover{
+    color: #20BEFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #FFF;
+}
+.btn-white-to-blue:active{
+    color: #20BEFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #FFF;
+}
+
+.btn-white-to-blue:focus{
+    color: #20BEFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #FFF;
+}
+.btn-white-to-blue:visited{
+    color: #20BEFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #FFF;
+}
+.btn-blue-to-white{
+    -webkit-box-flex: 0;
+    -webkit-flex: 0 0 auto;
+    -ms-flex: 0 0 auto;
+    flex: 0 0 auto;
+    font-family: 'Atlas Grotesk',sans-serif;
+    font-weight: bolder;
+    font-size: 15px;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing:0px;
+    text-align: center;
+
+    color: #20BEFF;
+    border: 1px solid #20BEFF;
+    background-color: #FFF;
+}
+
+.btn-blue-to-white:hover{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:active{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:focus{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:visited{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+
 </style>
 <body>
   <nav class="navbar navbar-default" style="background-color:black;">
@@ -1581,9 +1839,89 @@ button {
 
 <div class="container">
     <div class="evaltitle">
-        <b>Eye Analysis</b>
+        <b>Sample Eye Analysis</b>
     </div>
-    <div class="cardable"></div>
+    <div>
+        {%for eye_measure in eye.eye_measures%}
+        <div>{{eye_measure.NAME}}</div>
+        <div id="{{eye_measure.NAME}}_error_analysis">
+            <a href="javascript:void(0)" name="add_col"><span class="badge" style="float: left;position: absolute;margin-top: 25px;">+</span></a>
+            <a href="javascript:void(0)" name="subtract_col"><span class="badge" style="float: left;position: absolute;margin-top: 47px;margin-left: 2px;">-</span></a>
+            <a href="javascript:void(0)" name="add_row"><span class="badge" style="margin-left: 30px;">+</span></a>
+            <a href="javascript:void(0)" name="subtract_row"><span class="badge">-</span></a>
+            <table class="table table-striped eye_error_analysis" style="margin-left: 20px">
+              <thead>
+                <tr>
+                    <!--sample index column 1-->
+                  <th>#</th>
+                    <!--sample content column 2-->
+                  <th>DATA</th>
+                    <!--sample tag column 3 ~ ...-->
+                    {%for eye_tag in eye_measure.eye_tags%}
+                    <th>{{eye_tag.NAME}}</th>
+                    {%endfor%}
+                    <!--sample GROUNDTRUTH column -2-->
+                  <th>GROUNDTRUTH</th>
+                    <!--sample comment column -2-->
+                  <th>COMMENT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {%for eye_sample in eye_measure.eye_samples%}
+                <tr>
+                    <!--sample index column 1-->
+                    <td scope="row">{{eye_sample.ID}}-(score: {{eye_sample.SCORE}})</td>
+                    <!--sample content column 2-->
+                    {% if eye_sample.DATA_TYPE == 'IMAGE'%}
+                    <td><img src="{{eye_sample.DATA}}" width="128" height="128"></td>
+                    {% elif eye_sample.DATA_TYPE == 'AUDIO'%}
+                    <td><audio src="{{eye_sample.DATA}}" controls="controls">Your browser does not support the audio element.</audio></td>
+                    {% elif eye_sample.DATA_TYPE == 'VIDEO'%}
+                    <td><video width="320" height="240" controls autoplay> <source src="{{eye_sample.DATA}}" type="video/mp4"> <object data="{{eye_sample.DATA}}" width="320" height="240"></object></video></td>
+                    {% elif eye_sample.DATA_TYPE == 'STRING'%}
+                    <td><p>{{eye_sample.DATA}}</p></td>
+                    {% endif%}
+                    <!--sample tag column 3 ~ ...-->
+                    {%for eye_tag in eye_measure.eye_tags%}
+                    {% if eye_tag.NAME in eye_sample.TAGS%}
+                    <td col={{eye_tag.ID}}><input type=checkbox name=is_it checked="checked"></td>
+                    {% else%}
+                    <td col={{eye_tag.ID}}><input type=checkbox name=is_it></td>
+                    {% endif%}
+                    {%endfor%}
+                    <!--sample GROUNDTRUTH column -2-->
+                    {% if eye_sample.GT_TYPE == 'IMAGE'%}
+                    <td><img src="{{eye_sample.GT}}" width="128" height="128"></td>
+                    {% elif eye_sample.GT_TYPE == 'AUDIO'%}
+                    <td><audio src="{{eye_sample.GT}}" controls="controls">Your browser does not support the audio element.</audio></td>
+                    {% elif eye_sample.GT_TYPE == 'VIDEO'%}
+                    <td><video width="320" height="240" controls autoplay> <source src="{{eye_sample.GT}}" type="video/mp4"> <object data="{{eye_sample.GT}}" width="320" height="240"></object></video></td>
+                    {% elif eye_sample.GT_TYPE == 'STRING'%}
+                    <td><p>{{eye_sample.GT}}</p></td>
+                    {% endif%}
+                    <!--sample comment column -2-->
+                    <td><input placeholder="COMMENT"></td>
+                </tr>
+                {%endfor%}
+                <tr>
+                   <td scope="row">STATISTIC</td>
+                    <td>-</td>
+                    {%for eye_tag in eye_measure.eye_tags%}
+                    <td col="{{eye_tag.ID}}">0%</td>
+                    {%endfor%}
+                    <td>-</td>
+                    <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="float: right; margin-top: -20px">
+              <button name="error_analysis_btn" class="btn btn-default btn-white-to-blue" type="button">
+                  save
+              </button>
+            </div>
+        </div>
+        {%endfor%}
+    </div>
 </div>
 </body>
 </html>

@@ -30,7 +30,11 @@ def tftool_frozen_graph(ctx,
   dump_dir = os.path.join(dump_dir, now_time_stamp)
   if not os.path.exists(dump_dir):
     os.makedirs(dump_dir)
-    
+
+  ablation_blocks = getattr(ctx.params, 'ablation', [])
+  for b in ablation_blocks:
+    ctx.deactivate_block(b)
+
   empty_datasource = EmptyDataset('test', '')
   ctx.call_infer_process(empty_datasource, dump_dir)
   

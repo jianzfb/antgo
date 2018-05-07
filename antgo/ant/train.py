@@ -336,13 +336,16 @@ class AntTrain(AntBase):
         data_attribute_info['score'] = score
         
         data_attribute_info['tag'] = []
-        _, label = running_ant_dataset.at(int(id))
+        sample, label = running_ant_dataset.at(int(id))
         if 'tag' in label:
           if type(label['tag']) == list or type(label['tag']) == tuple:
             data_attribute_info['tag'].extend(list(label['tag']))
           else:
             data_attribute_info['tag'].append(label['tag'])
         
+        data_attribute_info['data'] = sample
+        if running_ant_task.task_type == 'SEGMENTATION':
+          data_attribute_info['category'] = label['segmentation_map']
         eye_analysis_error.append(data_attribute_info)
       
       if 'eye' not in task_running_statictic[self.ant_name]:
