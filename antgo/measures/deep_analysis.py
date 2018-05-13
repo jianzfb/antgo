@@ -22,44 +22,8 @@ def _whats_data(data_source, id, infos):
     return {'type': 'TEXT', 'data': d}
   elif data_source.dataset_type == "IMAGE":
     # image
-    height, width = d.shape[0:2]
-    if len(d.shape) == 2:
-      d = np.expand_dims(d, 1)
-      d = np.concatenate((d, d, d), axis=2)
-    standard_d = resize(d, (50, 50))
-    
-    if 'box' in infos:
-      x1, y1, x2, y2 = infos['box']
-      x_scale = 50.0 / float(width)
-      y_scale = 50.0 / float(height)
-      x1 = np.minimum(np.maximum(0, x1), width - 1)
-      x1 = x1 * x_scale
-      y1 = np.minimum(np.maximum(0, y1), height - 1)
-      y1 = y1 * y_scale
-      x2 = np.maximum(np.minimum(width - 1, x2), 0)
-      x2 = x2 * x_scale
-      y2 = np.maximum(np.minimum(height - 1, y2), 0)
-      y2 = y2 * y_scale
-
-      standard_d[int(y1), int(x1):int(x2), 0] = 255
-      standard_d[int(y1), int(x1):int(x2), 1] = 0
-      standard_d[int(y1), int(x1):int(x2), 2] = 0
-  
-      standard_d[int(y2), int(x1):int(x2), 0] = 255
-      standard_d[int(y2), int(x1):int(x2), 1] = 0
-      standard_d[int(y2), int(x1):int(x2), 2] = 0
-  
-      standard_d[int(y1):int(y2), int(x1), 0] = 255
-      standard_d[int(y1):int(y2), int(x1), 1] = 0
-      standard_d[int(y1):int(y2), int(x1), 2] = 0
-  
-      standard_d[int(y1):int(y2), int(x2), 0] = 255
-      standard_d[int(y1):int(y2), int(x2), 1] = 0
-      standard_d[int(y1):int(y2), int(x2), 2] = 0
-
-    ss = base64.b64encode(png_encode(standard_d))
-    ss = ss.decode('utf-8')
-    return {'type': 'IMAGE', 'data': ss}
+    png_data = png_encode(d, True)
+    return {'type': 'IMAGE', 'data': png_data}
   
   return None
 

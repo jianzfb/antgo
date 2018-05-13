@@ -93,6 +93,10 @@ class AntTask(object):
     '''
     return self._estimation_procedure_type
 
+  @estimation_procedure.setter
+  def estimation_procedure(self, val):
+    self._estimation_procedure_type = val
+
   @property
   def estimation_procedure_params(self):
     '''

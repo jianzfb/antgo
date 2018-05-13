@@ -6,14 +6,16 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import numpy as np
+from PIL import Image
+try:
+    # python 2
+    from StringIO import StringIO as BufferIO
+except ImportError:
+    # python 3
+    from io import BytesIO as BufferIO
 
 
-def png_encode(data):
-  """ buf: must be bytes or a bytearray in Python3.x,
-      a regular string in Python2.x.
-  """
-  import zlib, struct
-
+def png_encode(data, thumbnail=False):
   assert(len(data.shape) == 2 or len(data.shape) == 3)
   if data.dtype != np.uint8:
     # normalized to 255
@@ -22,36 +24,22 @@ def png_encode(data):
     norm_data = (data - min_val) / (max_val - min_val) * 255.0
     data = norm_data.astype(np.uint8)
 
-  # data size
-  width = data.shape[1]
-  height = data.shape[0]
+  # 1.step convert to Image
+  image = Image.fromarray(data)
 
-  # convert to buf
-  aug_data = np.zeros((height, width, 4), dtype=np.uint8)
-  if len(data.shape) == 2:
-    aug_data[:, :, 0:3] = np.tile(np.expand_dims(data,2), [1, 1, 3])
-    aug_data[:, :, 3] = 255
-  else:
-    assert(data.shape[2] == 3 or data.shape[2] == 4)
-    aug_data[:, :, 3] = 255
-    aug_data[:, :, 0:data.shape[2]] = data
-  buf = bytes(aug_data.flatten().data)
+  if thumbnail:
+    # 2.step (option) thumbnail
+    width, height = image.size
+    small_size = width if width < height else height
+    ratio = small_size / 64
+    small_width = int(width / ratio)
+    small_height = int(height / ratio)
+    image.thumbnail((small_width, small_height), Image.ANTIALIAS)
 
-  # reverse the vertical line order and add null bytes at the start
-  width_byte_4 = width * 4
-  # raw_data = b''.join(b'\x00' + buf[span:span + width_byte_4]
-  #                     for span in range((height - 1) * width_byte_4, -1, -width_byte_4))
-  raw_data = b''.join(b'\x00' + buf[span:span + width_byte_4]
-                      for span in range(0, height * width_byte_4, width_byte_4))
-  
-  def png_pack(png_tag, data):
-    chunk_head = png_tag + data
-    return (struct.pack("!I", len(data)) +
-            chunk_head +
-            struct.pack("!I", 0xFFFFFFFF & zlib.crc32(chunk_head)))
+  # 2.step retarget to bufferio
+  temp = BufferIO()
+  image.save(temp, qtables='web_low', format='png')
+  content = temp.getvalue()
+  temp.close()
 
-  return b''.join([
-    b'\x89PNG\r\n\x1a\n',
-    png_pack(b'IHDR', struct.pack("!2I5B", width, height, 8, 6, 0, 0, 0)),
-    png_pack(b'IDAT', zlib.compress(raw_data, 9)),
-    png_pack(b'IEND', b'')])
+  return content

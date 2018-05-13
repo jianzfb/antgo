@@ -323,13 +323,57 @@
     })
     </script>
     <style>
+        .btn-blue-to-white{
+    -webkit-box-flex: 0;
+    -webkit-flex: 0 0 auto;
+    -ms-flex: 0 0 auto;
+    flex: 0 0 auto;
+    font-family: 'Atlas Grotesk',sans-serif;
+    font-weight: bolder;
+    font-size: 15px;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing:0px;
+    text-align: center;
+
+    color: #20BEFF;
+    border: 1px solid #20BEFF;
+    background-color: #FFF;
+}
+
+.btn-blue-to-white:hover{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:active{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:focus{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:visited{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
     </style>
 </head>
 <body>
 <div class="container">
 	<div class="jumbotron">
       <h1>Hello, MLTalker Contributer!</h1>
-      <p>hello Im zhangjian</p>
+      <p>{{task['title']}}</p>
       <p><a class="btn btn-primary btn-lg" href="#" role="button">Learn More</a></p>
     </div>
     <div id="user_submit_modal" class="modal fade" tabindex="-1" role="dialog" style="display: none;">
@@ -344,7 +388,7 @@
                     {%end%}
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-success"  type="button" name="user_submit">NEXT</button>
+                    <button class="btn btn-blue-to-white"  type="button" name="user_submit">NEXT</button>
                 </div>
             </div>
         </div>
@@ -359,7 +403,7 @@
 
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-success"  type="button" id="CLOSE_ECHO">CLOSE</button>
+                    <button class="btn btn-blue-to-white"  type="button" id="CLOSE_ECHO">CLOSE</button>
                 </div>
             </div>
         </div>
@@ -395,7 +439,7 @@
                 {%end%}
           </div>
           <div class="col-lg-4">
-            <button class="btn btn-success" type="button" style="float: right" name="user_submit">NEXT</button>
+            <button class="btn btn-success" type="button" style="float: right; margin-right: 15px" name="user_submit">NEXT</button>
           </div>
         </div>
     </div>

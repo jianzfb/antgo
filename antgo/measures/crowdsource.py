@@ -141,7 +141,9 @@ class AntCrowdsource(AntMeasure):
     # notify api
     if self.app_token is not None and len(update_real_statistic) > 0:
       user_authorization = {'Authorization': "token " + self.app_token}
-      request_url = 'http://%s:%s/hub/api/crowdsource/evaluation/experiment/%s/info' % (Config.server_ip, Config.server_port, self.experiment_id)
+      request_url = 'http://%s:%s/hub/api/crowdsource/evaluation/experiment/%s/info' % (Config.server_ip,
+                                                                                        Config.server_port,
+                                                                                        self.experiment_id)
       requests.post(request_url, data=update_real_statistic, headers=user_authorization)
 
     # check is over?
@@ -265,7 +267,7 @@ class AntCrowdsource(AntMeasure):
       client_query['QUERY_INDEX'] = self._client_response_record[client_id]['QUERY_INDEX'] - 1
       client_query['CLIENT_RESPONSE'] = None
       # client_query['QUERY_INDEX'] may be -1
-      return self._next_click_branch(client_query, record_db)
+      return self._next_click_branch(client_query, record_db, True)
     else:
       # clear
       self._client_response_record[client_id] = {}
@@ -337,7 +339,7 @@ class AntCrowdsource(AntMeasure):
       logger.info('leave client id %s "START" response'%client_id)
       return response_data
 
-  def _next_click_branch(self, client_query, record_db):
+  def _next_click_branch(self, client_query, record_db, to_next_page=False):
     # continue unfinished session
     client_id = client_query['CLIENT_ID']
     if client_id not in self._client_response_record:
@@ -349,7 +351,7 @@ class AntCrowdsource(AntMeasure):
     # 1.step client response content
     query_index = client_query['QUERY_INDEX']
 
-    if client_query['QUERY_STATUS'] == 'CLOSE_ECHO':
+    if client_query['QUERY_STATUS'] == 'CLOSE_ECHO' or to_next_page:
       logger.info('prepare next page data')
       # enter next sample
       return self._prepare_next_page(client_id, query_index, record_db)
@@ -471,7 +473,7 @@ class AntCrowdsource(AntMeasure):
     process.start()
 
     # 2.step listening crowdsource server is OK
-    waiting_time = 1
+    waiting_time = 10
     is_connected = False
     now_time = time.time()
     while not is_connected and (time.time() - now_time) < 60 * 5:
@@ -483,7 +485,6 @@ class AntCrowdsource(AntMeasure):
           is_connected = True
           break
       except:
-        waiting_time = waiting_time * 10
         time.sleep(waiting_time)
 
     if not is_connected:

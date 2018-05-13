@@ -332,7 +332,6 @@ class AntTrain(AntBase):
       for id, score, category in eye_analysis_set:
         data_attribute_info = {}
         data_attribute_info['id'] = id
-        data_attribute_info['category'] = category
         data_attribute_info['score'] = score
         
         data_attribute_info['tag'] = []
@@ -342,17 +341,41 @@ class AntTrain(AntBase):
             data_attribute_info['tag'].extend(list(label['tag']))
           else:
             data_attribute_info['tag'].append(label['tag'])
-        
-        data_attribute_info['data'] = sample
+
+        if type(sample) == np.ndarray:
+          if len(sample.shape) == 2:
+            image = ((sample - np.min(sample)) / (np.max(sample) - np.min(sample)) * 255).astype(np.uint8)
+            data_attribute_info['data_type'] = 'IMAGE'
+            data_attribute_info['data'] = png_encode(image, True)
+          elif len(sample.shape) == 3:
+            image = sample.astype(np.uint8)
+            data_attribute_info['data_type'] = 'IMAGE'
+            data_attribute_info['data'] = png_encode(image, True)
+          elif type(sample) == str:
+            data_attribute_info['data_type'] = 'STRING'
+            data_attribute_info['data'] = sample
+          else:
+            # TODO support multi images(gif)
+            pass
+
+        data_attribute_info['category'] = category
+        data_attribute_info['category_type'] = 'STRING'
         if running_ant_task.task_type == 'SEGMENTATION':
-          data_attribute_info['category'] = label['segmentation_map']
+          label_map = label['segmentation_map']
+          label_map = ((label_map - np.min(label_map)) / (np.max(label_map) - np.min(label_map)) * 255).astype(np.uint8)
+          data_attribute_info['category'] = png_encode(label_map, True)
+          data_attribute_info['category_type'] = 'IMAGE'
         eye_analysis_error.append(data_attribute_info)
       
       if 'eye' not in task_running_statictic[self.ant_name]:
           task_running_statictic[self.ant_name]['eye'] = {}
 
       task_running_statictic[self.ant_name]['eye'][measure_name] = eye_analysis_error
-    
+
+      ################
+      # 临时代码
+      # task_running_statictic[self.ant_name]['eye']['HMW'] = eye_analysis_error
+      ################
     return task_running_statictic
     
   def start(self):
@@ -439,7 +462,7 @@ class AntTrain(AntBase):
     # ablation experiment
     ablation_blocks = getattr(self.context.params, 'ablation', None)
     ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
-    assert(ablation_method in ['regular', 'inregular','accumulate', 'any'])
+    assert(ablation_method in ['regular', 'inregular','accumulate', 'any', 'fixed'])
     if ablation_blocks is not None:
       ablation_experiments_devices_num = 0
       if ablation_method in ['regular', 'inregular', 'accumulate']:
@@ -447,27 +470,36 @@ class AntTrain(AntBase):
         if ablation_method == 'inregular' and len(ablation_blocks) == 1:
           logger.warn('only exists one ablation block %s, couldnt set inregular ablation method' % ablation_blocks[0])
           ablation_method = 'regular'
-      else:
+      elif ablation_method == 'any':
         for i in range(len(ablation_blocks)):
           ablation_experiments_devices_num += len(list(itertools.combinations(ablation_blocks, i + 1)))
-      
+      else:
+        # fixed ablation method
+        ablation_experiments_devices_num = 0
+
       if len(apply_devices) >= ablation_experiments_devices_num + 1:
-        ablation_experiments_devices = apply_devices[:ablation_experiments_devices_num]
-        apply_devices = apply_devices[ablation_experiments_devices_num:]
-        
-        # assign device to every ablation experiment
-        ablation_experiments = self.start_ablation_train_proc(ant_train_dataset,
-                                                              running_ant_task,
-                                                              ablation_blocks,
-                                                              ablation_method,
-                                                              train_time_stamp,
-                                                              ablation_experiments_devices)
-        # launch all ablation experiments
-        logger.info('waiting until all ablation experiments finish')
-        for ablation_experiment in ablation_experiments:
-          ablation_experiment.start()
-        
+        ablation_experiments = []
+        if ablation_method != 'fixed':
+          ablation_experiments_devices = apply_devices[:ablation_experiments_devices_num]
+          apply_devices = apply_devices[ablation_experiments_devices_num:]
+
+          # assign device to every ablation experiment
+          ablation_experiments = self.start_ablation_train_proc(ant_train_dataset,
+                                                                running_ant_task,
+                                                                ablation_blocks,
+                                                                ablation_method,
+                                                                train_time_stamp,
+                                                                ablation_experiments_devices)
+          # launch all ablation experiments
+          logger.info('waiting until all ablation experiments finish')
+          for ablation_experiment in ablation_experiments:
+            ablation_experiment.start()
+
         if ablation_method == 'inregular':
+          for b in ablation_blocks:
+            self.ant_context.deactivate_block(b)
+
+        if ablation_method == 'fixed':
           for b in ablation_blocks:
             self.ant_context.deactivate_block(b)
         
@@ -541,7 +573,8 @@ class AntTrain(AntBase):
         return
       
       logger.warn('couldnt enable ablation experiment until set devices in *.yaml')
-    
+
+    # running_ant_task.estimation_procedure = 'holdout'
     with safe_recorder_manager(ant_train_dataset):
       # 2.step model evaluation (optional)
       if running_ant_task.estimation_procedure is not None and \
@@ -676,6 +709,47 @@ class AntTrain(AntBase):
             evaluation_measure_result.append(result)
   
       task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
+
+    ################
+    # 临时代码
+    # voc_measure = {'statistic': {'name': 'voc',
+    #                              'value': [{'name': 'MAP', 'value': [23.0, 11.0, 12.0], 'type': 'SCALAR', 'x': 'class',
+    #                                         'y': 'Mean Average Precision'},
+    #                                        {'name': 'Mean-MAP', 'value': 0.13, 'type': 'SCALAR'}]}}
+    #
+    # roc_auc_measure = {'statistic': {'name': 'roc_auc',
+    #                                  'value': [{'name': 'ROC', 'value': [[[0, 0], [1, 1], [2, 3]],
+    #                                                                      [[0, 3], [2, 5], [3, 0]]],
+    #                                             'type': 'CURVE', 'x': 'FP', 'y': 'TP',
+    #                                             'legend': ['class-0', 'class-1']},
+    #                                            {'name': 'AUC', 'value': [0.3, 0.4], 'type': 'SCALAR', 'x': 'class',
+    #                                             'y': 'AUC'}]}}
+    #
+    # pr_f1_measure = {'statistic': {'name': 'pr_f1',
+    #                                'value': [{'name': 'Precision-Recall',
+    #                                           'value': [[[0, 0], [1, 1], [2, 3]],
+    #                                                     [[0, 3], [2, 5], [3, 0]]],
+    #                                           'type': 'CURVE', 'x': 'precision', 'y': 'recall'},
+    #                                          {'name': 'F1', 'value': [1.0, 2.0], 'type': 'SCALAR', 'x': 'class',
+    #                                           'y': 'F1'}]}}
+    #
+    # confusion_m = {'statistic': {'name': 'cm',
+    #                              'value': [{'name': 'ccmm', 'value': (np.ones((3, 4)) * 3).tolist(), 'type': 'MATRIX',
+    #                                         'x': ['a', 'b', 'c', 'd'], 'y': ['x', 'y', 'z']}]}}
+    #
+    # random_img = np.random.random((100, 100))
+    # random_img = random_img * 255
+    # random_img = random_img.astype(np.uint8)
+    # image_m = {'statistic': {'name': 'image',
+    #                          'value': [{'name': 'image', 'value': random_img, 'type': 'IMAGE'}]}}
+    # task_running_statictic[self.ant_name]['measure'].extend([voc_measure, roc_auc_measure,pr_f1_measure, confusion_m, image_m])
+    #
+    # task_running_statictic[self.ant_name]['significant_diff'] = {}
+    # task_running_statictic[self.ant_name]['significant_diff']['QAS'] = [{'name': '20180429.161714.105706', 'score': 0},
+    #                                                                    {'name': '20180429.220804.516647', 'score': 1},
+    #                                                                    {'name': '20180429.222627.393376', 'score': -1},
+    #                                                                    {'name': '20180429.222721.264422', 'score': 1}]
+    # ################
 
     # error analysis
     task_running_statictic = self.error_analysis(running_ant_task, part_validation_dataset, task_running_statictic)

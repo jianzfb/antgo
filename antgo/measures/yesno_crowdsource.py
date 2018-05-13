@@ -25,6 +25,8 @@ class AntYesNoCrowdsource(AntCrowdsource):
     self.client_query_data = {'QUERY': {'PREDICT_%s'%self.left_tag: 'IMAGE',
                                         'GROUNDTRUTH_%s'%self.right_tag: 'IMAGE'}}
     self._is_support_rank = True
+    self._crowdsource_title = 'YesorNo'
+    self._crowdsource_type = "YN"
   
   def where_in_table(self, worksite, element_id):
     if type(element_id) != list:

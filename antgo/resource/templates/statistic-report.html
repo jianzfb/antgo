@@ -6,6 +6,7 @@
     <script src="https://cdn.bootcss.com/d3/3.2.8/d3.min.js" type="text/javascript"></script>
     <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
     <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+    <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
 </head>
 <script>
 String.prototype.replaceAll = function(exp, newStr){
@@ -17,9 +18,8 @@ String.prototype.format = function(args) {
         return result;
     }
 
-    var data = arguments; // 如果模板参数是数组
+    var data = arguments;
     if (arguments.length == 1 && typeof (args) == "object") {
-        // 如果模板参数是对象
         data = args;
     }
     for ( var key in data) {
@@ -34,7 +34,7 @@ String.prototype.format = function(args) {
 function matrix_chart(canvas_id){
     var _chart = {}
     var _width = 600, _height = 300,
-        _margins = {top: 30, left: 30, right: 30, bottom: 30},
+        _margins = {top: 30, left: 150, right: 30, bottom: 30},
         _data = [], _x_keys=[], _y_keys=[],
         _color_bound=['#72aeda','#18405e'],
         _svg,
@@ -262,7 +262,14 @@ function line_chart(canvas_id) { // <-1A
             _axes_y,
             _axesG,
             _x_label,
-            _y_label;
+            _y_label,
+            _x_start=null,
+            _x_end=null,
+            _y_start=null,
+            _y_end=null,
+            _last_mouse_x=null,
+            _last_mouse_y=null,
+            _canvas_id=canvas_id;
 
     _chart.render = function () { // <-2A
         if (!_svg) {
@@ -270,7 +277,43 @@ function line_chart(canvas_id) { // <-1A
                 .append("svg") // <-2B
                 .attr("height", _height)
                 .attr("width", _width);
-            //defineBodyClip(_svg);
+            defineBodyClip(_svg);
+
+            _svg.on('mousedown',function(){
+                 var position = d3.mouse(_svg.node())
+
+                _last_mouse_x = position[0]
+                _last_mouse_y = position[1]
+            })
+            _svg.on('mouseup', function(){
+                var xx = d3.scale.linear().domain([30, quadrantWidth()+30]).range([_x_start, _x_end])
+                var yy = d3.scale.linear().domain([quadrantHeight()+30, 30]).range([_y_start, _y_end])
+                var position = d3.mouse(_svg.node())
+
+                if(Math.abs(position[0] - _last_mouse_x) < 2 && Math.abs(position[1] - _last_mouse_y) < 2){
+                    _x_start = null;
+                    _y_start = null;
+                    _x_end = null;
+                    _y_end = null;
+                }
+                else{
+                    _x_start = xx(Math.min(_last_mouse_x, position[0]))
+                    _x_end = xx(Math.max(_last_mouse_x, position[0]))
+
+                    _y_start = Math.min(yy(_last_mouse_y), yy(position[1]))
+                    _y_end = Math.max(yy(_last_mouse_y), yy(position[1]))
+                }
+
+                renderAxes(_svg)
+                renderBody(_svg)
+            })
+            // _svg.on('mousemove', function(){
+            //     var xx = d3.scale.linear().domain([30, quadrantWidth()+30]).range([_x_start, _x_end])
+            //     var yy = d3.scale.linear().domain([quadrantHeight()+30, 30]).range([_y_start, _y_end])
+            //
+            //     var position = d3.mouse(_svg.node())
+            //     positionLabel.text('x: '+ xx(position[0])+' y: '+yy(position[1]));
+            // })
         }
 
         renderAxes(_svg);
@@ -292,9 +335,19 @@ function line_chart(canvas_id) { // <-1A
     }
 
     function renderXAxis(axesG){
-        _x = d3.scale.linear()
-                .domain([0, d3.max(_data, function(d,i){return d3.max(d, function(d){return d.x;})})])
-                .range([0, quadrantWidth()]);
+        if(_x_start != null && _x_end != null){
+            _x = d3.scale.linear()
+                    .domain([_x_start, _x_end])
+                    .range([0, quadrantWidth()]);
+        }
+        else{
+            _x_start = d3.min(_data, function(d,i){return d3.min(d, function(d){return d.x})})
+            _x_end = d3.max(_data, function (d,i) {return d3.max(d, function(d){return d.x})})
+
+            _x = d3.scale.linear()
+                    .domain([_x_start, _x_end])
+                    .range([0, quadrantWidth()]);
+        }
 
         var xAxis = d3.svg.axis()
                 .scale(_x)
@@ -314,7 +367,7 @@ function line_chart(canvas_id) { // <-1A
                 .style("text-anchor", "end")
                 .text(_x_label);
 
-        d3.selectAll("g.x g.tick")
+        d3.select("#"+_canvas_id).selectAll("g.x g.tick")
             .append("line")
                 .classed("grid-line", true)
                 .attr("x1", 0)
@@ -324,9 +377,19 @@ function line_chart(canvas_id) { // <-1A
     }
 
     function renderYAxis(axesG){
-        _y = d3.scale.linear()
-                .domain([0, d3.max(_data, function(d,i){return d3.max(d, function(d){return d.y;})})])
+        if(_y_start != null && _y_end != null){
+            _y = d3.scale.linear()
+                    .domain([_y_start, _y_end])
+                    .range([quadrantHeight(), 0]);
+        }
+        else{
+            _y_start = d3.min(_data, function(d,i){return d3.min(d, function(d){return d.y})})
+            _y_end = d3.max(_data, function (d,i) {return d3.max(d, function(d){return d.y})})
+
+            _y = d3.scale.linear()
+                .domain([_y_start, _y_end])
                 .range([quadrantHeight(), 0])
+        }
 
         var yAxis = d3.svg.axis()
                 .scale(_y)
@@ -346,7 +409,7 @@ function line_chart(canvas_id) { // <-1A
                 .style("text-anchor", "end")
                 .text(_y_label);
 
-        d3.selectAll("g.y g.tick")
+        d3.select('#'+_canvas_id).selectAll("g.y g.tick")
             .append("line")
                 .classed("grid-line", true)
                 .attr("x1", 0)
@@ -908,7 +971,7 @@ model_analysis = [
 
 pair_sig_compare= [
   {%for data in compare%}
-    {'data':{{data.score}}, 'x-name': {{data.benchmark}}, 'y-name': {{data.measure}}}
+    {'data':{{data.score}}, 'x-name': {{data.measure}}, 'y-name': {{data.benchmark}}}
   {%endfor%}
 ]
 
@@ -950,16 +1013,21 @@ $(document).ready( function () {
         var rows = data.length;
         var cols = data[0].length;
 
-        var min_size = rows;
+        var max_size = rows;
         if(rows > cols){
-          min_size = cols;
+          max_size = cols;
         }
-        var cell_size = 300 / min_size;
-        if(cell_size < 10){
-          cell_size = 10;
+        var cell_size = 500 / max_size;
+        if(cell_size < 2){
+          cell_size = 2;
         }
-        mc.setWidth(cell_size * cols);
-        mc.setHeight(cell_size * rows);
+        mc.setWidth(cell_size * cols + 200);
+        var opt_height = 100;
+        if(opt_height < cell_size * rows){
+          opt_height = cell_size * rows;
+        }
+        mc.setHeight(opt_height);
+
         mc.addLegends({'x':x_name, 'y':y_name});
         mc.addSeries(data);
         mc.render();
@@ -985,12 +1053,16 @@ $(document).ready( function () {
       if(rows < cols){
         max_size = cols;
       }
-      var cell_size = 300 / max_size;
-      if(cell_size < 5){
-        cell_size = 5;
+      var cell_size = 500 / max_size;
+      if(cell_size < 2){
+        cell_size = 2;
       }
-      mc.setWidth(cell_size * cols);
-      mc.setHeight(cell_size * rows);
+      mc.setWidth(cell_size * cols + 200);
+      var opt_height = 100;
+      if(opt_height < cell_size * rows){
+          opt_height = cell_size * rows;
+      }
+      mc.setHeight(opt_height);
 
       mc.addLegends({'x':x_name, 'y':y_name});
       mc.addSeries(data);
@@ -1010,12 +1082,16 @@ $(document).ready( function () {
       if(rows < cols){
         max_size = cols;
       }
-      var cell_size = 300 / max_size;
-      if(cell_size < 10){
-        cell_size = 10;
+      var cell_size = 500 / max_size;
+      if(cell_size < 2){
+        cell_size = 2;
       }
-      mc.setWidth(cell_size * cols);
-      mc.setHeight(cell_size * rows);
+      mc.setWidth(cell_size * cols + 200);
+      var opt_height = 100;
+      if(opt_height < cell_size * rows){
+          opt_height = cell_size * rows;
+      }
+      mc.setHeight(opt_height);
       mc.setColorBound(['#0098ff','#eeeeee','#ee3e32']);
       mc.addLegends({'x':x_name, 'y':y_name});
       mc.addSeries(data);
@@ -1025,25 +1101,6 @@ $(document).ready( function () {
 } );
 
 $(document).ready(function(){
-    <!--$('a[name="add_row"]').on('click',function(){-->
-        <!--var parent_layer = $(this).parent();-->
-        <!--var cn = 0;-->
-        <!--parent_layer.find("tbody tr:first").find("td").each(function(){-->
-            <!--cn = cn + 1;-->
-        <!--})-->
-        <!---->
-        <!--var new_row = $('<td></td><td><input placeholder="comment"></td>')       -->
-        <!--for(var i = 1; i<cn-1; i++){-->
-
-        <!--}-->
-        <!---->
-        <!--parent_layer.find("tbody tr").eq(-2).after('')-->
-    <!--})-->
-    <!--$('a[name="subtract_row"]').on('click', function(){-->
-        <!--var parent_layer = $(this).parent();-->
-        <!--parent_layer.find("tbody tr").eq(-2).remove();-->
-    <!--})-->
-
     $('a[name="add_col"]').on('click', function(){
         var parent_layer = $(this).parent();
         parent_layer.find("thead tr").find("th").eq(-3).after('<th><input placeholder="TAG"></th>')
@@ -1159,6 +1216,14 @@ $(document).ready(function(){
     })
 })
 
+    $(document).ready(function(){
+        $('img[name="image_container"]').each(function () {
+             $(this).on('click', function () {
+                 $("#bigger_image_container").html("<image src='"+$(this).attr('src') +"' class='carousel-inner img-responsive img-rounded' />");
+                 $("#bigger_image_modal").modal();
+             })
+         })
+    })
 </script>
 <style>
 .cardtable {
@@ -1574,6 +1639,16 @@ button {
 
   </div><!-- /.container-fluid -->
 </nav>
+<div class="modal fade" id="bigger_image_modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-body">
+            <div id="bigger_image_container"></div>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal -->
+</div>
+
 <div class="container">
     <div class="evaltitle">
         <b>Key Measures</b>
@@ -1814,7 +1889,7 @@ button {
                                 <div class="panel-body">
                                   {%for sampling in region_sampling.data%}
                                   {%if sampling.type=='IMAGE'%}
-                                  <img src="data:image/png;base64,{{sampling.data}}" class="img-rounded">
+                                  <img src="{{sampling.data}}" class="img-rounded" width="64px" height="64px" name="{{sampling.flag}}">
                                   {%endif%}
                                   {%if sampling.type=='TEXT'%}
                                   <p>{{sampling.data}}</p>
@@ -1873,7 +1948,7 @@ button {
                     <td scope="row">{{eye_sample.ID}}-(score: {{eye_sample.SCORE}})</td>
                     <!--sample content column 2-->
                     {% if eye_sample.DATA_TYPE == 'IMAGE'%}
-                    <td><img src="{{eye_sample.DATA}}" width="128" height="128"></td>
+                    <td><img src="{{eye_sample.DATA}}" width="128" height="128" name="image_container"></td>
                     {% elif eye_sample.DATA_TYPE == 'AUDIO'%}
                     <td><audio src="{{eye_sample.DATA}}" controls="controls">Your browser does not support the audio element.</audio></td>
                     {% elif eye_sample.DATA_TYPE == 'VIDEO'%}
@@ -1891,7 +1966,7 @@ button {
                     {%endfor%}
                     <!--sample GROUNDTRUTH column -2-->
                     {% if eye_sample.GT_TYPE == 'IMAGE'%}
-                    <td><img src="{{eye_sample.GT}}" width="128" height="128"></td>
+                    <td><img src="{{eye_sample.GT}}" width="128" height="128" name="image_container"></td>
                     {% elif eye_sample.GT_TYPE == 'AUDIO'%}
                     <td><audio src="{{eye_sample.GT}}" controls="controls">Your browser does not support the audio element.</audio></td>
                     {% elif eye_sample.GT_TYPE == 'VIDEO'%}
@@ -1899,7 +1974,7 @@ button {
                     {% elif eye_sample.GT_TYPE == 'STRING'%}
                     <td><p>{{eye_sample.GT}}</p></td>
                     {% endif%}
-                    <!--sample comment column -2-->
+                    <!--sample comment column -1 -->
                     <td><input placeholder="COMMENT"></td>
                 </tr>
                 {%endfor%}

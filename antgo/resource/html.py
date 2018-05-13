@@ -13,6 +13,7 @@ from antgo.utils.encode import *
 from jinja2 import Environment, FileSystemLoader
 import scipy.misc
 import sys
+import uuid
 if sys.version > '3':
   PY3 = True
 else:
@@ -159,12 +160,15 @@ def everything_to_html(data, dump_dir):
         # score (-1, 0, +1) matrix
         benchmark_model_sig_diff.append([bn['score'] for bn in sig_diff])
 
+      benchmark_model_sig_diff = np.array(benchmark_model_sig_diff)
+      benchmark_model_sig_diff = benchmark_model_sig_diff.transpose()
+      benchmark_model_sig_diff = benchmark_model_sig_diff.tolist()
       model_sig_diffs.append({'score': benchmark_model_sig_diff,
                               'benchmark': benchmark_model_names,
                               'measure': measure_names})
         
   statistic_visualization = _transform_statistic_to_visualization(everything_statistics)
-  analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis)
+  analysis_visualization = _transform_analysis_to_visualization(model_deep_analysis, dump_dir)
   model_sig_diffs_visualization = _transform_significant_to_visualization(model_sig_diffs)
   
   # 6.step model eye analysys
@@ -192,50 +196,24 @@ def everything_to_html(data, dump_dir):
           eye_sample['TAGS'] = sample_tag
           eye_sample['SCORE'] = sample_score
           # 2.step warp data to eye sample
-          if type(sample_data) == np.ndarray:
-            if len(sample_data.shape) == 2:
-              image = ((sample_data - np.min(sample_data)) / (np.max(sample_data) - np.min(sample_data)) * 255).astype(np.uint8)
-
-              with open(os.path.join(dump_dir, 'eye_analysis', '%s.png'%str(sample_id)), 'wb') as fp:
-                fp.write(png_encode(image))
-              eye_sample['DATA'] = './eye_analysis/%s.png'%str(sample_id)
-              eye_sample['DATA_TYPE'] = 'IMAGE'
-            elif len(sample_data.shape) == 3:
-              image = sample_data.astype(np.uint8)
-              with open(os.path.join(dump_dir, 'eye_analysis','%s.png'%str(sample_id)), 'wb') as fp:
-                fp.write(png_encode(image))
-              eye_sample['DATA'] = './eye_analysis/%s.png'%str(sample_id)
-              eye_sample['DATA_TYPE'] = 'IMAGE'
-            else:
-              # TODO support multi images (gif)
-              pass
-          elif type(sample_data) == str:
+          if sample['data_type'] == 'IMAGE':
+            with open(os.path.join(dump_dir, 'eye_analysis', '%s.png' % str(sample_id)), 'wb') as fp:
+              fp.write(sample_data)
+            eye_sample['DATA'] = './eye_analysis/%s.png' % str(sample_id)
+            eye_sample['DATA_TYPE'] = 'IMAGE'
+          elif sample['data_type'] == 'STRING':
             eye_sample['DATA'] = sample_data
             eye_sample['DATA_TYPE'] = 'STRING'
             
           # 3.step warp gt to eye sample
-          if type(sample_category) == np.ndarray:
-            if len(sample_category.shape) == 2:
-              image = ((sample_category - np.min(sample_category)) / (np.max(sample_category) - np.min(sample_category)) * 255).astype(np.uint8)
-              
-              with open(os.path.join(dump_dir, 'eye_analysis', '%s_gt.png'%str(sample_id)), 'wb') as fp:
-                fp.write(png_encode(image))
-              eye_sample['GT'] = './eye_analysis/%s_gt.png'%str(sample_id)
-              eye_sample['GT_TYPE'] = 'IMAGE'
-            elif len(sample_category.shape) == 3:
-              image = sample_category.astype(np.uint8)
-              with open(os.path.join(dump_dir, 'eye_analysis','%s_gt.png'%str(sample_id)), 'wb') as fp:
-                fp.write(png_encode(image))
-              eye_sample['GT'] = './eye_analysis/%s_gt.png'%str(sample_id)
-              eye_sample['GT_TYPE'] = 'IMAGE'
-            else:
-              # TODO support multi images (gif)
-              pass
-          elif type(sample_data) == str:
-            eye_sample['GT'] = sample_data
+          if sample['category_type'] == 'IMAGE':
+            with open(os.path.join(dump_dir, 'eye_analysis', '%s_gt.png' % str(sample_id)), 'wb') as fp:
+              fp.write(sample_category)
+            eye_sample['GT'] = './eye_analysis/%s_gt.png' % str(sample_id)
+            eye_sample['GT_TYPE'] = 'IMAGE'
+          elif sample['category_type'] == 'STRING':
+            eye_sample['GT'] = sample_category
             eye_sample['GT_TYPE'] = 'STRING'
-          else:
-            continue
 
           eye_samples.append(eye_sample)
         
@@ -366,7 +344,7 @@ def _transform_statistic_to_visualization(statistic_info):
   return visualization_statistic_info
 
 
-def _transform_analysis_to_visualization(analysis_info):
+def _transform_analysis_to_visualization(analysis_info, dump_dir):
   analysis_vis_data = []
   # analysis-name, analysis-tag, analysis_data
   for data in analysis_info:
@@ -389,7 +367,25 @@ def _transform_analysis_to_visualization(analysis_info):
     region_samplings = analysis_data['sampling']
     region_samplings_vis = []
     for sampling in region_samplings:
-      region_samplings_vis.append({'name': sampling['name'], 'data': sampling['data']})
+      mmm = []
+      for sampling_data in sampling['data']:
+        if sampling_data['type'] == 'IMAGE':
+          if type(sampling_data) == str:
+            mmm.append({'data':'data:image/png;base64,%s'%sampling_data['data'], 'flag': '', 'type': sampling_data['type']})
+          else:
+            if not os.path.exists(os.path.join(dump_dir, 'statistic_analysis')):
+              os.makedirs(os.path.join(dump_dir, 'statistic_analysis'))
+
+            uuid_name = '%s.png' % str(uuid.uuid4())
+            with open(os.path.join(dump_dir, 'statistic_analysis', uuid_name), 'wb') as fp:
+              fp.write(sampling_data['data'])
+
+            mmm.append(
+              {'data': './statistic_analysis/%s'%uuid_name, 'flag': 'image_container', 'type': sampling_data['type']})
+        else:
+          mmm.append({'data': sampling_data['data'], 'type': sampling_data['type']})
+
+      region_samplings_vis.append({'name': sampling['name'], 'data': mmm})
 
     item['region_samplings'] = region_samplings_vis
     analysis_vis_data.append(item)
@@ -400,6 +396,8 @@ def _transform_analysis_to_visualization(analysis_info):
 def _transform_significant_to_visualization(sig_diffs):
   return sig_diffs
 
+
+import cv2
 
 if __name__ == '__main__':
   # experiment 1
@@ -451,14 +449,45 @@ if __name__ == '__main__':
   experiment_1_statis['aa']['eye']['MM'] = [{'id': 0, 'category': 'hello', 'score':0.2, 'tag':['A','B'], 'data': 'mma'},
                                             {'id': 3, 'category': 'miao', 'score': 0.4, 'tag':['C'], 'data': 'yYU'},
                                             {'id': 1, 'category': 'world', 'score':1.0, 'tag':['A'], 'data': 'UUI'}]
+
+
+  # analysis data
+  scores = np.random.randint(0,100,200)
+  scores = scores.reshape((2,100))
+
+  sample_index = list(range(100))
+  image = cv2.imread('/Users/jian/Downloads/owl1.jpg')
+  image = image[...,::-1]
+  # image = base64.b64encode(png_encode(image))
+  # image = image.decode('utf-8')
+  hr_samples = []
+  mr_samples = []
+  lr_samples = []
+  for _ in range(10):
+    hr_samples.append({'type': 'IMAGE', 'data': image})
+    mr_samples.append({'type': 'IMAGE', 'data': image})
+    lr_samples.append({'type': 'IMAGE', 'data': image})
+
+  experiment_1_statis['aa']['analysis'] = {}
+  experiment_1_statis['aa']['analysis']['AA']={}
+  experiment_1_statis['aa']['analysis']['AA']['Global']={
+    'value': scores,
+    'type': 'MATRIX',
+    'x': sample_index,
+    'y': ['12345.1231.134134521','20142312.1324.135234'],
+    'sampling': [{'name': 'High Score Region', 'data': hr_samples},
+                 {'name': 'Middle Score Region', 'data': mr_samples},
+                 {'name': 'Low Score Region', 'data': lr_samples}],
+  }
+
   #
   # import cv2
-  # mm = cv2.imread('/home/mi/1.png')
-  # mm = mm[...,::-1]
-  #
-  # experiment_1_statis['aa']['eye']['NN'] = [{'id': 0, 'category': mm, 'score':0.2, 'tag':['A','B'], 'data': mm},
-  #                                           {'id': 3, 'category': mm, 'score': 0.4, 'tag':['C'], 'data': mm},
-  #                                           {'id': 1, 'category': mm, 'score':1.0, 'tag':['A'], 'data': mm}]
+  mm = cv2.imread('/Users/jian/Downloads/owl1.jpg')
+  mm = mm[...,::-1]
+
+  experiment_1_statis['aa']['eye']['NN'] = [{'id': 0, 'category': mm, 'score':0.2, 'tag':['A','B'], 'data': mm},
+                                            {'id': 3, 'category': mm, 'score': 0.4, 'tag':['C'], 'data': mm},
+                                            {'id': 1, 'category': mm, 'score':1.0, 'tag':['A'], 'data': mm}]
   
   # # experiment 2
   # experiment_2_statis = {}
@@ -502,4 +531,4 @@ if __name__ == '__main__':
   # experiment_2_statis['aa']['measure'] = [voc_measure, roc_auc_measure, pr_f1_measure, confusion_m]
 
   # ss = multi_repeats_measures_statistic([experiment_1_statis, experiment_2_statis])
-  everything_to_html(experiment_1_statis, '/home/mi/HQA')
+  everything_to_html(experiment_1_statis, '/Users/jian/Downloads/')

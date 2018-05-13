@@ -50,35 +50,18 @@ class BaseHandler(tornado.web.RequestHandler):
   def port(self):
     return self.settings['port']
 
+  @property
+  def token(self):
+    return self.settings['token']
 
 class IndexHandler(BaseHandler):
   def get(self, experiment_id, user_id):
     session_id = self.get_cookie('sessionid')
     if session_id not in self.db['user']:
-      self.set_status(500)
-      self.finish()
-      return
-
-    if self.db['user'][session_id] != user_id:
-      self.set_status(500)
-      self.finish()
-      return
+      self.db['user'][session_id] = user_id
 
     # render page
     self.render(self.html_template, task={'title': self.task_name,})
-
-
-class RegisterHandler(BaseHandler):
-  def post(self):
-    sessionid = self.get_argument('sessionid', '')
-    contributer = self.get_argument('user')
-    if sessionid == '':
-      self.set_status(500)
-      self.finish()
-      return
-
-    self.db['user'][sessionid] = contributer
-    self.finish()
 
 
 class HeartBeatHandler(tornado.web.RequestHandler):
@@ -102,6 +85,7 @@ class ClientQuery(BaseHandler):
     client_query['QUERY_INDEX'] = int(self.get_argument('QUERY_INDEX', -1))
     client_query['QUERY_STATUS'] = self.get_argument('QUERY_STATUS', '')
 
+    # 1.step get process result
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
     socket.connect('ipc://%s'%self.totem)
@@ -109,7 +93,13 @@ class ClientQuery(BaseHandler):
     server_response = socket.recv_json()
     socket.close()
 
-    # return
+    # 2.step is over flag
+    if 'PAGE_STATUS' in server_response and server_response['PAGE_STATUS'] == 'STOP':
+      user_authorization = {'Authorization': "token " + self.token}
+      request_url = 'http://%s:%s/hub/api/crowdsource/%s/proxy' % (Config.server_ip, Config.server_port, experiment_id)
+      requests.delete(request_url, data={'user_name': user_id}, headers=user_authorization)
+
+    # 3.step return server response
     self.write(json.dumps(server_response))
 
 
@@ -188,11 +178,11 @@ def crowdsrouce_server_start(totem,
               'html_template':html_template,
               'cookie_secret': str(uuid.uuid4()),
               'port':server_port,
-              'db': {'user':{}}}
+              'db': {'user':{}},
+              'token': app_token}
     app = tornado.web.Application(handlers=[(r"/crowdsource/([^/]+)/user/([^/]+)/", IndexHandler),
                                             (r"/crowdsource/([^/]+)/user/([^/]+)/query", ClientQuery),
                                             (r"/heartbeat", HeartBeatHandler),
-                                            (r"/register/", RegisterHandler),
                                             (r"/.*/static/.*", PrefixRedirectHandler)],
                                   **settings)
     http_server = tornado.httpserver.HTTPServer(app)

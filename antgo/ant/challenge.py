@@ -18,6 +18,7 @@ from antgo.measures.significance import *
 import shutil
 import tarfile
 from datetime import datetime
+from antgo.measures import *
 
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
@@ -77,10 +78,10 @@ class AntChallenge(AntBase):
     now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
 
     # # ############
-    # ss = AntYesNoCrowdsource(running_ant_task, 'YESorNo')
-    # cc = RecordReader('/Users/jian/Downloads/pp')
+    # ss = AntYesNoCrowdsource(running_ant_task)
+    # cc = RecordReader('/Users/jian/PycharmProjects/antgo/antgo/dump/20180510.173726.453039/record')
     # ss.dump_dir = "/Users/jian/Downloads/mm/static"
-    # ss.experiment_id = now_time_stamp
+    # ss.experiment_id = '20180510.173031.823969'
     # ss.app_token = self.token
     # ss.crowdsource_server(cc)
     # ############
@@ -194,10 +195,30 @@ class AntChallenge(AntBase):
             result = measure.eva(record_generator, None)
             if measure.is_support_rank:
               # compute confidence interval
-              confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 50)
+              confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 1)
               result['statistic']['value'][0]['interval'] = confidence_interval
 
           evaluation_measure_result.append(result)
+
+
+        # #########################
+        # roc_auc_measure = {'statistic': {'name': 'roc_auc',
+        #                                  'value': [{'name': 'ROC', 'value': [[[0, 3], [1, 0], [2, 6]],
+        #                                                                      [[0, 8], [2, 3], [3, 7]]],
+        #                                             'type': 'CURVE', 'x': 'FP', 'y': 'TP',
+        #                                             'legend': ['class-0', 'class-1']},
+        #                                            {'name': 'AUC', 'value': [0.1, 0.2], 'type': 'SCALAR', 'x': 'class',
+        #                                             'y': 'AUC'}]}}
+        #
+        # voc_measure = {'statistic': {'name': 'voc',
+        #                              'value': [{'name': 'MAP', 'value': [18.0, 9.0, 20.0], 'type': 'SCALAR', 'x': 'class',
+        #                                         'y': 'Mean Average Precision'},
+        #                                        {'name': 'Mean-MAP', 'value': 0.14, 'type': 'SCALAR'}]}}
+        #
+        #
+        # evaluation_measure_result.append(roc_auc_measure)
+        # evaluation_measure_result.append(voc_measure)
+        # #########################
 
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
       
@@ -251,7 +272,7 @@ class AntChallenge(AntBase):
             for benchmark_model_name, benchmark_model_address in benchmark_model_record.items():
               with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
                 with safe_recorder_manager(RecordReader(benchmark_model_address)) as benchmark_record_reader:
-                  s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 50)
+                  s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 1)
 
                   significant_diff_score.append({'name': benchmark_model_name, 'score': s})
             task_running_statictic[self.ant_name]['significant_diff'][measure.name] = significant_diff_score

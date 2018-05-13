@@ -76,10 +76,7 @@ class AntBase(object):
     if ant_context is not None:
       self.ant_context = ant_context
       self.ant_context.ant = self
-    
-    # non mltalker task
-    self._is_non_mltalker_task = False
-    
+
   @property
   def zmq_socket(self):
     return self._zmq_socket
@@ -87,14 +84,7 @@ class AntBase(object):
   def zmq_socket(self, val):
     self._zmq_socket = val
     self._zmq_socket.connect(self.app_connect)
-  
-  @property
-  def is_non_mltalker_task(self):
-    return self._is_non_mltalker_task
-  @is_non_mltalker_task.setter
-  def is_non_mltalker_task(self, val):
-    self._is_non_mltalker_task = val
-  
+
   @property
   def zmq_file_socket(self):
     return self._zmq_file_socket
@@ -111,9 +101,6 @@ class AntBase(object):
     self._pid = val
   
   def send(self, data, stage):
-    if self.is_non_mltalker_task:
-      return
-    
     if self.app_token is not None:
       # now_time = datetime.now().timestamp()
       now_time = timestamp()
@@ -153,9 +140,6 @@ class AntBase(object):
         self.send_record(record_data, stage)
   
   def send_record(self, data, stage):
-    if self.is_non_mltalker_task:
-      return
-    
     if self.app_token is not None:
       # format: token, stage, time_stamp, now_time_stamp, block_id, block_size, max_block_size, block
       # 1.step uuid
@@ -212,9 +196,6 @@ class AntBase(object):
         os.remove(temp_tar_file_path)
 
   def send_file(self, file_path, name, stage, mode, target_name):
-    if self.is_non_mltalker_task:
-      return
-    
     # 1.step whether file_path exist
     if not os.path.isfile(file_path):
       return False

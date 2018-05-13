@@ -102,10 +102,8 @@ class AntCmd(AntBase):
 
   def process_experiment_command(self):
     experiment_id = FLAGS.id()
-    experiment_new_name = FLAGS.name()
     experiment_download_model = FLAGS.model()
     experiment_download_report = FLAGS.report()
-    experiment_set_optimum = FLAGS.optimum()
 
     if experiment_id is None:
       experiment_id = -1
