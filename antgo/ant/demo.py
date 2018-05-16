@@ -133,11 +133,13 @@ class AntDemo(AntBase):
                                             self.support_user_upload,
                                             self.support_user_input,
                                             self.support_user_interaction,
+                                            self.support_upload_formats,
                                             infer_dump_dir,
                                             self.html_template,
                                             self.demo_port,
                                             demo_dataset.data_queue,
-                                            self.context.recorder.writer_queue))
+                                            self.context.recorder.writer_queue,
+                                            os.getpid()))
     process.daemon = True
     process.start()
 
@@ -146,10 +148,16 @@ class AntDemo(AntBase):
     ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
     for b in ablation_blocks:
       self.ant_context.deactivate_block(b)
-
-    try:
-      self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
-    except:
-      os.kill(process.pid, signal.SIGKILL)
-      logger.error('model infer error, exit')
-
+    
+    try_count = 0
+    while True:
+      try:
+        self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
+      except:
+        try_count += 1
+        logger.error('model infer error, trying again ... (%d)'%try_count)
+        
+      if try_count >= 5:
+        logger.error('trying count is over 5, stop ...')
+        break
+  

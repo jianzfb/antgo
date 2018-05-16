@@ -119,6 +119,15 @@ def densenet(inputs,
 
             # initial convolution
             net = slim.conv2d(net, num_filters, 7, stride=2, scope='conv1')
+            # with tf.variable_scope('root_ext', 'root_ext'):
+            #   root_weight_ext = tf.get_variable('weights', (7, 7, 1, 64), dtype=tf.float32,
+            #     initializer=tf.zeros_initializer())
+            #
+            # with tf.variable_scope('conv1', 'conv1', [net]):
+            #   root_weight = tf.get_variable('weights', (7, 7, 3, 64), dtype=tf.float32)
+            #   weight = tf.concat((root_weight, root_weight_ext), axis=2)
+            #   net = tf.nn.conv2d(net, weight, strides=(1,2,2,1), padding='SAME')
+
             net = slim.batch_norm(net)
             net = tf.nn.relu(net)
             end_points['densenet121/root_block'] = net

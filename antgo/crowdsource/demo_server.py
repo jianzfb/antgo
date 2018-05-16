@@ -51,6 +51,10 @@ class BaseHandler(tornado.web.RequestHandler):
   @property
   def demo_support_user_interaction(self):
     return self.settings.get('support_user_interaction', False)
+  
+  @property
+  def demo_support_upload_formats(self):
+    return self.settings.get('support_upload_formats', '')
 
   @property
   def demo_support_user_comment(self):
@@ -195,13 +199,28 @@ class IndexHandler(BaseHandler):
     if os.path.exists(history_folder):
       for f in os.listdir(history_folder):
         ext_name = f.split('.')[-1]
-        if ext_name.lower() in ['jpg', 'jpeg', 'png']:
+        if ext_name.lower() in ['jpg', 'jpeg', 'png', 'gif']:
           image_history_data.append('/static/input/%s'%f)
-
+    
+    input_filter = ''
+    for support_format in self.demo_support_upload_formats.split(','):
+      if support_format.lower() in ['jpg', 'jpeg', 'png', 'gif']:
+        input_filter += 'image/%s,'%support_format.lower()
+      elif support_format.lower() in ['mp4']:
+        input_filter += 'video/%s,'%support_format.lower()
+      elif support_format.lower() in ['mp3', 'wav']:
+        input_filter += 'audio/%s,'%support_format.lower()
+      else:
+        input_filter += '%s,'%support_format.lower()
+    
+    if len(input_filter) > 0:
+      input_filter = input_filter[0:-1]
+      
     self.render(self.html_template, demo={'name': self.demo_name,
                                           'type': self.demo_type,
                                           'description': self.demo_description,
                                           'upload': self.demo_support_user_upload,
+                                          'upload_accept': input_filter,
                                           'input': self.demo_support_user_input,
                                           'image_history': image_history_data})
 
@@ -317,11 +336,13 @@ def demo_server_start(demo_name,
                       support_user_upload,
                       support_user_input,
                       support_user_interaction,
+                      support_upload_formats,
                       demo_dump_dir,
                       html_template,
                       server_port,
                       demo_data_queue,
-                      demo_result_queue):
+                      demo_result_queue,
+                      parent_id):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
   
@@ -368,6 +389,7 @@ def demo_server_start(demo_name,
       'support_user_upload': support_user_upload,
       'support_user_input': support_user_input,
       'support_user_interaction': support_user_interaction,
+      'support_upload_formats': support_upload_formats,
     }
     app = tornado.web.Application(handlers=[(r"/", IndexHandler),
                                             (r"/demo", IndexHandler),
@@ -385,5 +407,7 @@ def demo_server_start(demo_name,
   except GracefulExitException:
     logger.info('demo server exit')
     sys.exit(0)
+  except KeyboardInterrupt:
+    os.kill(parent_id, signal.SIGKILL)
     
 # demo_server_start('world','IMAGE_SEGMENTATION','/Users/jian/Downloads/ww',None,6990)

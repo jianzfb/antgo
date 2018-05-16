@@ -487,7 +487,7 @@ class AntChallenge(AntBase):
                   task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
 
       # notify
-      self.context.job.send({'DATA': {'REPORT': copy.deepcopy(task_running_statictic), 'RECORD': intermediate_dump_dir}})
+      self.context.job.send({'DATA': {'REPORT': copy.deepcopy(task_running_statictic)}})
 
       # generate report resource
       logger.info('generate model evaluation report')

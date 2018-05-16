@@ -650,7 +650,7 @@ table th {
                   <button id="demo_browser" class="btn btn-default btn-white-to-blue" type="button" onclick="browser()">
                       <i class="fa fa-cloud-upload"></i>Browser
                   </button>
-                  <input id="file_browser" name="file" type="file" accept="image/png, image/jpeg, image/jpg">
+                  <input id="file_browser" name="file" type="file" accept="{{demo['upload_accept']}}">
                   {%end%}
               </span>
           </div><!-- /input-group -->
