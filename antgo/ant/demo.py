@@ -64,6 +64,7 @@ class AntDemo(AntBase):
     self.support_user_upload = kwargs.get('support_user_upload', False)
     self.support_user_input = kwargs.get('support_user_input', False)
     self.support_user_interaction = kwargs.get('support_user_interaction', False)
+    self.support_upload_formats = kwargs.get('support_upload_formats', None)
 
   def start(self):
     # 0.step loading demo task

@@ -21,6 +21,7 @@ import numpy as np
 from antgo.utils.fs import *
 from antgo.utils.encode import *
 from PIL import Image
+import imageio
 import uuid
 import signal
 
@@ -83,25 +84,43 @@ class BaseHandler(tornado.web.RequestHandler):
         # transform to image and save
         if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
           os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
-      
+        
+        is_image = True
+        image = None
         if len(v.shape) == 2:
           image = ((v - np.min(v)) / (np.max(v) - np.min(v)) * 255).astype(np.uint8)
         elif len(v.shape) == 3:
           image = v.astype(np.uint8)
         else:
-          # TODO support muti images (gif)
-          continue
-        
-        if k == 'RESULT':
-          with open(os.path.join(self.demo_dump, 'static', 'output', '%s.png' % uuid_flag), 'wb') as fp:
-            fp.write(png_encode(image))
-        
-          demo_response['DATA'].update({'RESULT': {'DATA': '/static/output/%s.png' % uuid_flag, 'TYPE': 'IMAGE'}})
+          is_image = False
+          assert(len(v.shape) == 4)
+          
+          # split images along axis=0
+          image = np.split(v, v.shape[0], 0)
+          if v.dtype != np.uint8:
+            for index in range(len(image)):
+              min_v = np.min(image[index])
+              max_v = np.max(image[index])
+              image[index] = ((image[index] - min_v)/(max_v - min_v) * 255).astype(np.uint8)
+          
+        if is_image:
+          if k == 'RESULT':
+            with open(os.path.join(self.demo_dump, 'static', 'output', '%s.png' % uuid_flag), 'wb') as fp:
+              fp.write(png_encode(image))
+          
+            demo_response['DATA'].update({'RESULT': {'DATA': '/static/output/%s.png' % uuid_flag, 'TYPE': 'IMAGE'}})
+          else:
+            with open(os.path.join(self.demo_dump, 'static', 'output', '%s_%s.png' % (uuid_flag, str(k))), 'wb') as fp:
+              fp.write(png_encode(image))
+    
+            demo_response['DATA'].update({str(k): {'DATA': '/static/output/%s_%s.png' % (uuid_flag, str(k)), 'TYPE': 'IMAGE'}})
         else:
-          with open(os.path.join(self.demo_dump, 'static', 'output', '%s_%s.png' % (uuid_flag, str(k))), 'wb') as fp:
-            fp.write(png_encode(image))
-  
-          demo_response['DATA'].update({str(k): {'DATA': '/static/output/%s_%s.png' % (uuid_flag, str(k)), 'TYPE': 'IMAGE'}})
+          if k == 'RESULT':
+            imageio.mimsave(os.path.join(self.demo_dump, 'static', 'output', '%s.gif' % uuid_flag), image)
+            demo_response['DATA'].update({'RESULT': {'DATA': '/static/output/%s.gif' % uuid_flag, 'TYPE': 'IMAGE'}})
+          else:
+            demo_response['DATA'].update(
+              {str(k): {'DATA': '/static/output/%s_%s.gif' % (uuid_flag, str(k)), 'TYPE': 'IMAGE'}})
       elif type(v) == str:
         demo_response['DATA'].update({k: {'DATA':v, 'TYPE': 'STRING'}})
       else:
@@ -137,6 +156,16 @@ class BaseHandler(tornado.web.RequestHandler):
         img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
         img_data = img_data.reshape((image_data.size[1], image_data.size[0], len(image_data.getbands())))
         return img_data, data_name, 'IMAGE'
+      elif ext_name in ['mp4']:
+        reader = imageio.get_reader(data_path)
+        image_list = []
+        for im in reader:
+          img_data = np.fromstring(im.tobytes(), dtype=np.uint8)
+          img_data = img_data.reshape((img_data.shape[0], img_data.shape[1], img_data.shape[2]))
+          image_list.append(np.expand_dims(img_data,0))
+          
+          image_volume = np.vstack(image_list)
+          return image_volume, data_name, 'VIDEO'
       else:
         #TODO: support video and sound
         logger.warn('dont support file type %s'%ext_name)

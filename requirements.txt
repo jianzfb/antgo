@@ -16,3 +16,4 @@ tornado
 beautifulsoup4
 python-rocksdb
 ipfsapi
+imageio

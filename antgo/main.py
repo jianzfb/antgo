@@ -54,6 +54,7 @@ flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_indicator('support_user_upload', '')
 flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
+flags.DEFINE_string('support_upload_formats', None, '')
 flags.DEFINE_indicator('skip_training', '')
 #############################################
 ########  tools - tffrozen            #######
@@ -285,7 +286,8 @@ def main():
                               time_stamp=time_stamp,
                               support_user_upload=FLAGS.support_user_upload(),
                               support_user_input=FLAGS.support_user_input(),
-                              support_user_interaction=FLAGS.support_user_interaction())
+                              support_user_interaction=FLAGS.support_user_interaction(),
+                              support_upload_formats=FLAGS.support_upload_formats())
 
     running_process.start()
   elif ant_cmd == 'dataset':

@@ -396,9 +396,6 @@ def _transform_analysis_to_visualization(analysis_info, dump_dir):
 def _transform_significant_to_visualization(sig_diffs):
   return sig_diffs
 
-
-import cv2
-
 if __name__ == '__main__':
   # experiment 1
   experiment_1_statis = {}

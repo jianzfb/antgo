@@ -15,7 +15,6 @@ from __future__ import print_function, unicode_literals
 import re
 import subprocess
 from textwrap import dedent
-from antgo.dataflow.core import Input, Node
 import collections
 from antgo.utils.serialize import *
 
