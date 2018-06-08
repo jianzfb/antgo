@@ -101,6 +101,9 @@ class BaseHandler(tornado.web.RequestHandler):
           
           # split images along axis=0
           image = np.split(v, v.shape[0], 0)
+          for index, image_data in enumerate(image):
+            image[index] = np.squeeze(image_data, 0)
+
           if v.dtype != np.uint8:
             for index in range(len(image)):
               min_v = np.min(image[index])
@@ -120,11 +123,21 @@ class BaseHandler(tornado.web.RequestHandler):
             demo_response['DATA'].update({str(k): {'DATA': '/static/output/%s_%s.png' % (uuid_flag, str(k)), 'TYPE': 'IMAGE'}})
         else:
           if k == 'RESULT':
-            imageio.mimsave(os.path.join(self.demo_dump, 'static', 'output', '%s.gif' % uuid_flag), image)
-            demo_response['DATA'].update({'RESULT': {'DATA': '/static/output/%s.gif' % uuid_flag, 'TYPE': 'IMAGE'}})
+            video_path = os.path.join(self.demo_dump, 'static', 'output', '%s.mp4' % uuid_flag)
+            writer = imageio.get_writer(video_path, fps=30)
+            for im in image:
+              writer.append_data(im)
+            writer.close()
+            
+            demo_response['DATA'].update({'RESULT': {'DATA': '/static/output/%s.mp4'%uuid_flag, 'TYPE': 'VIDEO'}})
           else:
-            demo_response['DATA'].update(
-              {str(k): {'DATA': '/static/output/%s_%s.gif' % (uuid_flag, str(k)), 'TYPE': 'IMAGE'}})
+            video_path = os.path.join(self.demo_dump, 'static', 'output', '%s_%s.mp4' % (uuid_flag, str(k)))
+            writer = imageio.get_writer(video_path, fps=30)
+            for im in image:
+              writer.append_data(im)
+            writer.close()
+            
+            demo_response['DATA'].update({str(k): {'DATA': '/static/output/%s_%s.mp4'%(uuid_flag, str(k)), 'TYPE': 'VIDEO'}})
       elif type(v) == str:
         demo_response['DATA'].update({k: {'DATA':v, 'TYPE': 'STRING'}})
       else:
@@ -165,11 +178,11 @@ class BaseHandler(tornado.web.RequestHandler):
         image_list = []
         for im in reader:
           img_data = np.fromstring(im.tobytes(), dtype=np.uint8)
-          img_data = img_data.reshape((img_data.shape[0], img_data.shape[1], img_data.shape[2]))
+          img_data = img_data.reshape((im.shape[0], im.shape[1], im.shape[2]))
           image_list.append(np.expand_dims(img_data,0))
           
-          image_volume = np.vstack(image_list)
-          return image_volume, data_name, 'VIDEO'
+        image_volume = np.vstack(image_list)
+        return image_volume, data_name, 'VIDEO'
       else:
         #TODO: support video and sound
         logger.warn('dont support file type %s'%ext_name)

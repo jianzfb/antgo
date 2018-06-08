@@ -523,8 +523,20 @@ table th {
                         demo_response['DATA']);
 
                     if(demo_response['INPUT_TYPE'] == 'IMAGE'){
-                        $('#demo_input_image').attr('src', demo_response['INPUT']);
+                        $('#demo_input_image').empty()
+                        $('#demo_input_image').append('<img src="{0}" style="width:100%;">'.format(demo_response['INPUT']))
                     }
+                    else if(demo_response['INPUT_TYPE'] == 'VIDEO'){
+                        $('#demo_input_image').empty()
+                        var video_html = '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(demo_response['INPUT'],demo_response['INPUT'])
+                        $('#demo_input_image').append(video_html)
+                    }
+                    else if(demo_response['INPUT_TYPE'] == 'AUDIO'){
+                        $('#demo_input_image').empty();
+                        var audio_html = '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(demo_response['INPUT'])
+                        $('#demo_input_image').append(audio_html)
+                    }
+
                 });
             })
             // submit user input
@@ -550,8 +562,22 @@ table th {
                         show_demo_response('feature-table',
                             demo_response['DATA']);
 
+                        <!--if(demo_response['INPUT_TYPE'] == 'IMAGE'){-->
+                            <!--$('#demo_input_image').attr('src', demo_response['INPUT']);-->
+                        <!--}-->
+
                         if(demo_response['INPUT_TYPE'] == 'IMAGE'){
-                            $('#demo_input_image').attr('src', demo_response['INPUT']);
+                            $('#demo_input_image').find('img').attr('src', demo_response['INPUT'])
+                        }
+                        else if(demo_response['INPUT_TYPE'] == 'VIDEO'){
+                            $('#demo_input_image').empty()
+                            var video_html = '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(demo_response['INPUT'],demo_response['INPUT'])
+                            $('#demo_input_image').append(video_html)
+                        }
+                        else if(demo_response['INPUT_TYPE'] == 'AUDIO'){
+                            $('#demo_input_image').empty();
+                            var audio_html = '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(demo_response['INPUT'])
+                            $('#demo_input_image').append(audio_html)
                         }
                     }
                 })
@@ -577,7 +603,7 @@ table th {
             })
             
             $('#demo_input_image').on('click', function () {
-                $("#bigger_image_container").html("<image src='"+$(this).attr('src') +"' class='carousel-inner img-responsive img-rounded' />");
+                $("#bigger_image_container").html("<image src='"+$(this).find('img').attr('src') +"' class='carousel-inner img-responsive img-rounded' />");
                 $("#bigger_image_modal").modal();
             })
         })
@@ -629,8 +655,8 @@ table th {
           </p>
       </div>
       <div class="row">
-          <div class="col-md-6 demo-image-warp">
-              <img id='demo_input_image' src="holder.js/512x430?text=?" style="width:100%;">
+          <div id='demo_input_image' class="col-md-6 demo-image-warp">
+              <img src="holder.js/512x430?text=?" style="width:100%;">
           </div>
           <div class="col-md-6">
               <div id="feature-table" class="demo-result-warp">

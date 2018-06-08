@@ -478,7 +478,7 @@ class TFTrainer(Trainer):
           data = next(data_generator)
   
           for k, v in binds.items():
-            placeholder_tensor = self.graph.get_tensor_by_name('{}{}:0'.format(clone.scope, k))
+            placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format('input', k))
             feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
 
       # increment
