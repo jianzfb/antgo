@@ -10,7 +10,6 @@ from antgo.ant.base import *
 from antgo.ant import flags
 from antgo.ant.challenge import *
 from antgo.ant.train import *
-from antgo.ant.deploy import *
 from antgo.ant.template import *
 from antgo.ant.utils import *
 from antgo.resource.html import *

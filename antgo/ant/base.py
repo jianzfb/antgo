@@ -24,6 +24,8 @@ from antgo.ant.utils import *
 import yaml
 from antgo.utils.utils import *
 from datetime import datetime
+from antgo.ant.subgradientrpc import *
+from qiniu import Auth, put_file, etag, urlsafe_base64_encode
 if sys.version > '3':
   PY3 = True
 else:
@@ -42,7 +44,9 @@ class AntBase(object):
     self.app_token = os.environ.get('APP_TOKEN', ant_token)
     self.app_connect = os.environ.get('APP_CONNECT', 'tcp://%s:%s' % (self.server_ip, '2345'))
     self.app_file_connect = os.environ.get('APP_FILE_CONNECT', 'tcp://%s:%s' % (self.server_ip, '2346'))
-    
+
+    self.subgradientserver = getattr(Config, 'subgradientserver', {})
+
     # three key info
     if 'main_file' in kwargs:
       self.main_file = kwargs['main_file']
@@ -70,6 +74,55 @@ class AntBase(object):
     self.app_server = self.__class__.__name__
     if not PY3:
       self.app_server = unicode(self.app_server)
+
+    # subgradient rpc
+    self.subgradient_rpc = SubgradientRPC(self.subgradientserver['subgradientserver_ip'], self.subgradientserver['subgradientserver_port'])
+
+    # parse hardware resource config
+    self._running_config = {'GPU_MODEL': '',
+                            'GPU_NUM': 0,
+                            'GPU_MEM': 0,
+                            'CPU_MODEL': '',
+                            'CPU_NUM': 0,
+                            'CPU_MEM': 0,
+                            'OS_PLATFORM': '',
+                            'OS_VERSION': '',
+                            'SOFTWARE_FRAMEWORK': '',
+                            'DATASET': ''}
+
+    config_params = ant_context.params._params
+    if 'RUNNING_CONFIG' in config_params:
+      if 'GPU_MODEL' in config_params['RUNNING_CONFIG']:
+        self._running_config['GPU_MODEL'] = config_params['RUNNING_CONFIG']['GPU_MODEL']
+
+      if 'GPU_NUM' in config_params['RUNNING_CONFIG']:
+        self._running_config['GPU_NUM'] = config_params['RUNNING_CONFIG']['GPU_NUM']
+
+      if 'GPU_MEM' in config_params['RUNNING_CONFIG']:
+        self._running_config['GPU_MEM'] = config_params['RUNNING_CONFIG']['GPU_MEM']
+
+      if 'CPU_MODEL' in config_params['RUNNING_CONFIG']:
+        self._running_config['CPU_MODEL'] = config_params['RUNNING_CONFIG']['CPU_MODEL']
+
+      if 'CPU_NUM' in config_params['RUNNING_CONFIG']:
+        self._running_config['CPU_NUM'] = config_params['RUNNING_CONFIG']['CPU_NUM']
+
+      if 'CPU_MEM' in config_params['RUNNING_CONFIG']:
+        self._running_config['CPU_MEM'] = config_params['RUNNING_CONFIG']['CPU_MEM']
+
+      if 'OS_PLATFORM' in config_params['RUNNING_CONFIG']:
+        self._running_config['OS_PLATFORM'] = config_params['RUNNING_CONFIG']['OS_PLATFORM']
+
+      if 'OS_VERSION' in config_params['RUNNING_CONFIG']:
+        self._running_config['OS_VERSION'] = config_params['RUNNING_CONFIG']['OS_VERSION']
+
+      if 'SOFTWARE_FRAMEWORK' in config_params['RUNNING_CONFIG']:
+        self._running_config['SOFTWARE_FRAMEWORK'] = config_params['RUNNING_CONFIG']['SOFTWARE_FRAMEWORK']
+
+      if 'DATASET' in config_params['RUNNING_CONFIG']:
+        self._running_config['DATASET'] = config_params['RUNNING_CONFIG']['DATASET']
+
+    self._running_platform = kwargs['running_platform']    # local, cloud
 
     # core
     self.ant_context = None
@@ -99,7 +152,81 @@ class AntBase(object):
   @pid.setter
   def pid(self, val):
     self._pid = val
-  
+
+  @property
+  def running_config(self):
+    return self._running_config
+
+  @property
+  def running_platform(self):
+    return self._running_platform
+
+  def _recursive_tar(self, root_path, path, tar, ignore=None):
+    if path.split('/')[-1][0] == '.':
+      return
+
+    if os.path.isdir(path):
+      for sub_path in os.listdir(path):
+        self._recursive_tar(root_path, os.path.join(path, sub_path), tar)
+    else:
+      if ignore is not None:
+        if path.split('/')[-1] == ignore:
+          return
+      arcname = os.path.relpath(path, root_path)
+      tar.add(path, arcname=arcname)
+
+  def package_codebase(self, prefix='qiniu'):
+    logger.info('package antgo codebase')
+    code_tar_path = os.path.join(self.main_folder, 'code.tar.gz')
+    tar = tarfile.open(code_tar_path, 'w:gz')
+    for sub_path in os.listdir(self.main_folder):
+      self._recursive_tar(self.main_folder,
+                          os.path.join(self.main_folder, sub_path),
+                          tar,
+                          ignore='code.tar.gz')
+    tar.close()
+    logger.info('finish package')
+    if prefix == 'qiniu':
+      logger.info('upload codebase package')
+      access_key = 'ZSC-X2p4HG5uvEtfmn5fsTZ5nqB3h54oKjHt0tU6'
+      secret_key = 'Ya8qYwIDXZn6jSJDMz_ottWWOZqlbV8bDTNfCGO0'
+      q = Auth(access_key, secret_key)
+      key = 'code.tar.gz'
+      token = q.upload_token('image', key, 3600)
+      ret, info = put_file(token, key, code_tar_path)
+      if ret['key'] == key and ret['hash'] == etag(code_tar_path):
+        logger.info('finish upload')
+        return 'qiniu:http://otcf1mj36.bkt.clouddn.com/%s'%key
+      else:
+        logger.info('fail upload')
+        return None
+    elif prefix == 'ipfs':
+      pass
+    elif prefix == 'baidu':
+      pass
+
+    return None
+
+  def register_ant(self, codebase_address, running_config, server_config={}):
+    request_url = '%s://%s:%d/api/aifactory/register'%(self.http_prefix, self.server_ip, self.http_port)
+
+    data_str = json.dumps({'CODE_BASE': codebase_address,
+                           'RUNNING_CONFIG': running_config,
+                           'SERVER_CONFIG': server_config})
+    response = requests.post(request_url, {'DATA': data_str})
+
+    if response is None:
+      return None
+
+    if response.status_code in [200, 201]:
+      result = json.loads(response.content)
+      return result
+    else:
+      return None
+
+  def submit_ant(self, codebase_address, running_config, server_config={}):
+    pass
+
   def send(self, data, stage):
     if self.app_token is not None:
       # now_time = datetime.now().timestamp()

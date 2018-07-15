@@ -37,6 +37,105 @@ class AntChallenge(AntBase):
     self.ant_task_benchmark = ant_task_benchmark
 
   def start(self):
+    if self.running_platform == 'edge':
+      # 1.step pack codebase
+      codebase_address = self.package_codebase()
+
+      # 2.step apply computing pow
+      computing_pow = {}
+      if FLAGS.order_id() == '':
+        computing_pow = self.subgradient_rpc.make_computingpow_order(FLAGS.max_time()[0:-1],
+                                                              self.running_config['OS_PLATFORM'],
+                                                              self.running_config['OS_VERSION'],
+                                                              self.running_config['SOFTWARE_FRAMEWORK'],
+                                                              self.running_config['CPU_MODEL'],
+                                                              self.running_config['CPU_NUM'],
+                                                              self.running_config['CPU_MEM'],
+                                                              self.running_config['GPU_MODEL'],
+                                                              self.running_config['GPU_NUM'],
+                                                              self.running_config['GPU_MEM'],
+                                                              self.running_config['DATASET'],
+                                                              FLAGS.max_fee())
+        if computing_pow is None:
+          logger.error('fail to find matched computing pow')
+          return
+
+        logger.info('success to apply computing pow order %s (%s:(rpc)%s or (ssh)%s)'%(computing_pow['order_id'],
+                                                                                       computing_pow['order_ip'],
+                                                                                       str(computing_pow['order_rpc_port']),
+                                                                                       str(computing_pow['order_ssh_port'])))
+
+      else:
+        computing_pow = {'order_id': FLAGS.order_id(),
+                         'order_ip': FLAGS.order_ip(),
+                         'order_rpc_port': FLAGS.order_rpc_port(),
+                         'order_ssh_port': FLAGS.order_ssh_port()}
+
+        if computing_pow['order_ip'] == '' or computing_pow['order_rpc_port'] == 0:
+          logger.error('order_ip is empty or order_rpc_port is empty')
+          return
+
+      # 3.step exchange access token
+      secret, signature = self.subgradient_rpc.signature(computing_pow['order_id'])
+      result = self.subgradient_rpc.authorize(computing_pow['order_ip'],
+                                              computing_pow['order_rpc_port'],
+                                              order_id=computing_pow['order_id'],
+                                              secret=secret,
+                                              signature=signature)
+
+      if result['authorize'] != 'success':
+        logger.error('couldnt authorize order access token')
+        return
+
+      order_access_token = result['access_token']
+      order_launch_time = result['launch_time']
+      order_rental_time = result['rental_time']
+
+      logger.info('computing pow rental time is %0.2f Hour, its expire time is %s'%(order_rental_time,
+                                                                                    time.strftime('%Y-%m-%d %H:%M:%S',
+                                                                                                  time.localtime(order_launch_time + order_rental_time * 60 * 60))))
+
+      remote_cmd = ''
+      if self.app_token is not None:
+        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --token=%s'%(
+          self.main_file, self.main_param, self.app_token)
+      else:
+        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --task=%s'%(
+          self.main_file, self.main_param, FLAGS.task())
+      self.subgradient_rpc.launch(computing_pow['order_ip'],
+                                  computing_pow['order_rpc_port'],
+                                  access_token=order_access_token,
+                                  cmd=remote_cmd,
+                                  code_address=codebase_address)
+
+      while True:
+        time.sleep(5)
+        status_response = self.subgradient_rpc.status(computing_pow['order_ip'],
+                                                      computing_pow['order_rpc_port'],
+                                                      access_token=order_access_token)
+
+        if result['authorize'] == 'fail':
+          # try refresh access token
+          refresh_result = self.subgradient_rpc.refresh(computing_pow['order_ip'],
+                                                        computing_pow['order_rpc_port'],
+                                                        access_token=order_access_token)
+
+          if refresh_result['authorize'] == 'fail':
+            logger.error('%s on computing pow server'%refresh_result['reason'])
+            return
+
+          order_access_token = refresh_result['refresh_access_token']
+        else:
+          logger.info('computing pow order is %s'%status_response['result'])
+
+          if status_response['result'] == 'running':
+            logger.info('you can access computing pow by \"ssh -p %d %s@%s\"'%(int(computing_pow['order_ssh_port']),
+                                                                               computing_pow['order_id'],
+                                                                               computing_pow['order_ip']))
+            return
+
+
+
     # 0.step loading challenge task
     running_ant_task = None
     if self.token is not None:

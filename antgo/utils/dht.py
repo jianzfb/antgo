@@ -276,6 +276,9 @@ def experiment_upload_dht(dump_dir, experiment, pwd, token):
     if token is None:
       return
 
+    if not os.path.exists(os.path.join(dump_dir, experiment)):
+      return
+
     import ipfsapi
     # 1.step tar all files
     tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (experiment, pwd)

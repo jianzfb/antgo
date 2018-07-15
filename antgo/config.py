@@ -20,6 +20,17 @@ class _Config(object):
     root = tree.getroot()
 
     for child in root:
+      if child.tag == 'subgradientserver':
+        subgradientserver_config = {}
+        for subgradientserver_child in child:
+          val = subgradientserver_child.text.strip() if subgradientserver_child.text is not None else None
+          if subgradientserver_child.tag == 'subgradientserver_port':
+            val = int(val)
+          subgradientserver_config[subgradientserver_child.tag] = val
+
+        setattr(self, child.tag, subgradientserver_config)
+        continue
+
       val = child.text.strip() if child.text is not None else None
       setattr(self, child.tag, val)
 

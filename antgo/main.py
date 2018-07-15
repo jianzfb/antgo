@@ -29,7 +29,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "deploy", "dataset", "template", "demo", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "dataset", "template", "demo", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -44,7 +44,7 @@ flags.DEFINE_boolean('local', False, 'cloud or local')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('platform', 'local', 'local or cloud')
-flags.DEFINE_string('sandbox_time', None, 'max running time')
+flags.DEFINE_string('max_time', '10h', 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
@@ -56,6 +56,12 @@ flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
 flags.DEFINE_string('support_upload_formats', None, '')
 flags.DEFINE_indicator('skip_training', '')
+flags.DEFINE_string('running_platform', 'local','')
+flags.DEFINE_string('order_id', '', '')
+flags.DEFINE_string('order_ip', '', '')
+flags.DEFINE_integer('order_rpc_port', 0, '')
+flags.DEFINE_integer('order_ssh_port', 0, '')
+flags.DEFINE_float('max_fee', 0.0, '')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -179,7 +185,11 @@ def main():
   # 8.1 step what is task
   task = FLAGS.task()
   if task is not None:
-    task = os.path.join(task_factory, task)
+    if os.path.exists(os.path.join(task_factory, task)):
+      task = os.path.join(task_factory, task)
+    else:
+      task = os.path.join(main_folder, task)
+
   dataset = FLAGS.dataset()
   if task is None and dataset is not None:
     # build default task
@@ -243,7 +253,7 @@ def main():
     return
   
   if ant_cmd == "train":
-    sandbox_time = FLAGS.sandbox_time()
+    sandbox_time = FLAGS.max_time()
     with running_sandbox(sandbox_time=sandbox_time,
                          sandbox_dump_dir=dump_dir,
                          sandbox_experiment=name,
@@ -258,7 +268,8 @@ def main():
                                  main_folder=main_folder,
                                  main_param=main_param,
                                  time_stamp=time_stamp,
-                                 skip_training=FLAGS.skip_training())
+                                 skip_training=FLAGS.skip_training(),
+                                 running_platform=FLAGS.running_platform())
       running_process.start()
   elif ant_cmd == 'challenge':
     running_process = AntChallenge(ant_context,
@@ -271,10 +282,9 @@ def main():
                                    main_file=main_file,
                                    main_folder=main_folder,
                                    main_param=main_param,
-                                   time_stamp=time_stamp)
+                                   time_stamp=time_stamp,
+                                   running_platform=FLAGS.running_platform())
     running_process.start()
-  elif ant_cmd == "deploy":
-    pass
   elif ant_cmd == "demo":
     running_process = AntDemo(ant_context,
                               name,

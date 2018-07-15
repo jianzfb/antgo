@@ -3,4 +3,8 @@
     <factory>/home/factory</factory>
     <server_ip>www.mltalker.com</server_ip>
     <server_port>8999</server_port>
+    <subgradientserver>
+        <subgradientserver_ip>127.0.0.1</subgradientserver_ip>
+        <subgradientserver_port>9880</subgradientserver_port>
+    </subgradientserver>
 </antgo>
