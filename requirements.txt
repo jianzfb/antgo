@@ -18,3 +18,4 @@ python-rocksdb
 ipfsapi
 imageio
 qiniu
+pycryptodome
