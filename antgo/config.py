@@ -35,8 +35,8 @@ class _Config(object):
       setattr(self, child.tag, val)
 
       if child.tag == 'factory':
-        setattr(self, 'data_factory', os.path.join(val, 'antgo-dataset'))
-        setattr(self, 'task_factory', os.path.join(val, 'antgo-task'))
+        setattr(self, 'data_factory', os.path.join(val, 'dataset'))
+        setattr(self, 'task_factory', os.path.join(val, 'task'))
 
       self._attribs[child.tag] = val
 
