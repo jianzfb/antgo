@@ -17,7 +17,7 @@ from antgo.dataflow.basic import *
 from antgo.utils.serialize import *
 import numpy as np
 import shutil
-
+from antgo.ant.warehouse import *
 
 from antgo import config
 PYTHON_VERSION = sys.version_info[0]
@@ -108,18 +108,28 @@ def dataset_upload_dht(dataset_name, data_generators, dump_dir):
 
   # upload to dht
   short_dir = dump_dir.split('/')[-1]
-  s = subprocess.Popen('ipfs add -r %s'%short_dir,
-                       shell=True,
-                       cwd='/'.join(dump_dir.split('/')[0:-1]), stdout=subprocess.PIPE)
-  result = s.communicate()[0].decode()
+  # s = subprocess.Popen('ipfs add -r %s'%short_dir,
+  #                      shell=True,
+  #                      cwd='/'.join(dump_dir.split('/')[0:-1]), stdout=subprocess.PIPE)
+  # result = s.communicate()[0].decode()
+  #
+  # dataset_hash_code = None
+  # for ff in result.split('\n'):
+  #   if len(ff) > 0:
+  #     cmd, hash_code, file_h = ff.split(' ')
+  #     if file_h == short_dir:
+  #       dataset_hash_code = hash_code
+  #       break
+  import ipfsapi
+  ipfs_host = os.environ.get('IPFS_HOST', '127.0.0.1')
+  ipfs = ipfsapi.connect(ipfs_host, 5001)
 
-  dataset_hash_code = None
-  for ff in result.split('\n'):
-    if len(ff) > 0:
-      cmd, hash_code, file_h = ff.split(' ')
-      if file_h == short_dir:
-        dataset_hash_code = hash_code
-        break
+  dataset_hash_code = ''
+  result = ipfs.add(dump_dir, recursive=True)
+  for ff in result:
+    if ff['Name'] == short_dir:
+      dataset_hash_code = ff['Hash']
+      break
 
   return dataset_hash_code
 
@@ -127,7 +137,8 @@ def dataset_upload_dht(dataset_name, data_generators, dump_dir):
 def dataset_download_dht(dataset_folder, train_or_test, dht_address, data_queue, db, threads_num):
   # 1.step download dataset readme.yaml
   import ipfsapi
-  ipfs = ipfsapi.connect('127.0.0.1', 5001)
+  ipfs_host = os.environ.get('IPFS_HOST', '127.0.0.1')
+  ipfs = ipfsapi.connect(ipfs_host, 5001)
 
   if not os.path.exists(os.path.join(dataset_folder,'temp')):
     os.makedirs(os.path.join(dataset_folder,'temp'))
@@ -166,7 +177,8 @@ def dataset_download_dht(dataset_folder, train_or_test, dht_address, data_queue,
 
   # continue download data from dht
   def _pull_from_dht(block_addresses, data_q):
-    local_ipfs = ipfsapi.connect('127.0.0.1', 5001)
+    ipfs_host = os.environ.get('IPFS_HOST', '127.0.0.1')
+    local_ipfs = ipfsapi.connect(ipfs_host, 5001)
 
     for block_index, block_address in block_addresses:
       try:
@@ -227,14 +239,13 @@ def dataset_download_dht(dataset_folder, train_or_test, dht_address, data_queue,
     pt.join()
 
 
-def experiment_download_dht(dump_dir, experiment, pwd, token):
+def experiment_download_dht(dump_dir, experiment, pwd, token, target='qiniu'):
   # call in an independent process
   try:
     experiment_path = os.path.join(dump_dir, experiment)
     if not os.path.exists(experiment_path):
       os.makedirs(experiment_path)
 
-    import ipfsapi
     # 1.step get experiment address
     user_authorization = {'Authorization': "token " + token}
 
@@ -248,9 +259,21 @@ def experiment_download_dht(dump_dir, experiment, pwd, token):
     address_update_time = experiment_info['ADDRESS_UPDATE_TIME']
 
     # 2.step get from dht
-    os.chdir(experiment_path)
-    ipfs = ipfsapi.connect('127.0.0.1', 5001)
-    ipfs.get(address)
+    if target == 'ipfs':
+      import ipfsapi
+      os.chdir(experiment_path)
+      ipfs_host = os.environ.get('IPFS_HOST', '127.0.0.1')
+      ipfs = ipfsapi.connect(ipfs_host, 5001)
+      ipfs.get(address)
+    elif target == 'qiniu':
+      os.chdir(experiment_path)
+      result = qiniu_download(address, experiment_path)
+      if result is None:
+        return False
+      address = result.split('/')[-1]
+    else:
+      # dont support now
+      return
 
     # 3.step post process (rename and extract)
     # 3.1.step rename
@@ -270,7 +293,7 @@ def experiment_download_dht(dump_dir, experiment, pwd, token):
     return False
 
 
-def experiment_upload_dht(dump_dir, experiment, pwd, token):
+def experiment_upload_dht(dump_dir, experiment, pwd, token, target='qiniu'):
   # call in an independent process
   try:
     if token is None:
@@ -279,15 +302,27 @@ def experiment_upload_dht(dump_dir, experiment, pwd, token):
     if not os.path.exists(os.path.join(dump_dir, experiment)):
       return
 
-    import ipfsapi
     # 1.step tar all files
     tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (experiment, pwd)
     subprocess.call(tar_shell, shell=True, cwd=os.path.join(dump_dir, experiment))
 
     # 2.step ipfs add to dht
-    ipfs = ipfsapi.connect('127.0.0.1', 5001)
-    res = ipfs.add(os.path.join(os.path.join(dump_dir, experiment), '%s.tar.gz' % experiment))
-    experiment_hash = res['Hash']
+    experiment_hash = ''
+    if target == 'ipfs':
+      import ipfsapi
+      ipfs_host = os.environ.get('IPFS_HOST', '127.0.0.1')
+      ipfs = ipfsapi.connect(ipfs_host, 5001)
+      res = ipfs.add(os.path.join(os.path.join(dump_dir, experiment), '%s.tar.gz' % experiment))
+      experiment_hash = res['Hash']
+    elif target == 'qiniu':
+      result = qiniu_upload(os.path.join(dump_dir, experiment, '%s.tar.gz'%experiment), bucket='mltalker', max_size=500)
+      if result is None:
+        return
+
+      experiment_hash = result
+    else:
+      # dont support now
+      return
 
     # 3.step notify mltalker
     user_authorization = {'Authorization': "token " + token}
@@ -304,3 +339,14 @@ def experiment_upload_dht(dump_dir, experiment, pwd, token):
   except:
     traceback.print_exc()
     return False
+
+
+# test update experiment record
+# experiment_upload_dht('/Users/Jian/PycharmProjects/antgo/antgo/dump/',
+#                       '20180509.230629.752734',
+#                       '123',
+#                       token=None
+#                       )
+
+# test download experiment record
+# experiment_download_dht('/Users/Jian/Downloads/', '20180509.230629.752734', '123', token=None)

@@ -25,6 +25,7 @@ import yaml
 from antgo.utils.utils import *
 from datetime import datetime
 from antgo.ant.subgradientrpc import *
+from antgo.ant.warehouse import *
 from qiniu import Auth, put_file, etag, urlsafe_base64_encode
 if sys.version > '3':
   PY3 = True
@@ -119,9 +120,6 @@ class AntBase(object):
       if 'SOFTWARE_FRAMEWORK' in config_params['RUNNING_CONFIG']:
         self._running_config['SOFTWARE_FRAMEWORK'] = config_params['RUNNING_CONFIG']['SOFTWARE_FRAMEWORK']
 
-      if 'DATASET' in config_params['RUNNING_CONFIG']:
-        self._running_config['DATASET'] = config_params['RUNNING_CONFIG']['DATASET']
-
     self._running_platform = kwargs['running_platform']    # local, cloud
 
     # core
@@ -177,29 +175,44 @@ class AntBase(object):
 
   def package_codebase(self, prefix='qiniu'):
     logger.info('package antgo codebase')
-    code_tar_path = os.path.join(self.main_folder, 'code.tar.gz')
+
+    random_code_package_name = str(uuid.uuid4())
+    code_tar_path = os.path.join(self.main_folder, '%s_code.tar.gz'%random_code_package_name)
     tar = tarfile.open(code_tar_path, 'w:gz')
     for sub_path in os.listdir(self.main_folder):
       self._recursive_tar(self.main_folder,
                           os.path.join(self.main_folder, sub_path),
                           tar,
-                          ignore='code.tar.gz')
+                          ignore='%s_code.tar.gz'%random_code_package_name)
     tar.close()
+
+    #
+    crypto_code = str(uuid.uuid4())
+    crypto_shell = 'openssl enc -e -aes256 -in %s -out %s -k %s'%('%s_code.tar.gz'%random_code_package_name,
+                                                                  '%s_code_ssl.tar.gz'%random_code_package_name,
+                                                                  crypto_code)
+    subprocess.call(crypto_shell, shell=True, cwd=self.main_folder)
+
     logger.info('finish package')
     if prefix == 'qiniu':
       logger.info('upload codebase package')
-      access_key = 'ZSC-X2p4HG5uvEtfmn5fsTZ5nqB3h54oKjHt0tU6'
-      secret_key = 'Ya8qYwIDXZn6jSJDMz_ottWWOZqlbV8bDTNfCGO0'
-      q = Auth(access_key, secret_key)
-      key = 'code.tar.gz'
-      token = q.upload_token('image', key, 3600)
-      ret, info = put_file(token, key, code_tar_path)
-      if ret['key'] == key and ret['hash'] == etag(code_tar_path):
-        logger.info('finish upload')
-        return 'qiniu:http://otcf1mj36.bkt.clouddn.com/%s'%key
-      else:
-        logger.info('fail upload')
-        return None
+      qiniu_address = qiniu_upload(os.path.join(self.main_folder, '%s_code_ssl.tar.gz'%random_code_package_name),
+                                   bucket='mltalker',
+                                   max_size=100)
+      return qiniu_address, crypto_code
+
+      # access_key = 'ZSC-X2p4HG5uvEtfmn5fsTZ5nqB3h54oKjHt0tU6'
+      # secret_key = 'Ya8qYwIDXZn6jSJDMz_ottWWOZqlbV8bDTNfCGO0'
+      # q = Auth(access_key, secret_key)
+      # key = 'code.tar.gz'
+      # token = q.upload_token('image', key, 3600)
+      # ret, info = put_file(token, key, code_tar_path)
+      # if ret['key'] == key and ret['hash'] == etag(code_tar_path):
+      #   logger.info('finish upload')
+      #   return 'qiniu:http://otcf1mj36.bkt.clouddn.com/%s'%key
+      # else:
+      #   logger.info('fail upload')
+      #   return None
     elif prefix == 'ipfs':
       pass
     elif prefix == 'baidu':

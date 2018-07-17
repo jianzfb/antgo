@@ -380,9 +380,46 @@ class AntTrain(AntBase):
     return task_running_statictic
     
   def start(self):
+    # 0.step loading challenge task
+    running_ant_task = None
+    if self.token is not None:
+      # 0.step load challenge task
+      challenge_task_config = self.rpc("TASK-CHALLENGE")
+      if challenge_task_config is None:
+        # invalid token
+        logger.error('couldnt load challenge task')
+        self.token = None
+      elif challenge_task_config['status'] in ['OK', 'SUSPEND']:
+        # maybe user token or task token
+        if 'task' in challenge_task_config:
+          # task token
+          challenge_task = create_task_from_json(challenge_task_config)
+          if challenge_task is None:
+            logger.error('couldnt load challenge task')
+            exit(-1)
+          running_ant_task = challenge_task
+      else:
+        # unknow error
+        logger.error('unknow error')
+        exit(-1)
+
+    self.is_non_mltalker_task = False
+    if running_ant_task is None:
+      # 0.step load custom task
+      if self.ant_task_config is not None:
+        custom_task = create_task_from_xml(self.ant_task_config, self.context)
+        if custom_task is None:
+          logger.error('couldnt load custom task')
+          exit(-1)
+        running_ant_task = custom_task
+        self.is_non_mltalker_task = True
+
+    assert (running_ant_task is not None)
+
+    # running position
     if self.running_platform == 'edge':
       # 1.step pack codebase
-      codebase_address = self.package_codebase()
+      codebase_address, codebase_address_code = self.package_codebase()
       if codebase_address is None:
         logger.error('couldnt package whole codebase')
         return
@@ -417,7 +454,7 @@ class AntTrain(AntBase):
                                                               self.running_config['GPU_MODEL'],
                                                               self.running_config['GPU_NUM'],
                                                               self.running_config['GPU_MEM'],
-                                                              self.running_config['DATASET'],
+                                                              running_ant_task.dataset_name,
                                                               FLAGS.max_fee())
         if computing_pow is None:
           logger.error('fail to find matched computing pow')
@@ -470,7 +507,8 @@ class AntTrain(AntBase):
                                   computing_pow['order_rpc_port'],
                                   access_token=order_access_token,
                                   cmd=remote_cmd,
-                                  code_address=codebase_address)
+                                  code_address=codebase_address,
+                                  code_address_code=codebase_address_code)
 
       while True:
         time.sleep(5)
@@ -501,42 +539,6 @@ class AntTrain(AntBase):
         else:
           logger.error('computing pow order is abnormal')
           return
-
-    # 0.step loading challenge task
-    running_ant_task = None
-    if self.token is not None:
-      # 0.step load challenge task
-      challenge_task_config = self.rpc("TASK-CHALLENGE")
-      if challenge_task_config is None:
-        # invalid token
-        logger.error('couldnt load challenge task')
-        self.token = None
-      elif challenge_task_config['status'] in ['OK', 'SUSPEND']:
-        # maybe user token or task token
-        if 'task' in challenge_task_config:
-          # task token
-          challenge_task = create_task_from_json(challenge_task_config)
-          if challenge_task is None:
-            logger.error('couldnt load challenge task')
-            exit(-1)
-          running_ant_task = challenge_task
-      else:
-        # unknow error
-        logger.error('unknow error')
-        exit(-1)
-
-    self.is_non_mltalker_task = False
-    if running_ant_task is None:
-      # 0.step load custom task
-      if self.ant_task_config is not None:
-        custom_task = create_task_from_xml(self.ant_task_config, self.context)
-        if custom_task is None:
-          logger.error('couldnt load custom task')
-          exit(-1)
-        running_ant_task = custom_task
-        self.is_non_mltalker_task = True
-
-    assert (running_ant_task is not None)
 
     # now time stamp
     # train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))

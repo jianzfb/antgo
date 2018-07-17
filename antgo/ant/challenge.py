@@ -37,9 +37,51 @@ class AntChallenge(AntBase):
     self.ant_task_benchmark = ant_task_benchmark
 
   def start(self):
+    # 0.step loading challenge task
+    running_ant_task = None
+    if self.token is not None:
+      # 0.step load challenge task
+      challenge_task_config = self.rpc("TASK-CHALLENGE")
+      if challenge_task_config is None:
+        # invalid token
+        logger.error('couldnt load challenge task')
+        self.token = None
+      elif challenge_task_config['status'] == 'SUSPEND':
+        # prohibit submit challenge task frequently
+        # submit only one in one week
+        logger.error('prohibit submit challenge task frequently')
+        exit(-1)
+      elif challenge_task_config['status'] == 'OK':
+        # maybe user token or task token
+        if 'task' in challenge_task_config:
+          challenge_task = create_task_from_json(challenge_task_config)
+          if challenge_task is None:
+            logger.error('couldnt load challenge task')
+            exit(-1)
+          running_ant_task = challenge_task
+      else:
+        # unknow error
+        logger.error('unknow error')
+        exit(-1)
+
+    if running_ant_task is None:
+      # 0.step load custom task
+      custom_task = create_task_from_xml(self.ant_task_config, self.context)
+      if custom_task is None:
+        logger.error('couldnt load custom task')
+        exit(0)
+      running_ant_task = custom_task
+
+    assert (running_ant_task is not None)
+
+    # running position
     if self.running_platform == 'edge':
       # 1.step pack codebase
-      codebase_address = self.package_codebase()
+      codebase_address, codebase_address_code = self.package_codebase()
+
+      if codebase_address is None:
+        logger.error('couldnt package whole codebase')
+        return
 
       # 2.step apply computing pow
       computing_pow = {}
@@ -54,7 +96,7 @@ class AntChallenge(AntBase):
                                                               self.running_config['GPU_MODEL'],
                                                               self.running_config['GPU_NUM'],
                                                               self.running_config['GPU_MEM'],
-                                                              self.running_config['DATASET'],
+                                                              running_ant_task.dataset_name,
                                                               FLAGS.max_fee())
         if computing_pow is None:
           logger.error('fail to find matched computing pow')
@@ -106,7 +148,8 @@ class AntChallenge(AntBase):
                                   computing_pow['order_rpc_port'],
                                   access_token=order_access_token,
                                   cmd=remote_cmd,
-                                  code_address=codebase_address)
+                                  code_address=codebase_address,
+                                  code_address_code=codebase_address_code)
 
       while True:
         time.sleep(5)
@@ -133,45 +176,6 @@ class AntChallenge(AntBase):
                                                                                computing_pow['order_id'],
                                                                                computing_pow['order_ip']))
             return
-
-
-
-    # 0.step loading challenge task
-    running_ant_task = None
-    if self.token is not None:
-      # 0.step load challenge task
-      challenge_task_config = self.rpc("TASK-CHALLENGE")
-      if challenge_task_config is None:
-        # invalid token
-        logger.error('couldnt load challenge task')
-        self.token = None
-      elif challenge_task_config['status'] == 'SUSPEND':
-        # prohibit submit challenge task frequently
-        # submit only one in one week
-        logger.error('prohibit submit challenge task frequently')
-        exit(-1)
-      elif challenge_task_config['status'] == 'OK':
-        # maybe user token or task token
-        if 'task' in challenge_task_config:
-          challenge_task = create_task_from_json(challenge_task_config)
-          if challenge_task is None:
-            logger.error('couldnt load challenge task')
-            exit(-1)
-          running_ant_task = challenge_task
-      else:
-        # unknow error
-        logger.error('unknow error')
-        exit(-1)
-    
-    if running_ant_task is None:
-      # 0.step load custom task
-      custom_task = create_task_from_xml(self.ant_task_config, self.context)
-      if custom_task is None:
-        logger.error('couldnt load custom task')
-        exit(0)
-      running_ant_task = custom_task
-      
-    assert(running_ant_task is not None)
 
     # now time stamp
     now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
