@@ -91,36 +91,37 @@ class AntBase(object):
                             'SOFTWARE_FRAMEWORK': '',
                             'DATASET': ''}
 
-    config_params = ant_context.params._params
-    if 'RUNNING_CONFIG' in config_params:
-      if 'GPU_MODEL' in config_params['RUNNING_CONFIG']:
-        self._running_config['GPU_MODEL'] = config_params['RUNNING_CONFIG']['GPU_MODEL']
+    if ant_context is not None:
+      config_params = ant_context.params._params
+      if 'RUNNING_CONFIG' in config_params:
+        if 'GPU_MODEL' in config_params['RUNNING_CONFIG']:
+          self._running_config['GPU_MODEL'] = config_params['RUNNING_CONFIG']['GPU_MODEL']
 
-      if 'GPU_NUM' in config_params['RUNNING_CONFIG']:
-        self._running_config['GPU_NUM'] = config_params['RUNNING_CONFIG']['GPU_NUM']
+        if 'GPU_NUM' in config_params['RUNNING_CONFIG']:
+          self._running_config['GPU_NUM'] = config_params['RUNNING_CONFIG']['GPU_NUM']
 
-      if 'GPU_MEM' in config_params['RUNNING_CONFIG']:
-        self._running_config['GPU_MEM'] = config_params['RUNNING_CONFIG']['GPU_MEM']
+        if 'GPU_MEM' in config_params['RUNNING_CONFIG']:
+          self._running_config['GPU_MEM'] = config_params['RUNNING_CONFIG']['GPU_MEM']
 
-      if 'CPU_MODEL' in config_params['RUNNING_CONFIG']:
-        self._running_config['CPU_MODEL'] = config_params['RUNNING_CONFIG']['CPU_MODEL']
+        if 'CPU_MODEL' in config_params['RUNNING_CONFIG']:
+          self._running_config['CPU_MODEL'] = config_params['RUNNING_CONFIG']['CPU_MODEL']
 
-      if 'CPU_NUM' in config_params['RUNNING_CONFIG']:
-        self._running_config['CPU_NUM'] = config_params['RUNNING_CONFIG']['CPU_NUM']
+        if 'CPU_NUM' in config_params['RUNNING_CONFIG']:
+          self._running_config['CPU_NUM'] = config_params['RUNNING_CONFIG']['CPU_NUM']
 
-      if 'CPU_MEM' in config_params['RUNNING_CONFIG']:
-        self._running_config['CPU_MEM'] = config_params['RUNNING_CONFIG']['CPU_MEM']
+        if 'CPU_MEM' in config_params['RUNNING_CONFIG']:
+          self._running_config['CPU_MEM'] = config_params['RUNNING_CONFIG']['CPU_MEM']
 
-      if 'OS_PLATFORM' in config_params['RUNNING_CONFIG']:
-        self._running_config['OS_PLATFORM'] = config_params['RUNNING_CONFIG']['OS_PLATFORM']
+        if 'OS_PLATFORM' in config_params['RUNNING_CONFIG']:
+          self._running_config['OS_PLATFORM'] = config_params['RUNNING_CONFIG']['OS_PLATFORM']
 
-      if 'OS_VERSION' in config_params['RUNNING_CONFIG']:
-        self._running_config['OS_VERSION'] = config_params['RUNNING_CONFIG']['OS_VERSION']
+        if 'OS_VERSION' in config_params['RUNNING_CONFIG']:
+          self._running_config['OS_VERSION'] = config_params['RUNNING_CONFIG']['OS_VERSION']
 
-      if 'SOFTWARE_FRAMEWORK' in config_params['RUNNING_CONFIG']:
-        self._running_config['SOFTWARE_FRAMEWORK'] = config_params['RUNNING_CONFIG']['SOFTWARE_FRAMEWORK']
+        if 'SOFTWARE_FRAMEWORK' in config_params['RUNNING_CONFIG']:
+          self._running_config['SOFTWARE_FRAMEWORK'] = config_params['RUNNING_CONFIG']['SOFTWARE_FRAMEWORK']
 
-    self._running_platform = kwargs['running_platform']    # local, cloud
+    self._running_platform = kwargs.get('running_platform', 'local')    # local, cloud
 
     # core
     self.ant_context = None
