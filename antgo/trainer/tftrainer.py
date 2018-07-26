@@ -512,6 +512,35 @@ class TFTrainer(Trainer):
       
       return result
 
+  def run_step(self, feed_dict):
+    start_time = time.time()
+    result = self.sess.run(self.val_ops, feed_dict=feed_dict if len(feed_dict) > 0 else None)
+    elapsed_time = int((time.time() - start_time) * 100) / 100.0
+
+    if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
+      self.ctx.recorder.action(result[-1])
+      result = result[:-1]
+
+    self.iter_at += 1
+
+    # record elapsed time
+    self.time_stat.add(elapsed_time)
+
+    if self.is_training:
+      loss_val = 0.0
+      if type(result) == list:
+        loss_val = result[1]
+      else:
+        loss_val = result
+
+      if self.iter_at % self.log_every_n_steps == 0:
+        logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)' %
+                    (str(os.getpid()), loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
+    else:
+      logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
+
+    return result
+
   # 3.step snapshot running state
   def snapshot(self, epoch=0):
     logger.info('snapshot at %d in %d epoch' % (self.iter_at, epoch))

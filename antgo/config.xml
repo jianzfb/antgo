@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <antgo>
-    <factory>/Users/jian/Downloads/factory</factory>
+    <factory>/home/factory</factory>
     <server_ip>www.mltalker.com</server_ip>
     <server_port>8999</server_port>
     <subgradientserver>
