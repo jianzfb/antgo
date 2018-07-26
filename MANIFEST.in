@@ -5,6 +5,8 @@ include antgo/resource/templates/crowdsource.html
 include antgo/resource/templates/yesno_crowdsource.html
 include antgo/resource/templates/demo.html
 include antgo/resource/static/antgo.ico
+include antgo/resource/static/antgo.js
+include antgo/resource/static/antgo.css
 include antgo/resource/static/card.png
 include antgo/resource/static/crowdsource.js
 include antgo/resource/static/register.png

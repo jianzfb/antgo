@@ -84,20 +84,38 @@ class AntChallenge(AntBase):
         return
 
       # 2.step apply computing pow
+      max_running_time = 0.0    # unit hour
       computing_pow = {}
       if FLAGS.order_id() == '':
-        computing_pow = self.subgradient_rpc.make_computingpow_order(FLAGS.max_time()[0:-1],
-                                                              self.running_config['OS_PLATFORM'],
-                                                              self.running_config['OS_VERSION'],
-                                                              self.running_config['SOFTWARE_FRAMEWORK'],
-                                                              self.running_config['CPU_MODEL'],
-                                                              self.running_config['CPU_NUM'],
-                                                              self.running_config['CPU_MEM'],
-                                                              self.running_config['GPU_MODEL'],
-                                                              self.running_config['GPU_NUM'],
-                                                              self.running_config['GPU_MEM'],
-                                                              running_ant_task.dataset_name,
-                                                              FLAGS.max_fee())
+        # transform max time unit
+        max_running_time_and_unit = FLAGS.max_time()
+        max_running_time = float(max_running_time_and_unit[0:-1])
+        max_running_time_unit = max_running_time_and_unit[-1]
+        if max_running_time_unit == 's':
+          # second
+          max_running_time = max_running_time / (60.0 * 60.0)
+        elif max_running_time_unit == 'm':
+          max_running_time = max_running_time / 60.0
+        elif max_running_time_unit == 'd':
+          max_running_time = max_running_time * 24
+        elif max_running_time_unit == 'h':
+          pass
+        else:
+          logger.error('max running time error')
+          return
+
+        computing_pow = self.subgradient_rpc.make_computingpow_order(max_running_time,
+                                                                     self.running_config['OS_PLATFORM'],
+                                                                     self.running_config['OS_VERSION'],
+                                                                     self.running_config['SOFTWARE_FRAMEWORK'],
+                                                                     self.running_config['CPU_MODEL'],
+                                                                     self.running_config['CPU_NUM'],
+                                                                     self.running_config['CPU_MEM'],
+                                                                     self.running_config['GPU_MODEL'],
+                                                                     self.running_config['GPU_NUM'],
+                                                                     self.running_config['GPU_MEM'],
+                                                                     running_ant_task.dataset_name,
+                                                                     FLAGS.max_fee())
         if computing_pow is None:
           logger.error('fail to find matched computing pow')
           return
@@ -106,7 +124,6 @@ class AntChallenge(AntBase):
                                                                                        computing_pow['order_ip'],
                                                                                        str(computing_pow['order_rpc_port']),
                                                                                        str(computing_pow['order_ssh_port'])))
-
       else:
         computing_pow = {'order_id': FLAGS.order_id(),
                          'order_ip': FLAGS.order_ip(),
@@ -139,11 +156,14 @@ class AntChallenge(AntBase):
 
       remote_cmd = ''
       if self.app_token is not None:
-        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --token=%s'%(
-          self.main_file, self.main_param, self.app_token)
+        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --token=%s --max_time=%s'%(
+          self.main_file, self.main_param, self.app_token, '%fh'%(max_running_time - 0.5))
       else:
-        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --task=%s'%(
-          self.main_file, self.main_param, FLAGS.task())
+        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --task=%s --max_time=%s'%(
+          self.main_file, self.main_param, FLAGS.task(), '%fh'%(max_running_time - 0.5))
+
+      if FLAGS.from_experiment() is not None:
+        remote_cmd += ' --from_experiment=%s'%FLAGS.from_experiment()
       self.subgradient_rpc.launch(computing_pow['order_ip'],
                                   computing_pow['order_rpc_port'],
                                   access_token=order_access_token,
@@ -182,9 +202,9 @@ class AntChallenge(AntBase):
 
     # # ############
     # ss = AntYesNoCrowdsource(running_ant_task)
-    # cc = RecordReader('/Users/jian/PycharmProjects/antgo/antgo/dump/20180510.173726.453039/record')
-    # ss.dump_dir = "/Users/jian/Downloads/mm/static"
-    # ss.experiment_id = '20180510.173031.823969'
+    # cc = RecordReader('/Users/jian/PycharmProjects/antgo/antgo/dump/20180726.151520.620675/record')
+    # ss.dump_dir = "/Users/jian/Downloads/mm/"
+    # ss.experiment_id = '20180726.151520.620675'
     # ss.app_token = self.token
     # ss.crowdsource_server(cc)
     # ############

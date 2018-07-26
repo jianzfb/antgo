@@ -2,7 +2,7 @@
 # coding=utf-8
 from __future__ import print_function, unicode_literals, division, absolute_import
 
-from .common_func import *
+from antgo.crowdsource.common_func import *
 import argparse
 
 __author__ = "Aploium <i@z.codes>"
@@ -283,11 +283,14 @@ def launch_slaver_proxy(master, target):
 
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
-  parser.add_argument("-m", "--master", help="proxy master")
-  parser.add_argument("-t", "--target", help="local target")
+  # parser = argparse.ArgumentParser()
+  # parser.add_argument("-m", "--master", help="proxy master")
+  # parser.add_argument("-t", "--target", help="local target")
+  #
+  # args = parser.parse_args()
+  # master_address = args.master
+  # target_address = args.target
 
-  args = parser.parse_args()
-  master_address = args.master
-  target_address = args.target
+  master_address = '59.110.164.237:30000'
+  target_address = '127.0.0.1:8000'
   launch_slaver_proxy(master_address, target_address)

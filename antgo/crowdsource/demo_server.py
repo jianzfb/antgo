@@ -10,7 +10,7 @@ import tornado.httpserver
 import tornado.ioloop
 import tornado.options
 from tornado.options import define, options
-from tornado import web
+from tornado import web, gen
 import tornado.web
 from antgo.utils import logger
 import os
@@ -24,17 +24,21 @@ from PIL import Image
 import imageio
 import uuid
 import signal
+from zmq.eventloop import future
+from ..utils.serialize import loads,dumps
 
 class BaseHandler(tornado.web.RequestHandler):
   @property
   def demo_name(self):
     return self.settings.get('demo_name', '-')
+
   @property
   def demo_type(self):
     return self.settings.get('demo_type', '-')
+
   @property
   def demo_description(self):
-    return self.settings.get('demo_description','')
+    return self.settings.get('demo_description',{})
 
   @property
   def demo_dump(self):
@@ -73,13 +77,9 @@ class BaseHandler(tornado.web.RequestHandler):
     return self.settings['port']
 
   @property
-  def demo_data_queue(self):
-    return self.settings['demo_data_queue']
+  def zmq_client_socket(self):
+    return self.settings['zmq_client_socket']
 
-  @property
-  def demo_result_queue(self):
-    return self.settings['demo_result_queue']
-  
   def _transfer_data(self, data, uuid_flag):
     # 5.step postprocess demo predict result
     demo_response = {'DATA': {}}
@@ -216,19 +216,22 @@ class IndexHandler(BaseHandler):
           image_history_data.append('/static/input/%s'%f)
     
     input_filter = ''
-    for support_format in self.demo_support_upload_formats.split(','):
-      if support_format.lower() in ['jpg', 'jpeg', 'png', 'gif']:
-        input_filter += 'image/%s,'%support_format.lower()
-      elif support_format.lower() in ['mp4']:
-        input_filter += 'video/%s,'%support_format.lower()
-      elif support_format.lower() in ['mp3', 'wav']:
-        input_filter += 'audio/%s,'%support_format.lower()
-      else:
-        input_filter += '%s,'%support_format.lower()
-    
+    if self.demo_support_upload_formats is not None:
+      for support_format in self.demo_support_upload_formats.split(','):
+        if support_format.lower() in ['jpg', 'jpeg', 'png', 'gif']:
+          input_filter += 'image/%s,'%support_format.lower()
+        elif support_format.lower() in ['mp4']:
+          input_filter += 'video/%s,'%support_format.lower()
+        elif support_format.lower() in ['mp3', 'wav']:
+          input_filter += 'audio/%s,'%support_format.lower()
+        else:
+          input_filter += '%s,'%support_format.lower()
+
     if len(input_filter) > 0:
       input_filter = input_filter[0:-1]
-      
+    else:
+      input_filter = '*'
+
     self.render(self.html_template, demo={'name': self.demo_name,
                                           'type': self.demo_type,
                                           'description': self.demo_description,
@@ -239,6 +242,7 @@ class IndexHandler(BaseHandler):
 
 
 class ClientQueryHandler(BaseHandler):
+  @gen.coroutine
   def post(self):
     # 0.step check support status
     if not self.demo_support_user_input:
@@ -255,11 +259,13 @@ class ClientQueryHandler(BaseHandler):
     if model_data is None:
       raise web.HTTPError(500)
 
-    # 2.step preprocess data, then submit to model
-    self.demo_data_queue.put(model_data)
+    # no block
+    self.zmq_client_socket.send(dumps(model_data))
 
-    # 3.step waiting model response
-    _, demo_result = self.demo_result_queue.get()
+    # asyn
+    result = yield self.zmq_client_socket.recv()
+    result = loads(result)
+    _, demo_result = result
 
     # 4.step post process and render
     demo_response = self.post_process_model_response(model_data_name, demo_result)
@@ -274,6 +280,7 @@ class ClientQueryHandler(BaseHandler):
 
 
 class ClientFileUploadAndProcessHandler(BaseHandler):
+  @gen.coroutine
   def post(self):
     # 0.step check support status
     if not self.demo_support_user_upload:
@@ -289,37 +296,68 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
     if not file_metas:
       raise web.HTTPError(500)
 
-    file_path = None
-    file_name = None
+    file_paths = []
+    file_names = []
     for meta in file_metas:
-      file_name = '%s_%s'%(str(uuid.uuid4()), meta['filename'])
-      file_path = os.path.join(upload_path, file_name)
+      _file_name = '%s_%s'%(str(uuid.uuid4()), meta['filename'])
+      _file_path = os.path.join(upload_path, _file_name)
 
-      with open(file_path, 'wb') as up:
-        up.write(meta['body'])
+      with open(_file_path, 'wb') as fp:
+        fp.write(meta['body'])
 
-    if file_path is None or file_name is None:
+      file_paths.append(_file_path)
+      file_names.append(_file_name)
+
+    if len(file_paths) == 0 or len(file_names) == 0:
       raise web.HTTPError(500)
 
     # 2.step parse query data
-    model_data, model_data_name, model_data_type = self.dispatch_prepare_data(file_path, 'PATH')
-    if model_data is None:
-      raise web.HTTPError(500)
+    model_datas = []
+    model_data_names = []
+    model_data_types = []
+
+    for file_path in file_paths:
+      model_data, model_data_name, model_data_type = self.dispatch_prepare_data(file_path, 'PATH')
+      if model_data is None:
+        raise web.HTTPError(500)
+
+      model_datas.append(model_data)
+      model_data_names.append(model_data_name)
+      model_data_types.append(model_data_type)
 
     # 3.step preprocess data, then submit to model
-    self.demo_data_queue.put(model_data)
+    model_input = model_datas if len(model_datas) > 1 else model_datas[0]
+    # self.demo_data_queue.put(model_input)
+    #
+    # # 4.step waiting model response
+    # _, demo_result = self.demo_result_queue.get()
 
-    # 4.step waiting model response
-    _,demo_result = self.demo_result_queue.get()
+    # no block
+    self.zmq_client_socket.send(dumps(model_input))
+
+    # asyn
+    result = yield self.zmq_client_socket.recv()
+    result = loads(result)
+    _, demo_result = result
 
     # 5.step post process and render
-    demo_response = self.post_process_model_response(model_data_name, demo_result)
+    demo_response = self.post_process_model_response(model_data_names[0], demo_result)
 
-    demo_response['INPUT_TYPE'] = model_data_type
-    if model_data_type in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
-      demo_response['INPUT'] = '/static/input/%s' % model_data_name
+    if len(model_data_names) == 1:
+      demo_response['INPUT_TYPE'] = model_data_types[0]
+      if model_data_types[0] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
+        demo_response['INPUT'] = '/static/input/%s' % model_data_names[0]
+      else:
+        demo_response['INPUT'] = model_datas[0]
     else:
-      demo_response['INPUT'] = model_data
+      demo_response['INPUT_TYPE'] = []
+      demo_response['INPUT'] = []
+      for index in range(len(model_data_names)):
+        demo_response['INPUT_TYPE'].append(model_data_types[index])
+        if model_data_types[index] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
+          demo_response['INPUT'].append('/static/input/%s' % model_data_names[index])
+        else:
+          demo_response['INPUT'].append(model_datas[index])
 
     self.write(json.dumps(demo_response))
     self.finish()
@@ -346,6 +384,7 @@ class GracefulExitException(Exception):
 
 def demo_server_start(demo_name,
                       demo_type,
+                      demo_description,
                       support_user_upload,
                       support_user_input,
                       support_user_interaction,
@@ -353,8 +392,6 @@ def demo_server_start(demo_name,
                       demo_dump_dir,
                       html_template,
                       server_port,
-                      demo_data_queue,
-                      demo_result_queue,
                       parent_id):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
@@ -362,7 +399,11 @@ def demo_server_start(demo_name,
   try:
     # 0.step define http server port
     define('port', default=server_port, help='run on port')
-  
+
+    zmq_ctx = future.Context.instance()
+    client_socket = zmq_ctx.socket(zmq.REQ)
+    client_socket.bind('ipc://%s'%str(parent_id))
+
     # 1.step prepare static resource
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
     demo_static_dir = os.path.join(demo_dump_dir, 'static')
@@ -384,10 +425,12 @@ def demo_server_start(demo_name,
     if html_template is None:
       html_template = 'demo.html'
   
-    if not os.path.exists(os.path.join(demo_tempate_dir, html_template)):
-      assert(os.path.exists(os.path.join(static_folder, 'resource', 'templates',html_template)))
-      shutil.copy(os.path.join(static_folder, 'resource', 'templates',html_template), demo_tempate_dir)
-  
+      if not os.path.exists(os.path.join(demo_tempate_dir, html_template)):
+        assert(os.path.exists(os.path.join(static_folder, 'resource', 'templates',html_template)))
+        shutil.copy(os.path.join(static_folder, 'resource', 'templates',html_template), demo_tempate_dir)
+    else:
+      shutil.copy(html_template, demo_tempate_dir)
+
     tornado.options.parse_command_line()
     settings = {
       'template_path': demo_tempate_dir,
@@ -397,12 +440,12 @@ def demo_server_start(demo_name,
       'demo_dump': demo_dump_dir,
       'demo_name': demo_name,
       'demo_type': demo_type,
-      'demo_data_queue': demo_data_queue,
-      'demo_result_queue': demo_result_queue,
+      'demo_description': demo_description,
       'support_user_upload': support_user_upload,
       'support_user_input': support_user_input,
       'support_user_interaction': support_user_interaction,
       'support_upload_formats': support_upload_formats,
+      'zmq_client_socket': client_socket,
     }
     app = tornado.web.Application(handlers=[(r"/", IndexHandler),
                                             (r"/demo", IndexHandler),

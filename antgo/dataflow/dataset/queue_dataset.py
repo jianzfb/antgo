@@ -11,24 +11,29 @@ import os
 import copy
 import multiprocessing
 import sys
+import zmq
+from antgo.utils.serialize import *
+
 
 class QueueDataset(Dataset):
   def __init__(self):
     super(QueueDataset, self).__init__('test', '', None)
-    self._data_queue = multiprocessing.Queue()
+    context = zmq.Context()
+    self.socket = context.socket(zmq.REP)
+    self.socket.connect('ipc://%s'%str(os.getpid()))
 
   @property
   def size(self):
     return sys.maxsize
 
-  @property
-  def data_queue(self):
-    return self._data_queue
-
   def at(self, id):
     raise NotImplementedError
 
+  def put(self, data):
+    self.socket.send(dumps(data))
+
   def data_pool(self):
     while True:
-      data = self.data_queue.get()
+      data = self.socket.recv()
+      data = loads(data)
       yield data

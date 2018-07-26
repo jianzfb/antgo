@@ -67,9 +67,8 @@ class AntCrowdsource(AntMeasure):
     self._app_token = None
     self._experiment_id = None
 
-    self._totem = str(uuid.uuid4())
     self._backend = zmq.Context().socket(zmq.REP)
-    self._backend.bind('ipc://%s'%self._totem)
+    self._backend.connect('ipc://%s'%str(os.getpid()))
 
     self._complex_degree = 0                    # 0,1,2,3,4,5 (subclass define)
     self._crowdsource_type = ''                 # (subclass define)
@@ -98,7 +97,7 @@ class AntCrowdsource(AntMeasure):
     return self._dump_dir
   @dump_dir.setter
   def dump_dir(self, val):
-    self._dump_dir = val
+    self._dump_dir = os.path.join(val,'static')
 
   @property
   def app_token(self):
@@ -462,10 +461,10 @@ class AntCrowdsource(AntMeasure):
 
     # 1.step launch crowdsource server (independent process)
     process = multiprocessing.Process(target=crowdsrouce_server_start,
-                                      args=(self._totem,
+                                      args=(os.getpid(),
                                             self.experiment_id,
                                             self.app_token,
-                                            self.dump_dir,
+                                            '/'.join(os.path.normpath(self.dump_dir).split('/')[0:-1]),
                                             self.name,
                                             self.client_html_template,
                                             idle_server_port,

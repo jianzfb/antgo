@@ -425,6 +425,7 @@ class AntTrain(AntBase):
         return
 
       # 2.step apply computing pow
+      max_running_time = 0.0
       computing_pow = {}
       if FLAGS.order_id() == '':
         # transform max time unit
@@ -497,11 +498,14 @@ class AntTrain(AntBase):
 
       remote_cmd = ''
       if self.app_token is not None:
-        remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --token=%s' % (
-          self.main_file, self.main_param, self.app_token)
+        remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --token=%s --max_time=%s' % (
+          self.main_file, self.main_param, self.app_token, '%fh'%(max_running_time - 0.5))
       else:
-        remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --task=%s' % (
-          self.main_file, self.main_param, FLAGS.task())
+        remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --task=%s --max_time=%s' % (
+          self.main_file, self.main_param, FLAGS.task(), '%fh'%(max_running_time - 0.5))
+
+      if FLAGS.from_experiment() is not None:
+        remote_cmd += ' --from_experiment=%s'%FLAGS.from_experiment()
 
       self.subgradient_rpc.launch(computing_pow['order_ip'],
                                   computing_pow['order_rpc_port'],

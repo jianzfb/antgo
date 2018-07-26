@@ -116,11 +116,12 @@ class RecorderNode(Node):
 
 
 class QueueRecorderNode(Node):
-  def __init__(self, inputs):
+  def __init__(self, inputs, output_queue):
     super(QueueRecorderNode, self).__init__(name=None, action=self.action, inputs=inputs,auto_trigger=True)
 
     self._annotation_cache = queue.Queue()
-    self._record_writer = multiprocessing.Queue()
+
+    self.recorder_output_queue = output_queue
     self._dump_dir = None
     self._is_none = False
     
@@ -154,9 +155,9 @@ class QueueRecorderNode(Node):
         self._is_none = True
       
       if len(results_label) > 0:
-        self.writer_queue.put((gt, (result, results_label[index])))
+        self.recorder_output_queue.put((gt, (result, results_label[index])))
       else:
-        self.writer_queue.put((gt, result))
+        self.recorder_output_queue.put((gt, result))
 
   def action(self, *args, **kwargs):
     value = copy.deepcopy(args[0])
@@ -183,10 +184,6 @@ class QueueRecorderNode(Node):
       return False
 
     return True
-
-  @property
-  def writer_queue(self):
-    return self._record_writer
 
   def iterator_value(self):
     pass

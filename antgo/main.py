@@ -13,10 +13,12 @@ from antgo.ant import flags
 from antgo.ant.cmd import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
+from antgo.ant.release import *
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
 from antgo.utils.dht import *
+from antgo import version
 import multiprocessing
 
 if sys.version > '3':
@@ -29,7 +31,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "dataset", "template", "demo", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "dataset", "template", "demo", "release", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -37,13 +39,13 @@ _ant_support_commands = ["train", "challenge", "dataset", "template", "demo", "t
 flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
+flags.DEFINE_string('version', None, 'minist antgo version')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dataset', None, 'dataset')
 flags.DEFINE_boolean('public', False, 'public or private')
 flags.DEFINE_boolean('local', False, 'cloud or local')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
-flags.DEFINE_string('platform', 'local', 'local or cloud')
 flags.DEFINE_string('max_time', '10h', 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
@@ -95,6 +97,13 @@ def main():
     flags.cli_param_flags(sys.argv[1:])
   else:
     flags.cli_param_flags(sys.argv[2:])
+
+  if FLAGS.running_platform == 'local' and FLAGS.version() is not None:
+    a,b,c = FLAGS.version().split('.')
+    sys_a, sys_b, sys_c = version.split('.')
+    if int(sys_a) < int(a) or int(sys_b) < int(b) or int(sys_c) < int(c):
+      logger.error('antgo version dont satisfy task minimum request (%s)'%FLAGS.version())
+      sys.exit(-1)
 
   # 4.step load antgo global config
   if FLAGS.config() is not None:
@@ -214,7 +223,9 @@ def main():
     ant_context.params = params
   
   # 8.4 step load experiment
-  if FLAGS.from_experiment() is not None:
+  if FLAGS.from_experiment() is not None and \
+          FLAGS.running_platform() == 'local' and \
+          ant_cmd not in ['release']:
     experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
     if not os.path.exists(experiment_path):
       process = multiprocessing.Process(target=experiment_download_dht,
@@ -302,6 +313,20 @@ def main():
                               support_user_interaction=FLAGS.support_user_interaction(),
                               support_upload_formats=FLAGS.support_upload_formats())
 
+    running_process.start()
+  elif ant_cmd == "release":
+    running_process = AntRelease(ant_context,
+                                 name,
+                                 token,
+                                 task,
+                                 html_template=FLAGS.html_template,
+                                 main_file=main_file,
+                                 main_param=main_param,
+                                 main_folder=main_folder,
+                                 support_user_upload=FLAGS.support_user_upload(),
+                                 support_user_input=FLAGS.support_user_interaction(),
+                                 support_user_interaction=FLAGS.support_user_interaction(),
+                                 support_upload_formats=FLAGS.support_upload_formats())
     running_process.start()
   elif ant_cmd == 'dataset':
     running_process = AntGenerate(ant_context,

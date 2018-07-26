@@ -12,7 +12,7 @@ from antgo.dataflow.recorder import *
 from antgo.crowdsource.demo_server import *
 from antgo.utils import logger
 import socket
-
+import zmq
 
 def _is_open(check_ip, port):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -43,6 +43,7 @@ def _pick_idle_port(from_port=40000, check_count=100):
     exit(-1)
 
   return check_port
+
 
 class AntDemo(AntBase):
   def __init__(self, ant_context,
@@ -106,7 +107,7 @@ class AntDemo(AntBase):
     # 1.step prepare datasource and infer recorder
     demo_dataset = QueueDataset()
     demo_dataset._force_inputs_dirty()
-    self.context.recorder = QueueRecorderNode(((), None))
+    self.context.recorder = QueueRecorderNode(((), None), demo_dataset)
 
     # 2.step prepare dump dir
     now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
@@ -129,6 +130,7 @@ class AntDemo(AntBase):
     process = multiprocessing.Process(target=demo_server_start,
                                       args=(demo_name,
                                             demo_type,
+                                            self.description_config,
                                             self.support_user_upload,
                                             self.support_user_input,
                                             self.support_user_interaction,
@@ -136,8 +138,6 @@ class AntDemo(AntBase):
                                             infer_dump_dir,
                                             self.html_template,
                                             self.demo_port,
-                                            demo_dataset.data_queue,
-                                            self.context.recorder.writer_queue,
                                             os.getpid()))
     process.daemon = True
     process.start()
@@ -147,16 +147,8 @@ class AntDemo(AntBase):
     ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
     for b in ablation_blocks:
       self.ant_context.deactivate_block(b)
-    
-    try_count = 0
-    while True:
-      try:
-        self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
-      except:
-        try_count += 1
-        logger.error('model infer error, trying again ... (%d)'%try_count)
-        
-      if try_count >= 5:
-        logger.error('trying count is over 5, stop ...')
-        break
-  
+
+    try:
+      self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
+    except:
+      logger.error('model infor error, please check your code')

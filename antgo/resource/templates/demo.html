@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
@@ -19,444 +19,359 @@
     <link href="https://cdn.bootcss.com/OwlCarousel2/2.3.4/assets/owl.carousel.min.css" rel="stylesheet">
     <link href="https://cdn.bootcss.com/OwlCarousel2/2.3.4/assets/owl.theme.default.min.css" rel="stylesheet">
     <script src="/static/holder.min.js"></script>
+    <script src="/static/antgo.js"></script>
     <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
     <!--[if lt IE 9]>
       <script src="https://cdn.bootcss.com/html5shiv/3.7.3/html5shiv.min.js"></script>
       <script src="https://cdn.bootcss.com/respond.js/1.4.2/respond.min.js"></script>
     <![endif]-->
     <style>
-        .banner {
+    .banner {
         background: url(/static/banner.png)no-repeat;
         min-height: 300px;
         background-size: cover;
         position: relative;
     }
-        .logo h1 {
-            font-size: 3.5em;
-            font-family: 'Aladin', cursive;
-            color: #ffffff;
-        }
+    .logo h1 {
+        font-size: 70px;
+        color: #ffffff;
+    }
+    table {
+        background-color: #fff;
+        border-collapse: collapse;
+        border-spacing: 0;
+        border-top: 2px solid #dedede;
+        margin: 12px 0;
+        padding: 0;
+        text-align: left;
+        width: 100%;
+    }
 
-        table {
-    background-color: #fff;
-    border-collapse: collapse;
-    border-spacing: 0;
-    border-top: 2px solid #dedede;
-    margin: 12px 0;
-    padding: 0;
-    text-align: left;
-    width: 100%;
-}
+    table {
+        border-collapse: collapse;
+        border-spacing: 0;
+    }
+    table {
+        display: table;
 
-table {
-    border-collapse: collapse;
-    border-spacing: 0;
-}
-table {
-    display: table;
+        border-spacing: 2px;
+        border-color: grey;
+            font-family: 'Segoe UI',SegoeUI,'Segoe WP',Tahoma,Arial,sans-serif;
+    }
+            table.no-border tr:last-child {
+        border: none;
+    }
+    table.no-border {
+        border: none;
+    }
+    table tr:last-child {
+        border-bottom: 2px solid #c9c9c9;
+    }
+    table tr {
+        border-bottom: 1px solid #dedede;
+    }
+    .demo-headline{
+            max-width: 75rem;
+        margin-left: auto;
+        margin-right: auto;
+        color: #505050;;
+        margin-top: 20px;
+    }
+    .demo-headline::after {
+        clear: both;
+    }
 
-    border-spacing: 2px;
-    border-color: grey;
+    .demo-headline::before, .demo-headline::after {
+        content: ' ';
+        display: table;
+    }
+    .text-center {
+        text-align: center;
+    }
+
+    .demo-box{
+        margin-left: auto;
+        margin-right: auto;
+        margin-top: 20px;
+        margin-bottom: 50px;
+            color: #505050;
+    }
+    .demo-box::after {
+        clear: both;
+    }
+
+    .demo-box::before, .demo-box::after {
+        content: ' ';
+        display: table;
+    }
+    .column, .columns {
+        width: 100%;
+        float: left;
+        padding-left: .9375rem;
+        padding-right: .9375rem;
+    }
+    .centered-text-with-hr {
+        position: relative;
+        text-align: center;
+        z-index: 1;
+    }
+    .centered-text-with-hr:after {
+        -ms-transform: translate(0,-50%);
+        -o-transform: translate(0,-50%);
+        -webkit-transform: translate(0,-50%);
+        transform: translate(0,-50%);
+        border-left: 1px solid #dedede;
+        border-right: 1px solid #dedede;
+        border-top: 1px solid #dedede;
+        content: '';
+        display: block;
+        height: 24px;
+        position: absolute;
+        top: 100%;
+        width: 100%;
+        z-index: -1;
+    }
+    .centered-text-with-hr span {
+        background-color: #fff;
+        padding: 0 12px;
+    }
+    p {
+        font-size: 15px;
+        margin: 12px 0;
+    }
+    .text-heading6 {
+        font-weight: 400;
+        /* font-size: 16px; */
+        /* line-height: 1.5; */
+        /* margin: 0 0 12px; */
+    }
+    body {
+        font-size: 15px;
+        line-height: 1.5;
+        font-weight: 400;
+        /* color: #505050; */
         font-family: 'Segoe UI',SegoeUI,'Segoe WP',Tahoma,Arial,sans-serif;
-}
-        table.no-border tr:last-child {
-    border: none;
-}
-table.no-border {
-    border: none;
-}
-table tr:last-child {
-    border-bottom: 2px solid #c9c9c9;
-}
-table tr {
-    border-bottom: 1px solid #dedede;
-}
-.demo-headline{
-        max-width: 75rem;
-    margin-left: auto;
-    margin-right: auto;
-    color: #505050;;
-    margin-top: 20px;
-}
-.demo-headline::after {
-    clear: both;
-}
+    }
+    .demo-image-warp{
+        align-items: center;
+        align-content: center;
+        text-align: center;
+        box-sizing: inherit;
+        border: #505050;
+    }
+    .demo-result-warp{
+        height: 430px;
+        overflow: auto;
+        width: 100%;
+        background-color: #f4f4f4;
+        border: 1px #969696 solid;
+    }
+    table thead {
+        border-bottom: 2px solid #dedede;
+    }
+    .column>:first-child {
+        margin-top: 0;
+    }
+    .column>:last-child {
+        margin-bottom: 0;
+    }
+    table th {
+        font-size: 14px;
+        font-weight: 700;
+        min-width: 60px;
+        padding: 12px;
+        text-transform: uppercase;
+        vertical-align: top;
+    }
+    table td, table th {
+        padding: 12px 6px;
+        vertical-align: top;
+    }
+    table th {
+        font-size: 14px;
+        font-weight: 700;
+        text-align: inherit;
+        text-transform: uppercase;
+    }
+    td, th {
+        padding: 0;
+    }
+    .demo-result-warp table {
+        background-color: inherit;
+    }
+    .demo-control{
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+    .btn-white-to-blue{
+        -webkit-box-flex: 0;
+        -webkit-flex: 0 0 auto;
+        -ms-flex: 0 0 auto;
+        flex: 0 0 auto;
+        font-family: 'Atlas Grotesk',sans-serif;
+        color: #6F7175;
+        font-weight: bolder;
+        font-size: 15px;
+        text-decoration: none;
+        padding: 5px 10px;
+        background-color: #FFF;
+        border: 1px solid #DEDFE0;
+        border-radius: 4px;
+        cursor: pointer;
+        letter-spacing:0px;
+        text-align: center;
+    }
+    .btn-white-to-blue:hover{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
+    .btn-white-to-blue:active{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
 
-.demo-headline::before, .demo-headline::after {
-    content: ' ';
-    display: table;
-}
-.text-center {
-    text-align: center;
-}
+    .btn-white-to-blue:focus{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
+    .btn-white-to-blue:visited{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
 
-.demo-box{
-    margin-left: auto;
-    margin-right: auto;
-    margin-top: 20px;
-    margin-bottom: 50px;
-        color: #505050;
-}
-.demo-box::after {
-    clear: both;
-}
+    .btn-blue-to-white{
+        -webkit-box-flex: 0;
+        -webkit-flex: 0 0 auto;
+        -ms-flex: 0 0 auto;
+        flex: 0 0 auto;
+        font-family: 'Atlas Grotesk',sans-serif;
+        font-weight: bolder;
+        font-size: 15px;
+        text-decoration: none;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        letter-spacing:0px;
+        text-align: center;
 
-.demo-box::before, .demo-box::after {
-    content: ' ';
-    display: table;
-}
-.column, .columns {
-    width: 100%;
-    float: left;
-    padding-left: .9375rem;
-    padding-right: .9375rem;
-}
-        .centered-text-with-hr {
-    position: relative;
-    text-align: center;
-    z-index: 1;
-}
-        .centered-text-with-hr:after {
-    -ms-transform: translate(0,-50%);
-    -o-transform: translate(0,-50%);
-    -webkit-transform: translate(0,-50%);
-    transform: translate(0,-50%);
-    border-left: 1px solid #dedede;
-    border-right: 1px solid #dedede;
-    border-top: 1px solid #dedede;
-    content: '';
-    display: block;
-    height: 24px;
-    position: absolute;
-    top: 100%;
-    width: 100%;
-    z-index: -1;
-}
-        .centered-text-with-hr span {
-    background-color: #fff;
-    padding: 0 12px;
-}
-        p {
-    font-size: 15px;
-    margin: 12px 0;
-}
-        .text-heading6 {
-    font-weight: 400;
-    /* font-size: 16px; */
-    /* line-height: 1.5; */
-    /* margin: 0 0 12px; */
-}
-        body {
-    font-size: 15px;
-    line-height: 1.5;
-    font-weight: 400;
-    /* color: #505050; */
-    font-family: 'Segoe UI',SegoeUI,'Segoe WP',Tahoma,Arial,sans-serif;
-}
-        .demo-image-warp{
-                align-items: center;
-    align-content: center;
-    text-align: center;
-box-sizing: inherit;
-    border: #505050;
-        }
-        .demo-result-warp{
-                height: 430px;
-    overflow: auto;
-    width: 100%;
-    background-color: #f4f4f4;
-    border: 1px #969696 solid;
-        }
-        table thead {
-    border-bottom: 2px solid #dedede;
-}
-        .column>:first-child {
-    margin-top: 0;
-}
-.column>:last-child {
-    margin-bottom: 0;
-}
-        table th {
-    font-size: 14px;
-    font-weight: 700;
-    min-width: 60px;
-    padding: 12px;
-    text-transform: uppercase;
-    vertical-align: top;
-}
-table td, table th {
-    padding: 12px 6px;
-    vertical-align: top;
-}
-table th {
-    font-size: 14px;
-    font-weight: 700;
-    text-align: inherit;
-    text-transform: uppercase;
-}
-td, th {
-    padding: 0;
-}
-        .demo-result-warp table {
-    background-color: inherit;
-}
-        .demo-control{
-            margin-top: 20px;
-            margin-bottom: 20px;
-        }
-        .btn-white-to-blue{
-    -webkit-box-flex: 0;
-    -webkit-flex: 0 0 auto;
-    -ms-flex: 0 0 auto;
-    flex: 0 0 auto;
-    font-family: 'Atlas Grotesk',sans-serif;
-    color: #6F7175;
-    font-weight: bolder;
-    font-size: 15px;
-    text-decoration: none;
-    padding: 5px 10px;
-    background-color: #FFF;
-    border: 1px solid #DEDFE0;
-    border-radius: 4px;
-    cursor: pointer;
-    letter-spacing:0px;
-    text-align: center;
-}
-.btn-white-to-blue:hover{
-    color: #20BEFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #FFF;
-}
-.btn-white-to-blue:active{
-    color: #20BEFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #FFF;
-}
-
-.btn-white-to-blue:focus{
-    color: #20BEFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #FFF;
-}
-.btn-white-to-blue:visited{
-    color: #20BEFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #FFF;
-}
-
-.btn-blue-to-white{
-    -webkit-box-flex: 0;
-    -webkit-flex: 0 0 auto;
-    -ms-flex: 0 0 auto;
-    flex: 0 0 auto;
-    font-family: 'Atlas Grotesk',sans-serif;
-    font-weight: bolder;
-    font-size: 15px;
-    text-decoration: none;
-    padding: 5px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    letter-spacing:0px;
-    text-align: center;
-
-    color: #20BEFF;
-    border: 1px solid #20BEFF;
-    background-color: #FFF;
-}
+        color: #20BEFF;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
 
 
-.btn-blue-to-white:hover{
-    color: #FFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #20BEFF;
-}
-.btn-blue-to-white:active{
-    color: #FFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #20BEFF;
-}
-.btn-blue-to-white:focus{
-    color: #FFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #20BEFF;
-}
-.btn-blue-to-white:visited{
-    color: #FFF;
-    text-decoration: none;
-    border: 1px solid #20BEFF;
-    background-color: #20BEFF;
-}
-.site-footer {
-    border-top: 1px solid #DDD;
-    display: -webkit-box;
-    display: -webkit-flex;
-    display: -ms-flexbox;
-    display: flex;
-    background-color: #FFF;
-}
-.site-footer__content {
-    -webkit-box-align: center;
-    -webkit-align-items: center;
-    -ms-flex-align: center;
-    align-items: center;
-    display: -webkit-box;
-    display: -webkit-flex;
-    display: -ms-flexbox;
-    display: flex;
-    -webkit-flex-flow: row nowrap;
-    -ms-flex-flow: row nowrap;
-    flex-flow: row nowrap;
-    -webkit-box-pack: justify;
-    -webkit-justify-content: space-between;
-    -ms-flex-pack: justify;
-    justify-content: space-between;
-    padding: 35px 10px;
-    width: 100%;
-}
-.site-footer__copyright {
-    font-family: 'Atlas Grotesk',sans-serif;
-    -webkit-box-ordinal-group: 2;
-    -webkit-order: 1;
-    -ms-flex-order: 1;
-    order: 1;
-    -webkit-box-flex: 0;
-    -webkit-flex: 0 1 auto;
-    -ms-flex: 0 1 auto;
-    flex: 0 1 auto;
-    font-size: 14px;
-    color: #C4C9CD;
-    margin-bottom: 3px;
-}
-form [type='file'] {
-     opacity: 0;
-     position: absolute;
-     top: auto;
-     left: -10000px;
-     width: 1px;
-     height: 1px;
-    overflow: hidden;
-}
-table th {
-     font-size: 14px;
-     font-weight: 700;
-     min-width: 60px;
-     padding: 12px;
-     text-transform: uppercase;
-     vertical-align: top;
-}
+    .btn-blue-to-white:hover{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+    .btn-blue-to-white:active{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+    .btn-blue-to-white:focus{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+    .btn-blue-to-white:visited{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+    .site-footer {
+        border-top: 1px solid #DDD;
+        display: -webkit-box;
+        display: -webkit-flex;
+        display: -ms-flexbox;
+        display: flex;
+        background-color: #FFF;
+    }
+    .site-footer__content {
+        -webkit-box-align: center;
+        -webkit-align-items: center;
+        -ms-flex-align: center;
+        align-items: center;
+        display: -webkit-box;
+        display: -webkit-flex;
+        display: -ms-flexbox;
+        display: flex;
+        -webkit-flex-flow: row nowrap;
+        -ms-flex-flow: row nowrap;
+        flex-flow: row nowrap;
+        -webkit-box-pack: justify;
+        -webkit-justify-content: space-between;
+        -ms-flex-pack: justify;
+        justify-content: space-between;
+        padding: 35px 10px;
+        width: 100%;
+    }
+    .site-footer__copyright {
+        font-family: 'Atlas Grotesk',sans-serif;
+        -webkit-box-ordinal-group: 2;
+        -webkit-order: 1;
+        -ms-flex-order: 1;
+        order: 1;
+        -webkit-box-flex: 0;
+        -webkit-flex: 0 1 auto;
+        -ms-flex: 0 1 auto;
+        flex: 0 1 auto;
+        font-size: 14px;
+        color: #C4C9CD;
+        margin-bottom: 3px;
+    }
+    form [type='file'] {
+         opacity: 0;
+         position: absolute;
+         top: auto;
+         left: -10000px;
+         width: 1px;
+         height: 1px;
+        overflow: hidden;
+    }
+    table th {
+         font-size: 14px;
+         font-weight: 700;
+         min-width: 60px;
+         padding: 12px;
+         text-transform: uppercase;
+         vertical-align: top;
+    }
 
-table td, table th {
-    padding: 12px 6px;
-    vertical-align: top;
-}
-table th {
-    font-size: 14px;
-    font-weight: 700;
-    text-align: inherit;
-    text-transform: uppercase;
-}
+    table td, table th {
+        padding: 12px 6px;
+        vertical-align: top;
+    }
+    table th {
+        font-size: 14px;
+        font-weight: 700;
+        text-align: inherit;
+        text-transform: uppercase;
+    }
 
-        #owl-demo .item{ display: block; margin: 5px;}
-        #owl-demo img { display: block; width: 100%;}
-.demo-result-warp table .color-square {
-    display: inline-block;
-    width: 15px;
-    height: 15px;
-    border: 1px #000 solid;
-}
+    #owl-demo .item{ display: block; margin: 5px;}
+    #owl-demo img { display: block; width: 100%;}
+    .demo-result-warp table .color-square {
+        display: inline-block;
+        width: 15px;
+        height: 15px;
+        border: 1px #000 solid;
+    }
     </style>
     <script>
-        String.prototype.replaceAll = function(exp, newStr){
-            return this.replace(new RegExp(exp, 'gm'), newStr)
-        };
-        String.prototype.format = function(args) {
-            var result = this;
-            if (arguments.length < 1) {
-                return result;
-            }
-
-            var data = arguments; // 如果模板参数是数组
-            if (arguments.length == 1 && typeof (args) == "object") {
-                // 如果模板参数是对象
-                data = args;
-            }
-            for ( var key in data) {
-                var value = data[key];
-                if (undefined != value) {
-                    result = result.replaceAll("\\{" + key + "\\}", value);
-                }
-            }
-            return result;
-        };
-
-        function checkUrl(urlString){
-            if(urlString!=""){
-                var reg=/(http|ftp|https):\/\/[\w\-_]+(\.[\w\-_]+)+([\w\-\.,@?^=%&:/~\+#]*[\w\-\@?^=%&/~\+#])?/;
-                if(!reg.test(urlString)){
-                        return false;
-                    }
-
-                    return true;
-                }
-            return false;
-        }
-        function checkEmail(address) {
-            return false
-        }
-        function checkPostcode(address) {
-            return false;
-        }
-        function checkTelephone(number){
-
-        }
-        function LayoutTable(id, rows, cols){
-            var layout_table = {};
-            var _id = id;
-            var _rows = rows;
-            var _cols = cols;
-
-            layout_table.append = function (r,c,node) {
-                var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
-                // 1.step clear
-                $('#'+cell_id).empty();
-                // 2.step append
-                $('#'+cell_id).append(node);
-            }
-            layout_table.text = function (r, c, text){
-                var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
-                $('#'+cell_id).text(text);
-            }
-
-            layout_table.create = function(container) {
-                var table_div = $('<div id="{id}-layout"></div>'.format({id: _id}));
-                var table_div_body = $('<table class="no-border"></table>');
-                table_div_body.append($('<thead><tr><th>Feature Name</th><th>Value</th></tr></thead>'));
-                var table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
-
-                for (var r = 0; r < _rows; ++r) {
-                    var item = $('<tr></tr>');
-                    for (var c = 0; c < _cols; ++c) {
-                        item.append('<td id="table-{id}-{r}{c}"></td>'.format({id: id, r: r, c: c}));
-                    }
-
-                    table_bbody.append(item);
-                }
-
-                table_div_body.append(table_bbody);
-                table_div.append(table_div_body);
-
-                container.append(table_div)
-            }
-
-            return layout_table
-        }
         function show_demo_response(container, data) {
             $('#'+container).html("");
 
@@ -516,102 +431,89 @@ table th {
         }
 
         $(document).ready(function () {
-            // submit after browser
-            $("input[type=file]").change(function(e){
-                $("#demo_submit_form").ajaxSubmit(function(data){
-                    var demo_response = eval('('+data+')');
-                    show_demo_response('feature-table',
-                        demo_response['DATA']);
+            //////////////////////////////////////////////////////////////////////////////////////////////////////
+            // manage user browser
+            function user_browser_callback(data){
+                var demo_response = eval('('+data+')');
+                show_demo_response('feature-table', demo_response['DATA']);
 
-                    if(demo_response['INPUT_TYPE'] == 'IMAGE'){
-                        $('#demo_input_image').empty()
-                        $('#demo_input_image').append('<img src="{0}" style="width:100%;">'.format(demo_response['INPUT']))
-                    }
-                    else if(demo_response['INPUT_TYPE'] == 'VIDEO'){
-                        $('#demo_input_image').empty()
-                        var video_html = '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(demo_response['INPUT'],demo_response['INPUT'])
-                        $('#demo_input_image').append(video_html)
-                    }
-                    else if(demo_response['INPUT_TYPE'] == 'AUDIO'){
-                        $('#demo_input_image').empty();
-                        var audio_html = '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(demo_response['INPUT'])
-                        $('#demo_input_image').append(audio_html)
-                    }
+                if(demo_response['INPUT_TYPE'] == 'IMAGE'){
+                    $('#demo_input_image').empty()
+                    $('#demo_input_image').append('<img src="{0}" style="width:100%;">'.format(demo_response['INPUT']))
+                }
+                else if(demo_response['INPUT_TYPE'] == 'VIDEO'){
+                    $('#demo_input_image').empty()
+                    var video_html = '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(demo_response['INPUT'],demo_response['INPUT'])
+                    $('#demo_input_image').append(video_html)
+                }
+                else if(demo_response['INPUT_TYPE'] == 'AUDIO'){
+                    $('#demo_input_image').empty();
+                    var audio_html = '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(demo_response['INPUT'])
+                    $('#demo_input_image').append(audio_html)
+                }
+            }
+            var file_filter = "{{demo['upload_accept']}}";
+            demoUserBrowser(user_browser_callback, 'demo_browser',file_filter);
+            /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-                });
-            })
-            // submit user input
+            //////////////////////////////////////////////////////////////////////////////////////////////////////
+            // manage submit user input
+            function user_submit_callback(data){
+                var demo_response = eval('('+data+')');
+                show_demo_response('feature-table', demo_response['DATA']);
+
+                if(demo_response['INPUT_TYPE'] == 'IMAGE'){
+                    $('#demo_input_image').find('img').attr('src', demo_response['INPUT'])
+                }
+                else if(demo_response['INPUT_TYPE'] == 'VIDEO'){
+                    $('#demo_input_image').empty()
+                    var video_html = '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(demo_response['INPUT'],demo_response['INPUT'])
+                    $('#demo_input_image').append(video_html)
+                }
+                else if(demo_response['INPUT_TYPE'] == 'AUDIO'){
+                    $('#demo_input_image').empty();
+                    var audio_html = '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(demo_response['INPUT'])
+                    $('#demo_input_image').append(audio_html)
+                }
+            }
+            var demo_user_input_cl = demoUserInput(user_submit_callback)
             $('#demo_submit').on('click', function(){
                 var input_str = $('#demo_input').val();
                 if(input_str == ""){
                     alert('please valid image url');
                     return;
                 }
-                var is_url = checkUrl(input_str);
-                var query_data = {};
-                query_data['DATA'] = input_str;
-                if(is_url){
-                    query_data['DATA_TYPE'] = 'URL';
-                }
-                else{
-                    query_data['DATA_TYPE'] = 'STRING';
-                }
-
-                $.post('/api/query/', query_data, function(data, status){
-                    if(status == 'success'){
-                        var demo_response = eval('('+data+')');
-                        show_demo_response('feature-table',
-                            demo_response['DATA']);
-
-                        <!--if(demo_response['INPUT_TYPE'] == 'IMAGE'){-->
-                            <!--$('#demo_input_image').attr('src', demo_response['INPUT']);-->
-                        <!--}-->
-
-                        if(demo_response['INPUT_TYPE'] == 'IMAGE'){
-                            $('#demo_input_image').find('img').attr('src', demo_response['INPUT'])
-                        }
-                        else if(demo_response['INPUT_TYPE'] == 'VIDEO'){
-                            $('#demo_input_image').empty()
-                            var video_html = '<video width="320" height="240" controls autoplay> <source src="{0}" type="video/mp4"> <object data="{1}" width="320" height="240"></object></video>'.format(demo_response['INPUT'],demo_response['INPUT'])
-                            $('#demo_input_image').append(video_html)
-                        }
-                        else if(demo_response['INPUT_TYPE'] == 'AUDIO'){
-                            $('#demo_input_image').empty();
-                            var audio_html = '<audio src="{0}" controls="controls">Your browser does not support the audio element.</audio>'.format(demo_response['INPUT'])
-                            $('#demo_input_image').append(audio_html)
-                        }
-                    }
-                })
+                demo_user_input_cl.trigger(input_str)
             })
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////
+            // manage history record
             $('#owl-demo').owlCarousel();
-
             $('a[name=history_demo_item]').each(function(){
                 $(this).on('click',function () {
                     var query_data = {'DATA': $(this).attr('path'), 'DATA_TYPE': 'PATH'}
                     $.post('/api/query/', query_data, function(data, status){
                         if(status == 'success'){
                             var demo_response = eval('('+data+')');
-                            show_demo_response('feature-table',
-                                demo_response['DATA']);
+                            show_demo_response('feature-table', demo_response['DATA']);
 
                             if(demo_response['INPUT_TYPE'] == 'IMAGE'){
-                                $('#demo_input_image').attr('src', demo_response['INPUT']);
+                                $('#demo_input_image').find("img").attr('src', demo_response['INPUT']);
                             }
                         }
                     })
                 })
             })
-            
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////
             $('#demo_input_image').on('click', function () {
                 $("#bigger_image_container").html("<image src='"+$(this).find('img').attr('src') +"' class='carousel-inner img-responsive img-rounded' />");
                 $("#bigger_image_modal").modal();
             })
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////
         })
-        // trigger file browser
-        function browser(){
-            $('#file_browser').click()
-        }
     </script>
 </head>
 <div class="modal fade" id="bigger_image_modal" tabindex="-1" role="dialog" aria-hidden="true">
@@ -633,7 +535,7 @@ table th {
                  </div>
                 <div class="wqdelementEditBox wqdAnimatedos" style="visibility: visible;" data-emptytexttemplate="title3">
                     <h2 class="wqd-text-title2" style="text-align: center;">
-                        <font color="#ffffff" style="size: 40px">Antgo Help AI Going !!!</font>
+                        <font color="#ffffff" style="size: 40px">Antgo Help AI Go Go</font>
                     </h2>
                 </div>
               <div class="clearfix"> </div>
@@ -644,10 +546,8 @@ table th {
   <div class="container">
       <div class="demo-headline">
           <div class="column medium-10 medium-centered large-8 large-centered text-center">
-              {%if demo['type'] == 'SEGMENTATION'%}
-              <h2>Analyze an image</h2>
-              <p>Parse a scene image and make segmentation</p>
-              {%end%}
+              <p>{{demo['description']['SHORT_DESCRIPTION']}}</p>
+              <p>{{demo['description']['LONG_DESCRIPTION']}}</p>
           </div>
       </div>
       <div class="demo-box">
@@ -657,7 +557,7 @@ table th {
       </div>
       <div class="row">
           <div id='demo_input_image' class="col-md-6 demo-image-warp">
-              <img src="holder.js/512x430?text=?" style="width:100%;">
+              <img src="holder.js/512x430?text=...&size=100" style="width:100%;">
           </div>
           <div class="col-md-6">
               <div id="feature-table" class="demo-result-warp">
@@ -666,7 +566,6 @@ table th {
       </div>
       <div class="row">
           <div class="col-md-6">
-          <form id="demo_submit_form" name="form" action="/submit/" method="POST" enctype="multipart/form-data">
           <div class="input-group demo-control">
               <input id="demo_input" type="text" class="form-control" placeholder="Image URL">
               <span class="input-group-btn">
@@ -674,17 +573,14 @@ table th {
                   <button id="demo_submit" class="btn btn-default btn-blue-to-white" type="button" style="margin-right: 10px;margin-left: 10px;">Submit</button>
                   {%end%}
                   {%if demo['upload']%}
-                  <button id="demo_browser" class="btn btn-default btn-white-to-blue" type="button" onclick="browser()">
+                  <button id="demo_browser" class="btn btn-default btn-white-to-blue" type="button">
                       <i class="fa fa-cloud-upload"></i>Browser
                   </button>
-                  <input id="file_browser" name="file" type="file" accept="{{demo['upload_accept']}}">
                   {%end%}
               </span>
           </div><!-- /input-group -->
-          </form>
           </div>
       </div>
-
   </div>
   <div class="container">
       <div class="demo-box">
@@ -696,9 +592,9 @@ table th {
           {%for image_url in demo['image_history']%}
             <a href="javascript:void(0)" class="item" name="history_demo_item" path="{{image_url}}"><img src="{{image_url}}"></a>
           {%end%}
-    </div>
+      </div>
   </div>
-      <div class="container">
+    <div class="container">
     <footer class="site-footer">
         <div class="site-footer__content">
             <div class="site-footer__copyright">

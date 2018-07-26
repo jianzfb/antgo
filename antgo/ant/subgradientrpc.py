@@ -21,13 +21,11 @@ class SubgradientRPC(object):
 
   @property
   def private_key(self):
-    # return open('%s/.ssh/id_rsa'%os.environ['HOME']).read()
-    return open('/Users/jian/Downloads/id_rsa').read()
+    return open('%s/.ssh/id_rsa'%os.environ['HOME']).read()
 
   @property
   def public_key(self):
-    # return open('%s/.ssh/id_rsa.pub'%os.environ['HOME']).read()
-    return open('/Users/jian/Downloads/id_rsa.pub').read()
+    return open('%s/.ssh/id_rsa.pub'%os.environ['HOME']).read()
 
   @property
   def subgradientserver_ip(self):

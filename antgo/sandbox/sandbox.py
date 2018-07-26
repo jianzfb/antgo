@@ -24,13 +24,14 @@ def running_sandbox(*wargs, **kwargs):
       now_time = time.time()
       if now_time - launch_time > sandbox_running_time:
         # arriving custom max running time
-        logger.info('running time is arriving')
+        logger.info('max running time is arriving, exit antgo running environment')
 
         # experiment result save process
         if 'sandbox_dump_dir' in kwargs and \
                 'sandbox_experiment' in kwargs and \
                 'sandbox_user_token' in kwargs:
           # 1.step launch experiment save process
+          logger.info('launch upload experiment record in the running end')
           process = multiprocessing.Process(target=experiment_upload_dht,
                                             args=(kwargs['sandbox_dump_dir'],
                                                   kwargs['sandbox_experiment'],
@@ -51,8 +52,9 @@ def running_sandbox(*wargs, **kwargs):
       now_time = time.time()
       launch_time = kwargs['sandbox_launch_time']
       sandbox_running_time = int(now_time - launch_time)
-      if (sandbox_running_time+1) / 3600 == 0:
-        # launch experiment save process
+      if int(sandbox_running_time+1) % 3600 == 0:
+        # launch experiment save process (every hour)
+        logger.info('launch upload experiment record every one hour')
         process = multiprocessing.Process(target=experiment_upload_dht,
                                           args=(kwargs['sandbox_dump_dir'],
                                                 kwargs['sandbox_experiment'],
@@ -99,6 +101,7 @@ def running_sandbox(*wargs, **kwargs):
     timer_thread.stop()
 
   # launch experiment save process
+  logger.info('launch upload experiment record in the running end')
   process = multiprocessing.Process(target=experiment_upload_dht,
                                     args=(kwargs['sandbox_dump_dir'],
                                           kwargs['sandbox_experiment'],
@@ -107,3 +110,4 @@ def running_sandbox(*wargs, **kwargs):
 
   process.start()
   process.join()
+  logger.info('exit antgo running environment')

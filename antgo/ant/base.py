@@ -25,6 +25,7 @@ import yaml
 from antgo.utils.utils import *
 from datetime import datetime
 from antgo.ant.subgradientrpc import *
+from antgo.ant.mltalkerrpc import *
 from antgo.ant.warehouse import *
 from qiniu import Auth, put_file, etag, urlsafe_base64_encode
 if sys.version > '3':
@@ -78,6 +79,7 @@ class AntBase(object):
 
     # subgradient rpc
     self.subgradient_rpc = SubgradientRPC(self.subgradientserver['subgradientserver_ip'], self.subgradientserver['subgradientserver_port'])
+    self.mltalker_rpc = MLTalkerRPC(self.server_ip, self.http_port, self.app_token)
 
     # parse hardware resource config
     self._running_config = {'GPU_MODEL': '',
@@ -90,6 +92,12 @@ class AntBase(object):
                             'OS_VERSION': '',
                             'SOFTWARE_FRAMEWORK': '',
                             'DATASET': ''}
+
+    self._description_config = {'SHORT_DESCRIPTION': '',
+                                'LONG_DESCRIPTION': '',
+                                'VERSION': '',
+                                'INPUT_NUM': 1,
+                                'INPUT_TYPE':[]}
 
     if ant_context is not None:
       config_params = ant_context.params._params
@@ -120,6 +128,22 @@ class AntBase(object):
 
         if 'SOFTWARE_FRAMEWORK' in config_params['RUNNING_CONFIG']:
           self._running_config['SOFTWARE_FRAMEWORK'] = config_params['RUNNING_CONFIG']['SOFTWARE_FRAMEWORK']
+
+      if 'DESCRIPTION_CONFIG' in config_params:
+        if 'SHORT_DESCRIPTION' in config_params['DESCRIPTION_CONFIG']:
+          self._description_config['SHORT_DESCRIPTION'] = config_params['DESCRIPTION_CONFIG']['SHORT_DESCRIPTION']
+
+        if 'LONG_DESCRIPTION' in config_params['DESCRIPTION_CONFIG']:
+          self._description_config['LONG_DESCRIPTION'] = config_params['DESCRIPTION_CONFIG']['LONG_DESCRIPTION']
+
+        if 'VERSION' in config_params['DESCRIPTION_CONFIG']:
+          self._description_config['VERSION'] = config_params['DESCRIPTION_CONFIG']['VERSION']
+
+        if 'INPUT_NUM' in config_params['DESCRIPTION_CONFIG']:
+          self._description_config['INPUT_NUM'] = config_params['DESCRIPTION_CONFIG']['INPUT_NUM']
+
+        if 'INPUT_TYPE' in config_params['DESCRIPTION_CONFIG']:
+          self._description_config['INPUT_TYPE'] = config_params['DESCRIPTION_CONFIG']['INPUT_TYPE']
 
     self._running_platform = kwargs.get('running_platform', 'local')    # local, cloud
 
@@ -155,6 +179,10 @@ class AntBase(object):
   @property
   def running_config(self):
     return self._running_config
+
+  @property
+  def description_config(self):
+    return self._description_config
 
   @property
   def running_platform(self):
