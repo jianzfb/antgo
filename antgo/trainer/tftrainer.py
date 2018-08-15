@@ -466,6 +466,9 @@ class TFTrainer(Trainer):
 
     # record run time
     self.time_stat = MovingAverage(self.log_every_n_steps)
+    self.loss_stat = MovingAverage(10)
+
+    self._has_model_input = False
     
   # 2.step run model once
   def run(self, data_generator=None, binds={}):
@@ -473,13 +476,30 @@ class TFTrainer(Trainer):
     with self.graph.as_default():
       feed_dict = {}
       if data_generator is not None:
-        for clone in self.clones:
+        if self._has_model_input and len(self.clones) > 1:
+          logger.error('clones number > 1, must set different placeholder for every clone')
+          exit(-1)
+
+        if self._has_model_input:
           # generate data
           data = next(data_generator)
-  
+
           for k, v in binds.items():
             placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format('input', k))
             feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
+        else:
+          # set different placeholder for every clone
+          for clone in self.clones:
+            # generate data
+            data = next(data_generator)
+
+            for k, v in binds.items():
+              placeholder_tensor = None
+              if len(self.clones) > 1:
+                placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format(clone[1][:-1], k))
+              else:
+                placeholder_tensor = self.graph.get_tensor_by_name('{}:0'.format(k))
+              feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
 
       # increment
       self.iter_at += 1
@@ -503,43 +523,52 @@ class TFTrainer(Trainer):
           loss_val = result[1]
         else:
           loss_val = result
-        
+
+        self.loss_stat.add(loss_val)
+
         if self.iter_at % self.log_every_n_steps == 0:
           logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)'%
-                      (str(os.getpid()), loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
+                      (str(os.getpid()), self.loss_stat.get(), self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
       else:
         logger.info('(PID: %s) INFO: (%f sec/step)'%(str(os.getpid()), float(self.time_stat.get())))
       
       return result
 
-  def run_step(self, feed_dict):
-    start_time = time.time()
-    result = self.sess.run(self.val_ops, feed_dict=feed_dict if len(feed_dict) > 0 else None)
-    elapsed_time = int((time.time() - start_time) * 100) / 100.0
+  def run_dict(self, feed_dict):
+    with self.graph.as_default():
+      start_time = time.time()
+      replace_feed_dict = {}
+      for k_name, v_value in feed_dict.items():
+        k_tensor = self.graph.get_tensor_by_name('{}:0'.format(k_name))
+        replace_feed_dict[k_tensor] = v_value
 
-    if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
-      self.ctx.recorder.action(result[-1])
-      result = result[:-1]
+      result = self.sess.run(self.val_ops, feed_dict=replace_feed_dict if len(replace_feed_dict) > 0 else None)
+      elapsed_time = int((time.time() - start_time) * 100) / 100.0
 
-    self.iter_at += 1
+      if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
+        self.ctx.recorder.action(result[-1])
+        result = result[:-1]
 
-    # record elapsed time
-    self.time_stat.add(elapsed_time)
+      self.iter_at += 1
 
-    if self.is_training:
-      loss_val = 0.0
-      if type(result) == list:
-        loss_val = result[1]
+      # record elapsed time
+      self.time_stat.add(elapsed_time)
+
+      if self.is_training:
+        loss_val = 0.0
+        if type(result) == list:
+          loss_val = result[1]
+        else:
+          loss_val = result
+
+        self.loss_stat.add(loss_val)
+        if self.iter_at % self.log_every_n_steps == 0:
+          logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)' %
+                      (str(os.getpid()), self.loss_stat.get(), self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
       else:
-        loss_val = result
+        logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
 
-      if self.iter_at % self.log_every_n_steps == 0:
-        logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)' %
-                    (str(os.getpid()), loss_val, self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
-    else:
-      logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
-
-    return result
+      return result
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0):
@@ -582,6 +611,8 @@ class TFTrainer(Trainer):
         #############################
         with tf.variable_scope('input'):
           data_queue = self.ctx.model.model_input(self.is_training)
+          if data_queue is not None:
+            self._has_model_input = True
         
         #############################
         ####    define model       ##
@@ -596,11 +627,11 @@ class TFTrainer(Trainer):
             
             # 2.step transfer to local graph net
             logger.info('build model graph svg')
-            # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
-            #                                   self.dump_dir,
-            #                                   ['input'])
-            # if svg_graph is not None:
-            #   self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+            svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
+                                              self.dump_dir,
+                                              ['input'])
+            if svg_graph is not None:
+              self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
           return res
   
         #######################
@@ -677,7 +708,7 @@ class TFTrainer(Trainer):
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
-  
+
   def infer_deploy(self, model):
     tf.logging.set_verbosity(tf.logging.INFO)
     with tf.Graph().as_default() as graph:
@@ -705,7 +736,9 @@ class TFTrainer(Trainer):
         #############################
         with tf.variable_scope('input'):
           data_queue = self.ctx.model.model_input(self.is_training)
-        
+          if data_queue is not None:
+            self._has_model_input = True
+
         #############################
         ####    define model       ##
         #############################
@@ -760,11 +793,11 @@ class TFTrainer(Trainer):
           self.val_ops = [self.val_ops]
         if type(self.val_ops) == tuple:
           self.val_ops = list(self.val_ops)
-        
+
         # Append recorder model fn
         if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
           self.val_ops.append(self.ctx.recorder.model_fn)
-        
+
   # 1.step deploy model on hardwares
   def deploy(self, model):
     # model context

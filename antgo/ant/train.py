@@ -379,6 +379,146 @@ class AntTrain(AntBase):
       ################
     return task_running_statictic
     
+
+  def apply_and_launch_computingpow(self, running_ant_task, ablation_blocks):
+    ctx = get_global_context()
+    main_param = ''
+    if ablation_blocks is not None:
+      main_param = 'ablation_param.yaml'
+    else:
+      main_param = 'main_param.yaml'
+
+    with open(os.path.join(self.main_folder, main_param), 'w') as fp:
+      main_params = copy.deepcopy(ctx.params.content)
+      if ablation_blocks is not None:
+        main_params['ablation'] = ablation_blocks
+        main_params['ablation_method'] = 'fixed'
+        main_params['devices'] = [0]
+      else:
+        if 'ablation' in main_params:
+          main_params.pop('ablation')
+        if 'ablation_method' in main_params:
+          main_params.pop('ablation_method')
+
+      yaml.dump(main_params, fp)
+
+    # 1.step pack codebase
+    codebase_address, codebase_address_code = self.package_codebase()
+    if codebase_address is None:
+      logger.error('couldnt package whole codebase')
+      return
+
+    # 2.step apply computing pow
+    max_running_time = 0.0
+    computing_pow = {}
+
+    # transform max time unit
+    max_running_time_and_unit = FLAGS.max_time()
+    max_running_time = float(max_running_time_and_unit[0:-1])
+    max_running_time_unit = max_running_time_and_unit[-1]
+    if max_running_time_unit == 's':
+      # second
+      max_running_time = max_running_time / (60.0 * 60.0)
+    elif max_running_time_unit == 'm':
+      max_running_time = max_running_time / 60.0
+    elif max_running_time_unit == 'd':
+      max_running_time = max_running_time * 24
+    elif max_running_time_unit == 'h':
+      pass
+    else:
+      logger.error('max running time error')
+      return
+
+    computing_pow = self.subgradient_rpc.make_computingpow_order(max_running_time,
+                                                                 self.running_config['OS_PLATFORM'],
+                                                                 self.running_config['OS_VERSION'],
+                                                                 self.running_config['SOFTWARE_FRAMEWORK'],
+                                                                 self.running_config['CPU_MODEL'],
+                                                                 self.running_config['CPU_NUM'],
+                                                                 self.running_config['CPU_MEM'],
+                                                                 self.running_config['GPU_MODEL'],
+                                                                 self.running_config['GPU_NUM'],
+                                                                 self.running_config['GPU_MEM'],
+                                                                 running_ant_task.dataset_name,
+                                                                 FLAGS.max_fee())
+    if computing_pow is None:
+      logger.error('fail to find matched computing pow')
+      return
+
+    logger.info('success to apply computing pow order %s (%s:(rpc)%s or (ssh)%s)' % (computing_pow['order_id'],
+                                                                                     computing_pow['order_ip'],
+                                                                                     str(computing_pow['order_rpc_port']),
+                                                                                     str(computing_pow['order_ssh_port'])))
+
+    # 3.step exchange access token
+    secret, signature = self.subgradient_rpc.signature(computing_pow['order_id'])
+    result = self.subgradient_rpc.authorize(computing_pow['order_ip'],
+                                            computing_pow['order_rpc_port'],
+                                            order_id=computing_pow['order_id'],
+                                            secret=secret,
+                                            signature=signature)
+
+    if result['authorize'] != 'success':
+      logger.error('couldnt authorize order access token')
+      return
+
+    order_access_token = result['access_token']
+    order_launch_time = result['launch_time']
+    order_rental_time = result['rental_time']
+
+    logger.info('computing pow rental time is %0.2f Hour, its expire time is %s' % (order_rental_time,
+                                                                                    time.strftime('%Y-%m-%d %H:%M:%S',
+                                                                                                  time.localtime(
+                                                                                                    order_launch_time + order_rental_time * 60 * 60))))
+
+    remote_cmd = ''
+    if self.app_token is not None:
+      remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --token=%s --max_time=%s' % (
+        self.main_file, main_param, self.app_token, '%fh' % (max_running_time - 0.5))
+    else:
+      remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --task=%s --max_time=%s' % (
+        self.main_file, main_param, FLAGS.task(), '%fh' % (max_running_time - 0.5))
+
+    if FLAGS.from_experiment() is not None:
+      remote_cmd += ' --from_experiment=%s' % FLAGS.from_experiment()
+
+    self.subgradient_rpc.launch(computing_pow['order_ip'],
+                                computing_pow['order_rpc_port'],
+                                access_token=order_access_token,
+                                cmd=remote_cmd,
+                                code_address=codebase_address,
+                                code_address_code=codebase_address_code)
+
+    while True:
+      time.sleep(5)
+      status_response = self.subgradient_rpc.status(computing_pow['order_ip'],
+                                                    computing_pow['order_rpc_port'],
+                                                    access_token=order_access_token)
+
+      if status_response['authorize'] == 'fail' and \
+              status_response['reason'] == 'EXPIRE_ACCESS_TOKEN_ERROR':
+        # try refresh access token
+        refresh_result = self.subgradient_rpc.refresh(computing_pow['order_ip'],
+                                                      computing_pow['order_rpc_port'],
+                                                      access_token=order_access_token)
+
+        if refresh_result['authorize'] == 'fail':
+          logger.error('%s on computing pow server' % refresh_result['reason'])
+          return
+
+        order_access_token = refresh_result['refresh_access_token']
+      elif status_response['authorize'] == 'success':
+        logger.info('computing pow order is %s' % status_response['result'])
+
+        if status_response['result'] == 'running':
+          logger.info('you can access computing pow by \"ssh -p %d %s@%s\"' % (int(computing_pow['order_ssh_port']),
+                                                                               computing_pow['order_id'],
+                                                                               computing_pow['order_ip']))
+          return
+      else:
+        logger.error('computing pow order is abnormal')
+        return
+
   def start(self):
     # 0.step loading challenge task
     running_ant_task = None
@@ -416,136 +556,78 @@ class AntTrain(AntBase):
 
     assert (running_ant_task is not None)
 
+    # analyze ablation blocks
+    # user custom devices
+    apply_devices = getattr(self.context.params, 'devices', [])
+    # ablation experiment
+    ablation_blocks = getattr(self.context.params, 'ablation', None)
+    ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
+    assert(ablation_method in ['regular', 'inregular','accumulate', 'any', 'fixed'])
+    ablation_experiments_devices_num = 0
+    if ablation_blocks is not None:
+      ablation_experiments_devices_num = 0
+      if ablation_method in ['regular', 'inregular', 'accumulate']:
+        ablation_experiments_devices_num = len(ablation_blocks)
+        if ablation_method == 'inregular' and len(ablation_blocks) == 1:
+          logger.warn('only exists one ablation block %s, couldnt set inregular ablation method' % ablation_blocks[0])
+          ablation_method = 'regular'
+      elif ablation_method == 'any':
+        for i in range(len(ablation_blocks)):
+          ablation_experiments_devices_num += len(list(itertools.combinations(ablation_blocks, i + 1)))
+      else:
+        # fixed ablation method
+        ablation_experiments_devices_num = 0
+
     # running position
     if self.running_platform == 'edge':
-      # 1.step pack codebase
-      codebase_address, codebase_address_code = self.package_codebase()
-      if codebase_address is None:
-        logger.error('couldnt package whole codebase')
-        return
+      traverse_ablation_blocks = []
+      if ablation_blocks is not None:
+        if ablation_method is None:
+          ablation_method = 'regular'
 
-      # 2.step apply computing pow
-      max_running_time = 0.0
-      computing_pow = {}
-      if FLAGS.order_id() == '':
-        # transform max time unit
-        max_running_time_and_unit = FLAGS.max_time()
-        max_running_time = float(max_running_time_and_unit[0:-1])
-        max_running_time_unit = max_running_time_and_unit[-1]
-        if max_running_time_unit == 's':
-          # second
-          max_running_time = max_running_time / (60.0 * 60.0)
-        elif max_running_time_unit == 'm':
-          max_running_time = max_running_time / 60.0
-        elif max_running_time_unit == 'd':
-          max_running_time = max_running_time * 24
-        elif max_running_time_unit == 'h':
-          pass
+        traverse_ablation_blocks = []
+        if ablation_method == 'regular':
+          # traverse all
+          traverse_ablation_blocks.extend(ablation_blocks)
+          # add an empty
+          traverse_ablation_blocks.append(None)
+        elif ablation_method == 'inregular':
+          for b in ablation_blocks:
+            traverse_ablation_blocks.append([m for m in ablation_blocks if m != b])
+          # add an inverse
+          traverse_ablation_blocks.append(ablation_blocks)
+        elif ablation_method == 'accumulate':
+          accumulate_blocks = []
+          for block in ablation_blocks:
+            accumulate_blocks.append(block)
+            traverse_ablation_blocks.append(copy.deepcopy(accumulate_blocks))
+          # add an empty
+          traverse_ablation_blocks.append(None)
+        elif ablation_method == 'any':
+          for i in range(len(ablation_blocks)):
+            aa = list(itertools.combinations(ablation_blocks, i + 1))
+            traverse_ablation_blocks.extend(aa)
+
+          traverse_ablation_blocks = [list(m) for m in traverse_ablation_blocks]
+          # add an empty
+          traverse_ablation_blocks.append(None)
         else:
-          logger.error('max running time error')
-          return
-
-        computing_pow = self.subgradient_rpc.make_computingpow_order(max_running_time,
-                                                              self.running_config['OS_PLATFORM'],
-                                                              self.running_config['OS_VERSION'],
-                                                              self.running_config['SOFTWARE_FRAMEWORK'],
-                                                              self.running_config['CPU_MODEL'],
-                                                              self.running_config['CPU_NUM'],
-                                                              self.running_config['CPU_MEM'],
-                                                              self.running_config['GPU_MODEL'],
-                                                              self.running_config['GPU_NUM'],
-                                                              self.running_config['GPU_MEM'],
-                                                              running_ant_task.dataset_name,
-                                                              FLAGS.max_fee())
-        if computing_pow is None:
-          logger.error('fail to find matched computing pow')
-          return
-
-        logger.info('success to apply computing pow order %s (%s:(rpc)%s or (ssh)%s)'%(computing_pow['order_id'],
-                                                                                       computing_pow['order_ip'],
-                                                                                       str(computing_pow['order_rpc_port']),
-                                                                                       str(computing_pow['order_ssh_port'])))
-
+          # fixed
+          traverse_ablation_blocks.append(ablation_blocks)
       else:
-        computing_pow = {'order_id': FLAGS.order_id(),
-                         'order_ip': FLAGS.order_ip(),
-                         'order_rpc_port': FLAGS.order_rpc_port(),
-                         'order_ssh_port': FLAGS.order_ssh_port()}
+        # add an empty
+        traverse_ablation_blocks.append(None)
 
-        if computing_pow['order_ip'] == '' or computing_pow['order_rpc_port'] == 0:
-          logger.error('order_ip is empty or order_rpc_port is empty')
-          return
+      for experiment_ablation_blocks in traverse_ablation_blocks:
+        if experiment_ablation_blocks is not None and \
+                (type(experiment_ablation_blocks) != list or type(experiment_ablation_blocks) != tuple):
+          experiment_ablation_blocks = [experiment_ablation_blocks]
 
-      # 3.step exchange access token
-      secret, signature = self.subgradient_rpc.signature(computing_pow['order_id'])
-      result = self.subgradient_rpc.authorize(computing_pow['order_ip'],
-                                              computing_pow['order_rpc_port'],
-                                              order_id=computing_pow['order_id'],
-                                              secret=secret,
-                                              signature=signature)
-
-      if result['authorize'] != 'success':
-        logger.error('couldnt authorize order access token')
-        return
-
-      order_access_token = result['access_token']
-      order_launch_time = result['launch_time']
-      order_rental_time = result['rental_time']
-
-      logger.info('computing pow rental time is %0.2f Hour, its expire time is %s'%(order_rental_time,
-                                                                                    time.strftime('%Y-%m-%d %H:%M:%S',
-                                                                                                  time.localtime(order_launch_time + order_rental_time * 60 * 60))))
-
-      remote_cmd = ''
-      if self.app_token is not None:
-        remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --token=%s --max_time=%s' % (
-          self.main_file, self.main_param, self.app_token, '%fh'%(max_running_time - 0.5))
-      else:
-        remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --task=%s --max_time=%s' % (
-          self.main_file, self.main_param, FLAGS.task(), '%fh'%(max_running_time - 0.5))
-
-      if FLAGS.from_experiment() is not None:
-        remote_cmd += ' --from_experiment=%s'%FLAGS.from_experiment()
-
-      self.subgradient_rpc.launch(computing_pow['order_ip'],
-                                  computing_pow['order_rpc_port'],
-                                  access_token=order_access_token,
-                                  cmd=remote_cmd,
-                                  code_address=codebase_address,
-                                  code_address_code=codebase_address_code)
-
-      while True:
-        time.sleep(5)
-        status_response = self.subgradient_rpc.status(computing_pow['order_ip'],
-                                                      computing_pow['order_rpc_port'],
-                                                      access_token=order_access_token)
-
-        if status_response['authorize'] == 'fail' and \
-                status_response['reason'] == 'EXPIRE_ACCESS_TOKEN_ERROR':
-          # try refresh access token
-          refresh_result = self.subgradient_rpc.refresh(computing_pow['order_ip'],
-                                                        computing_pow['order_rpc_port'],
-                                                        access_token=order_access_token)
-
-          if refresh_result['authorize'] == 'fail':
-            logger.error('%s on computing pow server'%refresh_result['reason'])
-            return
-
-          order_access_token = refresh_result['refresh_access_token']
-        elif status_response['authorize'] == 'success':
-          logger.info('computing pow order is %s'%status_response['result'])
-
-          if status_response['result'] == 'running':
-            logger.info('you can access computing pow by \"ssh -p %d %s@%s\"'%(int(computing_pow['order_ssh_port']),
-                                                                               computing_pow['order_id'],
-                                                                               computing_pow['order_ip']))
-            return
-        else:
-          logger.error('computing pow order is abnormal')
-          return
+        self.apply_and_launch_computingpow(running_ant_task,experiment_ablation_blocks)
+      logger.info('antgo have been deployed all train experiment')
+      return
 
     # now time stamp
-    # train_time_stamp = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(self.time_stamp))
     train_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
 
     # 0.step warp model (main_file and main_param)
@@ -585,27 +667,7 @@ class AntTrain(AntBase):
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
-    
-    # user custom devices
-    apply_devices = getattr(self.context.params, 'devices', [])
-    # ablation experiment
-    ablation_blocks = getattr(self.context.params, 'ablation', None)
-    ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
-    assert(ablation_method in ['regular', 'inregular','accumulate', 'any', 'fixed'])
     if ablation_blocks is not None:
-      ablation_experiments_devices_num = 0
-      if ablation_method in ['regular', 'inregular', 'accumulate']:
-        ablation_experiments_devices_num = len(ablation_blocks)
-        if ablation_method == 'inregular' and len(ablation_blocks) == 1:
-          logger.warn('only exists one ablation block %s, couldnt set inregular ablation method' % ablation_blocks[0])
-          ablation_method = 'regular'
-      elif ablation_method == 'any':
-        for i in range(len(ablation_blocks)):
-          ablation_experiments_devices_num += len(list(itertools.combinations(ablation_blocks, i + 1)))
-      else:
-        # fixed ablation method
-        ablation_experiments_devices_num = 0
-
       if len(apply_devices) >= ablation_experiments_devices_num + 1:
         ablation_experiments = []
         if ablation_method != 'fixed':

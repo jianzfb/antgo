@@ -66,7 +66,7 @@ class Trainer(object):
           k = param.name
           v = param.value
           if trainer_context is not None:
-              setattr(self, k, getattr(trainer_context, k, v))
+              setattr(self, k, getattr(trainer_context.params, k, v))
           else:
               setattr(self, k, v)
 

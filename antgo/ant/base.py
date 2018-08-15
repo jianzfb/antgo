@@ -205,6 +205,10 @@ class AntBase(object):
   def package_codebase(self, prefix='qiniu'):
     logger.info('package antgo codebase')
 
+    if self.app_token is None:
+      if not os.path.exists(os.path.join(self.main_folder, FLAGS.task())):
+        shutil.copy(os.path.join(Config.task_factory, FLAGS.task()), os.path.join(self.main_folder))
+
     random_code_package_name = str(uuid.uuid4())
     code_tar_path = os.path.join(self.main_folder, '%s_code.tar.gz'%random_code_package_name)
     tar = tarfile.open(code_tar_path, 'w:gz')

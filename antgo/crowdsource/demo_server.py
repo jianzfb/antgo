@@ -84,7 +84,7 @@ class BaseHandler(tornado.web.RequestHandler):
     # 5.step postprocess demo predict result
     demo_response = {'DATA': {}}
     for k, v in data.items():
-      if type(v) == np.ndarray:
+      if type(v) == np.ndarray and len(v.shape) > 1:
         # transform to image and save
         if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
           os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
@@ -94,6 +94,7 @@ class BaseHandler(tornado.web.RequestHandler):
         if len(v.shape) == 2:
           image = ((v - np.min(v)) / (np.max(v) - np.min(v)) * 255).astype(np.uint8)
         elif len(v.shape) == 3:
+          assert(v.shape[2] == 1 or v.shape[2] == 3)
           image = v.astype(np.uint8)
         else:
           is_image = False
@@ -138,10 +139,11 @@ class BaseHandler(tornado.web.RequestHandler):
             writer.close()
             
             demo_response['DATA'].update({str(k): {'DATA': '/static/output/%s_%s.mp4'%(uuid_flag, str(k)), 'TYPE': 'VIDEO'}})
-      elif type(v) == str:
-        demo_response['DATA'].update({k: {'DATA':v, 'TYPE': 'STRING'}})
       else:
-        pass
+        # default string
+        if type(v) == np.ndarray and len(v.shape) == 1:
+          v = v.tolist()
+        demo_response['DATA'].update({k: {'DATA':str(v), 'TYPE': 'STRING'}})
       
     demo_response['DEMO_TYPE'] = self.demo_type
     demo_response['DEMO_NAME'] = self.demo_name

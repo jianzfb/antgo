@@ -1,0 +1,13 @@
+batch_size: 1
+max_epochs: 10
+class_num: 2
+input_height: 512
+input_width: 512
+num_clones: 1
+learning_rate: 0.001
+optimizer: 'adam'
+CPU_NUM: 1
+CPU_MEM: 1
+OS_PLATFORM: 'ubuntu'
+OS_VERSION: '14.04'
+SOFTWARE_FRAMEWORK: 'python3;tensorflow1.2'
