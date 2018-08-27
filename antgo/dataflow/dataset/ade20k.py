@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time : 2018/8/13
-# @File : ade.py
+# @File : ade20k.py
 # @Author: Jian <jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -9,10 +9,10 @@ from antgo.dataflow.dataset import *
 import os
 import numpy as np
 
-__all__ = ['ADE']
-class ADE(Dataset):
+__all__ = ['ADE20K']
+class ADE20K(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
-    super(ADE, self).__init__(train_or_test, dir)
+    super(ADE20K, self).__init__(train_or_test, dir)
 
     assert(train_or_test in ['sample', 'train', 'val', 'test'])
     if train_or_test == 'sample':
@@ -52,7 +52,7 @@ class ADE(Dataset):
           if len(file) == 0:
             continue
 
-          self._image_file_list.append(os.path.join(dir, 'release_test', 'testing', file))
+          self._image_file_list.append(os.path.join(dir, 'release_test', 'testing', file.replace('\n','')))
 
     self.ids = list(range(len(self._image_file_list)))
 
@@ -84,33 +84,40 @@ class ADE(Dataset):
 
       for k in idxs:
         image_file = self._image_file_list[k]
-        label_file = self._annotation_file_list[k]
-
         image = imread(image_file)
-        label = imread(label_file)
 
-        if len(label.shape) == 3:
-          label = label[:,:,0]
+        if self.train_or_test in ['train', 'val']:
+          label_file = self._annotation_file_list[k]
+          label = imread(label_file)
 
-        yield [image, label]
+          if len(label.shape) == 3:
+            label = label[:,:,0]
+
+          yield [image, {'segmentation_map': label, 'file_id': image_file.split('/')[-1]}]
+        else:
+          yield [image, {'file_id': image_file.split('/')[-1]}]
 
   def at(self, id):
     if self.train_or_test == 'sample':
       return self.data_samples[id]
 
     image_file = self._image_file_list[id]
-    label_file = self._annotation_file_list[id]
     image = imread(image_file)
-    label = imread(label_file)
 
-    if len(label.shape) == 3:
-      label = label[:, :, 0]
+    if self.train_or_test in ['train', 'val']:
+      label_file = self._annotation_file_list[id]
+      label = imread(label_file)
 
-    return image,label
+      if len(label.shape) == 3:
+        label = label[:, :, 0]
+
+      return [image, {'segmentation_map':label, 'file_id': image_file.split('/')[-1]}]
+    else:
+      return [image, {'file_id': image_file.split('/')[-1]}]
 
   def split(self, split_params={}, split_method='holdout'):
     assert(self.train_or_test == 'train')
     assert(split_method == 'holdout')
 
-    validation_dataet = ADE('val', self.dir)
+    validation_dataet = ADE20K('val', self.dir)
     return self, validation_dataet

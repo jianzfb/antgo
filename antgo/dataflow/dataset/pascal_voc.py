@@ -14,15 +14,16 @@ import logging
 import tarfile
 import xml.etree.ElementTree as ET
 import scipy.sparse
-from ...utils.fs import download
-from ...utils.fs import maybe_here_match_format
-from ...utils import logger, get_rng
-from .dataset import *
+from antgo.utils.fs import download
+from antgo.utils.fs import maybe_here_match_format
+from antgo.utils import logger, get_rng
+from antgo.dataflow.dataset.dataset import *
 
 __all__ = ['Pascal2007', 'Pascal2012']
 
 PASCAL2007_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2007"
 PASCAL2012_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2012"
+
 
 class PascalBase(Dataset):
   def __init__(self, year, image_set, dir=None, ext_params=None):
@@ -37,7 +38,8 @@ class PascalBase(Dataset):
       return
 
     if self._year == '2007':
-      self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
+      if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
+        self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
       maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
       if maybe_data_path is None:
         # auto untar
@@ -49,11 +51,18 @@ class PascalBase(Dataset):
         tar.extractall(self.dir)
         tar.close()
     else:
-      self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
+      if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
+        self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
+        self.download(self.dir, ['VOC2012test.tar'], default_url='http://host.robots.ox.ac.uk:8080/eval/downloads/')
+
       maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
       if maybe_data_path is None:
         # auto untar
         tar = tarfile.open(os.path.join(self.dir, 'VOCtrainval_11-May-2012.tar'), 'r')
+        tar.extractall(self.dir)
+        tar.close()
+
+        tar = tarfile.open(os.path.join(self.dir, 'VOC2012test.tar'), 'r')
         tar.extractall(self.dir)
         tar.close()
 
@@ -79,6 +88,19 @@ class PascalBase(Dataset):
                      'sofa',
                      'train',
                      'tvmonitor')
+
+    self._action_classes = {'phoning': 1,
+                            'playinginstrument': 2,
+                            'reading': 3,
+                            'ridingbike': 4,
+                            'ridinghorse': 5,
+                            'running': 6,
+                            'takingphoto': 7,
+                            'usingcomputer': 8,
+                            'walking': 9,
+                            'jumping': 10,
+                            'other': 0}
+
     self._num_classes = len(self._classes)
     self._class_to_ind = dict(zip(self._classes, range(self._num_classes)))
     self._image_ext = '.jpg'
@@ -123,13 +145,36 @@ class PascalBase(Dataset):
       for k in idxs:
         # real index
         index = self._image_index[k]
+        if self.train_or_test == 'test' and self._year == '2012':
+          image = imread(self.image_path_from_index(index))
+          yield [image, {'file_id': index + self._image_ext}]
+
+          continue
+
         # annotation
         gt_roidb = self._load_roidb(index)
 
-        # label info
-        gt_roidb = self.filter_by_condition(gt_roidb, ['segmentation'])
-        if gt_roidb is None:
-          continue
+        task_type = getattr(self, 'task_type', None)
+        if task_type is not None:
+          if task_type == 'ACTION_CLASSIFICATION':
+            keep_index = []
+            for obj_index, obj_name in enumerate(gt_roidb['category']):
+              if obj_name == 'person':
+                keep_index.append(obj_index)
+
+            if len(keep_index) == 0:
+              continue
+
+            keep_index = [ki for ki in keep_index if gt_roidb['person_action'][ki] is not None]
+            if len(keep_index) == 0:
+              continue
+
+            gt_roidb['category_id'] = np.concatenate([gt_roidb['person_action'][ki].reshape((1,-1)) for ki in keep_index])
+            gt_roidb['bbox'] = gt_roidb['bbox'][keep_index,:]
+            gt_roidb['area'] = gt_roidb['area'][keep_index]
+            gt_roidb['difficult'] = [gt_roidb['difficult'][ki] for ki in keep_index]
+
+            gt_roidb.pop('person_action')
 
         # image
         image = imread(self.image_path_from_index(index))
@@ -138,6 +183,7 @@ class PascalBase(Dataset):
         gt_roidb['id'] = k
         
         # [img, groundtruth]
+        gt_roidb.update({'file_id': index})
         yield [image, gt_roidb]
   
   def at(self, id):
@@ -146,12 +192,29 @@ class PascalBase(Dataset):
 
     index = self._image_index[id]
     gt_roidb = self._load_roidb(index)
-  
-    # label info
-    gt_roidb = self.filter_by_condition(gt_roidb, ['segmentation'])
-    if gt_roidb is None:
-      return [None, None]
-  
+
+    task_type = getattr(self, 'task_type', None)
+    if task_type is not None:
+      if task_type == 'ACTION_CLASSIFICATION':
+        keep_index = []
+        for obj_index, obj_name in enumerate(gt_roidb['category']):
+          if obj_name == 'person':
+            keep_index.append(obj_index)
+
+        if len(keep_index) == 0:
+          return [None, None]
+
+        keep_index = [ki for ki in keep_index if gt_roidb['person_action'][ki] is not None]
+        if len(keep_index) == 0:
+          return [None, None]
+
+        gt_roidb['category_id'] = np.concatenate([gt_roidb['person_action'][ki].reshape((1, -1)) for ki in keep_index])
+        gt_roidb['bbox'] = gt_roidb['bbox'][keep_index, :]
+        gt_roidb['area'] = gt_roidb['area'][keep_index]
+        gt_roidb['difficult'] = [gt_roidb['difficult'][ki] for ki in keep_index]
+
+        gt_roidb.pop('person_action')
+
     image = imread(self.image_path_from_index(index))
     gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
     gt_roidb['id'] = id
@@ -186,6 +249,16 @@ class PascalBase(Dataset):
     # self._devkit_path + /VOCdevkit2007/VOC2007/ImageSets/Main/val.txt
     image_set_file = os.path.join(self._data_path, 'ImageSets', 'Main',
                                   self._image_set + '.txt')
+
+    task_type = getattr(self, 'task_type', None)
+    if task_type is not None:
+      if task_type == 'ACTION_CLASSIFICATION':
+        image_set_file = os.path.join(self._data_path, 'ImageSets', 'Action',
+                                  self._image_set + '.txt')
+      elif task_type == 'SEGMENTATION':
+        image_set_file = os.path.join(self._data_path, 'ImageSets', 'Segmentation',
+                                  self._image_set + '.txt')
+
     assert os.path.exists(image_set_file), \
             'Path Does not Exist: {}'.format(image_set_file)
     with open(image_set_file) as f:
@@ -230,6 +303,7 @@ class PascalBase(Dataset):
 
     # Load object bb and segmentation into a data frame.
     segmentation = []
+    person_action = []
     for ix, obj in enumerate(objs):
       bbox = obj.find('bndbox')
       # Make pixel indexes 0-based
@@ -249,12 +323,26 @@ class PascalBase(Dataset):
         obj_seg[np.where(seg_img[:, :, 0] == cls)] = 255
         segmentation.append(obj_seg)
 
+      if category[-1] == 'person':
+        action_cls = obj.find('actions')
+        if action_cls is not None:
+          action_label = np.zeros((11), np.int32)
+          for action_cc in action_cls.getchildren():
+            action_label[self._action_classes[action_cc.tag]] = int(action_cc.text)
+
+          person_action.append(action_label)
+        else:
+          person_action.append(None)
+      else:
+        person_action.append(None)
+
     annotation = {'bbox': boxes,
                   'category_id': category_id,
                   'category': category,
                   'flipped': False,
                   'difficult': difficult,
-                  'area': area}
+                  'area': area,
+                  'person_action': person_action}
 
     if has_seg:
       segmentation_map = seg_img[:, :, 0]

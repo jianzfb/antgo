@@ -43,11 +43,34 @@ def download(url, dir, fname=None):
   print('Succesfully downloaded ' + fname + " " + str(size) + ' bytes.')
   return fpath
 
-def maybe_here(dest_dir,target_file):
+def maybe_here(dest_dir, target_file):
   maybe_dest_dir = dest_dir
   while maybe_dest_dir is not None:
     target_file_path = os.path.join(maybe_dest_dir, target_file)
     if not os.path.exists(target_file_path):
+      is_over = False
+      for ff in os.listdir(maybe_dest_dir):
+        if ff[0] == '.':
+          continue
+        if os.path.isdir(os.path.join(maybe_dest_dir, ff)):
+          maybe_dest_dir = os.path.join(maybe_dest_dir, ff)
+          break
+
+        is_over = True
+
+      if is_over:
+        maybe_dest_dir = None
+    else:
+      break
+
+  return maybe_dest_dir
+
+def maybe_here_match_format(dest_dir, target_pattern):
+  maybe_dest_dir = dest_dir
+  while maybe_dest_dir is not None:
+    files = os.listdir(maybe_dest_dir)
+    is_has_files = len([f for f in files if target_pattern == f])
+    if is_has_files == 0:
       is_continue = False
       for ff in os.listdir(maybe_dest_dir):
         if ff[0] == '.':
@@ -63,28 +86,6 @@ def maybe_here(dest_dir,target_file):
         break
     else:
       break
-
-  return maybe_dest_dir
-
-def maybe_here_match_format(dest_dir, target_pattern):
-  maybe_dest_dir = dest_dir
-  while maybe_dest_dir is not None:
-    files = os.listdir(maybe_dest_dir)
-    is_has_files = len([f for f in files if target_pattern in f])
-    if is_has_files == 0:
-      is_continue = False
-      for ff in os.listdir(maybe_dest_dir):
-        if ff[0] == '.':
-          continue
-        if os.path.isdir(os.path.join(maybe_dest_dir, ff)):
-          maybe_dest_dir = os.path.join(maybe_dest_dir, ff)
-          is_continue = True
-          break
-
-      if not is_continue:
-        maybe_dest_dir = None
-      else:
-        break
 
   return maybe_dest_dir
 
