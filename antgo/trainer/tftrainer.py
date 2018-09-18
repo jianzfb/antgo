@@ -625,13 +625,13 @@ class TFTrainer(Trainer):
             # 1.step save graph file
             tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
             
-            # 2.step transfer to local graph net
-            logger.info('build model graph svg')
-            svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
-                                              self.dump_dir,
-                                              ['input'])
-            if svg_graph is not None:
-              self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+            # # 2.step transfer to local graph net
+            # logger.info('build model graph svg')
+            # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'graph.pbtxt'),
+            #                                   self.dump_dir,
+            #                                   ['input'])
+            # if svg_graph is not None:
+            #   self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
           return res
   
         #######################
@@ -808,7 +808,40 @@ class TFTrainer(Trainer):
       self.training_deploy(model)
     else:
       self.infer_deploy(model)
-  
+
+  def frozen(self, model):
+    assert(not self.is_training)
+    self.ctx.model = model
+    tf.logging.set_verbosity(tf.logging.INFO)
+    with tf.Graph().as_default() as graph:
+      # Default graph
+      self.graph = graph
+      self.sess = tf.Session(graph=graph)
+
+      #############################
+      ####    define model       ##
+      #############################
+      model.model_fn(self.is_training)
+      # write graph
+      tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pb')
+
+      # Global initialization
+      self.sess.run(tf.global_variables_initializer())
+      self.sess.run(tf.local_variables_initializer())
+
+      # Restore from checkpoint
+      restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
+      if restore_fns is not None:
+        for restore_fn in restore_fns:
+          restore_fn(self.sess)
+
+      # model saver
+      model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
+      self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
+
+      # snapshot
+      self.snapshot(0)
+
   @property
   def model_variables(self):
     return self._model_variables
@@ -824,6 +857,7 @@ class TFTrainer(Trainer):
     self._model_dependence = val
   
   def wait_until_clear(self):
-    self.coord.request_stop()
-    self.coord.join(self.threads)
+    if self.coord is not None:
+      self.coord.request_stop()
+      self.coord.join(self.threads)
   

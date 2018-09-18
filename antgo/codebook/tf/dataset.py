@@ -15,7 +15,7 @@ class DatasetQueue(object):
   def __init__(self,
                datasource,
                dtype=[tf.uint8],
-               shape=[(None, None, None)],
+               shape=[[None, None, None]],
                max_queue_size=32,
                wait_time=0.01):
     # Change the shape of the input data here with the parameter shapes.

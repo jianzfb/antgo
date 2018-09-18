@@ -35,8 +35,7 @@ def tftool_frozen_graph(ctx,
   for b in ablation_blocks:
     ctx.deactivate_block(b)
 
-  empty_datasource = EmptyDataset('test', '')
-  ctx.call_infer_process(empty_datasource, dump_dir)
+  ctx.call_frozen_process(dump_dir)
   
   # 2.step check input_node_names and output_node_names
   if input_node_names == '' or output_node_names == '':

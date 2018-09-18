@@ -170,6 +170,8 @@ class BaseHandler(tornado.web.RequestHandler):
 
     if data_type == 'URL' or data_type == 'PATH':
       ext_name = data_path.split('/')[-1].split('.')[-1].lower()
+
+
       if ext_name in ['jpg', 'jpeg', 'png', 'bmp']:
         image_data = Image.open(data_path)
         img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
