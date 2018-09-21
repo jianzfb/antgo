@@ -17,7 +17,8 @@ except:
 import multiprocessing
 from antgo.task.task import *
 from antgo.dataflow.basic import *
-
+import scipy.misc
+import imageio
 
 class RecorderNode(Node):
   def __init__(self, inputs):
@@ -127,24 +128,79 @@ class QueueRecorderNode(Node):
     
     setattr(self,'model_fn', None)
 
+  def _transfer_data(self, result, key):
+      transfer_result = None
+      transfer_result_type = None
+
+      if result['%s_TYPE'%key] in ['FILE', 'STRING']:
+        transfer_result = result[key]
+        transfer_result_type = result['%s_TYPE'%key]
+      elif result['%s_TYPE'%key] == 'JSON':
+        transfer_result = json.dumps(result[key])
+        transfer_result_type = 'STRING'
+      elif result['%s_TYPE'%key] == 'IMAGE':
+        data = result[key]
+        assert(len(data.shape) <= 3 and len(data.shape) >= 2)
+
+        if len(data.shape) == 2:
+          if data.dtype == np.uint8:
+            transfer_result = data
+          else:
+            data_min = np.min(data)
+            data_max = np.max(data)
+            transfer_result = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+        else:
+          assert(data.shape[2] == 3)
+          transfer_result = data.astype(np.uint8)
+
+        # save path
+        if not os.path.exists(self.dump_dir):
+          os.makedirs(self.dump_dir)
+
+        image_path = os.path.join(self.dump_dir, '%s.png'%str(uuid.uuid4()))
+        scipy.misc.imsave(image_path, transfer_result)
+        transfer_result = image_path
+        transfer_result_type = 'IMAGE'
+      elif result['%s_TYPE'%key] == 'VIDEO':
+        data = result[key]
+        assert(type(data) == list)
+
+        # save path
+        video_path = os.path.join(self.dump_dir, '%s.mp4'%str(uuid.uuid4()))
+        writer = imageio.get_writer(video_path, fps=30)
+        for im in data:
+          writer.append_data(im.astype(np.uint8))
+        writer.close()
+
+        transfer_result = video_path
+        transfer_result_type = 'VIDEO'
+      else:
+        logger.error('AUDIO not support')
+
+      return transfer_result, transfer_result_type
+
+
   def record(self, val, **kwargs):
     results = []
     results_label = []
     if type(val) == list or type(val) == tuple:
       for aa in val:
-        if type(aa) == dict:
-          results.append(aa['RESULT'])
+        if 'RESULT' in aa and 'RESULT_TYPE' in aa:
+          results.append({'RESULT': aa['RESULT'], 'RESULT_TYPE': aa['RESULT_TYPE']})
           aa.pop('RESULT')
-          results_label.append(aa)
-        else:
-          results.append(aa)
+          aa.pop('RESULT_TYPE')
+
+        results_label.append(aa)
     else:
       if type(val) == dict:
-        results.append(val['RESULT'])
-        val.pop('RESULT')
+        if 'RESULT' in val and 'RESULT_TYPE' in val:
+          results.append({'RESULT': val['RESULT'], 'RESULT_TYPE': val['RESULT_TYPE']})
+          val.pop('RESULT')
+          val.pop('RESULT_TYPE')
+
         results_label.append(val)
       else:
-        results = [val]
+        results = [{'RESULT': val, 'RESULT_TYPE': 'IMAGE'}]
 
     for index, result in enumerate(results):
       gt = None
@@ -153,11 +209,48 @@ class QueueRecorderNode(Node):
 
       if gt is None and not self._is_none:
         self._is_none = True
-      
+
+      # result 中保存模型输出的唯一结果
+      # results_label 中保存其他附加结果
+      # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
+      #                           {'TYPE': 'JSON', 'CONTENT': ''},
+      #                           {'TYPE': 'STRING', 'CONTENT': ''},
+      #                           {'TYPE': 'IMAGE', 'PATH': ''},
+      #                           {'TYPE': 'VIDEO', 'PATH': ''},
+      #                           {'TYPE': 'AUDIO', 'PATH': ''}]
+
+      # 1.step for main results
+      assert(result['RESULT_TYPE'] in ['FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
+      transfer_result = None
+      transfer_result_type = None
+      try:
+        transfer_result, transfer_result_type = self._transfer_data(result, 'RESULT')
+      except:
+        transfer_result = None
+        transfer_result_type = None
+
+      # 2.step for additional results
+      transfer_additional_results = []
+      for k,v in results_label[index].items():
+        if '_TYPE' not in k:
+          if '%s_TYPE'%k in results_label[index]:
+            a = None
+            b = None
+            try:
+              a, b = self._transfer_data({k: v, '%s_TYPE'%k: results_label[index]['%s_TYPE'%k]}, k)
+            except:
+              a = None
+              b = None
+
+            if a is not None and b is not None:
+              transfer_additional_results.append({k: a, 'TYPE': b})
+
       if len(results_label) > 0:
-        self.recorder_output_queue.put((gt, (result, results_label[index])))
+        self.recorder_output_queue.put((None, ({'DATA': transfer_result,
+                                                'TYPE': transfer_result_type},transfer_additional_results)))
       else:
-        self.recorder_output_queue.put((gt, result))
+        self.recorder_output_queue.put((None, {'DATA': transfer_result,
+                                               'TYPE': transfer_result_type}))
 
   def action(self, *args, **kwargs):
     value = copy.deepcopy(args[0])

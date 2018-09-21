@@ -64,7 +64,7 @@ class AntDemo(AntBase):
     self.support_user_upload = kwargs.get('support_user_upload', False)
     self.support_user_input = kwargs.get('support_user_input', False)
     self.support_user_interaction = kwargs.get('support_user_interaction', False)
-    self.support_upload_formats = kwargs.get('support_upload_formats', None)
+    self.support_user_constraint = kwargs.get('support_user_constraint', None)
 
   def start(self):
     # 0.step loading demo task
@@ -105,12 +105,14 @@ class AntDemo(AntBase):
     assert (running_ant_task is not None)
 
     # 1.step prepare datasource and infer recorder
+    now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
+
     demo_dataset = QueueDataset()
     demo_dataset._force_inputs_dirty()
     self.context.recorder = QueueRecorderNode(((), None), demo_dataset)
+    self.context.recorder.dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'recorder')
 
     # 2.step prepare dump dir
-    now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
     infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')
     if not os.path.exists(infer_dump_dir):
       os.makedirs(infer_dump_dir)
@@ -134,7 +136,7 @@ class AntDemo(AntBase):
                                             self.support_user_upload,
                                             self.support_user_input,
                                             self.support_user_interaction,
-                                            self.support_upload_formats,
+                                            self.support_user_constraint,
                                             infer_dump_dir,
                                             self.html_template,
                                             self.demo_port,

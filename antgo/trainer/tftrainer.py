@@ -146,7 +146,7 @@ def _get_variables_to_train(trainer_obj):
   return variables_to_train
 
 
-def _get_init_fn(trainer_obj, dump_dir, ctx=None):
+def _get_init_fn(trainer_obj, model, dump_dir, ctx=None):
   """Returns a function run by the chief worker to warm-start the training.
 
   Note that the init_fn is only run when initializing the model during the very
@@ -184,7 +184,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
       
       if latest_checkpoint is not None:
         variables_to_restore = {}
-        model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
 
         exclusions = []
         checkpoint_exclude_scopes = getattr(trainer_obj, 'checkpoint_exclude_scopes', None)
@@ -208,7 +208,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
           
           variables_to_restore[var_name] = var
     
-        return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore)]
+        return [slim.assign_from_checkpoint_fn(latest_checkpoint, variables_to_restore, ignore_missing_vars=True)]
 
   # Warn the user if a checkpoint exists in the train_dir. Then we'll be
   # ignoring the checkpoint anyway.
@@ -218,7 +218,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
     # initilize model from dump_dir
     latest_checkpoint = tf.train.latest_checkpoint(dump_dir)
     variables_to_restore = {}
-    model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+    model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
 
     for var in model_variables:
       var_name = var.op.name
@@ -248,7 +248,7 @@ def _get_init_fn(trainer_obj, dump_dir, ctx=None):
   # TODO(sguada) variables.filter_variables()
   auxilary_variables_to_restore = []
   variables_to_restore = {}
-  model_variables = slim.get_model_variables() if trainer_obj.model_variables is None else trainer_obj.model_variables
+  model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
   for var in model_variables:
     # transfer name
     var_name = var.op.name
@@ -459,9 +459,7 @@ class TFTrainer(Trainer):
 
     self.coord = None
     self.threads = None
-    
-    # model variables
-    self._model_variables = None
+
     self._model_dependence = None
 
     # record run time
@@ -700,11 +698,11 @@ class TFTrainer(Trainer):
           self.threads.extend(custom_threads)
         
         # Training saver
-        model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
+        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
         self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=2)
 
         # Restore from checkpoint
-        restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
+        restore_fns = _get_init_fn(self, model, self.dump_dir, self.ctx)
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
@@ -755,11 +753,11 @@ class TFTrainer(Trainer):
 
         # write graph
         tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
-        svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'),
-                                          self.dump_dir,
-                                          ['input'])
-        if svg_graph is not None:
-          self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
+        # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'),
+        #                                   self.dump_dir,
+        #                                   ['input'])
+        # if svg_graph is not None:
+        #   self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
 
         # Global initialization
         self.sess.run(tf.global_variables_initializer())
@@ -775,13 +773,13 @@ class TFTrainer(Trainer):
           self.threads.extend(custom_threads)
 
         # Restore from checkpoint
-        restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
+        restore_fns = _get_init_fn(self, model, self.dump_dir, self.ctx)
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
         
         # model saver
-        model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
+        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
         self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
 
         # snapshot
@@ -823,32 +821,25 @@ class TFTrainer(Trainer):
       #############################
       model.model_fn(self.is_training)
       # write graph
-      tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pb')
+      tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
 
       # Global initialization
       self.sess.run(tf.global_variables_initializer())
       self.sess.run(tf.local_variables_initializer())
 
       # Restore from checkpoint
-      restore_fns = _get_init_fn(self, self.dump_dir, self.ctx)
+      restore_fns = _get_init_fn(self, model, self.dump_dir, self.ctx)
       if restore_fns is not None:
         for restore_fn in restore_fns:
           restore_fn(self.sess)
 
       # model saver
-      model_variables = slim.get_model_variables() if self.model_variables is None else self.model_variables
+      model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
       self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
 
       # snapshot
       self.snapshot(0)
 
-  @property
-  def model_variables(self):
-    return self._model_variables
-  @model_variables.setter
-  def model_variables(self, val):
-    self._model_variables = val
-  
   @property
   def model_dependence(self):
     return self._model_dependence

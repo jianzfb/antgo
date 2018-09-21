@@ -399,6 +399,10 @@
                 kv_table.append(count, 0, 'RESULT');
                 kv_table.append(count, 1, '<p>{0}</p>'.format(data['RESULT']['DATA']));
             }
+            else if(data_type == 'FILE'){
+                kv_table.append(count, 0, 'RESULT');
+                kv_table.append(count, 1, '<a href="{0}"><span class="badge">FILE</span></a>'.format(data['RESULT']['DATA']))
+            }
 
             count += 1;
             for (var k in data){
@@ -416,6 +420,9 @@
                     }
                     else if(data[k]['TYPE'] == 'STRING'){
                         kv_table.append(count, 1, '<p>{0}</p>'.format(data[k]['DATA']));
+                    }
+                    else if(data[k]['TYPE'] == 'FILE'){
+                        kv_table.append(count, 1, '<a href="{0}"><span class="badge">FILE</span></a>'.format(data[k]['DATA']))
                     }
 
                     count += 1;

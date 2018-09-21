@@ -130,6 +130,7 @@ class ModelDesc(object):
   
     self._ctx = None
     self._data_source = model_data_source
+    self._model_variables = None
 
   @property
   def name(self):
@@ -164,3 +165,10 @@ class ModelDesc(object):
     '''
     :return: 
     '''
+
+  @property
+  def model_variables(self):
+      return self._model_variables
+  @model_variables.setter
+  def model_variables(self, val):
+      self._model_variables = val

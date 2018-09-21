@@ -126,9 +126,17 @@ function demoUserBrowser(ok_callback, bind_elem, file_filter){
     $("body").append($(browser_str))
 
     $('#demo_file_browser').change(function(e){
-        $("#demo_browser_form").ajaxSubmit(function(data) {
-            if (ok_callback != null){
-                ok_callback(data)
+        $("#demo_browser_form").ajaxSubmit(
+            {
+                error: function(data){
+                    var demo_response = eval('('+data['responseText']+')');
+                    console.log(demo_response['code']+":  "+demo_response['message'])
+                    alert(demo_response['code']+":  "+demo_response['message'])
+                },
+                success: function(data) {
+                    if (ok_callback != null){
+                        ok_callback(data)
+                    }
             }
         })
     })
@@ -226,6 +234,10 @@ function demoUserInput(ok_callback){
                     log.console('couldnt return processing result successfully')
                 }
             }
+        }).error(function(data){
+            var demo_response = eval('('+data['responseText']+')');
+            console.log(demo_response['code']+":  "+demo_response['message'])
+            alert(demo_response['code']+":  "+demo_response['message'])
         })
     }
     return demo_user_input_obj;

@@ -78,10 +78,14 @@ def tftool_frozen_graph(ctx,
                             clear_devices, initializer_nodes)
   
   # 5.step build optimized graph
-  with tf.Graph().as_default():
-    input_graph_def = tf.GraphDef()
+  with tf.Graph().as_default() as graph:
+    input_graph_def = graph.as_graph_def()
     with open(output_graph_path, 'rb') as f:
       input_graph_def.ParseFromString(f.read())
+
+      _ = tf.import_graph_def(input_graph_def, name="")
+      summary_write = tf.summary.FileWriter(dump_dir, graph)
+
 
   output_graph_def = optimize_for_inference_lib.optimize_for_inference(input_graph_def,
                                                                        input_node_names.split(','),

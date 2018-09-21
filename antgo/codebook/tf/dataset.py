@@ -9,6 +9,7 @@ import threading
 import time
 import numpy as np
 import tensorflow as tf
+from antgo.utils import logger
 
 
 class DatasetQueue(object):
@@ -60,23 +61,27 @@ class DatasetQueue(object):
       iterator = self.datasource.iterator_value()
       
       for data in iterator:
-        while self.queue_size.eval(session=sess) == self.max_queue_size:
+        try:
+          while self.queue_size.eval(session=sess) == self.max_queue_size:
+            if self.coord.should_stop():
+              self.queue.close()
+              break
+            time.sleep(self.wait_time)
+
           if self.coord.should_stop():
+            stop = True
             self.queue.close()
             break
-          time.sleep(self.wait_time)
-          
-        if self.coord.should_stop():
-          stop = True
-          self.queue.close()
-          break
-        feed_dict = {}
-        if type(data) == list or type(data) == tuple:
-          for i in range(len(data)):
-            feed_dict.update({self.sample_placeholder[i]: data[i]})
-        else:
-          feed_dict = {self.sample_placeholder[0]: data}
-        sess.run(self.enqueue, feed_dict=feed_dict)
+          feed_dict = {}
+          if type(data) == list or type(data) == tuple:
+            for i in range(len(data)):
+              feed_dict.update({self.sample_placeholder[i]: data[i]})
+          else:
+            feed_dict = {self.sample_placeholder[0]: data}
+          sess.run(self.enqueue, feed_dict=feed_dict)
+        except:
+          logger.error('couldnt feed data into tensorflow pipeline')
+          pass
         
   def start_threads(self, sess):
     for _ in range(1):
