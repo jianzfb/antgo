@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.dataflow.core import *
-from antgo.utils.bboxes import *
+from antgo.codebook.bboxes.bboxes import *
 import copy
 
 

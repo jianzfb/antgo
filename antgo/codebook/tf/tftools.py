@@ -144,11 +144,14 @@ def tftool_generate_image_records(data_dir,
       prepare_data_files.append(kp_maps[prefix])
       prepare_label_files.append(os.path.join(label_dir, f))
     else:
-      print(f)
-  
-  num_per_shard = int(np.math.ceil(len(prepare_data_files) / float(num_shards)))
-  
+      sys.stdout.write('%f couldnt find data - label pair'% f)
+      sys.stdout.flush()
+
+  sys.stdout.write('total files %d are splited to %d shards'%(len(prepare_data_files),int(num_shards)))
+  sys.stdout.flush()
+
   # 2.step transform to tfrecord
+  num_per_shard = int(np.math.ceil(len(prepare_data_files) / float(num_shards)))
   with tf.Session('') as sess:
     for shard_id in range(num_shards):
       record_filename = _get_dataset_record_filename(record_dir, dataset_flag, train_or_test, shard_id, num_shards)
@@ -172,23 +175,3 @@ def tftool_generate_image_records(data_dir,
                                                                 'label/encoded': _bytes_feature(b_data),
                                                                 'label/format': _bytes_feature(format_str.encode('utf-8'))}))
           tfrecord_writer.write(example.SerializeToString())
-          
-          
-# tftool_generate_image_records('/home/mi/下载/portrait-dataset-stage-2',
-#                               '/home/mi/下载/portrait-mask-stage-2',
-#                               '/home/mi/rr',
-#                               label_flag='-mask', num_shards=40, dataset_flag='new')
-
-# from antgo.dataflow.dataset.tfrecordsreader import *
-# ss = TFRecordsReader('train', '/home/mi/antgo/antgo-dataset/tf-f2f')
-# ss.has_format = True
-#
-# with tf.Session() as sess:
-#   data, label = ss.model_fn()
-#   sess.run(tf.global_variables_initializer())
-#   sess.run(tf.local_variables_initializer())
-#   coord = tf.train.Coordinator()
-#   threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-#
-#   data_v, label_v = sess.run([data, label])
-#   print(data_v.shape)

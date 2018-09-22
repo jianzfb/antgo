@@ -99,7 +99,7 @@ class AntBase(object):
                                 'INPUT_NUM': 1,
                                 'INPUT_TYPE':[]}
 
-    if ant_context is not None:
+    if ant_context is not None and ant_context.params is not None:
       config_params = ant_context.params._params
       if 'RUNNING_CONFIG' in config_params:
         if 'GPU_MODEL' in config_params['RUNNING_CONFIG']:

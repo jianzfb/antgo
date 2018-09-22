@@ -1,10 +1,51 @@
-from __future__ import absolute_import
+# -*- coding: UTF-8 -*-
+# @Time    : 17-5-26
+# @File    : bboxes.py
+# @Author  : Jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
-
+from __future__ import print_function
 import numpy as np
 import numpy.random as npr
 from antgo.utils._bbox import bbox_overlaps
+
+
+def bboxes_translate(bbox_ref, bboxes):
+    """Resize bounding boxes based on a reference bounding box,
+    assuming that the latter is [0, 0, 1, 1] after transform. Useful for
+    updating a collection of boxes after cropping an image.
+    """
+
+    # translate
+    v = np.stack([bbox_ref[0],bbox_ref[1],bbox_ref[0],bbox_ref[1]])
+    bboxes = bboxes - v
+    bboxes[:,0] = np.maximum(bboxes[:,0],0)
+    bboxes[:,1] = np.maximum(bboxes[:,1],0)
+    bboxes[:,2] = np.minimum(bboxes[:,2],bbox_ref[2] - bbox_ref[0])
+    bboxes[:,3] = np.minimum(bboxes[:,3],bbox_ref[3] - bbox_ref[1])
+    return bboxes
+
+
+def bboxes_filter_overlap(bbox_ref,bboxes,min_overlap = 0.5):
+    bboxes_num = bboxes.shape[0]
+    bbox_ref_tile = np.tile(bbox_ref,[bboxes_num,1])
+
+    union_bboxes_x0 = np.maximum(bbox_ref_tile[:, 0], bboxes[:, 0])
+    union_bboxes_y0 = np.maximum(bbox_ref_tile[:, 1], bboxes[:, 1])
+    union_bboxes_x1 = np.minimum(bbox_ref_tile[:, 2], bboxes[:, 2])
+    union_bboxes_y1 = np.minimum(bbox_ref_tile[:, 3], bboxes[:, 3])
+    union_bboxes_area = (union_bboxes_x1 - union_bboxes_x0) * (union_bboxes_y1 - union_bboxes_y0)
+    normalized_boxes_area = (bboxes[:, 2] - bboxes[:, 0]) * \
+                            (bboxes[:, 3] - bboxes[:, 1])
+
+    overlaps = union_bboxes_area / normalized_boxes_area
+    invalid_index_1 = np.where(union_bboxes_x1 - union_bboxes_x0 < 0)[0]
+    invalid_index_2 = np.where(union_bboxes_y1 - union_bboxes_y0 < 0)[0]
+    invalid_index = list(set(invalid_index_1) & set(invalid_index_2))
+    overlaps[invalid_index] = -1.0
+    valid_bboxes_index = np.where(overlaps > min_overlap)[0]
+    return bboxes[valid_bboxes_index,:],valid_bboxes_index
+
 
 def _whctrs(anchor):
     """
@@ -16,6 +57,7 @@ def _whctrs(anchor):
     x_ctr = anchor[0] + 0.5 * (w - 1)
     y_ctr = anchor[1] + 0.5 * (h - 1)
     return w, h, x_ctr, y_ctr
+
 
 def _mkanchors(ws, hs, x_ctr, y_ctr):
     """
@@ -31,6 +73,7 @@ def _mkanchors(ws, hs, x_ctr, y_ctr):
                          y_ctr + 0.5 * (hs - 1)))
     return anchors
 
+
 def _ratio_enum(anchor, ratios):
     """
     Enumerate a set of anchors for each aspect ratio wrt an anchor.
@@ -42,10 +85,11 @@ def _ratio_enum(anchor, ratios):
     #
     # ws = np.round(np.sqrt(size_ratios))
     # hs = np.round(ws * ratios)
-    ws = np.round(w * np.power(ratios,0.5))
-    hs = np.round(h * np.power(ratios,-0.5))
+    ws = np.round(w * np.power(ratios, 0.5))
+    hs = np.round(h * np.power(ratios, -0.5))
     anchors = _mkanchors(ws, hs, x_ctr, y_ctr)
     return anchors
+
 
 def _scale_enum(anchor, scales):
     """
@@ -58,8 +102,9 @@ def _scale_enum(anchor, scales):
     anchors = _mkanchors(ws, hs, x_ctr, y_ctr)
     return anchors
 
+
 def make_anchors(base_size=16, ratios=[0.5, 1, 2],
-                 scales=2**np.arange(3, 6)):
+                 scales=2 ** np.arange(3, 6)):
     """
     Generate anchor (reference) windows by enumerating aspect ratios X
     scales wrt a reference (0, 0, 15, 15) window.
@@ -71,25 +116,26 @@ def make_anchors(base_size=16, ratios=[0.5, 1, 2],
                          for i in range(ratio_anchors.shape[0])])
     return anchors
 
-def make_shift_anchors(height,width,stride,anchors):
+
+def make_shift_anchors(height, width, stride, anchors):
     # Enumerate all shifts
     shift_x = np.arange(0, width) * stride
     shift_y = np.arange(0, height) * stride
     shift_x, shift_y = np.meshgrid(shift_x, shift_y)
     shifts = np.vstack((shift_x.ravel(), shift_y.ravel(),
-                                shift_x.ravel(), shift_y.ravel())).transpose()
+                        shift_x.ravel(), shift_y.ravel())).transpose()
 
     A = anchors.shape[0]
     K = shifts.shape[0]
     shift_anchors = anchors.reshape((1, A, 4)) + \
-                      shifts.reshape((1, K, 4)).transpose((1, 0, 2))
+                    shifts.reshape((1, K, 4)).transpose((1, 0, 2))
     shift_anchors = shift_anchors.reshape((K * A, 4))
 
     return shift_anchors
 
 
 def bbox_transform(proposals, gt_rois):
-    assert(proposals.shape[0] == gt_rois.shape[0])
+    assert (proposals.shape[0] == gt_rois.shape[0])
     ex_widths = proposals[:, 2] - proposals[:, 0] + 1.0
     ex_heights = proposals[:, 3] - proposals[:, 1] + 1.0
     ex_ctr_x = proposals[:, 0] + 0.5 * ex_widths
@@ -158,7 +204,7 @@ def clip_boxes(boxes, im_shape):
     return boxes
 
 
-def filter_boxes(boxes, min_size,max_size = None):
+def filter_boxes(boxes, min_size, max_size=None):
     """Remove all boxes with any side smaller than min_size."""
     ws = boxes[:, 2] - boxes[:, 0] + 1
     hs = boxes[:, 3] - boxes[:, 1] + 1
@@ -171,21 +217,22 @@ def filter_boxes(boxes, min_size,max_size = None):
     return keep
 
 
-def inv_filter_boxes(boxes,min_size,max_size = None):
+def inv_filter_boxes(boxes, min_size, max_size=None):
     """Remove all boxes with any side smaller than min_size."""
     ws = boxes[:, 2] - boxes[:, 0] + 1
     hs = boxes[:, 3] - boxes[:, 1] + 1
 
     disable_keep = None
     if max_size is not None:
-        disable_keep = np.where((ws < min_size) | (hs < min_size) | 
+        disable_keep = np.where((ws < min_size) | (hs < min_size) |
                                 (ws > max_size) | (hs > max_size))[0]
     else:
         disable_keep = np.where((ws < min_size) | (hs < min_size))[0]
     return disable_keep
 
 
-def batch_positive_and_negative_selecting_strategy(batch_proposals,batch_logits,batch_gt_boxes,batch_gt_labels,neg_pos_ratio=3):
+def batch_positive_and_negative_selecting_strategy(batch_proposals, batch_logits, batch_gt_boxes, batch_gt_labels,
+                                                   neg_pos_ratio=3):
     # overlaps between the anchors and the gt boxes
     # overlaps (ex, gt)
     # batch_proposals shape -> (batch_size,proposals_num,4)
@@ -194,23 +241,24 @@ def batch_positive_and_negative_selecting_strategy(batch_proposals,batch_logits,
     proposal_bbox_labels_list = []
     proposal_bbox_targets_list = []
     for batch_index in range(batch_proposals.shape[0]):
-        proposals = batch_proposals[batch_index,:,:]
-        logits = batch_logits[batch_index,:,:]
-        gt_boxes = batch_gt_boxes[batch_index,:,:]
-        gt_labels = batch_gt_labels[batch_index,:]
+        proposals = batch_proposals[batch_index, :, :]
+        logits = batch_logits[batch_index, :, :]
+        gt_boxes = batch_gt_boxes[batch_index, :, :]
+        gt_labels = batch_gt_labels[batch_index, :]
 
         selected_index = np.where(gt_labels >= 0)
         selected_gt_boxes = gt_boxes[selected_index]
         selected_gt_labels = gt_labels[selected_index]
 
-        proposal_bbox_labels,proposal_bbox_targets = \
-            positive_and_negative_selecting_strategy(proposals,logits,selected_gt_boxes,selected_gt_labels,neg_pos_ratio)
+        proposal_bbox_labels, proposal_bbox_targets = \
+            positive_and_negative_selecting_strategy(proposals, logits, selected_gt_boxes, selected_gt_labels,
+                                                     neg_pos_ratio)
 
-        proposal_bbox_labels_list.append(proposal_bbox_labels[np.newaxis,...])
-        proposal_bbox_targets_list.append(proposal_bbox_targets[np.newaxis,...])
+        proposal_bbox_labels_list.append(proposal_bbox_labels[np.newaxis, ...])
+        proposal_bbox_targets_list.append(proposal_bbox_targets[np.newaxis, ...])
 
-    batch_proposal_bbox_labels = np.concatenate(proposal_bbox_labels_list,axis=0)
-    batch_proposal_bbox_targets = np.concatenate(proposal_bbox_targets_list,axis=0)
+    batch_proposal_bbox_labels = np.concatenate(proposal_bbox_labels_list, axis=0)
+    batch_proposal_bbox_targets = np.concatenate(proposal_bbox_targets_list, axis=0)
 
     # if len(np.where(batch_proposal_bbox_labels==0)[0]) == 0:
     #     print('no negative samples')
@@ -218,10 +266,10 @@ def batch_positive_and_negative_selecting_strategy(batch_proposals,batch_logits,
     # if len(np.where(batch_proposal_bbox_labels>=0)[0]) == 0:
     #     print('no proposal data')
 
-    return batch_proposal_bbox_labels,batch_proposal_bbox_targets
+    return batch_proposal_bbox_labels, batch_proposal_bbox_targets
 
 
-def positive_and_negative_selecting_strategy(proposals,logits,gt_boxes,gt_labels,neg_pos_ratio=3,min_size = 5):
+def positive_and_negative_selecting_strategy(proposals, logits, gt_boxes, gt_labels, neg_pos_ratio=3, min_size=5):
     # overlaps between the anchors and the gt boxes
     # overlaps (ex, gt)
     overlaps = bbox_overlaps(
@@ -238,9 +286,9 @@ def positive_and_negative_selecting_strategy(proposals,logits,gt_boxes,gt_labels
 
     proposal_labels = np.empty((proposals.shape[0],), dtype=np.int32)
     proposal_labels.fill(-1)
-    
-    proposal_bbox_index = np.zeros((proposals.shape[0],),dtype=np.int32)
-    
+
+    proposal_bbox_index = np.zeros((proposals.shape[0],), dtype=np.int32)
+
     # negative
     proposal_labels[max_overlaps < 0.3] = 0
 
@@ -250,10 +298,10 @@ def positive_and_negative_selecting_strategy(proposals,logits,gt_boxes,gt_labels
 
     # strategy 1 (positive)
     proposal_labels[gt_argmax_overlaps] = gt_labels
-    proposal_bbox_index[gt_argmax_overlaps] = np.arange(0,gt_boxes.shape[0])
+    proposal_bbox_index[gt_argmax_overlaps] = np.arange(0, gt_boxes.shape[0])
 
     # remove invalid proposals
-    disable_keep_index = inv_filter_boxes(proposals,min_size)
+    disable_keep_index = inv_filter_boxes(proposals, min_size)
     proposal_labels[disable_keep_index] = -1
 
     # subsample negative labels if we have too many

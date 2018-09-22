@@ -64,6 +64,9 @@ class AntTask(object):
   @property
   def dataset_name(self):
     return self._dataset_name
+  @dataset_name.setter
+  def dataset_name(self, name):
+    self._dataset_name = name
 
   @property
   def dataset_params(self):

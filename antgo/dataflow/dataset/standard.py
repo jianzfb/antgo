@@ -71,7 +71,7 @@ class Standard(Dataset):
       setattr(self, k, v)
 
     # dataset index
-    self.ids = np.arange(0, int(self.size)).tolist()
+    self.ids = np.arange(0, int(self.count)).tolist()
 
     if Standard.is_complete['%s_%s'%(dataset_name, train_or_test)]:
       self.ok_ids = np.arange(0, int(self.size)).tolist()
@@ -156,34 +156,8 @@ class Standard(Dataset):
   def split(self, split_params={}, split_method='holdout'):
     assert(self.train_or_test == 'train')
 
-    category_ids = copy.copy(self.ids)
-    if 'is_stratified' in split_params and split_params['is_stratified'] and \
-        (split_method == 'repeated-holdout' or split_method == 'holdout'):
-
-      # traverse dataset
-      for id in self.ids:
-        _, label = self._record_reader.read(id, 'data', 'label')
-        if type(label) == dict and 'category' in label:
-          category_ids[id] = label['category']
-        else:
-          category_ids[id] = 0 if random.random() > 0.5 else 1
-
-    if split_method == 'holdout':
-      if 'ratio' not in split_params:
-        val_dataset = Standard('val', self.dir, self.ext_params)
-        return self, val_dataset
-
-    if split_method == 'kfold':
-      np.random.seed(np.int64(self.seed))
-      np.random.shuffle(category_ids)
-
-    train_ids, val_ids = self._split(category_ids, split_params, split_method)
-    train_dataset = Standard(self.train_or_test, self.dir, self.ext_params)
-    train_dataset.ids = train_ids
-
-    val_dataset = Standard(self.train_or_test, self.dir, self.ext_params)
-    val_dataset.ids = val_ids
-    return train_dataset, val_dataset
+    val_dataset = Standard('val', self.dir, self.ext_params)
+    return self, val_dataset
 
   @property
   def size(self):

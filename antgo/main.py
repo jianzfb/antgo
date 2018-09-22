@@ -6,14 +6,11 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from datetime import datetime
-
-from antgo import config
-from antgo.ant import flags
 from antgo.ant.cmd import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
 from antgo.ant.release import *
+from antgo.ant.batch import *
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
@@ -31,7 +28,7 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "dataset", "template", "demo", "release", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train", "challenge", "dataset", "batch", "template", "demo", "release", "tools/tffrozen", "tools/tfrecords"]
 
 #############################################
 #######   antgo parameters            #######
@@ -245,7 +242,7 @@ def main():
   # tools
   if ant_cmd == 'tools/tffrozen':
     # tensorflow tools
-    import antgo.tools.tftools as tftools
+    import antgo.codebook.tf.tftools as tftools
     tftools.tftool_frozen_graph(ant_context,
                                 dump_dir,
                                 time_stamp,
@@ -254,7 +251,7 @@ def main():
     return
   elif ant_cmd == 'tools/tfrecords':
     # tensorflwo tools
-    import antgo.tools.tftools as tftools
+    import antgo.codebook.tf.tftools as tftools
     tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir,
                                           FLAGS.tfrecords_label_dir,
                                           FLAGS.tfrecords_record_dir,
@@ -314,6 +311,13 @@ def main():
                               support_user_constraint=FLAGS.support_user_constraint())
 
     running_process.start()
+  elif ant_cmd == "batch":
+    running_process = AntBatch(ant_context,
+                               name,
+                               data_factory,
+                               dump_dir,
+                               task)
+    running_process.start()
   elif ant_cmd == "release":
     running_process = AntRelease(ant_context,
                                  name,
@@ -334,9 +338,7 @@ def main():
                                   data_factory,
                                   dump_dir,
                                   token,
-                                  dataset,
-                                  FLAGS.public(),
-                                  FLAGS.local())
+                                  dataset)
     running_process.start()
 
   # 9.step clear context
