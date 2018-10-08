@@ -65,6 +65,11 @@ ctx.job.create_chart([loss_channel], "Loss Curve", "step", "value")
 #     return {'statistic': {'name': self.name,
 #                           'value': [{'name': self.name, 'value': ..., 'type': 'SCALAR'}]}}
 
+##################################################
+######## 2.3.step custom model code        ######
+##################################################
+# your model code
+
 
 ##################################################
 ######## 3.step define training process  #########

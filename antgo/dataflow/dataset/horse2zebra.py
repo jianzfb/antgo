@@ -49,7 +49,7 @@ class Horse2Zebra(Dataset):
     
   @property
   def size(self):
-    return len(self.ids)
+    return min(len(self.data_a_list), len(self.data_b_list))
     
   def data_pool(self):
     if self.train_or_test == 'sample':
@@ -71,11 +71,14 @@ class Horse2Zebra(Dataset):
       idxs = copy.deepcopy(self.ids)
       if self.rng:
         self.rng.shuffle(idxs)
-      
-      for k in idxs:
-        a = self.data_a_list[k]
-        random_b_index = np.random.randint(0, len(self.data_b_list), 1)[0]
-        b = self.data_b_list[random_b_index]
+
+      b_idxs = list(range(len(self.data_b_list)))
+      if self.rng:
+        self.rng.shuffle(b_idxs)
+
+      for a_k, b_k in zip(idxs, b_idxs):
+        a = self.data_a_list[a_k]
+        b = self.data_b_list[b_k]
         a_img = imread(a)
         b_img = imread(b)
         yield [a_img, b_img]

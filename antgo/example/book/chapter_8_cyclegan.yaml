@@ -1,0 +1,12 @@
+batch_size: 1
+load_size: 286
+fine_size: 256
+input_nc: 3
+output_nc: 3
+ngf: 64
+ndf: 64
+lr: 0.0002
+L1_lambda: 10.0
+max_epochs: 200
+epoch_step: 100
+optimizer: 'adam'

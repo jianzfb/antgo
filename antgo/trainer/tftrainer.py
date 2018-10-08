@@ -447,8 +447,8 @@ def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
 
 
 class TFTrainer(Trainer):
-  def __init__(self, trainer_context, dump_dir, is_training=True):
-    super(TFTrainer, self).__init__(trainer_context, is_training)
+  def __init__(self, dump_dir, is_training=True):
+    super(TFTrainer, self).__init__(is_training)
     self.dump_dir = dump_dir
 
     self.saver = None
@@ -532,14 +532,14 @@ class TFTrainer(Trainer):
       
       return result
 
-  def run_dict(self, feed_dict):
+  def run_dict(self, *args, **kwargs):
     with self.graph.as_default():
-      start_time = time.time()
       replace_feed_dict = {}
-      for k_name, v_value in feed_dict.items():
+      for k_name, v_value in kwargs.items():
         k_tensor = self.graph.get_tensor_by_name('{}:0'.format(k_name))
         replace_feed_dict[k_tensor] = v_value
 
+      start_time = time.time()
       result = self.sess.run(self.val_ops, feed_dict=replace_feed_dict if len(replace_feed_dict) > 0 else None)
       elapsed_time = int((time.time() - start_time) * 100) / 100.0
 
@@ -569,14 +569,15 @@ class TFTrainer(Trainer):
       return result
 
   # 3.step snapshot running state
-  def snapshot(self, epoch=0):
+  def snapshot(self, epoch=0, iter=-1):
     logger.info('snapshot at %d in %d epoch' % (self.iter_at, epoch))
     if not os.path.exists(self.dump_dir):
         os.makedirs(self.dump_dir)
 
-    model_filename = "{prefix}_{infix}_{d}.ckpt".format(prefix=self.snapshot_prefix,
+    model_filename = "{prefix}_{infix}_{d}_{e}.ckpt".format(prefix=self.snapshot_prefix,
                                                         infix=self.snapshot_infix,
-                                                        d=self.iter_at)
+                                                        d=self.iter_at if iter < 0 else iter,
+                                                        e=epoch)
     model_filepath = os.path.join(self.dump_dir, model_filename)
     
     # save checkpoint

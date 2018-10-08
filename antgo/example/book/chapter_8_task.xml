@@ -1,0 +1,9 @@
+<task>
+    <task_name>Chapter8</task_name>
+    <task_type>IMAGETRANSFER</task_type>
+    <input>
+        <source_data>
+            <data_set_name>Horse2Zebra</data_set_name>
+        </source_data>
+    </input>
+</task>

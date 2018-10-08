@@ -60,7 +60,9 @@ trainer_default_params = [
 
 
 class Trainer(object):
-    def __init__(self, trainer_context=None, is_training=True):
+    def __init__(self, is_training=True):
+        trainer_context = get_global_context()
+        assert(trainer_context is not None)
         # 1.step config trainer context
         for param in trainer_default_params:
           k = param.name
