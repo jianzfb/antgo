@@ -11,8 +11,8 @@ from antgo.context import *
 from antgo.dataflow.dataset import *
 from antgo.measures import *
 from antgo.trainer.tfgantrainer import *
-from ops import *
-from module import *
+from chapter_8_ops import *
+from chapter_8_module import *
 from collections import namedtuple
 
 ##################################################
@@ -167,6 +167,15 @@ def preprocess_train_func(*args, **kwargs):
   img_A = img_A[h1:h1 + ctx.params.fine_size, w1:w1 + ctx.params.fine_size]
   img_B = img_B[h1:h1 + ctx.params.fine_size, w1:w1 + ctx.params.fine_size]
 
+  if len(img_A.shape) == 2:
+    img_A = np.concatenate((np.expand_dims(img_A, -1), np.expand_dims(img_A, -1), np.expand_dims(img_A, -1)), axis=2)
+
+  if len(img_B.shape) == 2:
+    img_B = np.concatenate((np.expand_dims(img_B, -1), np.expand_dims(img_B, -1), np.expand_dims(img_B, -1)), axis=2)
+
+  img_A = img_A[:,:,0:3]
+  img_B = img_B[:,:,0:3]
+
   if np.random.random() > 0.5:
     img_A = np.fliplr(img_A)
     img_B = np.fliplr(img_B)
@@ -176,6 +185,30 @@ def preprocess_train_func(*args, **kwargs):
 
   img_AB = np.concatenate((img_A, img_B), axis=2)
   return img_AB
+
+class ImagePool(object):
+  def __init__(self, maxsize=50):
+    self.maxsize = maxsize
+    self.num_img = 0
+    self.images = []
+
+  def __call__(self, image):
+    if self.maxsize <= 0:
+      return image
+    if self.num_img < self.maxsize:
+      self.images.append(image)
+      self.num_img += 1
+      return image
+    if np.random.rand() > 0.5:
+      idx = int(np.random.rand() * self.maxsize)
+      tmp1 = copy.copy(self.images[idx])[0]
+      self.images[idx][0] = image[0]
+      idx = int(np.random.rand() * self.maxsize)
+      tmp2 = copy.copy(self.images[idx])[1]
+      self.images[idx][1] = image[1]
+      return [tmp1, tmp2]
+    else:
+      return image
 
 
 def training_callback(data_source, dump_dir):
@@ -191,6 +224,8 @@ def training_callback(data_source, dump_dir):
   preprocess_node = Node('preprocess', preprocess_train_func, Node.inputs(data_source))
   batch_node = BatchData(Node.inputs(preprocess_node), ctx.params.batch_size)
 
+  pool = ImagePool()
+
   # 4. 迭代训练（max_epochs 指定最大数据源重复次数）
   count = 0
   for epoch in range(ctx.params.max_epochs):
@@ -200,23 +235,24 @@ def training_callback(data_source, dump_dir):
     # 4.2. 训练一次Generator网络，训练一次Discriminator网络
     for real_ab, _ in batch_node.iterator_value():
       # 更新 Generator 网络，并记录生成结果
-      g_loss_val, fake_A, fake_B = tf_trainer.run_dict('g_loss',
+      g_loss_val, fake_A, fake_B = tf_trainer.run('g_loss',
                                                        real_A_and_B_images=real_ab,
                                                        lr=lr_val)
 
+      [fake_A, fake_B] = pool([fake_A, fake_B])
       # 更新 Discriminator 网络
-      d_loss_val = tf_trainer.run_dict('d_loss',
-                                       real_A_and_B_images=real_ab,
-                                       fake_A_sample=fake_A,
-                                       fake_B_sample=fake_B,
-                                       lr=lr_val)
+      d_loss_val = tf_trainer.run('d_loss',
+                                        real_A_and_B_images=real_ab,
+                                        fake_A_sample=fake_A,
+                                        fake_B_sample=fake_B,
+                                        lr=lr_val)
       # 每隔50步打印日志
       if count % 50 == 0:
         logger.info('g_loss %f d_loss %f at iterator %d in epoch %d (lr=%f)'%(g_loss_val, d_loss_val, count, epoch, lr_val))
 
       count += 1
 
-    # 5. 保存模型
+    # 4.3. 保存模型
     tf_trainer.snapshot(epoch, count)
 
 
@@ -243,7 +279,7 @@ def infer_callback(data_source, dump_dir):
   # 4. 遍历所有数据 生成样本
   count = 0
   for a in preprocess_node.iterator_value():
-    fake_b, = tf_trainer.run_dict(loss_name=None, test_A=a)
+    fake_b = tf_trainer.run(test_A=a)
 
     fake_b = (fake_b + 1.) / 2.
     fake_b = np.squeeze(fake_b)
@@ -258,6 +294,7 @@ def infer_callback(data_source, dump_dir):
     aa = np.squeeze(aa)
     scipy.misc.imsave(os.path.join(dump_dir, 'B', 'a%d.png' % count), aa)
 
+    count += 1
     ctx.recorder.record([{'RESULT': (fake_b*255).astype(np.uint8),'RESULT_TYPE': 'IMAGE'}])
 
 

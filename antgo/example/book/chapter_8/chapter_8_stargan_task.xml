@@ -1,0 +1,16 @@
+<task>
+    <task_name>Chapter8</task_name>
+    <task_type>IMAGETRANSFER</task_type>
+    <input>
+        <source_data>
+            <data_set_name>CelebA</data_set_name>
+            <data_set_params>
+                <param>
+                    <name>image</name>
+                    <value>align</value>
+                </param>
+            </data_set_params>
+        </source_data>
+
+    </input>
+</task>

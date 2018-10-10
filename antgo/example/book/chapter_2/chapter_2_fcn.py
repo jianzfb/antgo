@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time : 2018/8/1
-# @File : fcn_seg.py
+# @File : chapter_2_fcn.py
 # @Author: Jian <jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals

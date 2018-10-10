@@ -467,80 +467,71 @@ class TFTrainer(Trainer):
     self.loss_stat = MovingAverage(10)
 
     self._has_model_input = False
-    
+    self.cache = {}
+
+  def run(self, *args, **kwargs):
+    data_generator = None
+
+    assert(len(args) <= 1)
+    if len(args) != 0:
+      data_generator = args[0]
+
+    if data_generator is not None:
+      return self._run_by_generator(data_generator, **kwargs)
+
+    return self._run_by_feed(feed_dict=None, **kwargs)
+
   # 2.step run model once
-  def run(self, data_generator=None, binds={}):
+  def _run_by_generator(self, data_generator, **kwargs):
     # bind data
     with self.graph.as_default():
       feed_dict = {}
-      if data_generator is not None:
-        if self._has_model_input and len(self.clones) > 1:
-          logger.error('clones number > 1, must set different placeholder for every clone')
-          exit(-1)
+      if self._has_model_input and len(self.clones) > 1:
+        logger.error('clones number > 1, must set different placeholder for every clone')
+        exit(-1)
 
-        if self._has_model_input:
+      if self._has_model_input:
+        # generate data
+        data = next(data_generator)
+
+        for k, v in kwargs.items():
+          if k not in self.cache:
+            placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format('input', k))
+            self.cache[k] = placeholder_tensor
+
+          feed_dict[self.cache[k]] = data[v] if (type(data) == tuple or type(data) == list) else data
+      else:
+        # set different placeholder for every clone
+        for clone in self.clones:
           # generate data
           data = next(data_generator)
 
-          for k, v in binds.items():
-            placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format('input', k))
-            feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
-        else:
-          # set different placeholder for every clone
-          for clone in self.clones:
-            # generate data
-            data = next(data_generator)
-
-            for k, v in binds.items():
+          for k, v in kwargs.items():
+            if k not in self.cache:
               placeholder_tensor = None
               if len(self.clones) > 1:
                 placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format(clone[1][:-1], k))
               else:
                 placeholder_tensor = self.graph.get_tensor_by_name('{}:0'.format(k))
-              feed_dict[placeholder_tensor] = data[v] if (type(data) == tuple or type(data) == list) else data
+              self.cache[k] = placeholder_tensor
 
-      # increment
-      self.iter_at += 1
-      
+            feed_dict[self.cache[k]] = data[v] if (type(data) == tuple or type(data) == list) else data
+
+      return self._run_by_feed(feed_dict=feed_dict, **kwargs)
+
+  def _run_by_feed(self, feed_dict=None, **kwargs):
+    with self.graph.as_default():
+      if feed_dict is None:
+        for k_name, v_value in kwargs.items():
+          if k_name not in self.cache:
+            k_tensor = self.graph.get_tensor_by_name('{}:0'.format(k_name))
+            self.cache[k_name] = k_tensor
+
+          feed_dict[self.cache[k_name]] = v_value
+
       # forward process
       start_time = time.time()
-      result = self.sess.run(self.val_ops, feed_dict=feed_dict if len(feed_dict) > 0 else None)
-      elapsed_time = int((time.time() - start_time) * 100) / 100.0
-
-      # push value passively
-      if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
-        self.ctx.recorder.action(result[-1])
-        result = result[:-1]
-
-      # record elapsed time
-      self.time_stat.add(elapsed_time)
-      
-      if self.is_training:
-        loss_val = 0.0
-        if type(result) == list:
-          loss_val = result[1]
-        else:
-          loss_val = result
-
-        self.loss_stat.add(loss_val)
-
-        if self.iter_at % self.log_every_n_steps == 0:
-          logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)'%
-                      (str(os.getpid()), self.loss_stat.get(), self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
-      else:
-        logger.info('(PID: %s) INFO: (%f sec/step)'%(str(os.getpid()), float(self.time_stat.get())))
-      
-      return result
-
-  def run_dict(self, *args, **kwargs):
-    with self.graph.as_default():
-      replace_feed_dict = {}
-      for k_name, v_value in kwargs.items():
-        k_tensor = self.graph.get_tensor_by_name('{}:0'.format(k_name))
-        replace_feed_dict[k_tensor] = v_value
-
-      start_time = time.time()
-      result = self.sess.run(self.val_ops, feed_dict=replace_feed_dict if len(replace_feed_dict) > 0 else None)
+      result = self.sess.run(self.val_ops, feed_dict=feed_dict if feed_dict is not None and len(feed_dict) > 0 else None)
       elapsed_time = int((time.time() - start_time) * 100) / 100.0
 
       if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
@@ -566,7 +557,7 @@ class TFTrainer(Trainer):
       else:
         logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
 
-      return result
+      return result[0] if type(result) == list and len(result) == 1 else result
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0, iter=-1):

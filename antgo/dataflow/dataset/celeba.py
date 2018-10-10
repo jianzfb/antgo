@@ -13,7 +13,7 @@ __all__ = ['CelebA']
 CELEBA_URL = "http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html"
 class CelebA(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
-    super(CelebA, self).__init__(train_or_test, dir)
+    super(CelebA, self).__init__(train_or_test, dir, ext_params=params)
 
     # read sample data
     if self.train_or_test == 'sample':
@@ -29,7 +29,7 @@ class CelebA(Dataset):
                     default_url='shell:unzip {file_placeholder} -d %s'%'/'.join(self.dir.split('/')[0:-1]))
     
     # 1.step data folder (wild or align)
-    image_flag = getattr(params, 'image', 'align')
+    image_flag = getattr(self, 'image', 'align')
     if image_flag == 'align':
       self._data_folder = os.path.join(self.dir, 'Img', 'img_align_celeba')
     else:
@@ -159,6 +159,48 @@ class CelebA(Dataset):
     # Wearing_Necklace
     # Wearing_Necktie
     # Young
+
+    self.attribute_name_dict = {'5_o_Clock_Shadow': 0,
+                                'Arched_Eyebrows': 1,
+                                'Attractive': 2,
+                                'Bags_Under_Eyes': 3,
+                                'Bald': 4,
+                                'Bangs': 5,
+                                'Big_Lips': 6,
+                                'Big_Nose': 7,
+                                'Black_Hair': 8,
+                                'Blond_Hair': 9,
+                                'Blurry': 10,
+                                'Brown_Hair': 11,
+                                'Bushy_Eyebrows': 12,
+                                'Chubby': 13,
+                                'Double_Chin': 14,
+                                'Eyeglasses': 15,
+                                'Goatee': 16,
+                                'Gray_Hair': 17,
+                                'Heavy_Makeup': 18,
+                                'High_Cheekbones': 19,
+                                'Male': 20,
+                                'Mouth_Slightly_Open': 21,
+                                'Mustache': 22,
+                                'Narrow_Eyes': 23,
+                                'No_Beard': 24,
+                                'Oval_Face': 25,
+                                'Pale_Skin': 26,
+                                'Pointy_Nose': 27,
+                                'Receding_Hairline': 28,
+                                'Rosy_Cheeks': 29,
+                                'Sideburns': 30,
+                                'Smiling': 31,
+                                'Straight_Hair': 32,
+                                'Wavy_Hair': 33,
+                                'Wearing_Earrings': 34,
+                                'Wearing_Hat': 35,
+                                'Wearing_Lipstick': 36,
+                                'Wearing_Necklace': 37,
+                                'Wearing_Necktie': 38,
+                                'Young': 39}
+
     with open(os.path.join(self.dir, 'Anno', 'list_attr_celeba.txt')) as fp:
       # skip first two rows
       fp.readline()
@@ -209,6 +251,7 @@ class CelebA(Dataset):
         Young = [i for i in attribute_content.replace('\n', '').split(' ') if i != '']
         
         if file_name in self._file_map:
+          self._annotations[file_name]['attribute_name'] = self.attribute_name_dict
           self._annotations[file_name]['attribute'] = [int(o_Clock_Shadow),
                                                        int(Arched_Eyebrows),
                                                        int(Attractive),
@@ -320,3 +363,9 @@ class CelebA(Dataset):
     assert (split_method == 'holdout')
     validation_dataset = CelebA('val', self.dir)
     return self, validation_dataset
+
+  def attribute_name_map(self, name):
+    if name not in self.attribute_name_dict:
+      return -1
+    else:
+      return self.attribute_name_dict[name]

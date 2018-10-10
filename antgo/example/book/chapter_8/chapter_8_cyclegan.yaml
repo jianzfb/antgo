@@ -10,3 +10,4 @@ L1_lambda: 10.0
 max_epochs: 200
 epoch_step: 100
 optimizer: 'adam'
+adam_beta1: 0.5

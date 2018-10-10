@@ -1,0 +1,16 @@
+batch_size: 1
+load_size: 128
+ch: 64
+label_num: 5
+selected_attrs: ['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young']
+ld: 10.0
+gan_type: 'wgan-gp'
+adv_weight: 1.0
+cls_weight: 10.0
+rec_weight: 10.0
+lr: 0.0002
+max_epochs: 20
+epoch_step: 100
+optimizer: 'adam'
+adam_beta1: 0.5
+n_critic: 5

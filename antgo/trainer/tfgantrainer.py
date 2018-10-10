@@ -304,49 +304,92 @@ class TFGANTrainer(Trainer):
     return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in
             auxilary_variables_to_restore]
 
-  def run(self, data_generator=None, binds={}):
-    raise NotImplementedError
+  def run(self, *args, **kwargs):
+    assert (len(args) <= 2)
+    loss_name = None
+    data_generator = None
+    if len(args) == 1:
+      if type(args[0]) == str:
+        loss_name = args[0]
+      else:
+        data_generator = args[0]
 
-  def run_dict(self, loss_name=None, *args, **kwargs):
-    replace_feed_dict = {}
-    for k_name, v_value in kwargs.items():
-      if k_name not in self.cache:
-        k_tensor = self.graph.get_tensor_by_name('{}:0'.format(k_name))
-        self.cache[k_name] = k_tensor
+    if len(args) == 2:
+      if type(args[0] == str):
+        loss_name = args[0]
+        data_generator = args[1]
+      else:
+        loss_name = args[1]
+        data_generator = args[0]
 
-      replace_feed_dict[self.cache[k_name]] = v_value
+    if data_generator is not None:
+      return self._run_by_generator(data_generator, loss_name, **kwargs)
+    else:
+      return self._run_by_feed(loss_name, feed_dict=None, **kwargs)
+
+  def _run_by_generator(self, data_generator, loss_name, **kwargs):
+    # bind data
+    with self.graph.as_default():
+      feed_dict = {}
+      if self._has_model_input and len(self.clones) > 1:
+        logger.error('clones number > 1, must set different placeholder for every clone')
+        exit(-1)
+
+      if self._has_model_input:
+        # generate data
+        data = next(data_generator)
+
+        for k, v in kwargs.items():
+          if k not in self.cache:
+            placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format('input', k))
+            self.cache[k] = placeholder_tensor
+
+          feed_dict[self.cache[k]] = data[v] if (type(data) == tuple or type(data) == list) else data
+      else:
+        # set different placeholder for every clone
+        for clone in self.clones:
+          # generate data
+          data = next(data_generator)
+
+          for k, v in kwargs.items():
+            if k not in self.cache:
+              placeholder_tensor = None
+              if len(self.clones) > 1:
+                placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format(clone[1][:-1], k))
+              else:
+                placeholder_tensor = self.graph.get_tensor_by_name('{}:0'.format(k))
+              self.cache[k] = placeholder_tensor
+
+            feed_dict[self.cache[k]] = data[v] if (type(data) == tuple or type(data) == list) else data
+
+      return self._run_by_feed(loss_name, feed_dict=feed_dict, **kwargs)
+
+  def _run_by_feed(self, loss_name=None, feed_dict=None, **kwargs):
+    if feed_dict is None:
+      feed_dict = {}
+      for k_name, v_value in kwargs.items():
+        if k_name not in self.cache:
+          k_tensor = self.graph.get_tensor_by_name('{}:0'.format(k_name))
+          self.cache[k_name] = k_tensor
+
+        feed_dict[self.cache[k_name]] = v_value
 
     start_time = time.time()
     loss_name = loss_name if loss_name is not None else 'GAN'
     result = self.sess.run(self.trainop_list[loss_name],
-                           feed_dict=replace_feed_dict if len(replace_feed_dict) > 0 else None)
+                           feed_dict=feed_dict if len(feed_dict) > 0 else None)
     elapsed_time = int((time.time() - start_time) * 100) / 100.0
 
     if self.ctx.recorder is not None and self.ctx.recorder.model_fn is not None:
       self.ctx.recorder.action(result[-1])
       result = result[:-1]
 
-    if len(args) >= 1 and args[0] == True:
-      self.iter_at += 1
+    # record iterator count
+    self.iter_at += 1
 
-      # record elapsed time
-      self.time_stat.add(elapsed_time)
-      if self.is_training:
-        loss_val = 0.0
-        if type(result) == list:
-          loss_val = result[1]
-        else:
-          loss_val = result
-
-        self.loss_stat.add(loss_val)
-        if self.iter_at % self.log_every_n_steps == 0:
-          logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)' %
-                      (str(os.getpid()), self.loss_stat.get(), self.sess.run(self.lr), self.iter_at,
-                       float(self.time_stat.get())))
-      else:
-        logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
-
-    return result
+    # record elapsed time
+    self.time_stat.add(elapsed_time)
+    return result[0] if type(result) == list and len(result) == 1 else result
 
   # 3.step snapshot running state
   def snapshot(self, epoch=0, iter=-1):
@@ -455,13 +498,16 @@ class TFGANTrainer(Trainer):
 
               self.update_list[loss_name].append(grad_update)
 
-              with tf.control_dependencies([tf.group(self.update_list[loss_name])]):
+              with tf.control_dependencies([tf.group(*self.update_list[loss_name])]):
                 train_op = tf.identity(loss_var, name='train_op_%s'%loss_name)
                 self.trainop_list[loss_name] = train_op
 
                 if self.clones[0].outputs is not None:
                   if type(self.clones[0].outputs) == dict:
                     for k,v in self.clones[0].outputs.items():
+                      if type(k) != str:
+                        k = k.name.replace(':0','')
+
                       if k == loss_name:
                         self.trainop_list[loss_name] = [train_op]
                         if type(v) == list or type(v) == tuple:
@@ -568,7 +614,7 @@ class TFGANTrainer(Trainer):
         # Value ops
         self.trainop_list['GAN'] = self.clones[0].outputs
         if type(self.trainop_list['GAN']) != list and type(self.trainop_list['GAN']) != tuple:
-          self.trainop_list['GAN'] = [self.trainop_list['GAN']]
+          self.trainop_list['GAN'] = self.trainop_list['GAN']
         if type(self.trainop_list["GAN"]) == tuple:
           self.trainop_list['GAN'] = list(self.trainop_list['GAN'])
 
