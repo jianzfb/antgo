@@ -273,12 +273,12 @@ def training_callback(data_source, dump_dir):
       # x_label:  [N x C]
 
       # 更新判别器网络
-      d_loss = tf_trainer.run('d_loss',x_real=x_real,x_label=x_label,lr=lr_val)
+      d_loss = tf_trainer.d_loss_run(x_real=x_real,x_label=x_label,lr=lr_val)
 
       # 更新生成器网络
       g_loss = None
       if count % ctx.params.n_critic == 0:
-        g_loss, x_fake, x_recon = tf_trainer.run('g_loss', x_real=x_real, x_label=x_label,lr=lr_val)
+        g_loss, x_fake, x_recon = tf_trainer.g_loss_run(x_real=x_real, x_label=x_label,lr=lr_val)
         last_g_loss = g_loss
 
       if g_loss is None:

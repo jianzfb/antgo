@@ -304,23 +304,27 @@ class TFGANTrainer(Trainer):
     return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in
             auxilary_variables_to_restore]
 
+  def __getattr__(self, item):
+    if not item.endswith('_run'):
+      return getattr(super(TFGANTrainer, self), item)
+
+    def func(**kwargs):
+      kwargs.update({'loss_name': item.replace('_run','')})
+      return self.run(**kwargs)
+
+    return func
+
   def run(self, *args, **kwargs):
-    assert (len(args) <= 2)
-    loss_name = None
+    assert (len(args) <= 1)
+
     data_generator = None
     if len(args) == 1:
-      if type(args[0]) == str:
-        loss_name = args[0]
-      else:
-        data_generator = args[0]
+      data_generator = args[0]
 
-    if len(args) == 2:
-      if type(args[0] == str):
-        loss_name = args[0]
-        data_generator = args[1]
-      else:
-        loss_name = args[1]
-        data_generator = args[0]
+    loss_name = None
+    if 'loss_name' in kwargs:
+      loss_name = kwargs['loss_name']
+      kwargs.pop('loss_name')
 
     if data_generator is not None:
       return self._run_by_generator(data_generator, loss_name, **kwargs)
@@ -443,8 +447,6 @@ class TFGANTrainer(Trainer):
           #
           logger.info('building computing graph')
           res = func(self.is_training, *args, **kwargs)
-
-          logger.info('save computing graph')
           tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
           return res
 
