@@ -211,12 +211,25 @@ class TFGANTrainer(Trainer):
 
             logger.info('exclude scope %s from the latest checkpoint' % (','.join(exclusions)))
 
+          fuzzy_exclusions = []
+          checkpoint_fuzzy_exclude_scopes = getattr(self, 'checkpoint_fuzzy_exclude_scopes', None)
+          if checkpoint_fuzzy_exclude_scopes is not None:
+            fuzzy_exclusions = [scope.strip()
+                                for scope in checkpoint_fuzzy_exclude_scopes.split(',')]
+
+            logger.info('exclude scope %s from the latest checkpoint' % (','.join(exclusions)))
+
           for var in model_variables:
             var_name = var.op.name
 
             excluded = False
             for exclusion in exclusions:
               if var_name.startswith(exclusion):
+                excluded = True
+                break
+
+            for exclusion in fuzzy_exclusions:
+              if exclusion in var_name:
                 excluded = True
                 break
 
@@ -255,6 +268,12 @@ class TFGANTrainer(Trainer):
       exclusions = [scope.strip()
                     for scope in checkpoint_exclude_scopes.split(',')]
 
+    fuzzy_exclusions = []
+    checkpoint_fuzzy_exclude_scopes = getattr(self, 'checkpoint_fuzzy_exclude_scopes', None)
+    if checkpoint_fuzzy_exclude_scopes is not None:
+      fuzzy_exclusions = [scope.strip()
+                          for scope in checkpoint_fuzzy_exclude_scopes.split(',')]
+
     transfers = {}
     checkpoint_transfer_scopes = getattr(self, 'checkpoint_transfer_scopes', None)
     if checkpoint_transfer_scopes is not None:
@@ -277,6 +296,11 @@ class TFGANTrainer(Trainer):
       excluded = False
       for exclusion in exclusions:
         if var_name.startswith(exclusion):
+          excluded = True
+          break
+
+      for exclusion in fuzzy_exclusions:
+        if exclusion in var_name:
           excluded = True
           break
 
