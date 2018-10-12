@@ -194,11 +194,11 @@ class StarGANModel(ModelDesc):
         GP = 0
 
       g_adv_loss = generator_loss(ctx.params.gan_type, fake=fake_logit)
-      g_cls_loss = classification_loss(logit=fake_cls, label=y_label)
+      g_cls_loss = classification_loss(logit=fake_cls, label=tf.reshape(tf.tile(tf.reshape(y_label,[ctx.params.batch_size,1,1,ctx.params.label_num]),[1,2,2,1]),[-1,ctx.params.label_num]))
       g_rec_loss = L1_loss(x_real, x_recon)
 
       d_adv_loss = discriminator_loss(ctx.params.gan_type, real=real_logit, fake=fake_logit) + GP
-      d_cls_loss = classification_loss(logit=real_cls, label=x_label)
+      d_cls_loss = classification_loss(logit=real_cls, label=tf.reshape(tf.tile(tf.reshape(x_label,[ctx.params.batch_size,1,1,ctx.params.label_num]),[1,2,2,1]),[-1,ctx.params.label_num]))
 
       d_loss = ctx.params.adv_weight * d_adv_loss + ctx.params.cls_weight * d_cls_loss
       d_loss = tf.identity(d_loss, name='d_loss')

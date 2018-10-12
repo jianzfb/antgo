@@ -1,4 +1,4 @@
-batch_size: 1
+batch_size: 8
 load_size: 128
 ch: 64
 label_num: 5
