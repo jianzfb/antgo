@@ -76,7 +76,6 @@ ctx.job.create_chart([loss_channel], "Loss Curve", "step", "value")
 class StarGANModel(ModelDesc):
   def __init__(self):
     super(StarGANModel, self).__init__()
-    pass
 
   def generator(self, x_input, c, reuse=False, scope="generator"):
     channel = ctx.params.ch

@@ -108,12 +108,26 @@ def main():
     Config.parse_xml(FLAGS.config())
     # 2.step try copy to system
     try:
-      shutil.copy(FLAGS.config(), os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'))
+      # shutil.copy(FLAGS.config(), os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'))
+      # copy to ~/.config/
+      if not os.path.exists(os.path.join(os.environ['HOME'],'.config','antgo')):
+        os.makedirs(os.path.join(os.environ['HOME'],'.config','antgo'))
+
+      shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'],'.config','antgo','config.xml'))
     except:
       logger.warn('perhaps you want to set default config.xml, please in root authority')
       pass
   else:
-    config_xml = os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml')
+    # parse config file
+    if not os.path.exists(os.path.join(os.environ['HOME'],'.config','antgo','config.xml')):
+      # use default config
+      if not os.path.exists(os.path.join(os.environ['HOME'],'.config','antgo')):
+        os.makedirs(os.path.join(os.environ['HOME'],'.config','antgo'))
+
+      shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'),
+                  os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
+
+    config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
     Config.parse_xml(config_xml)
 
   # 4.1.step check factory

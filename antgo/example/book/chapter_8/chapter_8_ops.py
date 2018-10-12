@@ -16,8 +16,8 @@ import tensorflow.contrib as tf_contrib
 def instance_norm(input, name="instance_norm"):
   with tf.variable_scope(name):
     depth = input.get_shape()[3]
-    scale = slim.variable("scale", [depth], initializer=tf.random_normal_initializer(1.0, 0.02, dtype=tf.float32))
-    offset = slim.variable("offset", [depth], initializer=tf.constant_initializer(0.0))
+    scale = slim.model_variable("scale", [depth], initializer=tf.random_normal_initializer(1.0, 0.02, dtype=tf.float32))
+    offset = slim.model_variable("offset", [depth], initializer=tf.constant_initializer(0.0))
 
     mean, variance = tf.nn.moments(input, axes=[1,2], keep_dims=True)
     epsilon = 1e-5
@@ -28,7 +28,7 @@ def instance_norm(input, name="instance_norm"):
 ##################################################################################
 # Normalization function
 ##################################################################################
-def conv2d(input, output_dim, kernel_size=3, stride=2, use_bias=True, padding='SAME', name="conv2d"):
+def conv2d(input, output_dim, kernel_size=4, stride=2, use_bias=False, padding='SAME', name="conv2d"):
   with tf.variable_scope(name):
     return slim.conv2d(input,
                        output_dim,
@@ -41,7 +41,7 @@ def conv2d(input, output_dim, kernel_size=3, stride=2, use_bias=True, padding='S
                        biases_initializer=tf.zeros_initializer() if use_bias else None)
 
 
-def deconv2d(input, output_dim, kernel_size=3, stride=2, use_bias=True, padding='SAME', name="deconv2d"):
+def deconv2d(input, output_dim, kernel_size=4, stride=2, use_bias=False, padding='SAME', name="deconv2d"):
   with tf.variable_scope(name):
     return slim.conv2d_transpose(input,
                                  output_dim,

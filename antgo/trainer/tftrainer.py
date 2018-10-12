@@ -522,6 +522,7 @@ class TFTrainer(Trainer):
   def _run_by_feed(self, feed_dict=None, **kwargs):
     with self.graph.as_default():
       if feed_dict is None:
+        feed_dict = {}
         for k_name, v_value in kwargs.items():
           if k_name not in self.cache:
             k_tensor = self.graph.get_tensor_by_name('{}:0'.format(k_name))
