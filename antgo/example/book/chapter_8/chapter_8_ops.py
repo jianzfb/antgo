@@ -25,6 +25,19 @@ def instance_norm(input, name="instance_norm"):
     normalized = (input-mean)*inv
     return scale*normalized + offset
 
+def adaptive_instance_norm(content, gamma, beta, epsilon=1e-5):
+  # gamma, beta = style_mean, style_std from MLP
+
+  c_mean, c_var = tf.nn.moments(content, axes=[1, 2], keep_dims=True)
+  c_std = tf.sqrt(c_var + epsilon)
+
+  return gamma * ((content - c_mean) / c_std) + beta
+
+def layer_norm(x, name='layer_norm'):
+  return tf_contrib.layers.layer_norm(x,
+                                      center=True, scale=True,
+                                      scope=name)
+
 ##################################################################################
 # Normalization function
 ##################################################################################
@@ -51,6 +64,14 @@ def deconv2d(input, output_dim, kernel_size=4, stride=2, use_bias=False, padding
                                  activation_fn=None,
                                  weights_initializer=tf_contrib.layers.xavier_initializer(),
                                  biases_initializer=tf.zeros_initializer() if use_bias else None)
+
+def linear(x, units, use_bias=True, name='linear'):
+  with tf.variable_scope(name):
+    x = tf.layers.flatten(x)
+    x = tf.layers.dense(x, units=units, kernel_initializer=tf_contrib.layers.xavier_initializer(),
+                        use_bias=use_bias)
+
+    return x
 
 
 ##################################################################################
@@ -81,6 +102,19 @@ def resblock(x_init, channels, use_bias=True, name='resblock'):
     with tf.variable_scope('res2'):
       x = conv2d(x, channels, kernel_size=3, stride=1, use_bias=use_bias)
       x = instance_norm(x)
+
+    return x + x_init
+
+def adaptive_resblock(x_init, channels, mu, sigma, use_bias=True, name='adaptive_resblock'):
+  with tf.variable_scope(name):
+    with tf.variable_scope('res1'):
+      x = conv2d(x_init, channels, kernel_size=3, stride=1, use_bias=use_bias)
+      x = adaptive_instance_norm(x, mu, sigma)
+      x = relu(x)
+
+    with tf.variable_scope('res2'):
+      x = conv2d(x, channels, kernel_size=3, stride=1, use_bias=use_bias)
+      x = adaptive_instance_norm(x, mu, sigma)
 
     return x + x_init
 
@@ -132,7 +166,48 @@ def discriminator_loss(gan_type, real, fake):
   loss = real_loss + fake_loss
   return loss
 
+def discriminator_loss_list(type, real, fake):
+  n_scale = len(real)
+  loss = []
+
+  real_loss = 0
+  fake_loss = 0
+
+  for i in range(n_scale):
+    if type == 'lsgan':
+      real_loss = tf.reduce_mean(tf.squared_difference(real[i], 1.0))
+      fake_loss = tf.reduce_mean(tf.square(fake[i]))
+
+    if type == 'gan':
+      real_loss = tf.reduce_mean(
+        tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(real[i]), logits=real[i]))
+      fake_loss = tf.reduce_mean(
+        tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(fake[i]), logits=fake[i]))
+
+    loss.append(real_loss + fake_loss)
+
+  return sum(loss)
+
+
+def generator_loss_list(type, fake):
+  n_scale = len(fake)
+  loss = []
+
+  fake_loss = 0
+
+  for i in range(n_scale):
+    if type == 'lsgan':
+      fake_loss = tf.reduce_mean(tf.squared_difference(fake[i], 1.0))
+
+    if type == 'gan':
+      fake_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(fake[i]), logits=fake[i]))
+
+    loss.append(fake_loss)
+
+  return sum(loss)
+
 
 def L1_loss(x, y):
   loss = tf.reduce_mean(tf.abs(x - y))
   return loss
+

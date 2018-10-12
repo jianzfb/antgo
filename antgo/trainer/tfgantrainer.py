@@ -508,10 +508,16 @@ class TFGANTrainer(Trainer):
             self.optimizer_list[loss_name] = self.configure_optimizer(self.lr_list[loss_name])
 
             # config related variables
-            self.var_list[loss_name] = [var for var in trainable_variables if loss_scope in var.name]
+            for loss_scope_name in loss_scope.split(','):
+              if loss_name not in self.var_list:
+                self.var_list[loss_name] = []
+              self.var_list[loss_name].extend([var for var in trainable_variables if loss_scope_name in var.name])
 
             # get update ops
-            self.update_list[loss_name] = [var for var in update_ops if loss_scope in var.name]
+            for loss_scope_name in loss_scope.split(','):
+              if loss_name not in self.update_list:
+                self.update_list[loss_name] = []
+              self.update_list[loss_name].extend([var for var in update_ops if loss_scope_name in var.name])
 
         # Variables to train.
         for loss_name, loss_var in self.loss_list.items():
