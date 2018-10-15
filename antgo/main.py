@@ -28,7 +28,16 @@ def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
 
-_ant_support_commands = ["train", "challenge", "dataset", "batch", "template", "demo", "release", "tools/tffrozen", "tools/tfrecords"]
+_ant_support_commands = ["train",
+                         "challenge",
+                         "dataset",
+                         "batch",
+                         "template",
+                         "demo",
+                         "release",
+                         "tools/tffrozen",
+                         "tools/tfrecords",
+                         "tools/tfshow"]
 
 #############################################
 #######   antgo parameters            #######
@@ -66,6 +75,7 @@ flags.DEFINE_float('max_fee', 0.0, '')
 #############################################
 flags.DEFINE_string('tffrozen_input_nodes', '', 'input node names in graph')
 flags.DEFINE_string('tffrozen_output_nodes', '', 'output node names in graph')
+flags.DEFINE_string('tfshow_pb', '', 'pb file path')
 #############################################
 ########  tools - tfrecords           #######
 #############################################
@@ -176,6 +186,11 @@ def main():
     tt.start()
     return
 
+  if ant_cmd == 'tools/tfshow':
+    import antgo.codebook.tf.tftools as tftools
+    tftools.tftool_visualize_pb(FLAGS.tfshow_pb())
+    return
+
   # 7.step check related params
   # 7.1 step check name, if None, set it as current time automatically
   time_stamp = timestamp()
@@ -266,14 +281,15 @@ def main():
   elif ant_cmd == 'tools/tfrecords':
     # tensorflwo tools
     import antgo.codebook.tf.tftools as tftools
-    tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir,
-                                          FLAGS.tfrecords_label_dir,
-                                          FLAGS.tfrecords_record_dir,
-                                          FLAGS.tfrecords_label_suffix,
-                                          FLAGS.tfrecords_train_or_test,
-                                          FLAGS.tfrecords_shards)
+    tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir(),
+                                          FLAGS.tfrecords_label_dir(),
+                                          FLAGS.tfrecords_record_dir(),
+                                          FLAGS.tfrecords_label_suffix(),
+                                          FLAGS.tfrecords_train_or_test(),
+                                          FLAGS.tfrecords_shards())
     return
-  
+
+
   if ant_cmd == "train":
     with running_sandbox(sandbox_time=FLAGS.max_time(),
                          sandbox_dump_dir=dump_dir,

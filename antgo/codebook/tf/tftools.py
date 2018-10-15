@@ -102,7 +102,20 @@ def tftool_frozen_graph(ctx,
   f = tf.gfile.FastGFile(optimized_path, "w")
   f.write(output_graph_def.SerializeToString())
 
-  
+
+def tftool_visualize_pb(pb_path):
+  if not os.path.exists(pb_path):
+    logger.error('pb model file dont exist')
+    return
+
+  logger.info('transfer pb to visualize')
+  graph = tf.get_default_graph()
+  graphdef = graph.as_graph_def()
+  graphdef.ParseFromString(gfile.FastGFile(pb_path, "rb").read())
+  _ = tf.import_graph_def(graphdef, name="")
+  summary_write = tf.summary.FileWriter("./", graph)
+
+
 def _int64_feature(values):
   if not isinstance(values, (tuple, list)):
     values = [values]
