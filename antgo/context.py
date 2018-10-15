@@ -107,7 +107,6 @@ class Context(object):
     # clear
     self.training_process_callback = None
     self.infer_process_callback = None
-    self.frozen_process_callback = None
 
     self._data_generator = None
 
@@ -204,17 +203,6 @@ class Context(object):
     if self.recorder is not None:
       if self.recorder.dump_dir is not None and is_inner_set:
         self.recorder.dump_dir = None
-
-  @property
-  def frozen_process(self):
-    return self.frozen_process_callback
-
-  @frozen_process.setter
-  def frozen_process(self, callback):
-    self.frozen_process_callback = callback
-
-  def call_frozen_process(self, dump_dir):
-    self.frozen_process(dump_dir)
 
   @property
   def data_generator(self):

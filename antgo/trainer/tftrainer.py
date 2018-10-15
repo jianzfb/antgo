@@ -749,10 +749,12 @@ class TFTrainer(Trainer):
         #############################
         ####    define model input ##
         #############################
-        with tf.variable_scope('input'):
-          data_queue = self.ctx.model.model_input(self.is_training)
-          if data_queue is not None:
-            self._has_model_input = True
+        data_queue = None
+        if self.ctx.ant is not None:
+          with tf.variable_scope('input'):
+            data_queue = self.ctx.model.model_input(self.is_training)
+            if data_queue is not None:
+              self._has_model_input = True
 
         #############################
         ####    define model       ##
@@ -766,7 +768,7 @@ class TFTrainer(Trainer):
         #######################
         # Create model clones #
         #######################
-        self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue])
+        self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue] if data_queue is not None else None)
 
         # write graph
         tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
@@ -824,38 +826,9 @@ class TFTrainer(Trainer):
     else:
       self.infer_deploy(model)
 
-  def frozen(self, model):
-    assert(not self.is_training)
-    self.ctx.model = model
-    tf.logging.set_verbosity(tf.logging.INFO)
-    with tf.Graph().as_default() as graph:
-      # Default graph
-      self.graph = graph
-      self.sess = tf.Session(graph=graph)
-
-      #############################
-      ####    define model       ##
-      #############################
-      model.model_fn(self.is_training)
-      # write graph
-      tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
-
-      # Global initialization
-      self.sess.run(tf.global_variables_initializer())
-      self.sess.run(tf.local_variables_initializer())
-
-      # Restore from checkpoint
-      restore_fns = _get_init_fn(self, model, self.dump_dir, self.ctx)
-      if restore_fns is not None:
-        for restore_fn in restore_fns:
-          restore_fn(self.sess)
-
-      # model saver
-      model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-      self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
-
-      # snapshot
-      self.snapshot(0)
+      if self.ctx.ant is None:
+        logger.info('successfully deploy model')
+        exit(0)
 
   @property
   def model_dependence(self):

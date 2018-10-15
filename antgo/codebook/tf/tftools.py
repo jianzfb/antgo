@@ -16,6 +16,7 @@ from antgo.utils import logger
 from antgo.dataflow.dataset.empty_dataset import *
 from antgo.ant import flags
 from datetime import datetime
+from multiprocessing import Process
 import yaml
 FLAGS = flags.AntFLAGS
 
@@ -35,8 +36,13 @@ def tftool_frozen_graph(ctx,
   for b in ablation_blocks:
     ctx.deactivate_block(b)
 
-  ctx.call_frozen_process(dump_dir)
-  
+  # independent process
+  # ctx.call_frozen_process(dump_dir)
+  logger.info('deploy infer model')
+  p = multiprocessing.Process(target=ctx.call_infer_process, args=(None, dump_dir))
+  p.start()
+  p.join()
+
   # 2.step check input_node_names and output_node_names
   if input_node_names == '' or output_node_names == '':
     logger.error('must set input_nodes and output_nodes')
