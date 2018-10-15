@@ -280,3 +280,100 @@ class QueueRecorderNode(Node):
 
   def iterator_value(self):
     pass
+
+
+class LocalRecorderNode(Node):
+  def __init__(self, inputs):
+    super(LocalRecorderNode, self).__init__(name=None, action=self.action, inputs=inputs, auto_trigger=True)
+    self._annotation_cache = queue.Queue()
+
+    self._dump_dir = None
+    self._is_none = False
+
+    self._count = 0
+    setattr(self, 'model_fn', None)
+
+  def save(self, data, data_type, name, count, index):
+    # only support 'FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
+    assert(data_type in ['FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
+
+    if data_type == 'FILE':
+      if not os.path.exists(data):
+        return
+
+      norm_path = os.path.normpath(data)
+      shutil.copy(data, os.path.join(self.dump_dir, '%d_%d_%s_%s'%(count, index,name,norm_path.split('/')[-1])))
+    elif data_type == 'JSON':
+      with open(os.path.join(self.dump_dir, '%d_%d_%s.json'%(count, index,name)),'w') as fp:
+        fp.write(json.dumps(data))
+    elif data_type == 'STRING':
+      with open(os.path.join(self.dump_dir, '%d_%d_%s.txt'%(count, index,name)), 'w') as fp:
+        fp.write(data)
+    elif data_type == 'IMAGE':
+      transfer_result = data
+      if len(data.shape) == 2:
+        if data.dtype == np.uint8:
+          transfer_result = data
+        else:
+          data_min = np.min(data)
+          data_max = np.max(data)
+          transfer_result = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+      else:
+        assert (data.shape[2] == 3)
+        transfer_result = data.astype(np.uint8)
+
+      scipy.misc.imsave(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
+    elif data_type == 'VIDEO':
+      video_path = os.path.join(self.dump_dir, '%d_%d_%s.mp4' % (count, index, name))
+      writer = imageio.get_writer(video_path, fps=30)
+      for im in data:
+        writer.append_data(im.astype(np.uint8))
+      writer.close()
+    elif data_type == 'AUDIO':
+      logger.error('now, dont support save audio')
+
+  def action(self, *args, **kwargs):
+    value = copy.deepcopy(args[0])
+    if type(value) != list:
+      value = [value]
+
+    for entry in value:
+      self._annotation_cache.put(copy.deepcopy(entry))
+
+  def record(self, val, **kwargs):
+    results = val
+    if type(val) != list or type(val) != tuple:
+      results = [val]
+
+    for index, result in enumerate(results):
+      gt = None
+      if self._annotation_cache.qsize() > 0:
+        gt = self._annotation_cache.get()
+
+      if gt is None and not self._is_none:
+        self._is_none = True
+
+      # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
+      #                           {'TYPE': 'JSON', 'CONTENT': ''},
+      #                           {'TYPE': 'STRING', 'CONTENT': ''},
+      #                           {'TYPE': 'IMAGE', 'PATH': ''},
+      #                           {'TYPE': 'VIDEO', 'PATH': ''},
+      #                           {'TYPE': 'AUDIO', 'PATH': ''}]
+
+      for k, v in result.items():
+        if not k.endswith('_TYPE'):
+          if '%s_TYPE' % k in result:
+            data = v
+            data_type = result['%s_TYPE' % k]
+
+            self.save(data, data_type, k, self._count, index)
+
+    self._count += 1
+
+  @property
+  def dump_dir(self):
+    return self._dump_dir
+
+  @dump_dir.setter
+  def dump_dir(self, val):
+    self._dump_dir = val

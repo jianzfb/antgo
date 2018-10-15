@@ -11,6 +11,7 @@ from antgo.ant.base import *
 from antgo.task.task import *
 from antgo.dataflow.common import *
 from antgo.dataflow.basic import *
+from antgo.dataflow.recorder import *
 
 class AntBatch(AntBase):
     def __init__(self,
@@ -59,6 +60,7 @@ class AntBatch(AntBase):
                                                          self.running_ant_task.dataset_params)
         # split data and label
         data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
+        self.context.recorder = LocalRecorderNode(Node.inputs(data_annotation_branch.output(1)))
 
         # 4.step prepare ablation blocks
         logger.info('prepare model ablation blocks')
@@ -68,4 +70,10 @@ class AntBatch(AntBase):
 
         # 5.step infer
         logger.info('running inference process')
-        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir=infer_dump_dir)
+        intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'record')
+        if not os.path.exists(intermediate_dump_dir):
+            os.makedirs(intermediate_dump_dir)
+
+        with safe_recorder_manager(self.context.recorder):
+            self.context.recorder.dump_dir = intermediate_dump_dir
+            self.context.call_infer_process(data_annotation_branch.output(0), dump_dir=infer_dump_dir)
