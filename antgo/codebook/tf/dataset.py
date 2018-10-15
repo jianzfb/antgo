@@ -12,7 +12,7 @@ import tensorflow as tf
 from antgo.utils import logger
 
 
-class DatasetQueue(object):
+class TFQueueDataset(object):
   def __init__(self,
                datasource,
                dtype=[tf.uint8],
