@@ -37,7 +37,7 @@ _ant_support_commands = ["train",
                          "release",
                          "tools/tffrozen",
                          "tools/tfrecords",
-                         "tools/tfshow"]
+                         "tools/tfgraph"]
 
 #############################################
 #######   antgo parameters            #######
@@ -75,7 +75,7 @@ flags.DEFINE_float('max_fee', 0.0, '')
 #############################################
 flags.DEFINE_string('tffrozen_input_nodes', '', 'input node names in graph')
 flags.DEFINE_string('tffrozen_output_nodes', '', 'output node names in graph')
-flags.DEFINE_string('tfshow_pb', '', 'pb file path')
+flags.DEFINE_string('tfgraph_path', '', 'pb file path')
 #############################################
 ########  tools - tfrecords           #######
 #############################################
@@ -186,9 +186,9 @@ def main():
     tt.start()
     return
 
-  if ant_cmd == 'tools/tfshow':
+  if ant_cmd == 'tools/tfgraph':
     import antgo.codebook.tf.tftools as tftools
-    tftools.tftool_visualize_pb(FLAGS.tfshow_pb())
+    tftools.tftool_visualize_pb(FLAGS.tfgraph_path())
     return
 
   # 7.step check related params

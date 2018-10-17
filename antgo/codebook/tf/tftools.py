@@ -108,12 +108,20 @@ def tftool_visualize_pb(pb_path):
     logger.error('pb model file dont exist')
     return
 
-  logger.info('transfer pb to visualize')
+  logger.info('load model pb')
   graph = tf.get_default_graph()
   graphdef = graph.as_graph_def()
   graphdef.ParseFromString(gfile.FastGFile(pb_path, "rb").read())
+
   _ = tf.import_graph_def(graphdef, name="")
+
+  logger.info('start model FLOPs statistic')
+  flops = tf.profiler.profile(graph, options=tf.profiler.ProfileOptionBuilder.float_operation())
+  logger.info('model FLOPs: {}'.format(flops.total_float_ops))
+
+  logger.info('generate visualization data')
   summary_write = tf.summary.FileWriter("./", graph)
+  logger.info('open tensorboard --logdir=.')
 
 
 def _int64_feature(values):
