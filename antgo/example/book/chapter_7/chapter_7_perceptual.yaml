@@ -1,0 +1,15 @@
+batch_size: 1
+max_epochs: 5
+load_size: 224
+content_weight: 1
+style_weight: 5
+tv_weight: 1e-6
+learning_rate: 0.003
+optimizer: 'adam'
+R_MEAN: 123.68
+G_MEAN: 116.78
+B_MEAN: 103.94
+clone_on_cpu: true
+trainable_scopes: 'transfer'
+checkpoint_path: 'vgg_19.ckpt'
+checkpoint_exclude_scopes: 'transfer'

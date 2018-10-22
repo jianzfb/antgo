@@ -654,7 +654,7 @@ class COCO2017(Dataset):
             yield [img, img_annotation]
           else:
             yield [None, None]
-        else:
+        elif self.task_type == 'LANDMARK':
           img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
           ann_ids = self.coco_kps_api.getAnnIds(imgIds=img_obj['id'])
           anns = self.coco_kps_api.loadAnns(ann_ids)
@@ -684,6 +684,9 @@ class COCO2017(Dataset):
           img_annotation['file_id'] = img_obj['file_name']
 
           yield [img, img_annotation]
+        else:
+          img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
+          yield [img, None]
 
   @property
   def size(self):
