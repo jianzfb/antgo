@@ -153,4 +153,5 @@ class AntDemo(AntBase):
     try:
       self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
     except:
-      logger.error('model infor error, please check your code')
+      traceback.print_exc()
+      raise sys.exc_info()[0]

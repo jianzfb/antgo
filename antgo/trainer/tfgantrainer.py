@@ -326,7 +326,7 @@ class TFGANTrainer(Trainer):
 
     logger.info('load model from %s' % checkpoint_path)
     return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in
-            auxilary_variables_to_restore]
+            auxilary_variables_to_restore if len(vr) > 0]
 
   def __getattr__(self, item):
     if not item.endswith('_run'):
@@ -337,6 +337,24 @@ class TFGANTrainer(Trainer):
       return self.run(**kwargs)
 
     return func
+
+  def restore_scopy_from(self, model, restore_scope, checkpoint_path):
+    model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    variables_to_restore = {}
+    for var in model_variables:
+      if var.op.name.startswith(restore_scope):
+        variables_to_restore[var.op.name] = var
+
+    if len(variables_to_restore) == 0:
+      return
+
+    if tf.gfile.IsDirectory(checkpoint_path):
+      checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
+
+    logger.info('restore %s scope from %s' % checkpoint_path)
+    fn = slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore, ignore_missing_vars=False)
+    fn(self.sess)
+
 
   def run(self, *args, **kwargs):
     assert (len(args) <= 1)
@@ -569,6 +587,10 @@ class TFGANTrainer(Trainer):
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
+
+        # resotre from auxilary checkpoint
+        for auxilary_scope, auxilary_checkpoint in self.auxilary_checkpoints.items():
+          self.restore_scopy_from(model, auxilary_scope, auxilary_checkpoint)
 
   def infer_deploy(self, model, *args, **kwargs):
     tf.logging.set_verbosity(tf.logging.INFO)

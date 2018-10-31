@@ -202,9 +202,8 @@ class AntBase(object):
       arcname = os.path.relpath(path, root_path)
       tar.add(path, arcname=arcname)
 
-  def package_codebase(self, prefix='qiniu'):
-    logger.info('package antgo codebase')
-
+  def package_codebase(self, prefix='qiniu', target_path=''):
+    logger.info('package code envoriment')
     if self.app_token is None:
       if not os.path.exists(os.path.join(self.main_folder, FLAGS.task())):
         shutil.copy(os.path.join(Config.task_factory, FLAGS.task()), os.path.join(self.main_folder))
@@ -250,8 +249,30 @@ class AntBase(object):
       pass
     elif prefix == 'baidu':
       pass
+    elif prefix.startswith('ssh') or prefix.startswith('scp'):
+      nodes = prefix.replace('ssh:', '')
+      node_ip_list = nodes.split(',')
+      for ip in node_ip_list:
+        if ip=='127.0.0.1' or ip=='localhost':
+          continue
 
-    return None
+        logger.info('deploy code at %s'%ip)
+        try:
+          subprocess.call('ssh %s %s'%(ip,'mkdir %s'%target_path))
+        except:
+          pass
+
+        try:
+          subprocess.call('scp %s %s:%s'%(os.path.join(self.main_folder,
+                                                       '%s_code_ssl.tar.gz'%random_code_package_name),
+                                          ip,
+                                          target_path))
+        except:
+          logger.error('couldnt distribute code base to %s'%ip)
+          exit(-1)
+
+    return '%s_code_ssl.tar.gz'%random_code_package_name, crypto_code
+
 
   def register_ant(self, codebase_address, running_config, server_config={}):
     request_url = '%s://%s:%d/api/aifactory/register'%(self.http_prefix, self.server_ip, self.http_port)

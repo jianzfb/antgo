@@ -62,6 +62,14 @@ class AntMSEMatting(AntMeasure):
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]}}
 
 
+class AntBoundaryMSEMatting(AntMeasure):
+  def __init__(self, task):
+    pass
+
+  def eva(self, data, label):
+    pass
+
+
 class AntGradientMatting(AntMeasure):
   def __init__(self, task):
     # paper: Christoph Rhemann, etc. A Perceptually Motivated Online Benchmark for Image Matting

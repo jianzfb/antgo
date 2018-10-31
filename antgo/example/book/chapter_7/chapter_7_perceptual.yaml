@@ -10,6 +10,6 @@ R_MEAN: 123.68
 G_MEAN: 116.78
 B_MEAN: 103.94
 clone_on_cpu: true
-trainable_scopes: 'transfer'
-checkpoint_path: 'vgg_19.ckpt'
-checkpoint_exclude_scopes: 'transfer'
+#trainable_scopes: 'transfer'
+#checkpoint_path: '/Users/jian/Downloads/vgg_19.ckpt'
+#checkpoint_exclude_scopes: 'transfer'

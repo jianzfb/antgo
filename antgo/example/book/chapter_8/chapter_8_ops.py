@@ -33,13 +33,8 @@ def adaptive_instance_norm(content, gamma, beta, epsilon=1e-5):
 
   return gamma * ((content - c_mean) / c_std) + beta
 
-def layer_norm(x, name='layer_norm'):
-  return tf_contrib.layers.layer_norm(x,
-                                      center=True, scale=True,
-                                      scope=name)
-
 ##################################################################################
-# Normalization function
+# regular layer function
 ##################################################################################
 def conv2d(input, output_dim, kernel_size=4, stride=2, use_bias=False, padding='SAME', name="conv2d"):
   with tf.variable_scope(name):
@@ -68,9 +63,7 @@ def deconv2d(input, output_dim, kernel_size=4, stride=2, use_bias=False, padding
 def linear(x, units, use_bias=True, name='linear'):
   with tf.variable_scope(name):
     x = tf.layers.flatten(x)
-    x = tf.layers.dense(x, units=units, kernel_initializer=tf_contrib.layers.xavier_initializer(),
-                        use_bias=use_bias)
-
+    x = slim.fully_connected(x, units)
     return x
 
 

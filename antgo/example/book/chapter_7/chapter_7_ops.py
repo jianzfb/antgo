@@ -38,6 +38,7 @@ def conv2d(input, output_dim, kernel_size=4, stride=2, use_bias=False, padding='
                        normalizer_fn=None,
                        biases_initializer=tf.zeros_initializer() if use_bias else None)
 
+
 def deconv2d(input, output_dim, kernel_size=4, stride=2, use_bias=False, padding='SAME', name="deconv2d"):
   with tf.variable_scope(name):
     return slim.conv2d_transpose(input,

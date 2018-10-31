@@ -77,54 +77,54 @@ class PerceptualModel(ModelDesc):
     super(PerceptualModel, self).__init__()
     self.style_image = style_image
 
-  def gram_matrix_for_style_image(self, network, image, layer, style_image, sess):
-      image_feature = network[layer].eval(feed_dict={image: style_image}, session=sess)
+  def gram_matrix_for_style_image(self, network_layer, image_placeholder, style_image, sess):
+      image_feature = network_layer.eval(feed_dict={image_placeholder: style_image}, session=sess)
       image_feature = np.reshape(image_feature, (-1, image_feature.shape[3]))
       return np.matmul(image_feature.T, image_feature) / image_feature.size
 
-  def gram_matrix_for_input_image(self, network, layer):
-      image_feature = network[layer]
-      _, height, width, channels = image_feature.get_shape()
+  def gram_matrix_for_input_image(self, network_layer):
+      _, height, width, channels = network_layer.get_shape()
 
       size = int(height) * int(width) * int(channels)
-      image_feature = tf.reshape(image_feature, (ctx.params.batch_size, height * width, channels))
-      return tf.matmul(tf.transpose(image_feature, perm=[0,2,1]), image_feature) / float(size)
+      network_layer = tf.reshape(network_layer, (ctx.params.batch_size, height * width, channels))
+      return tf.matmul(tf.transpose(network_layer, perm=[0, 2, 1]), network_layer) / float(size)
 
-  def content_loss(self, styled_vgg, input_vgg, content_layer, content_weight):
-    _, h, w, c = input_vgg[content_layer].get_shape()
+  def content_loss(self, styled_vgg, input_vgg, layer_name, content_weight):
+    _, h, w, c = input_vgg[layer_name].get_shape()
     size = ctx.params.batch_size * int(h) * int(w) * int(c)
 
-    return content_weight * (2 * tf.nn.l2_loss(input_vgg[content_layer] - styled_vgg[content_layer]) / float(size))
+    return content_weight * (2 * tf.nn.l2_loss(input_vgg[layer_name] - styled_vgg[layer_name]) / float(size))
 
-  def style_loss(self, styled_vgg, style_image, style_layers, style_weight, sess):
+  def style_loss(self, styled_vgg, style_image, layer_names, style_weight, sess):
     style_image_placeholder = tf.placeholder('float', shape=style_image.shape)
 
     with slim.arg_scope(vgg.vgg_arg_scope(reuse=True)):
-      _, style_loss_net = vgg.vgg_19(style_image_placeholder, num_classes=0, is_training=False)
+      _, style_image_vgg = vgg.vgg_19(style_image_placeholder, num_classes=0, is_training=False)
 
     style_loss = 0
-    style_preprocessed = style_image - np.array([ctx.params.R_MEAN,ctx.params.G_MEAN,ctx.params.B_MEAN]).reshape([1,1,1,3])
+    preprocessed_style_image = style_image - np.array([ctx.params.R_MEAN,
+                                                 ctx.params.G_MEAN,
+                                                 ctx.params.B_MEAN]).reshape([1,1,1,3])
 
-    for layer in style_layers:
-      style_image_gram = self.gram_matrix_for_style_image(style_loss_net,
+    for layer_name in layer_names:
+      style_image_gram = self.gram_matrix_for_style_image(style_image_vgg[layer_name],
                                                           style_image_placeholder,
-                                                          layer,
-                                                          style_preprocessed,
+                                                          preprocessed_style_image,
                                                           sess)
 
-      input_image_gram = self.gram_matrix_for_input_image(styled_vgg, layer)
+      input_image_gram = self.gram_matrix_for_input_image(styled_vgg[layer_name])
 
       style_loss += (2 * tf.nn.l2_loss(input_image_gram - np.expand_dims(style_image_gram, 0)) / style_image_gram.size)
-      return style_weight * style_loss
+    return style_weight * style_loss
 
   def tv_loss(self, image, tv_weight):
     # total variation denoising
     shape = tuple(image.get_shape().as_list())
 
     _, h, w, c = image[:, 1:, :, :].get_shape()
-    tv_y_size = ctx.params.batch_size * int(h) * int(w) * int(c)
+    tv_y_size = int(h) * int(w) * int(c)
     _, h, w, c = image[:, :, 1:, :].get_shape()
-    tv_x_size = ctx.params.batch_size * int(h) * int(w) * int(c)
+    tv_x_size = int(h) * int(w) * int(c)
     tv_loss = tv_weight * 2 * (
             (tf.nn.l2_loss(image[:, 1:, :, :] - image[:, :int(shape[1]) - 1, :, :]) /
              tv_y_size) +
@@ -147,19 +147,30 @@ class PerceptualModel(ModelDesc):
     conv3 = instance_norm(conv3, name='instance_norm3')
     conv3 = relu(conv3)
 
-    resid1 = resblock(conv3, 128, 3, name='resblock1')
-    resid2 = resblock(resid1, 128, 3, name='resblock2')
-    resid3 = resblock(resid2, 128, 3, name='resblock3')
-    resid4 = resblock(resid3, 128, 3, name='resblock4')
-    resid5 = resblock(resid4, 128, 3, name='resblock5')
+    resid1 = resblock(conv3, 128, 3, use_bias=False, name='resblock1')
+    resid2 = resblock(resid1, 128, 3, use_bias=False, name='resblock2')
+    resid3 = resblock(resid2, 128, 3, use_bias=False, name='resblock3')
+    resid4 = resblock(resid3, 128, 3, use_bias=False, name='resblock4')
+    resid5 = resblock(resid4, 128, 3, use_bias=False, name='resblock5')
 
-    conv_t1 = deconv2d(resid5, 64, kernel_size=3, stride=2, name='deconv1')
-    conv_t1 = instance_norm(conv_t1, name='de_instance_norm1')
+    _, h, w, _ = resid5.get_shape()
+    conv_t1 = tf.image.resize_nearest_neighbor(resid5, size=[int(h) * 2, int(w) * 2])
+    conv_t1 = conv2d(conv_t1, 64, kernel_size=3, stride=1, name='convd_1')
+    conv_t1 = instance_norm(conv_t1, name='de_instance_norm_' + str(1))
     conv_t1 = relu(conv_t1)
+    # conv_t1 = deconv2d(resid5, 64, kernel_size=3, stride=2, name='deconv1')
+    # conv_t1 = instance_norm(conv_t1, name='de_instance_norm1')
+    # conv_t1 = relu(conv_t1)
 
-    conv_t2 = deconv2d(conv_t1, 32, kernel_size=3, stride=2, name='deconv2')
-    conv_t2 = instance_norm(conv_t2, name='de_instance_norm2')
+    _, h, w, _ = conv_t1.get_shape()
+    conv_t2 = tf.image.resize_nearest_neighbor(conv_t1, size=[int(h) * 2, int(w) * 2])
+    conv_t2 = conv2d(conv_t2, 32, kernel_size=3, stride=1, name='convd_2')
+    conv_t2 = instance_norm(conv_t2, name='de_instance_norm_' + str(2))
     conv_t2 = relu(conv_t2)
+
+    # conv_t2 = deconv2d(conv_t1, 32, kernel_size=3, stride=2, name='deconv2')
+    # conv_t2 = instance_norm(conv_t2, name='de_instance_norm2')
+    # conv_t2 = relu(conv_t2)
 
     conv_t3 = conv2d(conv_t2, 3, kernel_size=9, stride=1, name='last_conv')
     conv_t3 = instance_norm(conv_t3, name='last_instance_norm')
@@ -175,10 +186,6 @@ class PerceptualModel(ModelDesc):
                                  shape=[None, ctx.params.load_size, ctx.params.load_size, 3],
                                  name="image")
 
-    # 对输入图像预处理
-    input_batch = input_batch - np.array([ctx.params.R_MEAN, ctx.params.G_MEAN, ctx.params.B_MEAN]).reshape(
-      [1, 1, 1, 3])
-
     # 构建风格化后图像
     with tf.variable_scope('transfer'):
       # 数据范围 0 ~ 255
@@ -189,8 +196,9 @@ class PerceptualModel(ModelDesc):
       return stylized_image
 
     # 对风格化后的图像预处理
-    stylized_image = stylized_image - np.array([ctx.params.R_MEAN, ctx.params.G_MEAN, ctx.params.B_MEAN]).reshape(
-      [1, 1, 1, 3])
+    stylized_image = stylized_image - np.array([ctx.params.R_MEAN,
+                                                ctx.params.G_MEAN,
+                                                ctx.params.B_MEAN]).reshape([1, 1, 1, 3])
 
     # 加载标准vgg-19模型参数，并将输入图像和风格化图像分别送入vgg-19
     # 处理风格化后的图像stylized_image
@@ -207,6 +215,10 @@ class PerceptualModel(ModelDesc):
     load_fn(kwargs['trainer'].sess)
 
     # 处理输入图像 input_batch
+    input_batch = input_batch - np.array([ctx.params.R_MEAN,
+                                          ctx.params.G_MEAN,
+                                          ctx.params.B_MEAN]).reshape([1, 1, 1, 3])
+
     with slim.arg_scope(vgg.vgg_arg_scope(reuse=True)):
         _, input_vgg_output = vgg.vgg_19(input_batch,
                                            is_training=False,
@@ -272,7 +284,7 @@ def training_callback(data_source, dump_dir):
   for epoch in range(ctx.params.max_epochs):
     for a, _ in batch_node.iterator_value():
       # 4.1 运行一次迭代
-      loss_val, stylyed_image = tf_trainer.run(image=a)
+      _, loss_val, stylyed_image = tf_trainer.run(image=a)
 
     # 4.2 保存模型
     tf_trainer.snapshot(epoch)
@@ -282,17 +294,7 @@ def training_callback(data_source, dump_dir):
 ######## 4.step define infer process     ##########
 ###################################################
 def preprocess_infer_func(*args, **kwargs):
-  image_a = args[0]
-  image_a = scipy.misc.imresize(image_a, [ctx.params.load_size, ctx.params.load_size])
-
-  if len(image_a.shape) == 2:
-    image_a = np.concatenate((np.expand_dims(image_a, -1),
-                              np.expand_dims(image_a, -1),
-                              np.expand_dims(image_a, -1)), axis=2)
-
-  image_a = image_a[:,:,0:3]
-  return image_a
-
+  return args[0]
 
 def infer_callback(data_source, dump_dir):
   # 1. 创建训练器
@@ -306,9 +308,26 @@ def infer_callback(data_source, dump_dir):
 
   # 4. 遍历所有数据，并生成风格化图像
   for a in preprocess_node.iterator_value():
-    styled_a = tf_trainer.run(image=np.expand_dims(a, 0))
+    height, width, _ = a.shape[0:3]
+
+    # resize to standard size
+    image_a = scipy.misc.imresize(a, [ctx.params.load_size, ctx.params.load_size])
+
+    if len(image_a.shape) == 2:
+      image_a = np.concatenate((np.expand_dims(image_a, -1),
+                                np.expand_dims(image_a, -1),
+                                np.expand_dims(image_a, -1)), axis=2)
+
+    image_a = image_a[:, :, 0:3]
+
+    styled_a = tf_trainer.run(image=np.expand_dims(image_a, 0))
     styled_a = np.squeeze(styled_a)
-    ctx.recorder.record({'RESULT': styled_a.astype(np.uint8), 'RESULT_TYPE': 'IMAGE'})
+    styled_a = np.maximum(styled_a, 0)
+    styled_a = np.minimum(styled_a, 255)
+    styled_a = styled_a.astype(np.uint8)
+    styled_a = scipy.misc.imresize(styled_a, [height, width])
+
+    ctx.recorder.record({'RESULT': styled_a, 'RESULT_TYPE': 'IMAGE'})
 
 
 ###################################################

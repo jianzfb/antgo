@@ -186,6 +186,8 @@ def create_clones(config, model_fn, args=None, kwargs=None):
                       device=config.variables_device()):
     # Create clones.
     for i in range(0, config.num_clones):
+      i = config.clone_id_map[i] if i in config.clone_id_map else i
+
       kwargs['clone'] = i
       with tf.name_scope(config.clone_scope(i)) as clone_scope:
         clone_device = config.clone_device(i)
@@ -493,7 +495,8 @@ class DeploymentConfig(object):
                num_replicas=1,
                num_ps_tasks=0,
                worker_job_name='worker',
-               ps_job_name='ps'):
+               ps_job_name='ps',
+               clone_id_map={}):
     """Create a DeploymentConfig.
 
     The config describes how to deploy a model across multiple clones and
@@ -538,10 +541,19 @@ class DeploymentConfig(object):
     self._ps_device = '/job:' + ps_job_name if num_ps_tasks > 0 else ''
     self._worker_device = '/job:' + worker_job_name if num_ps_tasks > 0 else ''
     self._devices = devices
+    self._clone_id_map = clone_id_map
 
   @property
   def num_clones(self):
     return self._num_clones
+
+  @num_clones.setter
+  def num_clones(self, n):
+    self._num_clones = n
+
+  @property
+  def clone_id_map(self):
+    return self._clone_id_map
 
   @property
   def devices(self):

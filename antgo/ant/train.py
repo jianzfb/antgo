@@ -519,6 +519,55 @@ class AntTrain(AntBase):
         logger.error('computing pow order is abnormal')
         return
 
+  def run_by_mpi(self, address_list):
+    # 0.step parse address_list str (ip:num,ip:num)
+    ip_num_list = address_list.split(',')
+    servers = ','.join([s.split(':')[0] for s in ip_num_list])
+    nodes_num = reduce(lambda x,y: x+y, [int(s.split(':')[1]) for s in ip_num_list],0)
+
+    # 1.step modify yaml
+    with open(os.path.join(self.main_folder, 'main_param.yaml'), 'w') as fp:
+      main_params = copy.deepcopy(self.context.params.content)
+      main_params['is_distribute_training'] = True
+      yaml.dump(main_params, fp)
+
+    # 2.step pack codebase and distribute
+    codebase_name, codebase_address_code = self.package_codebase('ssh:%s'%servers, target_path=self.main_folder)
+
+    # 3.step mpi run
+    kk = []
+    is_has_main_folder = False
+    for s in sys.argv[1:]:
+      if s.startswith('--main_folder'):
+        is_has_main_folder = True
+        s = '--main_folder=%s'%self.main_folder
+
+      if s.startswith('--running_platform'):
+        continue
+
+      if s.startswith('--main_param'):
+        continue
+
+      kk.append(s)
+
+    if not is_has_main_folder:
+      kk.append('--main_folder=%s'%self.main_folder)
+
+    kk.append('--code_tar=%s'%codebase_name)
+    kk.append('--crypto_code=%s'%codebase_address_code)
+    kk.append('--main_param=main_param.yaml')
+
+    cmd_str = 'antgo ' + ' '.join(kk)
+
+    logger.info('launch mpi')
+    subprocess.call(
+      "nohup mpirun -np %d -H %s  -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib %s > log 2>&1 &" % (nodes_num,address_list,cmd_str),
+    shell=True)
+
+    # 4.step remove temparay file
+    os.remove(os.path.join(self.main_folder, codebase_name))
+    return
+
   def start(self):
     # 0.step loading challenge task
     running_ant_task = None
@@ -625,6 +674,10 @@ class AntTrain(AntBase):
 
         self.apply_and_launch_computingpow(running_ant_task,experiment_ablation_blocks)
       logger.info('antgo have been deployed all train experiment')
+      return
+    elif self.running_platform == 'mpi':
+      self.run_by_mpi(FLAGS.server_list())
+      logger.info('antgo is runing on MPI envoriment')
       return
 
     # now time stamp

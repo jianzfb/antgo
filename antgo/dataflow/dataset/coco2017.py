@@ -509,6 +509,15 @@ class COCO2017(Dataset):
           # self.img_ids = self.coco_api.getImgIds()
           logger.error('not support')
           exit(-1)
+      else:
+        # annotation file
+        ann_file = self.config_ann_file(data_type, self.dir, "Instance")
+        self.coco_api = CocoAPI(ann_file)
+
+        # parse (for object detector)
+        self.cats = self.coco_api.loadCats(self.coco_api.getCatIds())
+        self.cat_ids = self.coco_api.getCatIds(self.cats)
+        self.img_ids = self.coco_api.getImgIds(self.cat_ids)
     else:
       ann_file = ''
 

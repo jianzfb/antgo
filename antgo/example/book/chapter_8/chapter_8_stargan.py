@@ -175,9 +175,11 @@ class StarGANModel(ModelDesc):
                               [None, 128, 128, 3],
                               name='x_real')
       # 训练时，外部指定所喂入数据对应的属性标签
-      x_label = tf.placeholder(tf.float32, [None, ctx.params.label_num], name='x_label')
-      # 随机获得目标域属性标签
-      y_label = tf.random_shuffle(x_label)
+      x_label = tf.placeholder(tf.float32,
+                               [None, ctx.params.label_num],
+                               name='x_label')
+      # 目标标签
+      y_label = 1.0 - x_label
 
       # 定义生成器和判别器
       x_fake = self.generator(x_real, y_label)  # real a
@@ -194,16 +196,29 @@ class StarGANModel(ModelDesc):
         GP = 0
 
       g_adv_loss = generator_loss(ctx.params.gan_type, fake=fake_logit)
-      g_cls_loss = classification_loss(logit=fake_cls, label=tf.reshape(tf.tile(tf.reshape(y_label,[ctx.params.batch_size,1,1,ctx.params.label_num]),[1,2,2,1]),[-1,ctx.params.label_num]))
+      g_cls_loss = classification_loss(logit=fake_cls,
+                                       label=tf.reshape(tf.tile(tf.reshape(y_label,[ctx.params.batch_size,
+                                                                                    1,
+                                                                                    1,
+                                                                                    ctx.params.label_num]),[1,2,2,1]),
+                                                        [-1,ctx.params.label_num]))
       g_rec_loss = L1_loss(x_real, x_recon)
 
       d_adv_loss = discriminator_loss(ctx.params.gan_type, real=real_logit, fake=fake_logit) + GP
-      d_cls_loss = classification_loss(logit=real_cls, label=tf.reshape(tf.tile(tf.reshape(x_label,[ctx.params.batch_size,1,1,ctx.params.label_num]),[1,2,2,1]),[-1,ctx.params.label_num]))
+      d_cls_loss = classification_loss(logit=real_cls,
+                                       label=tf.reshape(tf.tile(tf.reshape(x_label,[ctx.params.batch_size,
+                                                                                    1,
+                                                                                    1,
+                                                                                    ctx.params.label_num]),[1,2,2,1]),
+                                                        [-1,ctx.params.label_num]))
 
-      d_loss = ctx.params.adv_weight * d_adv_loss + ctx.params.cls_weight * d_cls_loss
+      d_loss = ctx.params.adv_weight * d_adv_loss + \
+               ctx.params.cls_weight * d_cls_loss
       d_loss = tf.identity(d_loss, name='d_loss')
 
-      g_loss = ctx.params.adv_weight * g_adv_loss + ctx.params.cls_weight * g_cls_loss + ctx.params.rec_weight * g_rec_loss
+      g_loss = ctx.params.adv_weight * g_adv_loss + \
+               ctx.params.cls_weight * g_cls_loss + \
+               ctx.params.rec_weight * g_rec_loss
       g_loss = tf.identity(g_loss,name='g_loss')
 
       return {g_loss: [x_fake, x_recon]}
@@ -225,21 +240,23 @@ class StarGANModel(ModelDesc):
 ######## 3.step define training process  #########
 ##################################################
 def preprocess_train_func(*args, **kwargs):
-  img, annotation = args[0]
+  img_A, img_B = args[0]
 
-  selected_attrs = ctx.params.selected_attrs
-  # 'Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young'
-  label = [0 for _ in range(len(selected_attrs))]
-  for index, attr_name in enumerate(selected_attrs):
-    label[index] = 0 if annotation['attribute'][annotation['attribute_name'][attr_name]] < 0 else 1
+  is_a = True
+  if np.random.random() > 0.5:
+    is_a = False
+
+  img = img_A
+  label = [1, 0]
+  if not is_a:
+    img = img_B
+    label = [0, 1]
 
   img = scipy.misc.imresize(img, [ctx.params.load_size, ctx.params.load_size])
-
   if len(img.shape) == 2:
     img = np.concatenate((np.expand_dims(img, -1), np.expand_dims(img, -1), np.expand_dims(img, -1)), axis=2)
 
   img = img[:,:,0:3]
-
   if np.random.random() > 0.5:
     img = np.fliplr(img)
 
@@ -317,12 +334,7 @@ def infer_callback(data_source, dump_dir):
   count = 0
   for a in preprocess_node.iterator_value():
     # 随机目标域标签
-    y_label = np.random.randint(0,2,ctx.params.label_num)
-    if np.sum(y_label) == 0:
-      y_label[2] = 1
-
-    y_label_name = ctx.params.selected_attrs
-    y_label = y_label.reshape([1,-1])
+    y_label = np.array([0, 1]).reshape([1,2])
     fake_b = tf_trainer.run(x_real=a, y_label=y_label)
 
     fake_b = (fake_b + 1.) / 2.
@@ -340,11 +352,7 @@ def infer_callback(data_source, dump_dir):
 
     count += 1
 
-    ctx.recorder.record({'RESULT': (fake_b*255).astype(np.uint8),'RESULT_TYPE': 'IMAGE',
-                         'ATTR': str(y_label_name), 'ATTR_TYPE': 'STRING',
-                         'ATTR_LABEL': str(y_label.tolist()), 'ATTR_LABEL_TYPE': 'STRING'},)
-
-
+    ctx.recorder.record({'RESULT': (fake_b*255).astype(np.uint8),'RESULT_TYPE': 'IMAGE'})
 
 
 ###################################################

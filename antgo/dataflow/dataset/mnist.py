@@ -198,8 +198,6 @@ class Mnist(Dataset):
       if filter_ids is not None:
         ids = [i for i in ids if i in filter_ids]
 
-      print(len(ids))
-
       for id in ids:
         img = ds.images[id].reshape((28, 28))
         img = img[..., np.newaxis]

@@ -308,7 +308,7 @@ def _get_init_fn(trainer_obj, model, dump_dir, ctx=None):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
   
   logger.info('load model from %s' % checkpoint_path)
-  return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in auxilary_variables_to_restore]
+  return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in auxilary_variables_to_restore if len(vr) > 0]
 
 
 def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
@@ -493,6 +493,23 @@ class TFTrainer(Trainer):
     self._has_model_input = False
     self.cache = {}
 
+  def restore_scopy_from(self, model, restore_scope, checkpoint_path):
+    model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    variables_to_restore = {}
+    for var in model_variables:
+      if var.op.name.startswith(restore_scope):
+        variables_to_restore[var.op.name] = var
+
+    if len(variables_to_restore) == 0:
+      return
+
+    if tf.gfile.IsDirectory(checkpoint_path):
+      checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
+
+    logger.info('restore %s scope from %s' % checkpoint_path)
+    fn = slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore, ignore_missing_vars=False)
+    fn(self.sess)
+
   def run(self, *args, **kwargs):
     data_generator = None
 
@@ -577,10 +594,12 @@ class TFTrainer(Trainer):
 
         self.loss_stat.add(loss_val)
         if self.iter_at % self.log_every_n_steps == 0:
-          logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)' %
-                      (str(os.getpid()), self.loss_stat.get(), self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
+          if not self.is_distribute_training or(self.is_distribute_training and self.rank == 0):
+            logger.info('(PID: %s) INFO: loss %f lr %f at iterator %d (%f sec/step)' %
+                        (str(os.getpid()), self.loss_stat.get(), self.sess.run(self.lr), self.iter_at, float(self.time_stat.get())))
       else:
-        logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
+        if not self.is_distribute_training or (self.is_distribute_training and self.rank == 0):
+         logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
 
       return result[0] if type(result) == list and len(result) == 1 else result
 
@@ -600,6 +619,16 @@ class TFTrainer(Trainer):
     self.saver.save(self.sess, model_filepath)
 
   def training_deploy(self, model):
+    # Horovod: initialize Horovod (prepare MPI envoriment)
+    if self.is_distribute_training:
+      import horovod.tensorflow as hvd
+      hvd.init()
+
+      # reset num_clones = 1
+      self.num_clones = 1
+      self.rank = hvd.rank()
+      self.local_rank = hvd.rank()
+
     tf.logging.set_verbosity(tf.logging.INFO)
     with tf.Graph().as_default() as graph:
       # Default graph
@@ -617,21 +646,22 @@ class TFTrainer(Trainer):
                                                       clone_on_cpu=self.clone_on_cpu,
                                                       replica_id=self.replica_id,
                                                       num_replicas=self.worker_replicas,
-                                                      num_ps_tasks=self.num_ps_tasks)
+                                                      num_ps_tasks=self.num_ps_tasks,
+                                                      clone_id_map={0:self.local_rank} if self.is_distribute_training else {})
 
       # init some info
       with tf.device(deploy_config.inputs_device()):
-        #############################
-        ####    define model input ##
-        #############################
+        ###################################
+        ####    define model input (CPU) ##
+        ###################################
         with tf.variable_scope('input'):
           data_queue = self.ctx.model.model_input(self.is_training)
           if data_queue is not None:
             self._has_model_input = True
         
-        #############################
-        ####    define model       ##
-        #############################
+        ###################################
+        ####    define model (CPU or GPU) #
+        ###################################
         func = model.model_fn
         @functools.wraps(func)
         def network_fn(*args, **kwargs):
@@ -649,9 +679,9 @@ class TFTrainer(Trainer):
             #   self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
           return res
   
-        #######################
-        # Create model clones #
-        #######################
+        ####################################
+        ####### Create model clones ########
+        ####################################
         self.clones = tfmodel_deploy.create_clones(deploy_config,
                                                    network_fn,
                                                    [data_queue] if data_queue is not None else None,
@@ -667,10 +697,19 @@ class TFTrainer(Trainer):
         # Configure the optimization procedure. #
         #########################################
         with tf.device(deploy_config.optimizer_device()):
+          # samples total number
           num_samples = self.num_samples if self.num_samples > 0 else self.ctx.data_source.size
+
+          # Horovod: adjust learning rate based on number of GPUs
           self.lr = _configure_learning_rate(self, num_samples, global_step)
+
+          # config optimizer
           optimizer = _configure_optimizer(self, self.lr)
-  
+
+          # Horovod: add Horovod Distributed Optimizer
+          if self.is_distribute_training:
+            optimizer = hvd.DistributedOptimizer(optimizer)
+
         # Variables to train.
         variables_to_train = _get_variables_to_train(self)
         
@@ -719,10 +758,21 @@ class TFTrainer(Trainer):
         self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=2)
 
         # Restore from checkpoint
-        restore_fns = _get_init_fn(self, model, self.dump_dir, self.ctx)
-        if restore_fns is not None:
-          for restore_fn in restore_fns:
-            restore_fn(self.sess)
+        if not self.is_distribute_training or (self.is_distribute_training and self.rank == 0):
+          restore_fns = _get_init_fn(self, model, self.dump_dir, self.ctx)
+          if restore_fns is not None:
+            for restore_fn in restore_fns:
+              restore_fn(self.sess)
+
+        # resotre from auxilary checkpoint
+        for auxilary_scope, auxilary_checkpoint in self.auxilary_checkpoints.items():
+          self.restore_scopy_from(model, auxilary_scope, auxilary_checkpoint)
+
+        # Horovod boardcast global variables
+        if self.is_distribute_training:
+          bgv = hvd.BroadcastGlobalVariablesHook(0)
+          bgv.begin()
+          bgv.after_create_session(self.sess, self.coord)
 
   def infer_deploy(self, model):
     tf.logging.set_verbosity(tf.logging.INFO)
