@@ -21,8 +21,8 @@ class AntDatasetFactory(object):
 
   @staticmethod
   def dataset(name, parse_flag=''):
-    if 'CUSTOM' in AntDatasetFactory.factory_dataset:
-      return AntDatasetFactory.factory_dataset['CUSTOM']
+    if name in AntDatasetFactory.factory_dataset:
+      return AntDatasetFactory.factory_dataset[name]
 
     for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
       if dataset_name.lower() == name.lower():
@@ -46,7 +46,7 @@ class AntDatasetFactory(object):
       if dataset_obj == custom_dataset:
         return
 
-    AntDatasetFactory.factory_dataset['CUSTOM'] = custom_dataset
+    AntDatasetFactory.factory_dataset[custom_dataset.__name__] = custom_dataset
 
 def _global_import(name):
   p = __import__(name, globals(), locals(), level=1)

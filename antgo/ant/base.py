@@ -250,7 +250,7 @@ class AntBase(object):
     elif prefix == 'baidu':
       pass
     elif prefix.startswith('ssh') or prefix.startswith('scp'):
-      nodes = prefix.replace('ssh:', '')
+      nodes = prefix.replace('scp:', '')
       node_ip_list = nodes.split(',')
       for ip in node_ip_list:
         if ip=='127.0.0.1' or ip=='localhost':

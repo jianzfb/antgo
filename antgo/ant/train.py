@@ -532,7 +532,7 @@ class AntTrain(AntBase):
       yaml.dump(main_params, fp)
 
     # 2.step pack codebase and distribute
-    codebase_name, codebase_address_code = self.package_codebase('ssh:%s'%servers, target_path=self.main_folder)
+    codebase_name, codebase_address_code = self.package_codebase('scp:%s'%servers, target_path=self.main_folder)
 
     # 3.step mpi run
     kk = []
@@ -561,7 +561,7 @@ class AntTrain(AntBase):
 
     logger.info('launch mpi')
     subprocess.call(
-      "nohup mpirun -np %d -H %s  -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib %s > log 2>&1 &" % (nodes_num,address_list,cmd_str),
+      "nohup mpirun -np %d -H %s -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib %s > log 2>&1 &" % (nodes_num,address_list,cmd_str),
     shell=True)
 
     # 4.step remove temparay file

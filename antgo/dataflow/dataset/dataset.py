@@ -50,7 +50,6 @@ class Dataset(BaseNode):
     self.dir = dir
     
     self._dataset_type = 'IMAGE'
-    
     # config extent params
     # included, excluded, transform(cls->id)
     self.ext_params = ext_params
@@ -74,7 +73,7 @@ class Dataset(BaseNode):
   
   def close(self):
     pass
-  
+
   @property
   def ids(self):
     return self._ids
