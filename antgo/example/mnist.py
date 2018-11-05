@@ -104,6 +104,8 @@ class MNISTModel(ModelDesc):
       # reshape tensor into a batch of vectors
       h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
 
+    tf.summary.histogram('activations', h_pool2)
+
     # Densely connected layer with 1024 neurons.
     h_fc1 = slim.dropout(
       slim.fully_connected(
@@ -114,9 +116,6 @@ class MNISTModel(ModelDesc):
     # Compute logits (1 per class) and compute loss.
     logits = slim.fully_connected(h_fc1, 10, activation_fn=None)
     loss = tf.losses.softmax_cross_entropy(target, logits)
-
-    return loss
-
 
 ##################################################
 ######## 3.step define training process  #########

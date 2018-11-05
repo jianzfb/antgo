@@ -44,6 +44,9 @@ class TFGANTrainer(Trainer):
     self.cache = {}
     self.loss_log = {}
 
+    self.summary_op = None
+    self.train_writer = None
+
   def configure_optimizer(self, learning_rate):
     """Configures the optimizer used for training.
 
@@ -433,14 +436,21 @@ class TFGANTrainer(Trainer):
     # record iterator count
     self.iter_at += 1
 
+    if self.summary_op is not None:
+      summary_op_val = result[0]
+      result = result[1:]
+      self.train_writer.add_summary(summary_op_val, self.iter_at)
+
     # record elapsed time
     self.time_stat.add(elapsed_time)
 
     # print log
     if self.is_training:
       loss_val = 0.0
-      if type(result) == list:
+      if type(result) == list and len(result) >= 2:
         loss_val = result[1]
+      elif type(result) == list and len(result) == 1:
+        loss_val = result[0]
       else:
         loss_val = result
 
@@ -518,6 +528,11 @@ class TFGANTrainer(Trainer):
           tf.train.write_graph(self.sess.graph_def, self.dump_dir, 'graph.pbtxt')
           return res
 
+        ####################################
+        ####### Create summary      ########
+        ####################################
+        summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
+
         #############################
         # Create model clones #######
         #############################
@@ -533,6 +548,9 @@ class TFGANTrainer(Trainer):
           num_samples = self.num_samples if self.num_samples > 0 else self.ctx.data_source.size
           trainable_variables = self.get_variables_to_train()       # all
           update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)   # all
+
+          for loss in tf.get_collection(tf.GraphKeys.LOSSES, deploy_config.clone_scope(0)):
+            summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
 
           for loss_name, loss_config in kwargs.items():
             loss_scope = loss_config['scope']
@@ -551,6 +569,8 @@ class TFGANTrainer(Trainer):
               self.lr_list[loss_name] = self.configure_learning_rate(num_samples, global_step)
               self.global_step_list[loss_name] = global_step
 
+            summaries.add(tf.summary.scalar('%s_learning_rate'%loss_name, self.lr_list[loss_name]))
+
             # config optimization procedure
             self.optimizer_list[loss_name] = self.configure_optimizer(self.lr_list[loss_name])
 
@@ -565,6 +585,12 @@ class TFGANTrainer(Trainer):
               if loss_name not in self.update_list:
                 self.update_list[loss_name] = []
               self.update_list[loss_name].extend([var for var in update_ops if loss_scope_name in var.name])
+
+
+        summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES, deploy_config.clone_scope(0)))
+
+        # Merge all summaries together.
+        self.summary_op = tf.summary.merge(list(summaries), name='summary_op')
 
         # Variables to train.
         for loss_name, loss_var in self.loss_list.items():
@@ -593,6 +619,20 @@ class TFGANTrainer(Trainer):
                           self.trainop_list[loss_name].extend(list(v))
                         else:
                           self.trainop_list[loss_name].append(v)
+
+                if type(self.trainop_list[loss_name]) != list:
+                  self.trainop_list[loss_name] = [self.trainop_list[loss_name]]
+
+                if self.summary_op is not None:
+                  val_ops_temp = [self.summary_op]
+                  val_ops_temp.extend(self.trainop_list[loss_name])
+                  self.trainop_list[loss_name] = val_ops_temp
+
+        # summary write
+        if not os.path.exists(os.path.join(self.dump_dir, 'summary')):
+          os.makedirs(os.path.join(self.dump_dir, 'summary'))
+
+        self.train_writer = tf.summary.FileWriter(os.path.join(self.dump_dir, 'summary'), graph)
 
         # Global initialization
         self.sess.run(tf.global_variables_initializer())

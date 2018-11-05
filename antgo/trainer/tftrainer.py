@@ -493,6 +493,9 @@ class TFTrainer(Trainer):
     self._has_model_input = False
     self.cache = {}
 
+    self.summary_op = None
+    self.train_writer = None
+
   def restore_scopy_from(self, model, restore_scope, checkpoint_path):
     model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
     variables_to_restore = {}
@@ -582,14 +585,21 @@ class TFTrainer(Trainer):
 
       self.iter_at += 1
 
+      if self.summary_op is not None:
+        summary_op_val = result[0]
+        result = result[1:]
+        self.train_writer.add_summary(summary_op_val, self.iter_at)
+
       # record elapsed time
       self.time_stat.add(elapsed_time)
 
       # print log
       if self.is_training:
         loss_val = 0.0
-        if type(result) == list:
+        if type(result) == list and len(result) >= 2:
           loss_val = result[1]
+        elif type(result) == list and len(result) == 1:
+          loss_val = result[0]
         else:
           loss_val = result
 
@@ -681,7 +691,12 @@ class TFTrainer(Trainer):
             # if svg_graph is not None:
             #   self.ctx.job.send({'DATA': {'GRAPH': svg_graph}})
           return res
-  
+
+        ####################################
+        ####### Create summary      ########
+        ####################################
+        summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
+
         ####################################
         ####### Create model clones ########
         ####################################
@@ -691,6 +706,9 @@ class TFTrainer(Trainer):
                                                    {'trainer': self})
         first_clone_scope = deploy_config.clone_scope(0)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
+
+        for loss in tf.get_collection(tf.GraphKeys.LOSSES, first_clone_scope):
+          summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
 
         # Create global_step
         with tf.device(deploy_config.variables_device()):
@@ -705,6 +723,7 @@ class TFTrainer(Trainer):
 
           # Horovod: adjust learning rate based on number of GPUs
           self.lr = _configure_learning_rate(self, num_samples, global_step)
+          summaries.add(tf.summary.scalar('learning_rate', self.lr))
 
           # config optimizer
           optimizer = _configure_optimizer(self, self.lr)
@@ -723,7 +742,9 @@ class TFTrainer(Trainer):
                                            optimizer,
                                            regularization_losses=None if self.regularization_loss else [],
                                            var_list=variables_to_train)
-    
+
+          summaries.add(tf.summary.scalar('total_loss', total_loss))
+
           # Create gradient updates.
           grad_updates = optimizer.apply_gradients(clones_gradients,
                                                    global_step=global_step)
@@ -742,7 +763,27 @@ class TFTrainer(Trainer):
               self.val_ops.extend(list(self.clones[0].outputs))
             else:
               self.val_ops.append(self.clones[0].outputs)
-        
+
+          if type(self.val_ops) != list:
+            self.val_ops = [self.val_ops]
+
+        summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES,
+                                           first_clone_scope))
+
+        # Merge all summaries together.
+        self.summary_op = tf.summary.merge(list(summaries), name='summary_op')
+
+        if self.summary_op is not None:
+          val_ops_temp = [self.summary_op]
+          val_ops_temp.extend(self.val_ops)
+          self.val_ops = val_ops_temp
+
+        # summary write
+        if not os.path.exists(os.path.join(self.dump_dir, 'summary')):
+          os.makedirs(os.path.join(self.dump_dir, 'summary'))
+
+        self.train_writer = tf.summary.FileWriter(os.path.join(self.dump_dir, 'summary'), graph)
+
         # Global initialization
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(tf.local_variables_initializer())
