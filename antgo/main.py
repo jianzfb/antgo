@@ -47,7 +47,7 @@ flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('version', None, 'minist antgo version')
-flags.DEFINE_string('crypto_code', '', 'crypto')
+flags.DEFINE_string('crypto_code', '', 'crypto code')
 flags.DEFINE_string('code_tar', '', 'code tar')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dataset', None, 'dataset')
@@ -152,8 +152,8 @@ def main():
 
     # plan B
     home_folder = os.environ['HOME']
-    Config.data_factory = os.path.join(home_folder, 'antgo', 'antgo-dataset')
-    Config.task_factory = os.path.join(home_folder, 'antgo', 'antgo-task')
+    Config.data_factory = os.path.join(home_folder, 'antgo', 'dataset')
+    Config.task_factory = os.path.join(home_folder, 'antgo', 'task')
     
   if not os.path.exists(Config.data_factory):
     os.makedirs(Config.data_factory)
@@ -207,15 +207,16 @@ def main():
   if main_folder is None:
     main_folder = os.path.abspath(os.curdir)
 
-    if FLAGS.code_tar() != "":
-      if os.path.exists(os.path.join(main_folder, FLAGS.code_tar())):
+  if FLAGS.code_tar() != "":
+    if os.path.exists(os.path.join(main_folder, FLAGS.code_tar())):
+      if FLAGS.code_tar().startswith('_ssl') and FLAGS.crypto_code() != "":
         decrypto_shell = 'openssl enc -d -aes256 -in %s -out %s -k %s' % (FLAGS.code_tar(),
                                                                           FLAGS.code_tar().replace('_ssl', ''),
                                                                           FLAGS.crypto_code())
         subprocess.call(decrypto_shell, shell=True, cwd=main_folder)
 
-        with tarfile.open(os.path.join(main_folder, FLAGS.code_tar().replace('_ssl', '')), 'r:gz') as tar:
-          tar.extractall(main_folder)
+      with tarfile.open(os.path.join(main_folder, FLAGS.code_tar().replace('_ssl', '')), 'r:gz') as tar:
+        tar.extractall(main_folder)
 
   # 7.3 check dump dir (all running data is stored here)
   dump_dir = FLAGS.dump()

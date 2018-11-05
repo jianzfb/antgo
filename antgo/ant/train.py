@@ -558,10 +558,9 @@ class AntTrain(AntBase):
     kk.append('--main_param=main_param.yaml')
 
     cmd_str = 'antgo ' + ' '.join(kk)
-
-    logger.info('launch mpi')
+    logger.info('launch mpi (%s)'%cmd_str)
     subprocess.call(
-      "nohup mpirun -np %d -H %s -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib %s > log 2>&1 &" % (nodes_num,address_list,cmd_str),
+      "mpirun -np %d -H %s -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib %s" % (nodes_num,address_list,cmd_str),
     shell=True)
 
     # 4.step remove temparay file

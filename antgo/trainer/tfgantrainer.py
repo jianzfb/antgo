@@ -22,7 +22,6 @@ class TFGANTrainer(Trainer):
     super(TFGANTrainer, self).__init__(is_training)
     self.dump_dir = dump_dir
     self.time_stat = MovingAverage(self.log_every_n_steps)
-    self.loss_stat = MovingAverage(10)
 
     self.coord = None
     self.threads = None
@@ -43,6 +42,7 @@ class TFGANTrainer(Trainer):
     self._has_model_input = False
 
     self.cache = {}
+    self.loss_log = {}
 
   def configure_optimizer(self, learning_rate):
     """Configures the optimizer used for training.
@@ -435,6 +435,32 @@ class TFGANTrainer(Trainer):
 
     # record elapsed time
     self.time_stat.add(elapsed_time)
+
+    # print log
+    if self.is_training:
+      loss_val = 0.0
+      if type(result) == list:
+        loss_val = result[1]
+      else:
+        loss_val = result
+
+      # record loss value
+      self.loss_log[loss_name].add(loss_val)
+
+      #
+      if self.iter_at % self.log_every_n_steps == 0:
+        if not self.is_distribute_training or (self.is_distribute_training and self.rank == 0):
+          loss_log_str = ''
+          for k,v in self.loss_log.items():
+            loss_log_str = loss_log_str + ' %s %f'%(k, v.get())
+
+          logger.info('(PID: %s) INFO: %s lr %f at iterator %d (%f sec/step)' %
+                      (str(os.getpid()),loss_log_str, self.sess.run(self.lr), self.iter_at,
+                       float(self.time_stat.get())))
+    else:
+      if not self.is_distribute_training or (self.is_distribute_training and self.rank == 0):
+        logger.info('(PID: %s) INFO: (%f sec/step)' % (str(os.getpid()), float(self.time_stat.get())))
+
     return result[0] if type(result) == list and len(result) == 1 else result
 
   # 3.step snapshot running state
@@ -510,6 +536,9 @@ class TFGANTrainer(Trainer):
 
           for loss_name, loss_config in kwargs.items():
             loss_scope = loss_config['scope']
+
+            # config loss log
+            self.loss_log[loss_name] = MovingAverage(10)
 
             # Extract loss variable
             self.loss_list[loss_name] = graph.get_tensor_by_name('{}:0'.format(loss_name))

@@ -54,6 +54,8 @@ class AntBatch(AntBase):
         dataset_stage = 'test'
         if len(self.running_ant_task.dataset_name.split('/')) == 2:
             dataset_name, dataset_stage = self.running_ant_task.dataset_name.split('/')
+        else:
+            dataset_name = self.running_ant_task.dataset_name
 
         ant_test_dataset = self.running_ant_task.dataset(dataset_stage,
                                                          os.path.join(self.ant_data_source, dataset_name),

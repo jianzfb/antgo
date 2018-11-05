@@ -585,6 +585,7 @@ class TFTrainer(Trainer):
       # record elapsed time
       self.time_stat.add(elapsed_time)
 
+      # print log
       if self.is_training:
         loss_val = 0.0
         if type(result) == list:
@@ -614,7 +615,7 @@ class TFTrainer(Trainer):
                                                         d=self.iter_at if iter < 0 else iter,
                                                         e=epoch)
     model_filepath = os.path.join(self.dump_dir, model_filename)
-    
+
     # save checkpoint
     self.saver.save(self.sess, model_filepath)
 
@@ -627,7 +628,9 @@ class TFTrainer(Trainer):
       # reset num_clones = 1
       self.num_clones = 1
       self.rank = hvd.rank()
-      self.local_rank = hvd.rank()
+      self.local_rank = hvd.local_rank()
+
+      get_global_context().quiet = False if self.rank == 0 else True
 
     tf.logging.set_verbosity(tf.logging.INFO)
     with tf.Graph().as_default() as graph:

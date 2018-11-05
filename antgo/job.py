@@ -266,5 +266,5 @@ class Job(threading.Thread):
         data['DATA']["CHART"] = chart_data
 
       # 2.step sending to mltalker
-      if self.job_context != None and data['DATA'] != None:
+      if self.job_context != None and data['DATA'] != None and not self.job_context.quiet:
         self.job_context.send(data['DATA'], job_stage)

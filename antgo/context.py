@@ -85,6 +85,8 @@ class Context(object):
     self._from_experiment = None
     self._model = None
 
+    self._quiet = False
+
   def wait_until_clear(self):
     if self.job is not None:
       self.job.stop()
@@ -277,3 +279,10 @@ class Context(object):
   @from_experiment.setter
   def from_experiment(self, experiment):
     self._from_experiment = experiment
+
+  @property
+  def quiet(self):
+    return self._quiet
+  @quiet.setter
+  def quiet(self, val):
+    self._quiet = val

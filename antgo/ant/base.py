@@ -99,7 +99,7 @@ class AntBase(object):
                                 'INPUT_NUM': 1,
                                 'INPUT_TYPE':[]}
 
-    if ant_context is not None and ant_context.params is not None:
+    if ant_context is not None and ant_context.params is not None and ant_context.params._params is not None:
       config_params = ant_context.params._params
       if 'RUNNING_CONFIG' in config_params:
         if 'GPU_MODEL' in config_params['RUNNING_CONFIG']:
@@ -258,15 +258,16 @@ class AntBase(object):
 
         logger.info('deploy code at %s'%ip)
         try:
-          subprocess.call('ssh %s %s'%(ip,'mkdir %s'%target_path))
+          cmd_str = 'ssh %s %s'%(ip,'mkdir -p %s'%target_path)
+          logger.info('execute %s'%cmd_str)
+          subprocess.call(cmd_str,shell=True)
         except:
           pass
 
         try:
-          subprocess.call('scp %s %s:%s'%(os.path.join(self.main_folder,
-                                                       '%s_code_ssl.tar.gz'%random_code_package_name),
-                                          ip,
-                                          target_path))
+          cmd_str = 'scp %s %s:%s'%(os.path.join(self.main_folder,'%s_code_ssl.tar.gz'%random_code_package_name),ip,target_path)
+          logger.info('execute %s'%cmd_str)
+          subprocess.call(cmd_str, shell=True)
         except:
           logger.error('couldnt distribute code base to %s'%ip)
           exit(-1)

@@ -139,6 +139,8 @@ class ModelDesc(object):
     self._data_source = model_data_source
     self._model_variables = None
 
+    self._log = ''
+
   @property
   def name(self):
     return self.model_name
