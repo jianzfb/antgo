@@ -13,6 +13,7 @@ from antgo.measures import *
 from antgo.trainer.tftrainer import *
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+from antgo.ant.debug import *
 
 ##################################################
 ######## 1.step global interaction handle ########
@@ -77,12 +78,6 @@ class MNISTModel(ModelDesc):
 
   def model_fn(self, is_training=True, *args, **kwargs):
     image = tf.placeholder(tf.float32, [None, 784], name='image')
-    label = tf.placeholder(tf.float32, [None], name='label')
-
-    """2-layer convolution model."""
-    # Convert the target to a one-hot tensor of shape (batch_size, 10) and
-    # with a on-value of 1 for each one-hot vector of length 10.
-    target = tf.one_hot(tf.cast(label, tf.int32), 10, 1, 0)
 
     # Reshape feature to 4d tensor with 2nd and 3rd dimensions being
     # image width and height final dimension being the number of color channels.
@@ -115,7 +110,15 @@ class MNISTModel(ModelDesc):
 
     # Compute logits (1 per class) and compute loss.
     logits = slim.fully_connected(h_fc1, 10, activation_fn=None)
-    loss = tf.losses.softmax_cross_entropy(target, logits)
+
+    if is_training:
+      label = tf.placeholder(tf.float32, [None], name='label')
+      target = tf.one_hot(tf.cast(label, tf.int32), 10, 1, 0)
+      loss = tf.losses.softmax_cross_entropy(target, logits)
+      return loss
+    else:
+      return logits
+
 
 ##################################################
 ######## 3.step define training process  #########
@@ -144,9 +147,14 @@ def training_callback(data_source, dump_dir):
 ######## 4.step define infer process     ##########
 ###################################################
 def infer_callback(data_source, dump_dir):
-  for _ in range(data_source.size):
+  # deploy model
+  tf_trainer = TFTrainer(dump_dir,False)
+  tf_trainer.deploy(MNISTModel())
+
+  for k in data_source.iterator_value():
     # execute infer process
-    # logits = ...
+    k = k.reshape([-1, 784])
+    logits = tf_trainer.run(image=k)
 
     # record
     ctx.recorder.record(logits)
@@ -158,3 +166,15 @@ def infer_callback(data_source, dump_dir):
 ###################################################
 ctx.training_process = training_callback
 ctx.infer_process = infer_callback
+
+
+###################################################
+###########    7.step test run         ############
+###########                            ############
+###################################################
+if __name__ == '__main__':
+  # 1.step debug training process
+  debug_training_process(lambda :(np.zeros((28,28)), 0))
+
+  # 2.step debug infer process
+  debug_infer_process(lambda :np.zeros((28,28)))

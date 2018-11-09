@@ -377,3 +377,19 @@ class LocalRecorderNode(Node):
   @dump_dir.setter
   def dump_dir(self, val):
     self._dump_dir = val
+
+class EmptyRecorderNode(Node):
+  def __init__(self):
+    self._dump_dir = ''
+    setattr(self, 'model_fn', None)
+
+  @property
+  def dump_dir(self):
+    return self._dump_dir
+
+  @dump_dir.setter
+  def dump_dir(self, val):
+    self._dump_dir = val
+
+  def record(self, val, **kwargs):
+    pass

@@ -119,6 +119,8 @@ class Context(object):
     self.trainer_callbacks = []
     self._data_source = None
 
+    self._debug = False
+
   @property
   def job(self):
     return self.context_job
@@ -286,3 +288,11 @@ class Context(object):
   @quiet.setter
   def quiet(self, val):
     self._quiet = val
+
+  @property
+  def debug(self):
+    return self._debug
+
+  @debug.setter
+  def debug(self, val):
+    self._debug = val

@@ -920,7 +920,7 @@ class TFTrainer(Trainer):
     else:
       self.infer_deploy(model)
 
-      if self.ctx.ant is None:
+      if self.ctx.ant is None and not self.ctx.debug:
         logger.info('successfully deploy model')
         exit(0)
 
