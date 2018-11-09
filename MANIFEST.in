@@ -4,6 +4,7 @@ include antgo/resource/templates/statistic-report.html
 include antgo/resource/templates/crowdsource.html
 include antgo/resource/templates/yesno_crowdsource.html
 include antgo/resource/templates/demo.html
+include antgo/resource/templates/task_main_param.yaml
 include antgo/resource/static/antgo.ico
 include antgo/resource/static/antgo.js
 include antgo/resource/static/antgo.css

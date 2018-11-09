@@ -10,6 +10,7 @@ from antgo.dataflow.common import *
 from antgo.context import *
 from antgo.dataflow.dataset import *
 from antgo.measures import *
+from antgo.ant.debug import *
 
 ##################################################
 ######## 1.step global interaction handle ########
@@ -104,3 +105,15 @@ def infer_callback(data_source, dump_dir):
 ###################################################
 ctx.training_process = training_callback
 ctx.infer_process = infer_callback
+
+
+###################################################
+###########    6.step test run         ############
+###########                            ############
+###################################################
+if __name__ == '__main__':
+  # 1.step debug training process
+  debug_training_process(lambda :(None,None), param_config='task_main_param.yaml')
+
+  # 2.step debug infer process
+  debug_infer_process(lambda : None, param_config='task_main_param.yaml')
