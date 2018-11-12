@@ -829,7 +829,7 @@ class AntTrain(AntBase):
         evaluation_measures = running_ant_task.evaluation_measures
 
         if estimation_procedure == 'holdout':
-          evaluation_statistic = self._holdout_validation(ant_train_dataset,running_ant_task, train_time_stamp)
+          evaluation_statistic = self._holdout_validation(ant_train_dataset,running_ant_task,train_time_stamp)
           
           if evaluation_statistic is not None and len(evaluation_statistic) > 0:
             logger.info('generate model evaluation report')
@@ -942,6 +942,7 @@ class AntTrain(AntBase):
       task_running_elapsed_time / float(part_validation_dataset.size)
 
     evaluation_measure_result = []
+    no_rank_measure = []
     with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
       for measure in running_ant_task.evaluation_measures:
         if not measure.crowdsource:
@@ -950,6 +951,8 @@ class AntTrain(AntBase):
           result = measure.eva(record_generator, None)
           if measure.is_support_rank:
             evaluation_measure_result.append(result)
+          else:
+            no_rank_measure.append(result)
   
       task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
 
@@ -996,6 +999,7 @@ class AntTrain(AntBase):
 
     # error analysis
     task_running_statictic = self.error_analysis(running_ant_task, part_validation_dataset, task_running_statictic)
+    task_running_statictic[self.ant_name]['measure'].extend(no_rank_measure)
     return task_running_statictic
 
   def _repeated_holdout_validation(self, repeats,

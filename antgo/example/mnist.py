@@ -101,6 +101,10 @@ class MNISTModel(ModelDesc):
 
     tf.summary.histogram('activations', h_pool2)
 
+    with ctx.block('auxilary_fc') as afc:
+      if afc.activate:
+        h_pool2_flat = slim.fully_connected(h_pool2_flat, 1024, activation_fn=tf.nn.relu)
+
     # Densely connected layer with 1024 neurons.
     h_fc1 = slim.dropout(
       slim.fully_connected(
@@ -132,11 +136,11 @@ def training_callback(data_source, dump_dir):
   batch_node = BatchData(Node.inputs(data_source), 12)
 
   iter = 0
-  for epoch in range(100):
+  for epoch in range(tf_trainer.max_epochs):
     for k,v in batch_node.iterator_value():
       # execute training process
       k = k.reshape([-1, 784])
-      _, loss_val = tf_trainer.run(image=k, label=v)
+      _, loss_val = tf_trainer.run(image=k, label=v['category_id'])
 
       # increment 1
       iter = iter + 1
@@ -157,7 +161,7 @@ def infer_callback(data_source, dump_dir):
     logits = tf_trainer.run(image=k)
 
     # record
-    ctx.recorder.record(logits)
+    ctx.recorder.record(np.argmax(logits[0]))
 
 
 ###################################################
@@ -169,7 +173,7 @@ ctx.infer_process = infer_callback
 
 
 ###################################################
-###########    7.step test run         ############
+###########    6.step test run         ############
 ###########                            ############
 ###################################################
 if __name__ == '__main__':

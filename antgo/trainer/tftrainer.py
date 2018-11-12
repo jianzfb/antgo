@@ -649,13 +649,14 @@ class TFTrainer(Trainer):
       # Session
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
+      config.gpu_options.visible_device_list = ','.join(str(x) for x in self.devices) if len(self.devices) > 0 else ''
       self.sess = tf.Session(graph=graph, config=config)
       
       #######################
       # Config model deploy #
       #######################
       deploy_config = tfmodel_deploy.DeploymentConfig(num_clones=self.num_clones,
-                                                      devices=self.devices,
+                                                      devices=[],
                                                       clone_on_cpu=self.clone_on_cpu,
                                                       replica_id=self.replica_id,
                                                       num_replicas=self.worker_replicas,
@@ -826,13 +827,16 @@ class TFTrainer(Trainer):
       # Session
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
+      config.gpu_options.visible_device_list = ','.join(str(x) for x in self.devices) if len(self.devices) > 0 else ''
+
       self.sess = tf.Session(graph=graph, config=config)
+
 
       #######################
       # Config model_deploy #
       #######################
       deploy_config = tfmodel_deploy.DeploymentConfig(num_clones=1,
-                                                      devices=self.devices,
+                                                      devices=[],
                                                       clone_on_cpu=getattr(self, 'clone_on_cpu', False),
                                                       replica_id=0,
                                                       num_replicas=1,

@@ -126,24 +126,9 @@ class Mnist(Dataset):
 
   def split(self, split_params={}, split_method='holdout'):
       assert(self.train_or_test == 'train')
-      assert(split_method in ['repeated-holdout','bootstrap','kfold'])
-
-      category_ids = None
-      if split_method == 'kfold':
-        np.random.seed(np.int64(self.seed))
-        category_ids = [i for i in range(len(self.ids))]
-        np.random.shuffle(category_ids)
-      else:
-        category_ids = [self.train.labels[i] for i in range(len(self.ids))]
-
-      train_ids, val_ids = self._split(category_ids, split_params, split_method)
-      train_dataset = Mnist(self.train_or_test, self.dir, self.ext_params)
-      train_dataset.ids = train_ids
-
-      val_dataset = Mnist(self.train_or_test, self.dir, self.ext_params)
-      val_dataset.ids = val_ids
-
-      return train_dataset, val_dataset
+      assert(split_method == 'holdout')
+      val_dataset = Mnist('test', self.dir, self.ext_params)
+      return self, val_dataset
 
   @property
   def size(self):
@@ -155,16 +140,14 @@ class Mnist(Dataset):
 
     if self.train_or_test == 'train':
       img = self.train.images[id].reshape((28, 28))
-      img = img[..., np.newaxis]
       label = self.train.labels[id]
 
-      return img, label
+      return img, {'id': id, 'category_id': label}
     else:
       img = self.test.images[id].reshape((28, 28))
-      img = img[..., np.newaxis]
       label = self.test.labels[id]
 
-      return img, label
+      return img, {'id': id, 'category_id': label}
 
   def data_pool(self):
     if self.train_or_test == 'sample':
@@ -200,7 +183,6 @@ class Mnist(Dataset):
 
       for id in ids:
         img = ds.images[id].reshape((28, 28))
-        img = img[..., np.newaxis]
         label = ds.labels[id]
 
-        yield img, label
+        yield img, {'id': id, 'category_id': label}
