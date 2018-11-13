@@ -15,6 +15,7 @@ import sys
 import yaml
 from datetime import datetime
 from types import FunctionType
+from antgo import config
 
 def debug_training_process(dataset_func, param_config=None):
   # 0.step get global context
@@ -40,7 +41,10 @@ def debug_training_process(dataset_func, param_config=None):
     dataset_obj = RandomDataset('train', '')
     dataset_obj.data_func = dataset_func
   else:
-    dataset_obj = dataset_func('train','')
+    Config = config.AntConfig
+    config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+    Config.parse_xml(config_xml)
+    dataset_obj = dataset_func('train', os.path.join(Config.data_factory, dataset_func.__name__))
 
   ctx.call_training_process(dataset_obj, dump_dir=dump_dir)
 
@@ -70,6 +74,9 @@ def debug_infer_process(dataset_func, param_config=None):
     dataset_obj = RandomDataset('test', '')
     dataset_obj.data_func = dataset_func
   else:
-    dataset_obj = dataset_func('test', '')
+    Config = config.AntConfig
+    config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+    Config.parse_xml(config_xml)
+    dataset_obj = dataset_func('test', os.path.join(Config.data_factory, dataset_func.__name__))
 
   ctx.call_infer_process(dataset_obj, dump_dir=dump_dir)
