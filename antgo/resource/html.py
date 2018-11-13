@@ -192,7 +192,7 @@ def everything_to_html(data, dump_dir):
           
           # 1.step warp to eye sample
           eye_sample = {}
-          eye_sample['ID'] = sample_index
+          eye_sample['ID'] = sample_id
           eye_sample['TAGS'] = sample_tag
           eye_sample['SCORE'] = sample_score
           # 2.step warp data to eye sample

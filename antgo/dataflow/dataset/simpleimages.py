@@ -56,7 +56,10 @@ class SimpleImages(Dataset):
         img = imread(self.data_files[id])
         if len(self.label_files) > 0:
           label = imread(self.label_files[id])
-          annotation = {'segmentation_map': label, 'id': id, 'path': self.data_files[id]}
+          seg_map = label
+          if len(label.shape) == 3:
+            seg_map = label[:,:,0]
+          annotation = {'segmentation_map': seg_map, 'data':label, 'id': id, 'path': self.data_files[id]}
           yield [img, annotation]
         else:
           annotation = {'id': id, 'path': self.data_files[id]}
@@ -66,7 +69,10 @@ class SimpleImages(Dataset):
     img = imread(self.data_files[id])
     if len(self.label_files) > 0:
       label = imread(self.label_files[id])
-      annotation = {'segmentation_map': label, 'id': id, 'path': self.data_files[id]}
+      seg_map = label
+      if len(label.shape) == 3:
+        seg_map = label[:, :, 0]
+      annotation = {'segmentation_map': seg_map, 'data':label, 'id': id, 'path': self.data_files[id]}
       return [img, annotation]
     else:
       annotation = {'id': id, 'path': self.data_files[id]}
@@ -75,4 +81,9 @@ class SimpleImages(Dataset):
   @property
   def size(self):
     return len(self.ids)
-  
+
+  def split(self, split_params={}, split_method='holdout'):
+    assert (self.train_or_test == 'train')
+    assert (split_method == 'holdout')
+
+    return self, SimpleImages('val', self.dir, self.ext_params)

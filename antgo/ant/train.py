@@ -290,8 +290,8 @@ class AntTrain(AntBase):
                 task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
     
     # stage-2 error eye analysis (all or subset in wrong samples)
-    custom_score_threshold = getattr(running_ant_task, 'badscore', 0.5)
-    eye_analysis_set_size = getattr(running_ant_task, 'eyeball', 100)
+    custom_score_threshold = float(getattr(running_ant_task, 'badscore', 0.5))
+    eye_analysis_set_size = int(getattr(running_ant_task, 'eyeball', 100))
     
     for measure_result in task_running_statictic[self.ant_name]['measure']:
       # analyze measure result
@@ -332,7 +332,7 @@ class AntTrain(AntBase):
       
       for id, score, category in eye_analysis_set:
         data_attribute_info = {}
-        data_attribute_info['id'] = id
+        data_attribute_info['id'] = '%d-(c %s)'%(id, str(category))
         data_attribute_info['score'] = score
         
         data_attribute_info['tag'] = []
@@ -627,7 +627,7 @@ class AntTrain(AntBase):
         ablation_experiments_devices_num = 0
 
     # running position
-    if self.running_platform == 'edge':
+    if self.running_platform == 'p2p':
       traverse_ablation_blocks = []
       if ablation_blocks is not None:
         if ablation_method is None:

@@ -75,7 +75,7 @@ class AntChallenge(AntBase):
     assert (running_ant_task is not None)
 
     # running position
-    if self.running_platform == 'edge':
+    if self.running_platform == 'p2p':
       # 1.step pack codebase
       codebase_address, codebase_address_code = self.package_codebase()
 

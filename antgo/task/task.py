@@ -312,6 +312,13 @@ def create_task_from_xml(task_config_xml, ant_context):
               if data_item.tag == 'class_label':
                 for c in data_item:
                     class_label.append(c.text.strip())
+          elif input_item.tag == "ext":
+            pp = {}
+            for data_item in input_item:
+              pp[data_item.tag] = data_item.text
+            if len(pp) > 0:
+              task_ext_params.update(pp)
+
       elif child.tag == 'output':
         for input_item in child:
           if input_item.tag == 'generate_report':
