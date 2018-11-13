@@ -132,8 +132,8 @@ class QueueRecorderNode(Node):
       transfer_result = None
       transfer_result_type = None
 
-      if result['%s_TYPE'%key] in ['FILE', 'STRING']:
-        transfer_result = result[key]
+      if result['%s_TYPE'%key] in ['SCALAR','FILE', 'STRING']:
+        transfer_result = str(result[key])
         transfer_result_type = result['%s_TYPE'%key]
       elif result['%s_TYPE'%key] == 'JSON':
         transfer_result = json.dumps(result[key])
@@ -220,7 +220,7 @@ class QueueRecorderNode(Node):
       #                           {'TYPE': 'AUDIO', 'PATH': ''}]
 
       # 1.step for main results
-      assert(result['RESULT_TYPE'] in ['FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
+      assert(result['RESULT_TYPE'] in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
       transfer_result = None
       transfer_result_type = None
       try:
@@ -295,7 +295,7 @@ class LocalRecorderNode(Node):
 
   def save(self, data, data_type, name, count, index):
     # only support 'FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
-    assert(data_type in ['FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
+    assert(data_type in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
 
     if data_type == 'FILE':
       if not os.path.exists(data):
@@ -306,9 +306,9 @@ class LocalRecorderNode(Node):
     elif data_type == 'JSON':
       with open(os.path.join(self.dump_dir, '%d_%d_%s.json'%(count, index,name)),'w') as fp:
         fp.write(json.dumps(data))
-    elif data_type == 'STRING':
+    elif data_type == 'STRING' or data_type == 'SCALAR':
       with open(os.path.join(self.dump_dir, '%d_%d_%s.txt'%(count, index,name)), 'w') as fp:
-        fp.write(data)
+        fp.write(str(data))
     elif data_type == 'IMAGE':
       transfer_result = data
       if len(data.shape) == 2:

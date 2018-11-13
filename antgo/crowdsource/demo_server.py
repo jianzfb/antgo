@@ -83,11 +83,15 @@ class BaseHandler(tornado.web.RequestHandler):
 
     user_demo_constraint = {}
     for ct in constraint_terms:
+      if len(ct) == 0:
+        continue
+
       k,v = ct.split(':')
       if k == 'file_type':
         user_demo_constraint['file_type'] = v.split(',')
       elif k == 'file_size':
-        user_demo_constraint['file_size'] = int(v)
+        if len(v) > 0:
+          user_demo_constraint['file_size'] = int(v)
 
     return user_demo_constraint
 
@@ -198,6 +202,7 @@ class IndexHandler(BaseHandler):
           image_history_data.append('/static/input/%s'%f)
     
     input_filter = ''
+
     if 'file_type' in self.demo_constraint:
       for support_format in self.demo_constraint['file_type']:
         if support_format.lower() in ['jpg', 'jpeg', 'png', 'gif']:
