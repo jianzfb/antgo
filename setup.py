@@ -70,5 +70,6 @@ setup(name='antgo',
 if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
   os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
-shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]),'antgo', 'config.xml'),
-            os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
+if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
+  shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]),'antgo', 'config.xml'),
+              os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
