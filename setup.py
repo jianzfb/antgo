@@ -1,7 +1,9 @@
 from setuptools import setup
 from Cython.Build import cythonize
 from distutils.extension import Extension
+import os
 import numpy as np
+import shutil
 
 # install: python setup.py build_ext install -r requirements.txt (from github)
 ext_modules = [
@@ -63,3 +65,10 @@ setup(name='antgo',
       long_description=readme(),
       include_package_data=True,
       zip_safe=False,)
+
+# config file
+if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+  os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
+
+shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]),'antgo', 'config.xml'),
+            os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
