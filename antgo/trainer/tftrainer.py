@@ -20,7 +20,7 @@ from antgo.utils.serialize import *
 from antgo.utils.dht import *
 
 import numpy as np
-from antgo.utils.net import *
+# from antgo.utils.net import *
 slim = tf.contrib.slim
 
 

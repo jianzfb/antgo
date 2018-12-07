@@ -5,9 +5,6 @@
 		<source_data>
 			<data_set_name>MNIST</data_set_name>
 		</source_data>
-		<estimation_procedure>
-			<type>holdout</type>
-		</estimation_procedure>
 		<evaluation_measures>
 			<evaluation_measure>ACCURACY</evaluation_measure>
 			<evaluation_measure>CONFUSION-MATRIX</evaluation_measure>

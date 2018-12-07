@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TRAIN MASTER</title>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+    <link href="//netdna.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="/static/antgo.js"></script>
+    <script src="https://cdn.bootcss.com/jquery.form/4.2.2/jquery.form.min.js"></script>
+    <script>
+        function TrialTable(id, rows, cols){
+            var layout_table = {};
+            var _id = id;
+            var _rows = rows;
+            var _cols = cols;
+
+            layout_table.append = function (r,c,node) {
+                var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
+                // 1.step clear
+                $('#'+cell_id).empty();
+                // 2.step append
+                $('#'+cell_id).append(node);
+            }
+            layout_table.text = function (r, c, text){
+                var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
+                $('#'+cell_id).text(text);
+            }
+
+            layout_table.create = function(container) {
+                var table_div = $('<div id="{id}-layout"></div>'.format({id: _id}));
+                var table_div_body = $('<table class="no-border"></table>');
+                table_div_body.append($('<thead><tr><th>#</th><th>name</th><th>time</th><th>status</th><th>value</th></tr></thead>'));
+                var table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
+
+                for (var r = 0; r < _rows; ++r) {
+                    var item = $('<tr></tr>');
+                    for (var c = 0; c < _cols; ++c) {
+                        item.append('<td id="table-{id}-{r}{c}"></td>'.format({id: id, r: r, c: c}));
+                    }
+
+                    table_bbody.append(item);
+                }
+
+                table_div_body.append(table_bbody);
+                table_div.append(table_div_body);
+
+                container.append(table_div)
+            }
+
+            return layout_table
+        }
+
+        function upload_json_callback(data){
+            var obj = eval('('+data+')');
+            var file_name = obj['file'];
+            $('#upload_json').attr('file_name', file_name);
+            alert('success to upload graph json')
+        }
+
+        $(document).ready(function(){
+            $('tr[name=study]').each(function(){
+                $(this).on('click', function(){
+                    var study_name = $(this).attr('study_name');
+                    $.post('/study/get/', {
+                        'study_name': study_name
+                    }, function(data, status){
+                        if(status == 'success'){
+                            $('#trail_list').empty();
+
+                            var obj = eval('('+data+')');
+                            var trial_num = obj.length;
+                            var table = TrialTable('trial_table', trial_num, 5);
+                            table.create($('#trail_list'));
+
+                            for(var i in obj){
+                                var trial_name = obj[i]['trial_name'];
+                                var trial_created_time = obj[i]['trial_created_time'];
+                                var trial_status = obj[i]['trial_status'];
+                                var trial_objective_value = obj[i]['trial_objective_value'];
+
+                                table.append(i, 0, '<p>{0}</p>'.format(i));
+                                table.append(i, 1, '<p>{0}</p>'.format(trial_name));
+                                table.append(i, 2, '<p>{0}</p>'.format(trial_created_time));
+                                table.append(i, 3, '<p>{0}</p>'.format(trial_status));
+                                table.append(i, 4, '<p>{0}</p>'.format(trial_objective_value));
+                            }
+
+                            $('#trail_modal').modal();
+                        }
+                    })
+                })
+            })
+
+            $('button[name=studyop]').each(function(){
+                $(this).on('click', function(event){
+                    var study_name = $(this).parent().parent().attr('study_name');
+                    var btn = $(this);
+                    $.post('/study/startorstop/', {
+                        'study_name': study_name
+                    }, function(data, status){
+                        var obj = eval('('+data+')');
+                        if(status == 'success'){
+                            if(obj['status'] == "ok"){
+                                btn.text(obj['study_status']);
+                            }
+                        }
+                    })
+
+                    event.stopPropagation();
+                })
+            })
+
+            demoUserBrowser(upload_json_callback, 'upload_json','.json');
+            
+            $('#study_submit').on('click', function () {
+                var study_name = $('#study_name').val();
+                var study_max_trials = $('#study_maxtrials').val();
+                var study_max_time = $('#study_maxtime').val();
+                var study_architecture_search = $("#study_architecture_search").find("option:selected").text();
+                var study_default_architecture = $('#upload_json').attr('file_name');
+
+                var study_flops = $('#study_flops').val();
+
+                $.post('/study/add/', {
+                    'study_name': study_name,
+                    'study_max_trials': study_max_trials,
+                    'study_max_time': study_max_time,
+                    'study_hyperparameter_search': '',
+                    'study_hyperparameters': '',
+                    'study_architecture_search': study_architecture_search,
+                    'study_default_architecture': study_default_architecture,
+                    'study_flops': study_flops,
+                }, function(data, status){
+                    if(status == 'success'){
+                        alert('success to add study');
+                    }
+                    else{
+                        var obj = eval('('+data+')');
+                        alert(obj);
+                    }
+                })
+            })
+        })
+
+    </script>
+
+    <style>
+        .banner {
+            background: url(/static/banner.png)no-repeat;
+            min-height: 300px;
+            background-size: cover;
+            position: relative;
+        }
+        .logo h1 {
+            font-size: 70px;
+            color: #ffffff;
+        }
+        .demo-headline{
+            max-width: 75rem;
+            margin-left: auto;
+            margin-right: auto;
+            color: #505050;;
+            margin-top: 20px;
+        }
+        .demo-headline::after {
+            clear: both;
+        }
+
+        .demo-headline::before, .demo-headline::after {
+            content: ' ';
+            display: table;
+        }
+        .text-center {
+            text-align: center;
+        }
+
+        .demo-box{
+            margin-left: auto;
+            margin-right: auto;
+            margin-top: 20px;
+            margin-bottom: 50px;
+                color: #505050;
+        }
+        .demo-box::after {
+            clear: both;
+        }
+
+        .demo-box::before, .demo-box::after {
+            content: ' ';
+            display: table;
+        }
+        .column, .columns {
+            width: 100%;
+            float: left;
+            padding-left: .9375rem;
+            padding-right: .9375rem;
+        }
+        .centered-text-with-hr {
+            position: relative;
+            text-align: center;
+            z-index: 1;
+        }
+        .centered-text-with-hr:after {
+            -ms-transform: translate(0,-50%);
+            -o-transform: translate(0,-50%);
+            -webkit-transform: translate(0,-50%);
+            transform: translate(0,-50%);
+            border-left: 1px solid #dedede;
+            border-right: 1px solid #dedede;
+            border-top: 1px solid #dedede;
+            content: '';
+            display: block;
+            height: 24px;
+            position: absolute;
+            top: 100%;
+            width: 100%;
+            z-index: -1;
+        }
+        .centered-text-with-hr span {
+            background-color: #fff;
+            padding: 0 12px;
+        }
+        p {
+            font-size: 15px;
+            margin: 12px 0;
+        }
+        .text-heading6 {
+            font-weight: 400;
+            /* font-size: 16px; */
+            /* line-height: 1.5; */
+            /* margin: 0 0 12px; */
+        }
+
+    table th {
+        font-size: 14px;
+        font-weight: 700;
+        min-width: 60px;
+        padding: 12px;
+        vertical-align: top;
+    }
+    table td, table th {
+        padding: 12px 6px;
+        vertical-align: top;
+    }
+    table th {
+        font-size: 14px;
+        font-weight: 700;
+        text-align: inherit;
+    }
+    td, th {
+        padding: 0;
+    }
+
+            .btn-white-to-blue{
+        -webkit-box-flex: 0;
+        -webkit-flex: 0 0 auto;
+        -ms-flex: 0 0 auto;
+        flex: 0 0 auto;
+        font-family: 'Atlas Grotesk',sans-serif;
+        color: #6F7175;
+        font-weight: bolder;
+        font-size: 15px;
+        text-decoration: none;
+        padding: 5px 10px;
+        background-color: #FFF;
+        border: 1px solid #DEDFE0;
+        border-radius: 4px;
+        cursor: pointer;
+        letter-spacing:0px;
+        text-align: center;
+    }
+    .btn-white-to-blue:hover{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
+    .btn-white-to-blue:active{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
+
+    .btn-white-to-blue:focus{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
+    .btn-white-to-blue:visited{
+        color: #20BEFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
+
+    .btn-blue-to-white{
+        -webkit-box-flex: 0;
+        -webkit-flex: 0 0 auto;
+        -ms-flex: 0 0 auto;
+        flex: 0 0 auto;
+        font-family: 'Atlas Grotesk',sans-serif;
+        font-weight: bolder;
+        font-size: 15px;
+        text-decoration: none;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        letter-spacing:0px;
+        text-align: center;
+
+        color: #20BEFF;
+        border: 1px solid #20BEFF;
+        background-color: #FFF;
+    }
+
+
+    .btn-blue-to-white:hover{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+    .btn-blue-to-white:active{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+    .btn-blue-to-white:focus{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+    .btn-blue-to-white:visited{
+        color: #FFF;
+        text-decoration: none;
+        border: 1px solid #20BEFF;
+        background-color: #20BEFF;
+    }
+            form [type='file'] {
+         opacity: 0;
+         position: absolute;
+         top: auto;
+         left: -10000px;
+         width: 1px;
+         height: 1px;
+        overflow: hidden;
+    }
+    </style>
+</head>
+
+<div class="modal fade" id="trail_modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="trail_title">TRIAL</h4>
+            </div>
+            <div class="modal-body">
+            <div id="trail_list"></div>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal -->
+</div>
+
+
+<body>
+    <div class="banner">
+        <div class="container">
+            <div class="banner-main">
+                 <div class="logo wow bounceInLeft animated" data-wow-delay="0.1s" style="visibility: visible; animation-delay: 0.1s; animation-name: bounceInLeft;">
+                    <h1>ANTGO</h1>
+                 </div>
+                <div class="wqdelementEditBox wqdAnimatedos" style="visibility: visible;" data-emptytexttemplate="title3">
+                    <h2 class="wqd-text-title2" style="text-align: center;">
+                        <font color="#ffffff" style="size: 40px">AUTOML SERVER</font>
+                    </h2>
+                </div>
+              <div class="clearfix"> </div>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <div class="demo-headline">
+            <div class="column medium-10 medium-centered large-8 large-centered text-center">
+                <p>AUTOML PAGE</p>
+            </div>
+            <div class="demo-box">
+              <p class="centered-text-with-hr text-heading6">
+                  <span>Running Study Instances</span>
+              </p>
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Study Name</th>
+                      <th scope="col">Created Time</th>
+                      <th scope="col">Completed Trial</th>
+                      <th scope="col">Uncompleted Trail</th>
+                      <th scope="col">Error Trail</th>
+                      <th scope="col">Objective Value</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Operator</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for s in automl['study'] %}
+                    <tr study_name="{{s['name']}}" name="study">
+                        <th scope="row">{{s['index']}}</th>
+                        <th>{{s['name']}}</th>
+                        <th>{{s['created_time']}}</th>
+                        <th>{{s['completed_trial']}}</th>
+                        <th>{{s['uncompleted_trial']}}</th>
+                        <th>{{s['error_trial']}}</th>
+                        <th>{{s['objective_value']}}</th>
+                        <th>{{s['status']}}</th>
+                        <th>
+                            {%if s['status'] == 'running'%}
+                                <button type="button" class="btn btn-default" name="studyop">stop</button>
+                            {%elif s['status'] == 'stop'%}
+                                 <button type="button" class="btn btn-default" name="studyop">start</button>
+                            {%else%}
+                                completed
+                            {%end%}
+                        </th>
+                    </tr>
+                    {% end %}
+                  </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <div class="demo-headline">
+        <div class="demo-box">
+          <p class="centered-text-with-hr text-heading6">
+              <span>Study Configure</span>
+          </p>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th scope="col">name</th>
+                        <th scope="col">value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>StudyName</td>
+                        <td><input type="text" id="study_name"></td>
+                    </tr>
+                    <tr>
+                        <td>MaxTrials</td>
+                        <td><input type="number" id="study_maxtrials"/></td>
+                    </tr>
+                    <tr>
+                        <td>MaxTime</td>
+                        <td><input type="number" id="study_maxtime"></td>
+                    </tr>
+                    <tr>
+                        <td>HyperParameterSearch<span class="label label-default" id="study_add_parameter">+</span></td>
+                        <td>
+                            <form role="form">
+                              <div class="form-group">
+                                <select class="form-control">
+                                  <option>Grid Search</option>
+                                </select>
+                              </div>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>ArchitectureSearchSpace</td>
+                        <td>
+                            <form role="form">
+                              <div class="form-group">
+                                <select class="form-control" id="study_architecture_search">
+                                  <option>Dense Search</option>
+                                </select>
+                              </div>
+                            </form>
+                            <button id="upload_json" class="btn btn-default btn-blue-to-white" type="button" file_name="">upload</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Flops</td>
+                        <td><input type="number" id="study_flops"></td>
+                    </tr>
+                </tbody>
+            </table>
+           <button id="study_submit" class="btn btn-default btn-blue-to-white" type="button" style="margin-right: 10px;margin-left: 10px;">Add Study</button>
+        </div>
+        </div>
+    </div>
+    <div class="container">
+    <footer class="site-footer">
+        <div class="site-footer__content">
+            <div class="site-footer__copyright">
+                <span>© 2018 Antgo Inc</span>
+            </div>
+        </div>
+    </footer>
+    </div>
+</body>
+</html>

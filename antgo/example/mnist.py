@@ -14,6 +14,7 @@ from antgo.trainer.tftrainer import *
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from antgo.ant.debug import *
+from antgo.automl.graph import *
 
 ##################################################
 ######## 1.step global interaction handle ########
@@ -88,6 +89,12 @@ class MNISTModel(ModelDesc):
       h_pool1 = tf.nn.max_pool(
         h_conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
+    # from automl graph
+    recommand_graph = Decoder().decode(self.automl['graph'])
+    recommand_graph.layer_factory = LayerFactory()
+    output_tensors = recommand_graph.materialization(input_nodes=[h_pool1])
+    h_pool1 = output_tensors[0]
+
     # 第二组卷积
     with tf.variable_scope('conv_layer2'):
       h_conv2 = slim.conv2d(
@@ -99,10 +106,10 @@ class MNISTModel(ModelDesc):
     # 记录激活分布
     tf.summary.histogram('activations', h_pool2)
 
-    # 消除实验模块
-    with ctx.block('auxilary_fc') as afc:
-      if afc.activate:
-        h_pool2_flat = slim.fully_connected(h_pool2_flat, 1024, activation_fn=tf.nn.relu)
+    # # 消除实验模块
+    # with ctx.block('auxilary_fc') as afc:
+    #   if afc.activate:
+    #     h_pool2_flat = slim.fully_connected(h_pool2_flat, 1024, activation_fn=tf.nn.relu)
 
     # 第一组全连接（紧跟dropout模块）
     h_fc1 = slim.dropout(
@@ -130,24 +137,40 @@ class MNISTModel(ModelDesc):
 ######## 3.step define training process  #########
 ##################################################
 def training_callback(data_source, dump_dir):
-  # 部署模型
-  tf_trainer = TFTrainer(dump_dir,True)
+  tf_trainer = TFTrainer(dump_dir, True)
   tf_trainer.deploy(MNISTModel())
 
-  # 将数据源链接Batch模块
-  batch_node = BatchData(Node.inputs(data_source), ctx.params.batch_size)
+  train_data_source, validation_data_source = data_source.split()
+  batch_node = BatchData(Node.inputs(train_data_source), ctx.params.batch_size)
 
+  tf_trainer.early_stop.on_train_begin()
   iter = 0
   for epoch in range(tf_trainer.max_epochs):
-    for k,v in batch_node.iterator_value():
-      # 执行训练
-      k = k.reshape([-1, 784])
-      _, loss_val = tf_trainer.run(image=k, label=v['category_id'])
+    # # train process
+    # for k, v in batch_node.iterator_value():
+    #   # run
+    #   k = k.reshape([-1, 784])
+    #   _, loss_val = tf_trainer.run(image=k, label=v['category_id'])
+    #
+    #   iter = iter + 1
 
-      # increment 1
-      iter = iter + 1
+    # evaluation process
+    for k, v in validation_data_source.iterator_value():
+      ctx.recorder.record(np.random.randint(0,9), v)
 
-    tf_trainer.snapshot(epoch)
+    evaluation_val = ctx.recorder.finish()
+    evaluation_loss = 1.0 - evaluation_val
+
+    # stop early ?
+    decreasing = tf_trainer.early_stop.on_epoch_end(evaluation_loss)
+    break
+
+    # if tf_trainer.early_stop.no_improvement_count == 0:
+    #   tf_trainer.snapshot(epoch)
+    #
+    # if not decreasing:
+    #   logger.info('no loss decrease after {} epochs.\n'.format(epoch))
+    #   break
 
 ###################################################
 ######## 4.step define infer process     ##########
@@ -180,7 +203,7 @@ ctx.infer_process = infer_callback
 ###################################################
 if __name__ == '__main__':
   # 1.step debug training process
-  debug_training_process(lambda :(np.zeros((28,28)), 0))
+  debug_training_process(lambda :(np.zeros((28,28)), 0), 'mnist.yaml')
 
   # 2.step debug infer process
   debug_infer_process(lambda :np.zeros((28,28)))

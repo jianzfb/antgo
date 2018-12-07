@@ -11,6 +11,7 @@ from antgo.ant.generate import *
 from antgo.ant.demo import *
 from antgo.ant.release import *
 from antgo.ant.batch import *
+from antgo.ant.train_server import *
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
@@ -53,8 +54,13 @@ flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dataset', None, 'dataset')
 flags.DEFINE_boolean('public', False, 'public or private')
 flags.DEFINE_boolean('local', False, 'cloud or local')
+flags.DEFINE_string('signature', None, 'signature')
+flags.DEFINE_string('devices', '', 'devices')
+flags.DEFINE_string('servers', '', '')
 flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
+flags.DEFINE_string('proxy', None, 'proxy')
+flags.DEFINE_string('name', None, 'name')
 flags.DEFINE_string('max_time', '10h', 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
@@ -65,10 +71,11 @@ flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_indicator('support_user_upload', '')
 flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
+flags.DEFINE_indicator('worker', '')
+flags.DEFINE_indicator('master', '')
 flags.DEFINE_string('support_user_constraint', 'file_type:;file_size:', '')
 flags.DEFINE_indicator('skip_training', '')
-flags.DEFINE_string('running_platform', 'local','')
-flags.DEFINE_string('server_list','','')
+flags.DEFINE_string('running_platform', 'local', '')
 flags.DEFINE_string('order_id', '', '')
 flags.DEFINE_string('order_ip', '', '')
 flags.DEFINE_integer('order_rpc_port', 0, '')
@@ -198,9 +205,11 @@ def main():
   # 7.step check related params
   # 7.1 step check name, if None, set it as current time automatically
   time_stamp = timestamp()
-  name = datetime.fromtimestamp(time_stamp).strftime('%Y%m%d.%H%M%S.%f')
-  if not PY3:
-    name = unicode(name)
+  name = FLAGS.name()
+  if name is None:
+    name = datetime.fromtimestamp(time_stamp).strftime('%Y%m%d.%H%M%S.%f')
+    if not PY3:
+      name = unicode(name)
   
   # 7.2 check main folder (all related model code, includes main_file and main_param)
   main_folder = FLAGS.main_folder()
@@ -228,8 +237,9 @@ def main():
   # 7.4 check main file
   main_file = FLAGS.main_file()
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
-    logger.error('main executing file dont exist')
-    sys.exit(-1)
+    if not (FLAGS.worker() or FLAGS.master()):
+      logger.error('main executing file dont exist')
+      sys.exit(-1)
 
   # 8 step ant running
   # 8.1 step what is task
@@ -254,7 +264,11 @@ def main():
     task = os.path.join(task_factory, '%s.xml'%name)
 
   # 8.2 step load ant context
-  ant_context = main_context(main_file, main_folder)
+  ant_context = None
+  if main_file is not None and main_file != '':
+    ant_context = main_context(main_file, main_folder)
+  else:
+    ant_context = Context()
   
   # 8.3 step load model config
   main_param = FLAGS.main_param()
@@ -262,7 +276,9 @@ def main():
     main_config_path = os.path.join(main_folder, main_param)
     params = yaml.load(open(main_config_path, 'r'))
     ant_context.params = params
-  
+
+  ant_context.name = name
+
   # 8.4 step load experiment
   if FLAGS.from_experiment() is not None and \
           FLAGS.running_platform() == 'local' and \
@@ -304,8 +320,29 @@ def main():
                                           FLAGS.tfrecords_shards())
     return
 
-
   if ant_cmd == "train":
+    is_train_server = False
+    if FLAGS.worker() or FLAGS.master():
+      is_train_server = True
+
+    if is_train_server:
+      running_process = AntTrainServer(ant_context,
+                                       name,
+                                       token,
+                                       FLAGS.main_file(),
+                                       FLAGS.main_param(),
+                                       main_folder,
+                                       dump_dir,
+                                       is_worker=FLAGS.worker(),
+                                       is_master=FLAGS.master(),
+                                       devices=FLAGS.devices(),
+                                       max_time=FLAGS.max_time(),
+                                       signature=FLAGS.signature(),
+                                       servers=FLAGS.servers(),
+                                       task=FLAGS.task())
+      running_process.start()
+      return
+
     with running_sandbox(sandbox_time=FLAGS.max_time(),
                          sandbox_dump_dir=dump_dir,
                          sandbox_experiment=name,
@@ -321,7 +358,9 @@ def main():
                                  main_param=main_param,
                                  time_stamp=time_stamp,
                                  skip_training=FLAGS.skip_training(),
-                                 running_platform=FLAGS.running_platform())
+                                 running_platform=FLAGS.running_platform(),
+                                 proxy=FLAGS.proxy(),
+                                 signature=FLAGS.signature())
       running_process.start()
   elif ant_cmd == 'challenge':
     with running_sandbox(sandbox_time=FLAGS.max_time(),

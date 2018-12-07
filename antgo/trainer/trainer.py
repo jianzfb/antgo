@@ -5,10 +5,10 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-import tensorflow as tf
 import re
 from abc import ABCMeta, abstractmethod
 from antgo.context import *
+from antgo.automl.graph import *
 import collections
 
 
@@ -61,6 +61,8 @@ trainer_default_params = [
   DefaultParam('dataset_queue_threads', 1, ''),
   DefaultParam('trainable_scopes', None, ''),
   DefaultParam('trainable_filter', None, ''),
+  DefaultParam('max_no_improvement_num', 5, ''),
+  DefaultParam('min_loss_dec', 1e-4, ''),
 ]
 
 
@@ -86,6 +88,9 @@ class Trainer(object):
         # context
         self.ctx = get_global_context()
         self.ctx.registry_clear_callback(self.wait_until_clear)
+
+        #
+        self.early_stop = EarlyStop(self.max_no_improvement_num, self.min_loss_dec)
         
     def deploy(self, model):
         pass
@@ -135,26 +140,24 @@ class ModelDesc(object):
     else:
       self.model_name = self.__class__.__name__
   
-    self._ctx = None
+    self._ctx = get_global_context()
     self._data_source = model_data_source
     self._model_variables = None
-
-    self._log = ''
 
   @property
   def name(self):
     return self.model_name
 
-  @property
-  def ctx(self):
-    return self._ctx
-  @ctx.setter
-  def ctx(self, val):
-    self._ctx = val
-    for k in dir(self._ctx):
-      if not k.startswith('__'):
-        setattr(self, k, getattr(self._ctx, k, None))
-  
+  # @property
+  # def ctx(self):
+  #   return self._ctx
+  # @ctx.setter
+  # def ctx(self, val):
+  #   self._ctx = val
+  #   for k in dir(self._ctx):
+  #     if not k.startswith('__'):
+  #       setattr(self, k, getattr(self._ctx, k, None))
+
   @property
   def need_feed(self):
     return self._need_feed
@@ -181,3 +184,42 @@ class ModelDesc(object):
   @model_variables.setter
   def model_variables(self, val):
       self._model_variables = val
+
+  @property
+  def automl(self):
+    return getattr(self._ctx.params, 'automl', None)
+
+
+class EarlyStop(object):
+  def __init__(self,
+               max_no_improvement_num,
+               min_loss_dec):
+    super().__init__()
+    self.training_losses = []
+    self.minimum_loss = None
+    self.no_improvement_count = 0
+    self._max_no_improvement_num = max_no_improvement_num
+    self._done = False
+    self._min_loss_dec = min_loss_dec
+
+  def on_train_begin(self):
+    self.training_losses = []
+    self.no_improvement_count = 0
+    self._done = False
+    self.minimum_loss = float('inf')
+
+  def on_epoch_end(self, loss):
+    self.training_losses.append(loss)
+    if self._done and loss > (self.minimum_loss - self._min_loss_dec):
+      return False
+
+    if loss > (self.minimum_loss - self._min_loss_dec):
+      self.no_improvement_count += 1
+    else:
+      self.no_improvement_count = 0
+      self.minimum_loss = loss
+
+    if self.no_improvement_count > self._max_no_improvement_num:
+      self._done = True
+
+    return True

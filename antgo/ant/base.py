@@ -60,7 +60,15 @@ class AntBase(object):
       self._time_stamp = kwargs['time_stamp']
     else:
       self._time_stamp = timestamp()
-    
+
+    self._proxy = None
+    if 'proxy' in kwargs:
+      self._proxy = kwargs['proxy']
+
+    self._signature = None
+    if 'signature' in kwargs:
+      self._signature = kwargs['signature']
+
     # current pid
     self._pid = str(os.getpid())
     
@@ -533,6 +541,14 @@ class AntBase(object):
   def context(self, val):
     self.ant_context = val
     self.ant_context.ant = self
+
+  @property
+  def proxy(self):
+    return self._proxy
+
+  @property
+  def signature(self):
+    return self._signature
 
   @property
   def time_stamp(self):

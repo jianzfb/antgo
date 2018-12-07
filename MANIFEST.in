@@ -2,6 +2,8 @@ include antgo/utils/_mask.pyx
 include antgo/cutils/maskApi.h
 include antgo/resource/templates/statistic-report.html
 include antgo/resource/templates/crowdsource.html
+include antgo/resource/templates/trainworker.html
+include antgo/resource/templates/trainmaster.html
 include antgo/resource/templates/yesno_crowdsource.html
 include antgo/resource/templates/demo.html
 include antgo/resource/templates/task_main_param.yaml

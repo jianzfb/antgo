@@ -88,6 +88,8 @@ class Context(object):
     self._quiet = False
     self._debug = False
 
+    self._name = ''
+
   def wait_until_clear(self):
     if self.job is not None:
       self.job.stop()
@@ -119,6 +121,13 @@ class Context(object):
     self.context_stage = ""
     self.trainer_callbacks = []
     self._data_source = None
+
+  @property
+  def name(self):
+    return self._name
+  @name.setter
+  def name(self, val):
+    self._name = val
 
   @property
   def job(self):

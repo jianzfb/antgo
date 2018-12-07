@@ -19,6 +19,10 @@ from antgo.task.task import *
 from antgo.dataflow.basic import *
 import scipy.misc
 import imageio
+import requests
+from antgo.context import *
+from antgo.utils import *
+
 
 class RecorderNode(Node):
   def __init__(self, inputs):
@@ -378,6 +382,7 @@ class LocalRecorderNode(Node):
   def dump_dir(self, val):
     self._dump_dir = val
 
+
 class EmptyRecorderNode(Node):
   def __init__(self):
     self._dump_dir = ''
@@ -393,3 +398,46 @@ class EmptyRecorderNode(Node):
 
   def record(self, val, **kwargs):
     pass
+
+
+class EvaluationRecorderNode():
+  def __init__(self, measure, proxy=None, signature=None):
+    self.proxy = proxy
+    self.signature = signature
+    self.measure = measure
+    self.record_cache = []
+    self.ctx = get_global_context()
+    self._dump_dir = ''
+
+  @property
+  def dump_dir(self):
+    return self._dump_dir
+
+  @dump_dir.setter
+  def dump_dir(self, val):
+    self._dump_dir = val
+
+  def record(self, *args, **kwargs):
+    # 1.step record all result and concat its groundtruth
+    predict, gt = args
+    self.record_cache.append((predict, gt))
+
+  def finish(self):
+    # 2.step evaluation measure value
+    result = self.measure.eva(self.record_cache, None)
+    if self.proxy is not None:
+      # try:
+      logger.error('proxy %s'%self.proxy)
+      logger.error('name %s'%self.ctx.name)
+      logger.error('signature %s'%self.signature)
+      logger.error('value %f' % result['statistic']['value'][0]['value'])
+
+      url = 'http://%s/update/model/%s/'%(self.proxy, self.ctx.name)
+      logger.error(url)
+      requests.post(url,
+                    data={'signature': self.signature,
+                          'evaluation_value': result['statistic']['value'][0]['value']})
+      # except:
+      #   logger.error('couldnt push evaluation info to proxy')
+
+    return result['statistic']['value'][0]['value']
