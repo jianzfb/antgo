@@ -205,8 +205,6 @@ def launch_train_process(server_records, experiment_records, content):
     cmd_shell += ' --token=%s' % server_records['token']
 
   # start running
-  # p = multiprocessing.Process(target=proxy_system_process, args=(cmd_shell, experiment_id))
-  # p.start()
   p = subprocess.Popen('%s > %s.log' % (cmd_shell, experiment_id), shell=True)
   experiment_records[experiment_id]['pid'] = p
   return True

@@ -28,7 +28,7 @@ class AbstractSearchSpace(object):
 class DenseArchitectureSearchSpace(AbstractSearchSpace):
   def __init__(self, graph, flops=None, **kwargs):
     super(DenseArchitectureSearchSpace, self).__init__(graph, flops)
-    self.branches = kwargs.get('branches', 1)
+    self.branches = kwargs.get('branches', 3)
 
   def get_new_suggestions(self, study_name, number=1):
     study = Study.get('name', study_name)
@@ -44,6 +44,10 @@ class DenseArchitectureSearchSpace(AbstractSearchSpace):
       output_node_id = -1
       decoder_output_last = []
       for output_index, output_id in enumerate(outputs):
+        if output_index > 0:
+          if random.random() > 0.5:
+            continue
+
         output = self.graph.node_list[output_id]
 
         temp = [output_id]
@@ -72,21 +76,21 @@ class DenseArchitectureSearchSpace(AbstractSearchSpace):
 
           # concat all input
           if len(X_selected) > 1:
-            output_node_id = self.graph.add_layer(self.graph.layer_factory.concat(X_selected), X_selected)
+            output_node_id = self.graph.add_layer(self.graph.layer_factory.concat(), X_selected)
 
           # operator space
           r = random.randint(0, 2)
           if r == 0:
-            # 1x1 convolution
+            # 1x1 convolution (conv + bn + relu)
             shape = self.graph.node_list[output_node_id].shape
             output_node_id = self.graph.add_layer(self.graph.layer_factory.conv2d(input_channel=shape[3],
                                                                         filters=256,
                                                                         kernel_size_h=1,
                                                                         kernel_size_w=1),
                                              output_node_id)
-            output_node_id = self.graph.add_layer(self.graph.layer_factory.relu(),
-                                             output_node_id)
             output_node_id = self.graph.add_layer(self.graph.layer_factory.bn2d(),
+                                             output_node_id)
+            output_node_id = self.graph.add_layer(self.graph.layer_factory.relu(),
                                              output_node_id)
           elif r == 1:
             # 3x3 atrous separable convolution
@@ -106,9 +110,9 @@ class DenseArchitectureSearchSpace(AbstractSearchSpace):
                                                                                   rate_h=rate_h,
                                                                                   rate_w=rate_w),
                                              output_node_id)
-            output_node_id = self.graph.add_layer(self.graph.layer_factory.relu(),
-                                             output_node_id)
             output_node_id = self.graph.add_layer(self.graph.layer_factory.bn2d(),
+                                             output_node_id)
+            output_node_id = self.graph.add_layer(self.graph.layer_factory.relu(),
                                              output_node_id)
           else:
             # spatial pyramid pooling

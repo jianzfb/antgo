@@ -9,7 +9,12 @@ from antgo.automl.stublayer import *
 from antgo.codebook.tf.stublayers import *
 from antgo.automl.layer_transformer import *
 from antgo.automl.constant import *
-from queue import Queue
+
+try:
+    import Queue as queue
+except ImportError:
+    import queue
+
 from copy import deepcopy
 from antgo.utils.serialize import *
 
@@ -269,7 +274,7 @@ class Graph(object):
   @property
   def topological_order(self):
     """Return the topological order of the node ids."""
-    q = Queue()
+    q = queue.Queue()
     in_degree = {}
     for i in range(self.n_nodes):
       in_degree[i] = 0
