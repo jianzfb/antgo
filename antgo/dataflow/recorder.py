@@ -410,6 +410,10 @@ class EvaluationRecorderNode():
     self._dump_dir = ''
 
   @property
+  def model_fn(self):
+    return None
+
+  @property
   def dump_dir(self):
     return self._dump_dir
 
