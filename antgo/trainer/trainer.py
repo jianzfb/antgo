@@ -194,7 +194,7 @@ class EarlyStop(object):
   def __init__(self,
                max_no_improvement_num,
                min_loss_dec):
-    super().__init__()
+    super(EarlyStop, self).__init__()
     self.training_losses = []
     self.minimum_loss = None
     self.no_improvement_count = 0
