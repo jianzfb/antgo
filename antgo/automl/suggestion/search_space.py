@@ -21,7 +21,7 @@ class AbstractSearchSpace(object):
   def __init__(self, graph, flops=None):
     self.graph = graph
 
-  def get_new_suggestions(self, study_name, number=1):
+  def get_new_suggestions(self, study_name, trial=None, number=1):
     raise NotImplementedError
 
 
@@ -30,7 +30,7 @@ class DenseArchitectureSearchSpace(AbstractSearchSpace):
     super(DenseArchitectureSearchSpace, self).__init__(graph, flops)
     self.branches = kwargs.get('branches', 3)
 
-  def get_new_suggestions(self, study_name, number=1):
+  def get_new_suggestions(self, study_name, trail=None, number=1):
     study = Study.get('name', study_name)
     if study is None:
       return [None]
@@ -148,7 +148,7 @@ class DenseArchitectureSearchSpace(AbstractSearchSpace):
 
       trail_name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
       trial = Trial.create(Trial(study.name, trail_name, created_time=time.time(), updated_time=time.time()))
-      trial.parameter_values = Encoder(skipkeys=True).encode(clone_graph)
+      trial.structure = Encoder(skipkeys=True).encode(clone_graph)
       trial.md5 = current_graph_md5
       all_trials.append(trial)
 

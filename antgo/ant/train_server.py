@@ -90,7 +90,7 @@ class AntTrainServer(AntBase):
     graph_content = study_configuration['graph']
     graph = Decoder().decode(graph_content)
     graph.layer_factory = LayerFactory()
-    if study.algorithm == 'Dense Search':
+    if study.search_space == 'Dense Search':
       return DenseArchitectureSearchSpace(graph, study.flops)
 
   def add_study(self, query):
@@ -107,43 +107,37 @@ class AntTrainServer(AntBase):
     if s is not None:
       return {'status': 'fail'}
 
-    study_mode = 'structure'
-    if len(study_hyperparameters) > 0:
-      study_mode = 'hyperparameter'
+    if study_hyperparameter_search == '' and study_architecture_search == '':
+      return {'status': 'fail'}
+
+    study_configuration = {
+      "goal": "MAXIMIZE",
+      "maxTrials": study_max_trials,
+      "maxTime": study_max_time,
+    }
+
     if len(study_default_architecture) > 0:
-      study_mode = 'structure'
+      if os.path.exists(study_default_architecture):
+        with open(study_default_architecture, 'r') as fp:
+          graph_content = fp.read()
+          study_configuration.update({'graph': graph_content})
 
-    if study_mode == 'structure':
-      with open(study_default_architecture, 'r') as fp:
-        graph_content = fp.read()
+    if len(study_hyperparameters) > 0:
+      study_configuration.update(json.loads(study_hyperparameters))
 
-      study_configuration = {
-        "goal": "MAXIMIZE",
-        "maxTrials": study_max_trials,
-        "maxTime": study_max_time,
-        "graph": graph_content,
-      }
-
-      ss = Study(name=study_name,
-                 study_configuration=json.dumps(study_configuration),
-                 algorithm=study_architecture_search,
-                 mode=study_mode,
-                 flops=study_flops,
-                 created_time=time.time())
-      Study.create(ss)
-
-      return {'status': 'ok'}
-
-
-    return {'status': 'fail'}
+    ss = Study(name=study_name,
+               study_configuration=json.dumps(study_configuration),
+               algorithm=study_hyperparameter_search,
+               search_space=study_architecture_search,
+               flops=study_flops,
+               created_time=time.time())
+    Study.create(ss)
+    return {'status': 'ok'}
 
   def delete_study(self, query):
     study_name = query.get('study_name', None)
     study = Study.get(key="name", value=study_name)
     if study is None:
-      return {'status': 'fail'}
-
-    if study.status == 'running':
       return {'status': 'fail'}
 
     Study.delete(study)
@@ -283,25 +277,16 @@ class AntTrainServer(AntBase):
 
     # parameter_values  {"name": ([], superscript, target), ...}
     # generate hyper-parameter config
+    suggestion_algorithm = self.suggestion_algorithm(study)
     trail = None
-    if study.mode == 'hyperparameter':
-      # 2.step get new suggestion
-      suggestion_algorithm = self.suggestion_algorithm(study)
-      trail, = suggestion_algorithm.get_new_suggestions(study_name, number=1)
+    if suggestion_algorithm is not None:
+      trails = suggestion_algorithm.get_new_suggestions(study_name, number=1)
+      trail = trails[0] if len(trails) > 0 else None
 
-      if trail is None:
-        # have no new trial
-        study.status = 'completed'
-        return {'status': 'completed', 'message': 'no new trial'}
-    else:
-      # 3.step generate graph structure config
-      search_space_algorithm = self.search_space_algorithm(study)
-      trail, = search_space_algorithm.get_new_suggestions(study_name, number=1)
-
-      if trail is None:
-        # have no new trial
-        study.status = 'completed'
-        return {'status': 'completed', 'message': 'no new trial'}
+    search_space_algorithm = self.search_space_algorithm(study)
+    if search_space_algorithm is not None:
+      trails = search_space_algorithm.get_new_suggestions(study_name, trail, number=1)
+      trail = trails[0] if len(trails) > 0 else None
 
     if trail is None:
       return {'status': 'completed', 'message': 'no new trial'}
@@ -310,8 +295,8 @@ class AntTrainServer(AntBase):
                 'trail_name': trail.name,
                 'created_time': trail.created_time,
                 'updated_time': trail.updated_time,
-                'hyperparameter': trail.parameter_values if study.mode == 'hyperparameter' else json.dumps({}),
-                'structure': trail.parameter_values if study.mode == 'structure' else '',
+                'hyperparameter': trail.parameter_values,
+                'structure': trail.structure,
                 'max_time': study_configuration['maxTime'],
                 'status': study.status}
     return response

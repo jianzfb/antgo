@@ -117,7 +117,10 @@ def launch_train_process(server_records, experiment_records, content):
 
   experiment_id = trail_name
   start_time = time.time()
-  main_param = json.loads(content['hyperparameter'])
+  main_param = {}
+  if content['hyperparameter'] is not None and content['hyperparameter'] != '':
+    main_param = json.loads(content['hyperparameter'])
+
   structure = content['structure']
   max_runtime = content['max_time']
 
@@ -251,15 +254,18 @@ def request_suggestion_process(experiment_records, server_records):
                                          'trail_name': trail_name,
                                          'objective_value': objective_value,
                                          'signature': server_records['signature']})
-          content = json.loads(response.content)
-          if len(content) == 0:
+          suggestion = json.loads(response.content)
+          if len(suggestion) == 0:
             continue
 
-          if content['status'] == 'running':
+          if suggestion['status'] == 'running':
             temp = {}
-            result = launch_train_process(server_records, temp, content)
+            result = launch_train_process(server_records, temp, suggestion)
             if result:
               new_experiments.update(temp)
+          elif suggestion['status'] == 'completed':
+            logger.info('training server is notified to stop by center')
+            exit(0)
 
     experiment_records.update(new_experiments)
 
@@ -276,12 +282,15 @@ def request_suggestion_process(experiment_records, server_records):
                                    'trail_name': None,
                                    'objective_value': None,
                                    'signature': server_records['signature']})
-    content = json.loads(response.content)
-    if len(content) == 0:
+    suggestion = json.loads(response.content)
+    if len(suggestion) == 0:
       return
 
-    if content['status'] == 'running':
-      launch_train_process(server_records, experiment_records, content)
+    if suggestion['status'] == 'running':
+      launch_train_process(server_records, experiment_records, suggestion)
+    elif suggestion['status'] == 'completed':
+      logger.info('training server is notified to stop by center')
+      exit(0)
 
 
 class UpdateModelHandler(BaseHandler):
@@ -343,18 +352,18 @@ class IndexHanlder(BaseHandler):
         study_name, study_created_time, study_id, study_status = s
         self.client_socket.send_json({'cmd': 'study/get',
                                       'study_name': study_name})
-        rr = yield self.client_socket.recv_json()
-        if len(rr) == 0:
+        study = yield self.client_socket.recv_json()
+        if len(study) == 0:
           self.set_status(500)
           self.finish(500)
           return
 
-        if rr['status'] != 'ok':
+        if study['status'] != 'ok':
           self.set_status(500)
           self.finish(500)
           return
 
-        trials = rr['result']
+        trials = study['result']
 
         study_info = {}
         # get completed_trial list
@@ -373,8 +382,7 @@ class IndexHanlder(BaseHandler):
         study_info['created_time'] = '-' if study_created_time is None else datetime.fromtimestamp(study_created_time).strftime('%Y-%m-%d')
 
         study_infos.append(study_info)
-
-      self.render(self.html_template,automl={'study': study_infos})
+      self.render(self.html_template, automl={'study': study_infos})
 
 
 class StudyStartorStopHandler(BaseHandler):
@@ -408,7 +416,7 @@ class StudyGetHandler(BaseHandler):
     trials_list = [{'trial_name': t[0],
                     'trial_created_time': datetime.fromtimestamp(t[1]).strftime('%Y-%m-%d %H:%M:%S'),
                     'trial_status': t[2],
-                    'trial_objective_value': t[3]} for t in trials]
+                    'trial_objective_value': t[3]} for t in trials[0:20]]
     self.write(json.dumps(trials_list))
     self.finish()
 
@@ -418,16 +426,38 @@ class StudyAddHandler(BaseHandler):
   def post(self):
     study_name = self.get_argument('study_name', '')
     study_max_trials = int(self.get_argument('study_max_trials', '10'))
-    study_max_time = self.get_argument('study_max_time','10')
+    study_max_time = int(self.get_argument('study_max_time', '10'))
     study_hyperparameter_search = self.get_argument('study_hyperparameter_search', '')
     study_hyperparameters = self.get_argument('study_hyperparameters', '')
     study_architecture_search = self.get_argument('study_architecture_search', '')
     study_default_architecture = self.get_argument('study_default_architecture', '')
     study_flops = self.get_argument('study_flops', 0)
 
+    if len(study_name) == 0:
+      self.set_status(500)
+      self.write(json.dumps({'code': 'InvalidInput',
+                             'message': 'study name isnt empty'}))
+      self.finish()
+      return
+
+    if len(study_hyperparameters) > 0 and len(study_hyperparameter_search) == 0:
+      self.set_status(500)
+      self.write(json.dumps({'code': 'InvalidInput',
+                             'message': 'must set hyperparameters search algorithm'}))
+      self.finish()
+      return
+
+    if len(study_default_architecture) > 0 and len(study_architecture_search) == 0:
+      self.set_status(500)
+      self.write(json.dumps({'code': 'InvalidInput',
+                             'message': 'must set architecture search space'}))
+      self.finish()
+      return
+
     if len(study_hyperparameters) == 0 and len(study_default_architecture) == 0:
       self.set_status(500)
-      self.write(json.dumps({'code': 'InvalidInput', 'message': 'must set study_hyperparameters or study_default_architecture'}))
+      self.write(json.dumps({'code': 'InvalidInput',
+                             'message': 'must set study_hyperparameters or study_architecture'}))
       self.finish()
       return
 
@@ -442,7 +472,6 @@ class StudyAddHandler(BaseHandler):
       return
 
     study_max_time = '%dd'%int(study_max_time)
-
     self.client_socket.send_json({'cmd': 'study/add',
                                   'study_name': study_name,
                                   'study_max_trials': int(study_max_trials),
@@ -464,13 +493,31 @@ class StudyAddHandler(BaseHandler):
     self.finish()
 
 
+class StudyDeleteHandler(BaseHandler):
+  @gen.coroutine
+  def post(self):
+    study_name = self.get_argument('study_name', '')
+
+    self.client_socket.send_json({'cmd': 'study/delete',
+                                  'study_name': study_name})
+
+    response = yield self.client_socket.recv_json()
+    if len(response) == 0 or response['status'] != 'ok':
+      self.set_status(500)
+      self.write(json.dumps({'code': 'InvalidServer'}))
+      self.finish()
+      return
+
+    self.finish()
+
+
 class TrialInfoHanlder(BaseHandler):
   @gen.coroutine
   def post(self, trial_name):
     self.finish()
 
 
-class ServerHandler(BaseHandler):
+class SuggestionServerHandler(BaseHandler):
   @gen.coroutine
   def post(self):
     if self.is_worker:
@@ -503,7 +550,7 @@ class ServerHandler(BaseHandler):
     self.write(json.dumps(server_response))
 
 
-class UpdateServerHandler(BaseHandler):
+class UpdateExperimentServerHandler(BaseHandler):
   @gen.coroutine
   def post(self):
     if self.is_worker:
@@ -803,9 +850,10 @@ def train_server_start(main_file,
                                                         ), 10*60*1000).start()
     else:
       app = tornado.web.Application(handlers=[('/', IndexHanlder),
-                                              ('/server/', ServerHandler),
-                                              ('/update/', UpdateServerHandler),
+                                              ('/server/', SuggestionServerHandler),
+                                              ('/update/', UpdateExperimentServerHandler),
                                               ('/study/startorstop/', StudyStartorStopHandler),
+                                              ('/study/delete/', StudyDeleteHandler),
                                               ('/study/get/', StudyGetHandler),
                                               ('/study/add/', StudyAddHandler),
                                               ('/trial/([^/]+)/', TrialInfoHanlder),

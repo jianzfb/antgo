@@ -56,7 +56,7 @@
             var obj = eval('('+data+')');
             var file_name = obj['file'];
             $('#upload_json').attr('file_name', file_name);
-            alert('success to upload graph json')
+            alert('success to upload architecture file '+file_name)
         }
 
         $(document).ready(function(){
@@ -93,7 +93,7 @@
                 })
             })
 
-            $('button[name=studyop]').each(function(){
+            $('a[name=studyop]').each(function(){
                 $(this).on('click', function(event){
                     var study_name = $(this).parent().parent().attr('study_name');
                     var btn = $(this);
@@ -103,12 +103,33 @@
                         var obj = eval('('+data+')');
                         if(status == 'success'){
                             if(obj['status'] == "ok"){
-                                btn.text(obj['study_status']);
+                                if(obj['study_status'] == 'stop'){
+                                    btn.find('span').text("start")
+                                    btn.parent().parent().find("th[name=status]").text("stop")
+                                }
+                                else{
+                                    btn.find('span').text("stop")
+                                    btn.parent().parent().find("th[name=status]").text("running")
+                                }
                             }
                         }
                     })
 
                     event.stopPropagation();
+                })
+            })
+
+            $('a[name=studydel]').each(function(){
+                $(this).on('click', function(event){
+                    var study_name = $(this).parent().parent().attr('study_name');
+                    var tr = $(this).parent().parent();
+                    $.post('/study/delete/', {
+                        'study_name': study_name
+                    }, function(data, status){
+                        tr.remove()
+                    })
+
+                    event.stopPropagation()
                 })
             })
 
@@ -118,6 +139,7 @@
                 var study_name = $('#study_name').val();
                 var study_max_trials = $('#study_maxtrials').val();
                 var study_max_time = $('#study_maxtime').val();
+                var study_hyperparameter_search = $("#study_hyperparameter_search").find("option:selected").text();
                 var study_architecture_search = $("#study_architecture_search").find("option:selected").text();
                 var study_default_architecture = $('#upload_json').attr('file_name');
 
@@ -127,20 +149,16 @@
                     'study_name': study_name,
                     'study_max_trials': study_max_trials,
                     'study_max_time': study_max_time,
-                    'study_hyperparameter_search': '',
+                    'study_hyperparameter_search': study_hyperparameter_search,
                     'study_hyperparameters': '',
                     'study_architecture_search': study_architecture_search,
                     'study_default_architecture': study_default_architecture,
                     'study_flops': study_flops,
                 }, function(data, status){
-                    if(status == 'success'){
-                        alert('success to add study');
-                    }
-                    else{
-                        var obj = eval('('+data+')');
-                        alert(obj);
-                    }
-                })
+                    alert('success to add ' + study_name);
+                }).fail(function(data, status) {
+                    alert(data.responseText);
+                  })
             })
         })
 
@@ -405,6 +423,7 @@
                       <th scope="col">Objective Value</th>
                       <th scope="col">Status</th>
                       <th scope="col">Operator</th>
+                      <th scope="col">Delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -417,15 +436,18 @@
                         <th>{{s['uncompleted_trial']}}</th>
                         <th>{{s['error_trial']}}</th>
                         <th>{{s['objective_value']}}</th>
-                        <th>{{s['status']}}</th>
+                        <th name="status">{{s['status']}}</th>
                         <th>
                             {%if s['status'] == 'running'%}
-                                <button type="button" class="btn btn-default" name="studyop">stop</button>
+                                <a href="javascript:void(0)" name="studyop"><span class="badge">stop</span></a>
                             {%elif s['status'] == 'stop'%}
-                                 <button type="button" class="btn btn-default" name="studyop">start</button>
+                                <a href="javascript:void(0)" name="studyop"><span class="badge">start</span></a>
                             {%else%}
                                 completed
                             {%end%}
+                        </th>
+                        <th>
+                            <a href="javascript:void(0)" name="studydel"><span class="badge">delete</span></a>
                         </th>
                     </tr>
                     {% end %}
@@ -465,7 +487,8 @@
                         <td>
                             <form role="form">
                               <div class="form-group">
-                                <select class="form-control">
+                                <select class="form-control" id="study_hyperparameter_search">
+                                  <option></option>
                                   <option>Grid Search</option>
                                 </select>
                               </div>
@@ -478,7 +501,8 @@
                             <form role="form">
                               <div class="form-group">
                                 <select class="form-control" id="study_architecture_search">
-                                  <option>Dense Search</option>
+                                    <option></option>
+                                    <option>Dense Search</option>
                                 </select>
                               </div>
                             </form>
