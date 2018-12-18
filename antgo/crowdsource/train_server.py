@@ -454,7 +454,7 @@ class StudyAddHandler(BaseHandler):
       self.finish()
       return
 
-    if len(study_hyperparameters) == 0 and len(study_default_architecture) == 0:
+    if len(study_hyperparameters) == 0 and len(study_architecture_search) == 0:
       self.set_status(500)
       self.write(json.dumps({'code': 'InvalidInput',
                              'message': 'must set study_hyperparameters or study_architecture'}))
@@ -515,6 +515,44 @@ class TrialInfoHanlder(BaseHandler):
   @gen.coroutine
   def post(self, trial_name):
     self.finish()
+
+
+class TrialDownloadConfigureHandler(BaseHandler):
+  @gen.coroutine
+  def get(self, study_name, trial_name):
+    self.client_socket.send_json({'cmd': 'trial/get',
+                                  'study_name': study_name,
+                                  'trial_name': trial_name})
+
+    response = yield self.client_socket.recv_json()
+    if len(response) == 0 or response['status'] == 'fail':
+      self.set_status(404)
+      self.finish()
+      return
+
+    _, created_time, status, objective_value, structure, parameter_value, address = response['result']
+
+    self.set_header('Content-Type', 'application/octet-stream')
+    self.set_header('Content-Disposition', 'attachment; filename='+trial_name+'.json')
+
+    trial_configure = {}
+    if structure is not None:
+      trial_configure['graph'] = structure
+
+    if parameter_value is not None:
+      trial_configure['parameters'] = parameter_value
+
+    trial_configure_str = json.dumps(trial_configure)
+
+    self.write(trial_configure_str)
+    # stop
+    self.finish()
+
+
+class TrialDownloadExperimentHandler(BaseHandler):
+  @gen.coroutine
+  def get(self, study_name, trial_name):
+    pass
 
 
 class SuggestionServerHandler(BaseHandler):
@@ -857,6 +895,8 @@ def train_server_start(main_file,
                                               ('/study/get/', StudyGetHandler),
                                               ('/study/add/', StudyAddHandler),
                                               ('/trial/([^/]+)/', TrialInfoHanlder),
+                                              ('/trial/download/([^/]+)/([^/]+)/configure/', TrialDownloadConfigureHandler),
+                                              ('/trial/download/([^/]+)/([^/]+)/experiment/', TrialDownloadExperimentHandler),
                                               ('/submit/', FileHanlder),],
                                     **settings)
       http_server = tornado.httpserver.HTTPServer(app)

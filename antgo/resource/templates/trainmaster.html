@@ -31,7 +31,7 @@
             layout_table.create = function(container) {
                 var table_div = $('<div id="{id}-layout"></div>'.format({id: _id}));
                 var table_div_body = $('<table class="no-border"></table>');
-                table_div_body.append($('<thead><tr><th>#</th><th>name</th><th>time</th><th>status</th><th>value</th></tr></thead>'));
+                table_div_body.append($('<thead><tr><th>#</th><th>name</th><th>time</th><th>status</th><th>value</th><th>configure</th><th>experiment</th></tr></thead>'));
                 var table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
 
                 for (var r = 0; r < _rows; ++r) {
@@ -71,7 +71,7 @@
 
                             var obj = eval('('+data+')');
                             var trial_num = obj.length;
-                            var table = TrialTable('trial_table', trial_num, 5);
+                            var table = TrialTable('trial_table', trial_num, 7);
                             table.create($('#trail_list'));
 
                             for(var i in obj){
@@ -85,7 +85,24 @@
                                 table.append(i, 2, '<p>{0}</p>'.format(trial_created_time));
                                 table.append(i, 3, '<p>{0}</p>'.format(trial_status));
                                 table.append(i, 4, '<p>{0}</p>'.format(trial_objective_value));
+                                table.append(i, 5, '<a href="javascript:void(0)" name="download_configure" study_name={0} trial_name={1}><span class="badge">download</span></a>'.format(study_name, trial_name))
+                                table.append(i, 6, '<a href="javascript:void(0)" name="download_experiment" study_name={0} trial_name={1}><span class="badge">download</span></a>'.format(study_name, trial_name))
                             }
+
+                            $('a[name=download_configure]').each(function(){
+                                $(this).on('click', function(){
+                                    var study_name = $(this).attr('study_name');
+                                    var trial_name = $(this).attr('trial_name');
+                                    window.location.href = "/trial/download/{0}/{1}/configure/".format(study_name, trial_name);
+                                })
+                            })
+
+                            $('a[name=download_experiment]').each(function(){
+                                $(this).on('click', function(){
+
+                                })
+                            })
+
 
                             $('#trail_modal').modal();
                         }
@@ -489,7 +506,7 @@
                               <div class="form-group">
                                 <select class="form-control" id="study_hyperparameter_search">
                                   <option></option>
-                                  <option>Grid Search</option>
+                                  <option>grid_search</option>
                                 </select>
                               </div>
                             </form>
@@ -502,7 +519,7 @@
                               <div class="form-group">
                                 <select class="form-control" id="study_architecture_search">
                                     <option></option>
-                                    <option>Dense Search</option>
+                                    <option>dense_architecture</option>
                                 </select>
                               </div>
                             </form>

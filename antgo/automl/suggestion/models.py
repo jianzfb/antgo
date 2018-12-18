@@ -30,18 +30,25 @@ class Study(object):
     self.flops = flops
 
   @staticmethod
-  def get(key, value):
+  def get(**kwargs):
     for s in Study.contents:
-      if getattr(s, key) == value:
-        return s
+      for key, value in kwargs.items():
+        if getattr(s, key) == value:
+          return s
+        break
 
     return None
 
   @staticmethod
-  def filter(key, value):
+  def filter(**kwargs):
     ss = []
-    for s in Trial.contents:
-      if getattr(s, key) == value:
+    for s in Study.contents:
+      is_ok = True
+      for key, value in kwargs.items():
+        if getattr(s, key) != value:
+          is_ok = False
+          break
+      if is_ok:
         ss.append(s)
 
     return ss
@@ -79,27 +86,31 @@ class Trial(object):
                name,
                parameter_values=None,
                structure=None,
-               md5=None,
+               structure_encoder=None,
                objective_value=-1.0,
                status=None,
                created_time=None,
-               updated_time=None):
+               updated_time=None,
+               address=None):
     self.id = id
     self.study_name = study_name
     self.name = name
     self.parameter_values = parameter_values
     self.structure = structure
-    self.md5 = md5
+    self.structure_encoder = structure_encoder
     self.objective_value = objective_value
     self.status = status
     self.created_time = created_time
     self.updated_time = updated_time
+    self.address = address
 
   @staticmethod
-  def get(key, value):
+  def get(**kwargs):
     for s in Trial.contents:
-      if getattr(s, key) == value:
-        return s
+      for key, value in kwargs.items():
+        if getattr(s, key) == value:
+          return s
+        break
 
     return None
 
@@ -112,16 +123,27 @@ class Trial(object):
   @staticmethod
   def delete(T):
     if T in Trial.contents:
-      Study.contents.pop(T)
+      delete_index = -1
+      for t_i, t in enumerate(Trial.contents):
+        if t == T:
+          delete_index = t_i
+          break
+
+      Trial.contents.pop(delete_index)
       return T
 
     return None
 
   @staticmethod
-  def filter(key, value):
+  def filter(**kwargs):
     ss = []
     for s in Trial.contents:
-      if getattr(s, key) == value:
+      is_ok = True
+      for key, value in kwargs.items():
+        if getattr(s, key) != value:
+          is_ok = False
+          break
+      if is_ok:
         ss.append(s)
 
     return ss

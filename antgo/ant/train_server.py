@@ -5,13 +5,11 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.ant import flags
 from antgo.ant.base import *
 from antgo.crowdsource.train_server import *
 from antgo.utils import logger
-from antgo.automl.suggestion.models import *
 from antgo.automl.suggestion.algorithm.grid_search import *
-from antgo.automl.suggestion.search_space import *
+from antgo.automl.suggestion.searchspace.dense_architecture import *
 from antgo.automl.graph import *
 import json
 
@@ -86,12 +84,10 @@ class AntTrainServer(AntBase):
     return None
 
   def search_space_algorithm(self, study):
-    study_configuration = json.loads(study.study_configuration)
-    graph_content = study_configuration['graph']
-    graph = Decoder().decode(graph_content)
-    graph.layer_factory = LayerFactory()
-    if study.search_space == 'Dense Search':
-      return DenseArchitectureSearchSpace(graph, study.flops)
+    if study.search_space == 'dense_architecture':
+      return DenseArchitectureSearchSpace(study, study.flops)
+
+    return None
 
   def add_study(self, query):
     study_name = query.get('study_name', '')
@@ -103,7 +99,7 @@ class AntTrainServer(AntBase):
     study_default_architecture = query.get('study_default_architecture', '')
     study_flops = query.get('study_flops', 0)
 
-    s = Study.get(key='name', value=study_name)
+    s = Study.get(name=study_name)
     if s is not None:
       return {'status': 'fail'}
 
@@ -129,14 +125,14 @@ class AntTrainServer(AntBase):
                study_configuration=json.dumps(study_configuration),
                algorithm=study_hyperparameter_search,
                search_space=study_architecture_search,
-               flops=study_flops,
+               flops=float(study_flops),
                created_time=time.time())
     Study.create(ss)
     return {'status': 'ok'}
 
   def delete_study(self, query):
     study_name = query.get('study_name', None)
-    study = Study.get(key="name", value=study_name)
+    study = Study.get(name=study_name)
     if study is None:
       return {'status': 'fail'}
 
@@ -145,7 +141,7 @@ class AntTrainServer(AntBase):
 
   def start_or_stop_study(self, query):
     study_name = query.get('study_name', None)
-    study = Study.get(key="name", value=study_name)
+    study = Study.get(name=study_name)
     if study is None:
       return {'status': 'fail'}
 
@@ -160,11 +156,11 @@ class AntTrainServer(AntBase):
 
   def get_study(self, query):
     study_name = query.get('study_name', None)
-    study = Study.get(key="name", value=study_name)
+    study = Study.get(name=study_name)
     if study is None:
       return {'status': 'fail'}
 
-    all_trails = Trial.filter(key='study_name', value=study_name)
+    all_trails = Trial.filter(study_name=study_name)
     all_trails_result = [(trail.name, trail.created_time, trail.status, trail.objective_value) for trail in all_trails]
     all_trails_result = sorted(all_trails_result, key=lambda x: x[3], reverse=True)
 
@@ -180,14 +176,20 @@ class AntTrainServer(AntBase):
     if study_name is None or trial_name is None:
       return {'status': 'fail'}
 
-    triails = Trial.filter(key='name', value=trial_name)
+    triails = Trial.filter(name=trial_name)
     trial = [t for t in triails if t.study_name == study_name]
 
     if len(trial) == 0:
       return {'status': 'fail'}
 
     trial = trial[0]
-    return {'status': 'ok', 'result': (trial.name, trial.created_time, trial.status, trial.objective_value)}
+    return {'status': 'ok', 'result': (trial.name,
+                                       trial.created_time,
+                                       trial.status,
+                                       trial.objective_value,
+                                       trial.structure,
+                                       trial.parameter_values,
+                                       trial.address)}
 
   def listening_and_command_dispatch(self):
     self._backend = zmq.Context().socket(zmq.REP)
@@ -227,7 +229,7 @@ class AntTrainServer(AntBase):
     if 'study_name' not in query:
       return {}
 
-    study = Study.get('name', query['study_name'])
+    study = Study.get(name=query['study_name'])
     if study is None:
       return {}
 
@@ -240,14 +242,16 @@ class AntTrainServer(AntBase):
     objective_value = float(objective_value)
     created_time = query.get('created_time', None)
     updated_time = query.get('updated_time', None)
+    trail_address = query.get('address', None)
 
     # 1.step trail result
     if trail_name is not None and trail_name != '' and objective_value is not None:
-      trail = Trial.get('name', trail_name)
+      trail = Trial.get(name=trail_name)
       if trail is not None:
         if objective_value > 0.0:
           trail.status = 'Completed'
           trail.objective_value = objective_value
+          trail.address = trail_address
         else:
           trail.status = 'Failed'
 
@@ -270,7 +274,7 @@ class AntTrainServer(AntBase):
     if 'maxTrials' in study_configuration:
       max_trials = study_configuration['maxTrials']
       max_trials = int(max_trials)
-      trials = Trial.filter(key='study_name', value=study_name)
+      trials = Trial.filter(study_name=study_name)
       if len(trials) > max_trials:
         study.status = 'completed'
         return {'status': 'completed', 'message': 'arrive study max trials'}
@@ -285,7 +289,8 @@ class AntTrainServer(AntBase):
 
     search_space_algorithm = self.search_space_algorithm(study)
     if search_space_algorithm is not None:
-      trails = search_space_algorithm.get_new_suggestions(study_name, trail, number=1)
+      search_space_parameters = json.loads(trail.parameter_values) if trail is not None else {}
+      trails = search_space_algorithm.get_new_suggestions(number=1, **search_space_parameters)
       trail = trails[0] if len(trails) > 0 else None
 
     if trail is None:
@@ -304,7 +309,7 @@ class AntTrainServer(AntBase):
   def update_suggestion(self, query):
     experiments = query['experiments']
     for experiment in experiments:
-      mm = Trial.get(key='name', value=experiment)
+      mm = Trial.get(name=experiment)
       if mm is not None:
         mm.updated_time = time.time()
 

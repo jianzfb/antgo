@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.automl.stublayer import *
-from antgo.codebook.tf.stublayers import *
 from antgo.automl.layer_transformer import *
 from antgo.automl.constant import *
 
@@ -208,6 +207,14 @@ class Graph(object):
   def n_layers(self):
     """Return the number of layers in the model."""
     return len(self.layer_list)
+
+  @property
+  def flops(self):
+    total_flops = 0
+    for l in self.layer_list:
+      total_flops += l.flops()
+
+    return total_flops
 
   def _add_node(self, node):
     """Add node to node list if it is not in node list."""
@@ -728,7 +735,7 @@ class Graph(object):
         else:
           edge_input_tensor = node_list[u]
 
-        node_list[v] = layer(edge_input_tensor)
+        node_list[v] = getattr(self.layer_factory, layer.layer_name)(layer)(edge_input_tensor)
 
     output_tensors = []
     if output_nodes is None:

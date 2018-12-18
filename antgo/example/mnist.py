@@ -15,6 +15,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from antgo.ant.debug import *
 from antgo.automl.graph import *
+from antgo.codebook.tf.stublayers import *
 
 ##################################################
 ######## 1.step global interaction handle ########

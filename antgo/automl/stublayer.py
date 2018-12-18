@@ -15,6 +15,7 @@ class StubLayer:
     self.weights = None
     self.spatial_change = False
     self._layer_type = None
+    self._layer_name = None
     self._n_dim = -1
     self._layer_width = 0
 
@@ -66,6 +67,13 @@ class StubLayer:
   @layer_type.setter
   def layer_type(self, val):
     self._layer_type = val
+
+  @property
+  def layer_name(self):
+    return self._layer_name
+  @layer_name.setter
+  def layer_name(self, val):
+    self._layer_name = val
 
   @property
   def n_dim(self):

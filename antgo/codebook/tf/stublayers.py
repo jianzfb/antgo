@@ -6,68 +6,32 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.automl.stublayer import *
+from antgo.automl.basestublayers import *
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import functools
 import numpy as np
 
 
-class StubWeightBiasLayer(StubLayer):
-  def import_weights(self, layer):
-    pass
-
-  def export_weights(self, layer):
-    pass
-
-
-class StubDense(StubWeightBiasLayer):
-  def __init__(self, input_units, units, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.input_units = input_units
-    self.units = units
-    self.layer_type = 'dense'
-    self.layer_width = units
-
-  @property
-  def output_shape(self):
-    return self.units,
-
-  def size(self):
-    return self.input_units * self.units + self.units
+class StubDense(BaseStubDense):
+  def __init__(self, obj):
+    super(StubDense, self).__init__(obj.input_units, obj.units, obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(slim.fully_connected,num_outputs=self.units)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
-
-class StubConv2d(StubWeightBiasLayer):
-  def __init__(self, input_channel, filters, kernel_size_h, kernel_size_w, rate_h=1, rate_w=1, stride=1, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.input_channel = input_channel
-    self.filters = filters
-    self.kernel_size_h = kernel_size_h
-    self.kernel_size_w = kernel_size_w
-    self.rate_h = rate_h
-    self.rate_w = rate_w
-    self.stride = stride
-    self.layer_type = 'conv2d'
-    self.layer_width = filters
-    self.n_dim = 2
-    assert(stride == 1)
-
-  @property
-  def output_shape(self):
-    ret = (self.input.shape[0],)
-    for dim in self.input.shape[1:-1]:
-      ret = ret + (max(int(dim / self.stride), 1),)
-
-    ret = ret + (self.filters,)
-    return ret
-
-  def size(self):
-    return self.filters * self.kernel_size_h * self.kernel_size_w * self.input_channel + self.filters
+class StubConv2d(BaseStubConv2d):
+  def __init__(self, obj):
+    super(StubConv2d, self).__init__(obj.input_channel,
+                                     obj.filters,
+                                     obj.kernel_size_h,
+                                     obj.kernel_size_w,
+                                     obj.rate_h,
+                                     obj.rate_w,
+                                     obj.stride,
+                                     obj.input,
+                                     obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(slim.conv2d,
@@ -77,36 +41,18 @@ class StubConv2d(StubWeightBiasLayer):
                              rate=[self.rate_h, self.rate_w],
                              stride=self.stride)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
-
-class StubSeparableConv2d(StubWeightBiasLayer):
-  def __init__(self, input_channel, filters, kernel_size_h, kernel_size_w, rate_h=1, rate_w=1, stride=1, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.input_channel = input_channel
-    self.filters = filters
-    self.kernel_size_h = kernel_size_h
-    self.kernel_size_w = kernel_size_w
-    self.rate_h = rate_h
-    self.rate_w = rate_w
-    self.stride = stride
-    self.layer_type = 'conv2d'
-    self.layer_width = filters
-    self.n_dim = 2
-    assert(stride == 1)
-
-  @property
-  def output_shape(self):
-    ret = (self.input.shape[0],)
-    for dim in self.input.shape[1:-1]:
-      ret = ret + (max(int(dim / self.stride), 1),)
-
-    ret = ret + (self.filters,)
-    return ret
-
-  def size(self):
-    return self.filters * self.kernel_size_h * self.kernel_size_w*self.input_channel + self.filters
+class StubSeparableConv2d(BaseStubSeparableConv2d):
+  def __init__(self, obj):
+    super(StubSeparableConv2d, self).__init__(obj.input_channel,
+                                              obj.filters,
+                                              obj.kernel_size_h,
+                                              obj.kernel_size_w,
+                                              obj.rate_h,
+                                              obj.rate_w,
+                                              obj.stride,
+                                              obj.input,
+                                              obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(slim.separable_conv2d,
@@ -115,23 +61,10 @@ class StubSeparableConv2d(StubWeightBiasLayer):
                       rate=[self.rate_h, self.rate_w],
                       depth_multiplier=1)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
-
-class StubSPP(StubWeightBiasLayer):
-  def __init__(self, grid_h, grid_w, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.grid_h = grid_h
-    self.grid_w = grid_w
-    self.layer_type = 'spp'
-
-  @property
-  def output_shape(self):
-    return self.input.shape
-
-  def size(self):
-    return 0
+class StubSPP(BaseStubSPP):
+  def __init__(self, obj):
+    super(StubSPP, self).__init__(obj.grid_h, obj.grid_w, obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     # 1.step average pooling
@@ -150,203 +83,113 @@ class StubSPP(StubWeightBiasLayer):
 
     return output
 
-  def flops(self):
-    return 0
 
-
-class StubConcatenate(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    if input is None:
-      input = []
-    super().__init__(input, output)
-    self.layer_type = 'concat'
-
-  @property
-  def output_shape(self):
-    ret = 0
-    for current_input in self.input:
-      ret += current_input.shape[-1]
-    ret = tuple(self.input[0].shape[:-1]) + (ret,)
-    return ret
+class StubConcatenate(BaseStubConcatenate):
+  def __init__(self, obj):
+    super(StubConcatenate, self).__init__(obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.concat, axis=-1)(*args, **kwargs)
 
 
-class StubAdd(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.layer_type = 'add'
-
-  @property
-  def output_shape(self):
-    return self.input[0].shape
+class StubAdd(BaseStubAdd):
+  def __init__(self, obj):
+    super(StubAdd, self).__init__(obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.add)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
-
-class StubFlatten(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.layer_type = 'flatten'
-
-  @property
-  def output_shape(self):
-    ret = 1
-    for dim in self.input.shape:
-      ret *= dim
-    return ret,
+class StubFlatten(BaseStubFlatten):
+  def __init__(self, obj):
+    super(StubFlatten, self).__init__(obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(slim.flatten)(*args, **kwargs)
 
 
-class StubReLU(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.layer_type = 'relu'
+class StubReLU(BaseStubReLU):
+  def __init__(self, obj):
+    super(StubReLU, self).__init__(obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.nn.relu)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
-
-class StubReLU6(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.layer_type = 'relu6'
+class StubReLU6(BaseStubReLU6):
+  def __init__(self, obj):
+    super(StubReLU6, self).__init__(obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.nn.relu6)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
-
-class StubSoftmax(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.layer_type = 'softmax'
+class StubSoftmax(BaseStubSoftmax):
+  def __init__(self, obj):
+    super(StubSoftmax, self).__init__(obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.nn.softmax)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
+class StubAvgPooling2d(BaseStubAvgPooling2d):
+  def __init__(self, obj):
+    super(StubAvgPooling2d, self).__init__(obj.kernel_size_h, obj.kernel_size_w, obj.input, obj.output)
 
-class StubPooling(StubLayer):
-  def __init__(self, kernel_size_h=2, kernel_size_w=2, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.kernel_size_h = kernel_size_h
-    self.kernel_size_w = kernel_size_w
-    self.is_spatial_change = True
-    self.layer_type = 'pool2d'
-
-  @property
-  def output_shape(self):
-    ret = (self.input.shape[0],)
-    ret = ret + (max(int(self.input.shape[1] / self.kernel_size_h), 1),)
-    ret = ret + (max(int(self.input.shape[2] / self.kernel_size_w), 1),)
-    ret = ret + (self.input.shape[-1],)
-    return ret
-
-
-class StubAvgPooling2d(StubPooling):
   def __call__(self, *args, **kwargs):
     return functools.partial(slim.avg_pool2d,
                              kernel_size=(self.kernel_size_h,self.kernel_size_w),
                              stride=(self.kernel_size_h,self.kernel_size_w))(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
+class StubMaxPooling2d(BaseStubMaxPooling2d):
+  def __init__(self, obj):
+    super(StubMaxPooling2d, self).__init__(obj.kernel_size_h, obj.kernel_size_w, obj.input, obj.output)
 
-class StubMaxPooling2d(StubPooling):
   def __call__(self, *args, **kwargs):
     return functools.partial(slim.max_pool2d,
                              kernel_size=(self.kernel_size_h,self.kernel_size_w),
                              stride=(self.kernel_size_h,self.kernel_size_w))(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
+class StubGlobalPooling2d(BaseStubGlobalPooling2d):
+  def __init__(self, obj):
+    super(StubGlobalPooling2d, self).__init__(obj.input, obj.output)
 
-class StubGlobalPooling(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.layer_type = 'global_pool2d'
-
-  @property
-  def output_shape(self):
-    return (self.input.shape[0], 1, 1, self.input.shape[-1])
-
-
-class StubGlobalPooling2d(StubGlobalPooling):
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.reduce_mean, axis=[1,2])(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
+class StubDropout2d(BaseStubDropout2d):
+  def __init__(self, obj):
+    super(StubDropout2d, self).__init__(obj.rate, obj.input, obj.output)
 
-class StubDropout(StubLayer):
-  def __init__(self, rate, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.rate = rate
-    self.layer_type = 'dropout'
-
-
-class StubDropout2d(StubDropout):
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.nn.dropout, keep_prob=self.rate)(*args,**kwargs)
 
 
-class StubInput(StubLayer):
-  def __init__(self, shape, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.shape = shape
-    self.layer_type = 'placeholder'
+class StubInput(BaseStubInput):
+  def __init__(self, obj):
+    super(StubInput, self).__init__(obj.shape, obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.placeholder, shape=self.shape, dtype=tf.float32)(*args, **kwargs)
 
 
-class StubBatchNormalization2d(StubLayer):
-  def __init__(self, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.layer_type = 'bn'
-    self.n_dim = 2
+class StubBatchNormalization2d(BaseStubBatchNormalization2d):
+  def __init__(self, obj):
+    super(StubBatchNormalization2d, self).__init__(obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(slim.batch_norm)(*args, **kwargs)
 
-  def flops(self):
-    return 0
 
-
-class StubBilinearResize(StubLayer):
-  def __init__(self, height, width, input=None, output=None, **kwargs):
-    super().__init__(input, output)
-    self.height = height
-    self.width = width
-    self.layer_type = 'resize'
-
-  @property
-  def output_shape(self):
-    return (self.input.shape[0], self.height, self.width, self.input.shape[-1])
+class StubBilinearResize(BaseStubBilinearResize):
+  def __init__(self, obj):
+    super(StubBilinearResize, self).__init__(obj.height, obj.width, obj.input, obj.output)
 
   def __call__(self, *args, **kwargs):
     return functools.partial(tf.image.resize_bilinear, size=(self.height,self.width))(*args, **kwargs)
-
-  def flops(self):
-    return 0
 
 
 class LayerFactory():

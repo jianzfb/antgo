@@ -19,3 +19,4 @@ ipfsapi
 imageio
 qiniu
 pycryptodome
+sklearn
