@@ -5,7 +5,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.utils.net import *
+import importlib
 import msgpack
 import msgpack_numpy
 msgpack_numpy.patch()
@@ -29,11 +29,13 @@ class Decoder(json.JSONDecoder):
   def dict_to_object(self, d):
     if '__class__' in d:
       class_name = d.pop('__class__')
-      print(class_name)
       module_name = d.pop('__module__')
-      module = __import__(module_name.split('.')[1])
+      # module = __import__(module_name.split('.')[1])
+      # module = __import__(module_name)
+      module = importlib.import_module(module_name)
       class_ = getattr(module, class_name)
-      args = dict((key.encode('ascii'), value) for key, value in d.items())
+      args = dict((key, value) for key, value in d.items())
+
       inst = class_(**args)
     else:
       inst = d

@@ -239,48 +239,71 @@ def dataset_download_dht(dataset_folder, train_or_test, dht_address, data_queue,
     pt.join()
 
 
-def experiment_download_dht(dump_dir, experiment, pwd, token, target='qiniu'):
+def experiment_download_dht(dump_dir, experiment, token, proxy=None, signature='123',target='qiniu', address=None):
   # call in an independent process
   try:
+    if experiment is None:
+      kterms = dump_dir.split('/')
+      dump_dir = '/'.join(kterms[:-1])
+      experiment = kterms[-1]
+
     experiment_path = os.path.join(dump_dir, experiment)
     if not os.path.exists(experiment_path):
       os.makedirs(experiment_path)
 
-    # 1.step get experiment address
-    user_authorization = {'Authorization': "token " + token}
+    if token is not None:
+      # 1.step get experiment address
+      user_authorization = {'Authorization': "token " + token}
 
-    server = getattr(Config, 'server_ip', 'www.mltalker.com')
-    port = getattr(Config, 'server_port', '8999')
-    res = requests.get('http://%s:%s/hub/api/experiment/%s/address' % (server, port, experiment),
-                       headers=user_authorization)
-    experiment_info = json.loads(res.content)
+      server = getattr(Config, 'server_ip', 'www.mltalker.com')
+      port = getattr(Config, 'server_port', '8999')
+      res = requests.get('http://%s:%s/hub/api/experiment/%s/address' % (server, port, experiment),
+                         headers=user_authorization)
+      experiment_info = json.loads(res.content)
 
-    address = experiment_info['ADDRESS']
-    address_update_time = experiment_info['ADDRESS_UPDATE_TIME']
+      address = experiment_info['ADDRESS']
+      address_update_time = experiment_info['ADDRESS_UPDATE_TIME']
+    elif proxy is not None:
+      res = requests.get('http://%s/update/model/%s/' % (proxy, experiment),
+                    data={'signature': signature})
+      experiment_info = json.loads(res.content)
+      if experiment_info['code'] != 'Success':
+        logger.error('couldnt get experiment address')
+        return False
+
+      address = experiment_info['address']
+
+    if address is None:
+      logger.error('couldnt download experiment')
+      return False
 
     # 2.step get from dht
-    if target == 'ipfs':
-      import ipfsapi
-      os.chdir(experiment_path)
-      ipfs_host = os.environ.get('IPFS_HOST', '127.0.0.1')
-      ipfs = ipfsapi.connect(ipfs_host, 5001)
-      ipfs.get(address)
-    elif target == 'qiniu':
-      os.chdir(experiment_path)
-      result = qiniu_download(address, experiment_path)
-      if result is None:
+    try:
+      if target == 'ipfs':
+        import ipfsapi
+        os.chdir(experiment_path)
+        ipfs_host = os.environ.get('IPFS_HOST', '127.0.0.1')
+        ipfs = ipfsapi.connect(ipfs_host, 5001)
+        ipfs.get(address)
+      elif target == 'qiniu':
+        os.chdir(experiment_path)
+        result = qiniu_download(address, experiment_path)
+        if result is None:
+          return False
+        address = result.split('/')[-1]
+      else:
+        logger.error('dont support target %s platform'%target)
         return False
-      address = result.split('/')[-1]
-    else:
-      # dont support now
-      return
+    except:
+      logger.error('couldnt get experiment address')
+      return False
 
     # 3.step post process (rename and extract)
     # 3.1.step rename
     rename_shell = 'mv %s %s.tar.gz'%(address, experiment)
     subprocess.call(rename_shell, shell=True, cwd=experiment_path)
     # 3.2.step untar
-    untar_shell = 'openssl enc -d -aes256 -in %s.tar.gz -k %s | tar xz -C %s'%(experiment, pwd, '.')
+    untar_shell = 'openssl enc -d -aes256 -in %s.tar.gz -k %s | tar xz -C %s'%(experiment, signature, '.')
     subprocess.call(untar_shell, shell=True, cwd=experiment_path)
     # 3.3.step clear tar file
     os.remove(os.path.join(experiment_path, '%s.tar.gz'%experiment))
@@ -293,17 +316,23 @@ def experiment_download_dht(dump_dir, experiment, pwd, token, target='qiniu'):
     return False
 
 
-def experiment_upload_dht(dump_dir, experiment, pwd, token, target='qiniu'):
+def experiment_upload_dht(dump_dir, experiment, token, proxy=None, signature='123', bucket='experiment', target='qiniu'):
   # call in an independent process
   try:
-    if token is None:
+    if token is None and proxy is None:
       return
 
+    if experiment is None:
+      kterms = dump_dir.split('/')
+      dump_dir = '/'.join(kterms[:-1])
+      experiment = kterms[-1]
+
     if not os.path.exists(os.path.join(dump_dir, experiment)):
+      logger.error('experiment %s does not exist'%experiment)
       return
 
     # 1.step tar all files
-    tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (experiment, pwd)
+    tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (experiment, signature)
     subprocess.call(tar_shell, shell=True, cwd=os.path.join(dump_dir, experiment))
 
     # 2.step ipfs add to dht
@@ -315,23 +344,32 @@ def experiment_upload_dht(dump_dir, experiment, pwd, token, target='qiniu'):
       res = ipfs.add(os.path.join(os.path.join(dump_dir, experiment), '%s.tar.gz' % experiment))
       experiment_hash = res['Hash']
     elif target == 'qiniu':
-      result = qiniu_upload(os.path.join(dump_dir, experiment, '%s.tar.gz'%experiment), bucket='mltalker', max_size=500)
+      result = qiniu_upload(os.path.join(dump_dir, experiment, '%s.tar.gz'%experiment), bucket=bucket, max_size=500)
       if result is None:
+        logger.error('couldnt upload experiment %s to qiniu/%s'%(experiment, bucket))
         return
 
       experiment_hash = result
     else:
       # dont support now
+      logger.error('dont support target %s platform'%target)
       return
 
     # 3.step notify mltalker
-    user_authorization = {'Authorization': "token " + token}
+    try:
+      if token is not None:
+        user_authorization = {'Authorization': "token " + token}
 
-    server = getattr(Config, 'server_ip', 'www.mltalker.com')
-    port = getattr(Config, 'server_port', '8999')
-    requests.patch('http://%s:%s/hub/api/experiment/%s/address' % (server, port, experiment),
-                   data={'address': experiment_hash, 'time': time.time()},
-                   headers=user_authorization)
+        server = getattr(Config, 'server_ip', 'www.mltalker.com')
+        port = getattr(Config, 'server_port', '8999')
+        requests.patch('http://%s:%s/hub/api/experiment/%s/address' % (server, port, experiment),
+                       data={'address': experiment_hash, 'time': time.time()},
+                       headers=user_authorization)
+      elif proxy is not None:
+        requests.post('http://%s/update/model/%s/'%(proxy, experiment),
+                      data={'signature': signature, 'address': experiment_hash})
+    except:
+      logger.error('couldnt notify server')
 
     # 4.step clear
     os.remove(os.path.join(dump_dir, experiment, '%s.tar.gz' % experiment))
@@ -342,11 +380,16 @@ def experiment_upload_dht(dump_dir, experiment, pwd, token, target='qiniu'):
 
 
 # test update experiment record
-# experiment_upload_dht('/Users/Jian/PycharmProjects/antgo/antgo/dump/',
-#                       '20180509.230629.752734',
-#                       '123',
-#                       token=None
+# experiment_upload_dht('/Users/jian/PycharmProjects/antgo/antgo/example/',
+#                       'de03d0b6-9a2f-4704-94f0-a48cda92d8d5-20181219-143919-050970',
+#                       token=None,
+#                       proxy='127.0.0.1:10001',
+#                       signature='aaa'
 #                       )
 
 # test download experiment record
-# experiment_download_dht('/Users/Jian/Downloads/', '20180509.230629.752734', '123', token=None)
+# experiment_download_dht('/Users/Jian/Downloads/',
+#                         'de03d0b6-9a2f-4704-94f0-a48cda92d8d5-20181219-143919-050970',
+#                         token=None,
+#                         proxy='127.0.0.1:10001',
+#                         signature='aaa')

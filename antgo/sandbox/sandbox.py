@@ -82,6 +82,7 @@ def running_sandbox(*wargs, **kwargs):
   if timer_thread is not None:
     # stop thread
     timer_thread.stop()
+    timer_thread.join()
 
   # launch experiment save process
   logger.info('launch upload experiment record in the running end')
