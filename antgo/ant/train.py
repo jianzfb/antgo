@@ -378,7 +378,6 @@ class AntTrain(AntBase):
       # task_running_statictic[self.ant_name]['eye']['HMW'] = eye_analysis_error
       ################
     return task_running_statictic
-    
 
   def apply_and_launch_computingpow(self, running_ant_task, ablation_blocks):
     ctx = get_global_context()
@@ -403,10 +402,7 @@ class AntTrain(AntBase):
       yaml.dump(main_params, fp)
 
     # 1.step pack codebase
-    codebase_address, codebase_address_code = self.package_codebase()
-    if codebase_address is None:
-      logger.error('couldnt package whole codebase')
-      return
+    self.package_codebase()
 
     # 2.step apply computing pow
     max_running_time = 0.0
@@ -523,7 +519,7 @@ class AntTrain(AntBase):
     # 0.step parse address_list str (ip:num,ip:num)
     ip_num_list = address_list.split(',')
     servers = ','.join([s.split(':')[0] for s in ip_num_list])
-    nodes_num = reduce(lambda x,y: x+y, [int(s.split(':')[1]) for s in ip_num_list],0)
+    nodes_num = reduce(lambda x, y: x+y, [int(s.split(':')[1]) for s in ip_num_list], 0)
 
     # 1.step modify yaml
     with open(os.path.join(self.main_folder, 'main_param.yaml'), 'w') as fp:
@@ -532,7 +528,7 @@ class AntTrain(AntBase):
       yaml.dump(main_params, fp)
 
     # 2.step pack codebase and distribute
-    codebase_name, codebase_address_code = self.package_codebase('scp:%s'%servers, target_path=self.main_folder)
+    self.package_codebase('scp:%s'%servers, target_path=self.main_folder, signature=self.signature)
 
     # 3.step mpi run
     kk = []
@@ -553,8 +549,8 @@ class AntTrain(AntBase):
     if not is_has_main_folder:
       kk.append('--main_folder=%s'%self.main_folder)
 
-    kk.append('--code_tar=%s'%codebase_name)
-    kk.append('--crypto_code=%s'%codebase_address_code)
+    kk.append('--name=%s'%self.name)
+    kk.append('--signature=%s'%self.signature)
     kk.append('--main_param=main_param.yaml')
 
     cmd_str = 'antgo ' + ' '.join(kk)
@@ -562,9 +558,6 @@ class AntTrain(AntBase):
     subprocess.call(
       "mpirun -np %d -H %s -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib %s" % (nodes_num,address_list,cmd_str),
     shell=True)
-
-    # 4.step remove temparay file
-    os.remove(os.path.join(self.main_folder, codebase_name))
     return
 
   def start(self):

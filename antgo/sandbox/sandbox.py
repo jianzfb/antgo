@@ -36,7 +36,8 @@ def running_sandbox(*wargs, **kwargs):
                                             args=(kwargs['sandbox_dump_dir'],
                                                   kwargs['sandbox_experiment'],
                                                   kwargs['sandbox_user_token'],
-                                                  kwargs['sandbox_user_token']))
+                                                  kwargs['sandbox_user_proxy'],
+                                                  kwargs['sandbox_user_signature']))
           process.start()
 
           # 2.step wating until save process stop
@@ -44,23 +45,6 @@ def running_sandbox(*wargs, **kwargs):
 
         # exit globally
         os._exit(0)
-
-    # upload experiment record to dth every 1 hour
-    if 'sandbox_dump_dir' in kwargs and \
-            'sandbox_experiment' in kwargs and \
-            'sandbox_user_token' in kwargs:
-      now_time = time.time()
-      launch_time = kwargs['sandbox_launch_time']
-      sandbox_running_time = int(now_time - launch_time)
-      if int(sandbox_running_time+1) % 3600 == 0:
-        # launch experiment save process (every hour)
-        logger.info('launch upload experiment record every one hour')
-        process = multiprocessing.Process(target=experiment_upload_dht,
-                                          args=(kwargs['sandbox_dump_dir'],
-                                                kwargs['sandbox_experiment'],
-                                                kwargs['sandbox_user_token'],
-                                                kwargs['sandbox_user_token']))
-        process.start()
 
   # timer thread
   timer_thread = None
@@ -89,12 +73,11 @@ def running_sandbox(*wargs, **kwargs):
     sandbox_thread_kwargs['sandbox_time'] = running_time
 
   if len(sandbox_thread_kwargs) > 0:
-    timer_thread = TimerThread([lambda: _sandbox_thread(**sandbox_thread_kwargs)], periodic=60*30)
+    timer_thread = TimerThread([lambda: _sandbox_thread(**sandbox_thread_kwargs)], periodic=60)
     # start thread
     timer_thread.start()
 
   yield
-
 
   if timer_thread is not None:
     # stop thread
@@ -106,7 +89,8 @@ def running_sandbox(*wargs, **kwargs):
                                     args=(kwargs['sandbox_dump_dir'],
                                           kwargs['sandbox_experiment'],
                                           kwargs['sandbox_user_token'],
-                                          kwargs['sandbox_user_token']))
+                                          kwargs['sandbox_user_proxy'],
+                                          kwargs['sandbox_user_signature']))
 
   process.start()
   process.join()

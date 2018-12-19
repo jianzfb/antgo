@@ -48,8 +48,6 @@ flags.DEFINE_string('main_file', None, 'main file')
 flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('version', None, 'minist antgo version')
-flags.DEFINE_string('crypto_code', '', 'crypto code')
-flags.DEFINE_string('code_tar', '', 'code tar')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dataset', None, 'dataset')
 flags.DEFINE_boolean('public', False, 'public or private')
@@ -73,6 +71,7 @@ flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
+flags.DEFINE_indicator('zoo', '')
 flags.DEFINE_string('support_user_constraint', 'file_type:;file_size:', '')
 flags.DEFINE_indicator('skip_training', '')
 flags.DEFINE_string('running_platform', 'local', '')
@@ -207,7 +206,7 @@ def main():
   time_stamp = timestamp()
   name = FLAGS.name()
   if name is None:
-    name = datetime.fromtimestamp(time_stamp).strftime('%Y%m%d.%H%M%S.%f')
+    name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(time_stamp).strftime('%Y%m%d-%H%M%S-%f'))
     if not PY3:
       name = unicode(name)
   
@@ -216,16 +215,28 @@ def main():
   if main_folder is None:
     main_folder = os.path.abspath(os.curdir)
 
-  if FLAGS.code_tar() != "":
-    if os.path.exists(os.path.join(main_folder, FLAGS.code_tar())):
-      if FLAGS.code_tar().startswith('_ssl') and FLAGS.crypto_code() != "":
-        decrypto_shell = 'openssl enc -d -aes256 -in %s -out %s -k %s' % (FLAGS.code_tar(),
-                                                                          FLAGS.code_tar().replace('_ssl', ''),
-                                                                          FLAGS.crypto_code())
-        subprocess.call(decrypto_shell, shell=True, cwd=main_folder)
+  if os.path.exists(os.path.join(main_folder, '%s.tar.gz'%name)):
+    untar_shell = 'openssl enc -d -aes256 -in %s.tar.gz -k %s | tar xz -C %s' % (name, FLAGS.signature(), '.')
+    subprocess.call(untar_shell, shell=True, cwd=main_folder)
+    os.remove(os.path.join(main_folder, '%s.tar.gz' % name))
 
-      with tarfile.open(os.path.join(main_folder, FLAGS.code_tar().replace('_ssl', '')), 'r:gz') as tar:
-        tar.extractall(main_folder)
+    main_folder = os.path.join(main_folder, name)
+    os.chdir(main_folder)
+
+  if FLAGS.zoo():
+    is_ok = experiment_download_dht(main_folder,
+                                    name,
+                                    token,
+                                    proxy=FLAGS.proxy(),
+                                    signature=FLAGS.signature(),
+                                    address='http://experiment.mltalker.com/%s.tar.gz'%name)
+    if not is_ok:
+      logger.error('couldnt load experiment from experiment zoo')
+      return
+
+    # swith to experiment in main_folder
+    main_folder = os.path.join(main_folder, name)
+    os.chdir(main_folder)
 
   # 7.3 check dump dir (all running data is stored here)
   dump_dir = FLAGS.dump()
@@ -279,25 +290,25 @@ def main():
 
   ant_context.name = name
 
-  # 8.4 step load experiment
-  if FLAGS.from_experiment() is not None and \
-          FLAGS.running_platform() == 'local' and \
-          ant_cmd not in ['release']:
-    experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
-    if not os.path.exists(experiment_path):
-      process = multiprocessing.Process(target=experiment_download_dht,
-                                        args=(dump_dir, FLAGS.from_experiment(), token, token))
-      process.start()
-      process.join()
-
-    if not os.path.exists(experiment_path):
-      logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
-      exit(-1)
-
-    if os.path.exists(os.path.join(dump_dir, FLAGS.from_experiment(), 'train')):
-      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
-    else:
-      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
+  # # 8.4 step load experiment
+  # if FLAGS.from_experiment() is not None and \
+  #         FLAGS.running_platform() == 'local' and \
+  #         ant_cmd not in ['release']:
+  #   experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
+  #   if not os.path.exists(experiment_path):
+  #     process = multiprocessing.Process(target=experiment_download_dht,
+  #                                       args=(dump_dir, FLAGS.from_experiment(), token, token))
+  #     process.start()
+  #     process.join()
+  #
+  #   if not os.path.exists(experiment_path):
+  #     logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
+  #     exit(-1)
+  #
+  #   if os.path.exists(os.path.join(dump_dir, FLAGS.from_experiment(), 'train')):
+  #     ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
+  #   else:
+  #     ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
   
   # tools
   if ant_cmd == 'tools/tffrozen':
@@ -344,9 +355,11 @@ def main():
       return
 
     with running_sandbox(sandbox_time=FLAGS.max_time(),
-                         sandbox_dump_dir=dump_dir,
-                         sandbox_experiment=name,
-                         sandbox_user_token=token):
+                         sandbox_dump_dir=main_folder,
+                         sandbox_experiment=None,
+                         sandbox_user_token=token,
+                         sandbox_user_proxy=FLAGS.proxy(),
+                         sandbox_user_signature=FLAGS.signature()):
       running_process = AntTrain(ant_context,
                                  name,
                                  data_factory,
@@ -363,10 +376,6 @@ def main():
                                  signature=FLAGS.signature())
       running_process.start()
   elif ant_cmd == 'challenge':
-    with running_sandbox(sandbox_time=FLAGS.max_time(),
-                         sandbox_dump_dir=dump_dir,
-                         sandbox_experiment=name,
-                         sandbox_user_token=token):
       running_process = AntChallenge(ant_context,
                                      name,
                                      data_factory,

@@ -187,7 +187,7 @@ def infer_callback(data_source, dump_dir):
     logits = tf_trainer.run(image=k)
 
     # 记录到数据库
-    ctx.recorder.record({'RESULT':np.argmax(logits[0]), 'RESULT_TYPE': 'SCALAR'})
+    ctx.recorder.record({'RESULT': np.argmax(logits[0]), 'RESULT_TYPE': 'SCALAR'})
 
 
 ###################################################

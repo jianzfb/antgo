@@ -99,10 +99,10 @@
 
                             $('a[name=download_experiment]').each(function(){
                                 $(this).on('click', function(){
-
+                                    var trial_name = $(this).attr('trial_name');
+                                    window.location.href = "http://experiment.mltalker.com/{0}.tar.gz".format(trial_name);
                                 })
                             })
-
 
                             $('#trail_modal').modal();
                         }

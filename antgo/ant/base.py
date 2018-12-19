@@ -196,63 +196,24 @@ class AntBase(object):
   def running_platform(self):
     return self._running_platform
 
-  def _recursive_tar(self, root_path, path, tar, ignore=None):
-    if path.split('/')[-1][0] == '.':
-      return
-
-    if os.path.isdir(path):
-      for sub_path in os.listdir(path):
-        self._recursive_tar(root_path, os.path.join(path, sub_path), tar)
-    else:
-      if ignore is not None:
-        if path.split('/')[-1] == ignore:
-          return
-      arcname = os.path.relpath(path, root_path)
-      tar.add(path, arcname=arcname)
-
-  def package_codebase(self, prefix='qiniu', target_path=''):
+  def package_codebase(self, prefix='qiniu', target_path='', signature='123'):
     logger.info('package code envoriment')
     if self.app_token is None:
       if not os.path.exists(os.path.join(self.main_folder, FLAGS.task())):
         shutil.copy(os.path.join(Config.task_factory, FLAGS.task()), os.path.join(self.main_folder))
 
-    random_code_package_name = str(uuid.uuid4())
-    code_tar_path = os.path.join(self.main_folder, '%s_code.tar.gz'%random_code_package_name)
-    tar = tarfile.open(code_tar_path, 'w:gz')
-    for sub_path in os.listdir(self.main_folder):
-      self._recursive_tar(self.main_folder,
-                          os.path.join(self.main_folder, sub_path),
-                          tar,
-                          ignore='%s_code.tar.gz'%random_code_package_name)
-    tar.close()
-
-    #
-    crypto_code = str(uuid.uuid4())
-    crypto_shell = 'openssl enc -e -aes256 -in %s -out %s -k %s'%('%s_code.tar.gz'%random_code_package_name,
-                                                                  '%s_code_ssl.tar.gz'%random_code_package_name,
-                                                                  crypto_code)
-    subprocess.call(crypto_shell, shell=True, cwd=self.main_folder)
+    tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (self.name, signature)
+    subprocess.call(tar_shell, shell=True, cwd=self.main_folder)
 
     logger.info('finish package')
     if prefix == 'qiniu':
       logger.info('upload codebase package')
-      qiniu_address = qiniu_upload(os.path.join(self.main_folder, '%s_code_ssl.tar.gz'%random_code_package_name),
-                                   bucket='mltalker',
+      qiniu_address = qiniu_upload(os.path.join(self.main_folder, '%s.tar.gz'%self.name),
+                                   bucket='experiment',
                                    max_size=100)
-      return qiniu_address, crypto_code
-
-      # access_key = 'ZSC-X2p4HG5uvEtfmn5fsTZ5nqB3h54oKjHt0tU6'
-      # secret_key = 'Ya8qYwIDXZn6jSJDMz_ottWWOZqlbV8bDTNfCGO0'
-      # q = Auth(access_key, secret_key)
-      # key = 'code.tar.gz'
-      # token = q.upload_token('image', key, 3600)
-      # ret, info = put_file(token, key, code_tar_path)
-      # if ret['key'] == key and ret['hash'] == etag(code_tar_path):
-      #   logger.info('finish upload')
-      #   return 'qiniu:http://otcf1mj36.bkt.clouddn.com/%s'%key
-      # else:
-      #   logger.info('fail upload')
-      #   return None
+      # clear
+      os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
+      return qiniu_address
     elif prefix == 'ipfs':
       pass
     elif prefix == 'baidu':
@@ -266,22 +227,24 @@ class AntBase(object):
 
         logger.info('deploy code at %s'%ip)
         try:
-          cmd_str = 'ssh %s %s'%(ip,'mkdir -p %s'%target_path)
-          logger.info('execute %s'%cmd_str)
-          subprocess.call(cmd_str,shell=True)
+          cmd_str = 'ssh %s %s' % (ip, 'mkdir -p %s'%target_path)
+          logger.info('execute %s' % cmd_str)
+          subprocess.call(cmd_str, shell=True)
         except:
           pass
 
         try:
-          cmd_str = 'scp %s %s:%s'%(os.path.join(self.main_folder,'%s_code_ssl.tar.gz'%random_code_package_name),ip,target_path)
-          logger.info('execute %s'%cmd_str)
+          cmd_str = 'scp %s %s:%s' % (os.path.join(self.main_folder, '%s.tar.gz' % self.name), ip, target_path)
+          logger.info('execute %s' % cmd_str)
           subprocess.call(cmd_str, shell=True)
         except:
-          logger.error('couldnt distribute code base to %s'%ip)
+          logger.error('couldnt distribute code base to %s' % ip)
           exit(-1)
 
-    return '%s_code_ssl.tar.gz'%random_code_package_name, crypto_code
+      # clear
+      os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
 
+    return '%s.tar.gz' % self.name
 
   def register_ant(self, codebase_address, running_config, server_config={}):
     request_url = '%s://%s:%d/api/aifactory/register'%(self.http_prefix, self.server_ip, self.http_port)

@@ -295,6 +295,33 @@ def request_suggestion_process(experiment_records, server_records):
 
 class UpdateModelHandler(BaseHandler):
   @gen.coroutine
+  def get(self, experiment_id):
+    # check signature
+    signature = self.get_argument('signature', '')
+    if self.signature != signature:
+      logger.error('signature not consistent %s'%signature)
+      self.set_status(500)
+      self.write(json.dumps({'code': 'InvalidSignature'}))
+      self.finish()
+      return
+
+    if experiment_id not in self.experiment_records:
+      logger.error('no experiemnt %s here'%experiment_id)
+      self.set_status(404)
+      self.write(json.dumps({'code': 'InvalidInput', 'message': 'dont have experiment %s'%experiment_id}))
+      self.finish()
+      return
+
+    address = self.experiment_records[experiment_id]['address'] if 'address' in self.experiment_records[experiment_id] else ''
+    status = self.experiment_records[experiment_id]['status']
+
+    self.write(json.dumps({'code': 'Success',
+                           'address': address,
+                           'status': status}))
+
+    self.finish()
+
+  @gen.coroutine
   def post(self, experiment_id):
     # check signature
     signature = self.get_argument('signature', '')
@@ -319,6 +346,10 @@ class UpdateModelHandler(BaseHandler):
     if evaluation_val is not None:
       self.experiment_records[experiment_id]['evaluation_value'].append(evaluation_val)
       self.experiment_records[experiment_id]['evaluation_time'].append(time.time())
+
+    address = self.get_argument('address', None)
+    if address is not None:
+      self.experiment_records[experiment_id]['address'] = address
 
     # do other things
     status = self.get_argument('status', None)
