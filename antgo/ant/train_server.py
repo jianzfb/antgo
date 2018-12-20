@@ -9,7 +9,7 @@ from antgo.ant.base import *
 from antgo.crowdsource.train_server import *
 from antgo.utils import logger
 from antgo.automl.suggestion.algorithm.grid_search import *
-from antgo.automl.suggestion.searchspace.dense_architecture import *
+from antgo.automl.suggestion.searchspace.dpc import *
 from antgo.automl.graph import *
 import json
 
@@ -85,7 +85,7 @@ class AntTrainServer(AntBase):
 
   def search_space_algorithm(self, study):
     if study.search_space == 'dense_architecture':
-      return DenseArchitectureSearchSpace(study, study.flops)
+      return DPCSearchSpace(study, study.flops)
 
     return None
 

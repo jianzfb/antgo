@@ -428,6 +428,9 @@ class EvaluationRecorderNode():
 
   def finish(self):
     # 2.step evaluation measure value
+    if self.measure is None:
+      return 10000.0
+
     result = self.measure.eva(self.record_cache, None)
     if self.proxy is not None:
       # try:

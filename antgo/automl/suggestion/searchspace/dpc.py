@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 2018/11/29 3:36 PM
-# @File    : dense_architecture.py
+# @File    : dpc.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -23,9 +23,9 @@ from antgo.utils import logger
 import json
 
 
-class DenseArchitectureSearchSpace(AbstractSearchSpace):
+class DPCSearchSpace(AbstractSearchSpace):
   def __init__(self, study, flops=None, **kwargs):
-    super(DenseArchitectureSearchSpace, self).__init__(study, float(flops), **kwargs)
+    super(DPCSearchSpace, self).__init__(study, float(flops), **kwargs)
     self.branches = kwargs.get('branches', 3)
     self.study = study
     self.bo_min_samples = 10

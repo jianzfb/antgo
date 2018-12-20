@@ -893,6 +893,7 @@ class AntTrain(AntBase):
         for k in running_ant_task.evaluation_measures:
           if k.is_support_rank:
             self.context.recorder = EvaluationRecorderNode(k, self.proxy, self.signature)
+            break
 
       self.context.call_training_process(ant_train_dataset, train_dump_dir)
       logger.info('stop training process')

@@ -706,7 +706,7 @@ class Graph(object):
   def size(self):
     return sum(list(map(lambda x: x.size(), self.layer_list)))
 
-  def materialization(self, input_nodes=None, output_nodes=None):
+  def materialization(self, input_nodes=None, output_nodes=None, layer_factory=None):
     self.layers = []
 
     # Input
@@ -735,7 +735,10 @@ class Graph(object):
         else:
           edge_input_tensor = node_list[u]
 
-        node_list[v] = getattr(self.layer_factory, layer.layer_name)(layer)(edge_input_tensor)
+        if layer_factory is None:
+          node_list[v] = getattr(self.layer_factory, layer.layer_name)(layer)(edge_input_tensor)
+        else:
+          node_list[v] = getattr(layer_factory, layer.layer_name)(layer)(edge_input_tensor)
 
     output_tensors = []
     if output_nodes is None:

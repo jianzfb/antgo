@@ -496,6 +496,8 @@ class TFTrainer(Trainer):
     self.summary_op = None
     self.train_writer = None
 
+    self._create_funcs = []
+
   def restore_scopy_from(self, model, restore_scope, checkpoint_path):
     model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
     variables_to_restore = {}
@@ -629,7 +631,7 @@ class TFTrainer(Trainer):
     # save checkpoint
     self.saver.save(self.sess, model_filepath)
 
-  def training_deploy(self, model):
+  def training_deploy(self, model, funcs=[]):
     # Horovod: initialize Horovod (prepare MPI envoriment)
     if self.is_distribute_training:
       import horovod.tensorflow as hvd
@@ -714,6 +716,10 @@ class TFTrainer(Trainer):
         # Create global_step
         with tf.device(deploy_config.variables_device()):
           global_step = slim.get_or_create_global_step()
+
+        # create other func
+        for create_func in funcs:
+          self._create_funcs.append(create_func())
 
         #########################################
         # Configure the optimization procedure. #
@@ -819,7 +825,7 @@ class TFTrainer(Trainer):
           bgv.begin()
           bgv.after_create_session(self.sess, self.coord)
 
-  def infer_deploy(self, model):
+  def infer_deploy(self, model, funcs=[]):
     tf.logging.set_verbosity(tf.logging.INFO)
     with tf.Graph().as_default() as graph:
       # Default graph
@@ -868,6 +874,10 @@ class TFTrainer(Trainer):
         #######################
         self.clones = tfmodel_deploy.create_clones(deploy_config, network_fn, [data_queue] if data_queue is not None else None)
 
+        # create other func
+        for create_func in funcs:
+          self._create_funcs.append(create_func())
+
         # write graph
         tf.train.write_graph(graph.as_graph_def(), self.dump_dir, 'infer_graph.pbtxt')
         # svg_graph = _convert_to_svg_graph(os.path.join(self.dump_dir, 'infer_graph.pbtxt'),
@@ -914,19 +924,23 @@ class TFTrainer(Trainer):
           self.val_ops.append(self.ctx.recorder.model_fn)
 
   # 1.step deploy model on hardwares
-  def deploy(self, model):
+  def deploy(self, model, funcs=[]):
     # model context
     self.ctx.model = model
     
     # deploy model
     if self.is_training:
-      self.training_deploy(model)
+      self.training_deploy(model, funcs)
     else:
-      self.infer_deploy(model)
+      self.infer_deploy(model, funcs)
 
       if self.ctx.ant is None and not self.ctx.debug:
         logger.info('successfully deploy model')
         exit(0)
+
+  @property
+  def deploy_funcs(self):
+    return self._create_funcs
 
   @property
   def model_dependence(self):

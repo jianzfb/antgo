@@ -90,7 +90,7 @@ class Trainer(object):
         self.ctx.registry_clear_callback(self.wait_until_clear)
 
         #
-        self.early_stop = EarlyStop(self.max_no_improvement_num, self.min_loss_dec)
+        self.early_stop = EarlyStop(self.max_no_improvement_num, self.min_loss_dec, self.ctx)
         
     def deploy(self, model):
         pass
@@ -144,6 +144,8 @@ class ModelDesc(object):
     self._data_source = model_data_source
     self._model_variables = None
 
+    self._watch_vars = {}
+
   @property
   def name(self):
     return self.model_name
@@ -189,11 +191,25 @@ class ModelDesc(object):
   def automl(self):
     return getattr(self._ctx.params, 'automl', None)
 
+  def watch(self, **kwargs):
+    for k,v in kwargs.items():
+      self._watch_vars[k] = v
+
+  def get_watch(self, *args):
+    a = []
+    for k in args:
+      if k in self._watch_vars:
+        a.append(self._watch_vars[k])
+      else:
+        a.append(None)
+    return a
+
 
 class EarlyStop(object):
   def __init__(self,
                max_no_improvement_num,
-               min_loss_dec):
+               min_loss_dec,
+               ctx=None):
     super(EarlyStop, self).__init__()
     self.training_losses = []
     self.minimum_loss = None
@@ -201,6 +217,19 @@ class EarlyStop(object):
     self._max_no_improvement_num = max_no_improvement_num
     self._done = False
     self._min_loss_dec = min_loss_dec
+    self._ctx = ctx
+    self._is_stop = False
+    self.on_train_begin()
+
+  @contextmanager
+  def monitor(self, loss_transfer=lambda x: 1.0 - x):
+    yield self
+
+    if self._ctx is not None and self._ctx.recorder is not None:
+      evaluation_val = self._ctx.recorder.finish()
+      is_continue = self.on_epoch_end(loss_transfer(evaluation_val))
+      if not is_continue:
+        self._is_stop = True
 
   def on_train_begin(self):
     self.training_losses = []
@@ -223,3 +252,7 @@ class EarlyStop(object):
       self._done = True
 
     return True
+
+  @property
+  def is_stop(self):
+    return self._is_stop

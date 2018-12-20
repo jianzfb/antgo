@@ -46,6 +46,7 @@ def debug_training_process(dataset_func, param_config=None):
     Config.parse_xml(config_xml)
     dataset_obj = dataset_func('train', os.path.join(Config.data_factory, dataset_func.__name__))
 
+  ctx.recorder = EvaluationRecorderNode(None, None, '123')
   ctx.call_training_process(dataset_obj, dump_dir=dump_dir)
 
 
