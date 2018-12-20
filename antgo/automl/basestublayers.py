@@ -343,7 +343,7 @@ class BaseStubBilinearResize(StubLayer):
     return self.input.shape[1] * self.input.shape[2] * self.input.shape[3] * 7
 
 
-class BaseLayerFactory():
+class BaseLayerFactory(object):
   def __init__(self):
     pass
 

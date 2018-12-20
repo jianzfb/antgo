@@ -163,6 +163,15 @@ def launch_train_process(server_records, experiment_records, content):
   # prepare workspace
   os.makedirs(os.path.join(server_records['main_folder'], experiment_id))
 
+  # prepare support files
+  if os.path.exists(os.path.join(server_records['main_folder'], 'trainer.tar.gz')):
+    shutil.copy(os.path.join(server_records['main_folder'], 'trainer.tar.gz'),
+                os.path.join(server_records['main_folder'], experiment_id))
+
+    untar_shell = 'openssl enc -d -aes256 -in %s.tar.gz -k %s | tar xz -C %s' % ('trainer', server_records['signature'], '.')
+    subprocess.call(untar_shell, shell=True, cwd=os.path.join(server_records['main_folder'], experiment_id))
+    os.remove(os.path.join(server_records['main_folder'], experiment_id, 'trainer.tar.gz'))
+
   # prepare main param
   if server_records['main_param'] is not None and server_records['main_param'] != '':
     with open(os.path.join(server_records['main_folder'], server_records['main_param']), 'r') as fp:
@@ -836,6 +845,11 @@ def train_server_start(main_file,
                        parent_id):
   try:
     define('port', default=server_port, help='run on port')
+
+    if is_worker:
+      # tar all support files
+      tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % ('trainer', signature)
+      subprocess.call(tar_shell, shell=True, cwd=main_folder)
 
     # records db
     experiment_records = {}

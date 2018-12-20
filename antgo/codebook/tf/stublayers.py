@@ -192,7 +192,7 @@ class StubBilinearResize(BaseStubBilinearResize):
     return functools.partial(tf.image.resize_bilinear, size=(self.height,self.width))(*args, **kwargs)
 
 
-class LayerFactory():
+class LayerFactory(object):
   def __init__(self):
     pass
 

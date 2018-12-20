@@ -7,7 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 
-class StubLayer:
+class StubLayer(object):
   def __init__(self, input=None, output=None):
     self.input = input
     self.output = output

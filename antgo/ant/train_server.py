@@ -296,6 +296,8 @@ class AntTrainServer(AntBase):
     if trail is None:
       return {'status': 'completed', 'message': 'no new trial'}
 
+    logger.info('success to make a suggestion %s for study %s'%(trail.name, study_name))
+
     response = {'study_name': study_name,
                 'trail_name': trail.name,
                 'created_time': trail.created_time,
