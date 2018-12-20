@@ -433,18 +433,12 @@ class EvaluationRecorderNode():
 
     result = self.measure.eva(self.record_cache, None)
     if self.proxy is not None:
-      # try:
-      logger.error('proxy %s'%self.proxy)
-      logger.error('name %s'%self.ctx.name)
-      logger.error('signature %s'%self.signature)
-      logger.error('value %f' % result['statistic']['value'][0]['value'])
-
-      url = 'http://%s/update/model/%s/'%(self.proxy, self.ctx.name)
-      logger.error(url)
-      requests.post(url,
-                    data={'signature': self.signature,
-                          'evaluation_value': result['statistic']['value'][0]['value']})
-      # except:
-      #   logger.error('couldnt push evaluation info to proxy')
+      try:
+        url = 'http://%s/update/model/%s/'%(self.proxy, self.ctx.name)
+        requests.post(url,
+                      data={'signature': self.signature,
+                            'evaluation_value': result['statistic']['value'][0]['value']})
+      except:
+        logger.error('couldnt push evaluation info to proxy')
 
     return result['statistic']['value'][0]['value']

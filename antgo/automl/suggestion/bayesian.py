@@ -200,8 +200,8 @@ def bourgain_embedding_matrix(distance_matrix):
         for t in range(t):
             s = np.random.choice(r, 2 ** i)
             for j in r:
-                d = min([distance_matrix[j][s] for s in s])
-                counter += len(s)
+                d = min([distance_matrix[j][mm] for mm in s])
+                counter += len(s.tolist())
                 if i == 0 and t == 0:
                     distort_elements.append([d])
                 else:
@@ -305,4 +305,3 @@ class Elem:
 class ReverseElem(Elem):
     def __lt__(self, other):
         return self.metric_value > other.metric_value
-

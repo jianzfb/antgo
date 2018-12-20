@@ -219,37 +219,40 @@ class DPCSearchSpace(AbstractSearchSpace):
     return all_trials
 
 
-# if __name__ == '__main__':
-#   default_graph = Graph()
-#   default_graph.add_input(shape=(1, 14, 14, 32))
-#   # default_graph.add_input(shape=(1, 28, 28, 32))
-#
-#   ss = Encoder(skipkeys=True).encode(default_graph)
-#   with open('/Users/jian/Downloads/aa.json','w') as fp:
-#     fp.write(ss)
-#
-#   with open('/Users/jian/Downloads/aa.json','r') as fp:
-#     content = fp.read()
-#
-#   study_configuration = {'graph': content}
-#   #
-#   s = Study('hello', study_configuration=json.dumps(study_configuration), algorithm='dense')
-#   for _ in range(6):
-#     d = DenseArchitectureSearchSpace(s,10)
-#     m = d.get_new_suggestions()
-#
-#     # m[0].status = 'Completed'
-#     # m[0].objective_value = random.random()
-#     #
-#     # graph = Decoder().decode(m[0].structure)
-#     # graph.layer_factory = LayerFactory()
-#     # pp = tf.placeholder(tf.float32, [1,14,14,32])
-#     # cc=graph.materialization(input_nodes=[pp])
-#     # print(cc)
-#
-#   # for _ in range(100):
-#   #   d = DenseArchitectureSearchSpace(s)
-#   #   m = d.get_new_suggestions()
-#   #   print(m)
-#   #
-#   # print('hell')
+if __name__ == '__main__':
+  # default_graph = Graph()
+  # default_graph.add_input(shape=(1, 14, 14, 32))
+  # default_graph.add_input(shape=(1, 28, 28, 32))
+  #
+  # ss = Encoder(skipkeys=True).encode(default_graph)
+  # with open('/Users/jian/Downloads/aa.json','w') as fp:
+  #   fp.write(ss)
+
+  with open('/Users/jian/Downloads/bb.json','r') as fp:
+    content = fp.read()
+
+  study_configuration = {'graph': content}
+  #
+  s = Study('hello', study_configuration=json.dumps(study_configuration), algorithm='dense')
+  for _ in range(20):
+    d = DPCSearchSpace(s, 10000000000)
+    m = d.get_new_suggestions()
+    m[0].objective_value = random.random()
+    m[0].status = 'Completed'
+    print(m)
+
+    # m[0].status = 'Completed'
+    # m[0].objective_value = random.random()
+    #
+    # graph = Decoder().decode(m[0].structure)
+    # graph.layer_factory = LayerFactory()
+    # pp = tf.placeholder(tf.float32, [1,14,14,32])
+    # cc=graph.materialization(input_nodes=[pp])
+    # print(cc)
+
+  # for _ in range(100):
+  #   d = DenseArchitectureSearchSpace(s)
+  #   m = d.get_new_suggestions()
+  #   print(m)
+  #
+  # print('hell')
