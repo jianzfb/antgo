@@ -84,6 +84,7 @@ function LayoutTable(id, rows, cols){
     var _id = id;
     var _rows = rows;
     var _cols = cols;
+    var _table_bbody;
 
     layout_table.append = function (r,c,node) {
         var cell_id = 'table-{id}-{r}{c}'.format({id: _id, r: r, c: c});
@@ -101,21 +102,59 @@ function LayoutTable(id, rows, cols){
         var table_div = $('<div id="{id}-layout"></div>'.format({id: _id}));
         var table_div_body = $('<table class="no-border"></table>');
         table_div_body.append($('<thead><tr><th>Feature Name</th><th>Value</th></tr></thead>'));
-        var table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
+        _table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
 
         for (var r = 0; r < _rows; ++r) {
             var item = $('<tr></tr>');
             for (var c = 0; c < _cols; ++c) {
-                item.append('<td id="table-{id}-{r}{c}"></td>'.format({id: id, r: r, c: c}));
+                item.append('<td id="table-{id}-{r}{c}"></td>'.format({id: _id, r: r, c: c}));
             }
 
-            table_bbody.append(item);
+            _table_bbody.append(item);
         }
 
-        table_div_body.append(table_bbody);
+        table_div_body.append(_table_bbody);
         table_div.append(table_div_body);
 
         container.append(table_div)
+    }
+
+    layout_table.create2 = function(container, heads) {
+        var table_div = $('<div id="{id}-layout"></div>'.format({id: _id}));
+        var table_div_body = $('<table class="no-border"></table>');
+        var title = $('<thead><tr></tr></thead>');
+        for(var i in heads){
+            title.append('<th>{0}</th>'.format(heads[i]))
+        }
+        table_div_body.append(title);
+        _table_bbody = $('<tbody id="table-{id}"></tbody>'.format({id: _id}));
+
+        for (var r = 0; r < _rows; ++r) {
+            var item = $('<tr></tr>');
+            for (var c = 0; c < _cols; ++c) {
+                item.append('<td id="table-{id}-{r}{c}"></td>'.format({id: _id, r: r, c: c}));
+            }
+
+            _table_bbody.append(item);
+        }
+
+        table_div_body.append(_table_bbody);
+        table_div.append(table_div_body);
+
+        container.append(table_div)
+    }
+
+    layout_table.extend_rows = function(rows){
+        for (var r=0; r < rows; ++r){
+            var item = $('<tr></tr>');
+            for (var c = 0; c < _cols; ++c) {
+                item.append('<td id="table-{id}-{r}{c}"></td>'.format({id: _id, r: _rows + r, c: c}));
+            }
+
+            _table_bbody.append(item);
+        }
+
+        _rows += rows;
     }
 
     return layout_table

@@ -64,7 +64,7 @@ flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
-flags.DEFINE_string('port', None, 'port')
+flags.DEFINE_string('port', 10000, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_indicator('support_user_upload', '')
 flags.DEFINE_indicator('support_user_input', '')
@@ -350,7 +350,8 @@ def main():
                                        max_time=FLAGS.max_time(),
                                        signature=FLAGS.signature(),
                                        servers=FLAGS.servers(),
-                                       task=FLAGS.task())
+                                       task=FLAGS.task(),
+                                       port=FLAGS.port())
       running_process.start()
       return
 

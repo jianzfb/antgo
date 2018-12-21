@@ -10,6 +10,8 @@ from antgo.crowdsource.train_server import *
 from antgo.utils import logger
 from antgo.automl.suggestion.algorithm.grid_search import *
 from antgo.automl.suggestion.searchspace.dpc import *
+from antgo.automl.suggestion.searchspace.searchspace_factory import *
+from antgo.automl.suggestion.algorithm.hyperparameters_factory import *
 from antgo.automl.graph import *
 import json
 
@@ -76,6 +78,7 @@ class AntTrainServer(AntBase):
       self.servers = self.servers.split(',')[0]
 
     self.task = kwargs.get('task', '')
+    self.port = int(kwargs.get('port', 10000))
 
   def suggestion_algorithm(self, study):
     if study.algorithm == 'grid_search':
@@ -84,20 +87,20 @@ class AntTrainServer(AntBase):
     return None
 
   def search_space_algorithm(self, study):
-    if study.search_space == 'dense_architecture':
-      return DPCSearchSpace(study, study.flops)
+    if SearchspaceFactory.get(study.search_space) is None:
+      return None
 
-    return None
+    study_configuration = json.loads(study.study_configuration)
+    return SearchspaceFactory.get(study.search_space)(study, **study_configuration['searchSpace'])
 
   def add_study(self, query):
     study_name = query.get('study_name', '')
     study_max_trials = query.get('study_max_trials', 100)
     study_max_time = query.get('study_max_time', '1d')
     study_hyperparameter_search = query.get('study_hyperparameter_search', '')
-    study_hyperparameters = query.get('study_hyperparameters','')
+    study_hyperparameters = query.get('study_hyperparameters', [])
     study_architecture_search = query.get('study_architecture_search', '')
-    study_default_architecture = query.get('study_default_architecture', '')
-    study_flops = query.get('study_flops', 0)
+    study_architecture_parameters = query.get('study_architecture_parameters', {})
 
     s = Study.get(name=study_name)
     if s is not None:
@@ -110,22 +113,30 @@ class AntTrainServer(AntBase):
       "goal": "MAXIMIZE",
       "maxTrials": study_max_trials,
       "maxTime": study_max_time,
+      "searchSpace": {},
+      "params": []
     }
 
-    if len(study_default_architecture) > 0:
-      if os.path.exists(study_default_architecture):
-        with open(study_default_architecture, 'r') as fp:
-          graph_content = fp.read()
-          study_configuration.update({'graph': graph_content})
+    if study_architecture_search is not None and study_architecture_search != '':
+      searchspace_cls = SearchspaceFactory.get(study_architecture_search)
+      if searchspace_cls is None:
+        return {'status': 'fail'}
 
-    if len(study_hyperparameters) > 0:
-      study_configuration.update(json.loads(study_hyperparameters))
+    if study_architecture_parameters is not None and study_architecture_search != '':
+      for k, v in study_architecture_parameters.items():
+        if k == 'graph':
+          if os.path.exists(v):
+            with open(v, 'r') as fp:
+              graph_content = fp.read()
+              study_architecture_parameters[k] = graph_content
+      study_configuration['searchSpace'] = study_architecture_parameters
+
+    study_configuration["params"] = study_hyperparameters
 
     ss = Study(name=study_name,
                study_configuration=json.dumps(study_configuration),
                algorithm=study_hyperparameter_search,
                search_space=study_architecture_search,
-               flops=float(study_flops),
                created_time=time.time())
     Study.create(ss)
     return {'status': 'ok'}
@@ -191,6 +202,24 @@ class AntTrainServer(AntBase):
                                        trial.parameter_values,
                                        trial.address)}
 
+  def get_searchspace(self, query):
+    searchspace_name = query.get('searchspace', None)
+    if searchspace_name is None:
+      return {'status': 'fail'}
+
+    searchspace_cls = SearchspaceFactory.get(searchspace_name)
+    if searchspace_cls is None:
+      return {'status': 'fail'}
+
+    searchspace_params = searchspace_cls.default_params
+    return {'status': 'ok', 'result': searchspace_params}
+
+  def get_searchspace_all(self, query):
+    return {'status': 'ok', 'result': SearchspaceFactory.all()}
+
+  def get_hyperparameter_all(self, query):
+    return {'status': 'ok', 'result': HyperparametersFactory.all()}
+
   def listening_and_command_dispatch(self):
     self._backend = zmq.Context().socket(zmq.REP)
     self._backend.connect('ipc://%s'%str(os.getpid()))
@@ -216,6 +245,12 @@ class AntTrainServer(AntBase):
           response = self.make_suggestion(client_query)
         elif cmd == 'suggestion/update':
           response = self.update_suggestion(client_query)
+        elif cmd == 'searchspace/get':
+          response = self.get_searchspace(client_query)
+        elif cmd == 'searchspace/all':
+          response = self.get_searchspace_all(client_query)
+        elif cmd == 'hyperparameter/all':
+          response = self.get_hyperparameter_all(client_query)
 
         self._backend.send_json(response)
       except:
@@ -318,8 +353,7 @@ class AntTrainServer(AntBase):
     return {'status': 'ok'}
 
   def start(self):
-    server_port = 10000
-    server_port = _pick_idle_port(server_port)
+    server_port = _pick_idle_port(self.port)
 
     logger.info('launch train %s server'%'worker' if self.is_worker else 'master')
     pid = None

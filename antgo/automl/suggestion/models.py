@@ -27,7 +27,6 @@ class Study(object):
     self.status = status
     self.created_time = created_time
     self.updated_time = updated_time
-    self.flops = flops
 
   @staticmethod
   def get(**kwargs):

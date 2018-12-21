@@ -8,9 +8,9 @@ from __future__ import print_function
 
 
 class AbstractSearchSpace(object):
-  def __init__(self, study, flops=None, **kwargs):
-    self.flops = flops
+  def __init__(self, study, **kwargs):
     self.study = study
+    self._params = {}
 
   def get_new_suggestions(self, number=1, **kwargs):
     raise NotImplementedError

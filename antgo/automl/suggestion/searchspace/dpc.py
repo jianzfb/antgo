@@ -24,17 +24,25 @@ import json
 
 
 class DPCSearchSpace(AbstractSearchSpace):
-  def __init__(self, study, flops=None, **kwargs):
-    super(DPCSearchSpace, self).__init__(study, float(flops), **kwargs)
-    self.branches = kwargs.get('branches', 3)
-    self.study = study
-    self.bo_min_samples = 10
+  default_params={'branches': 3,
+                  'bo_min_samples': 10,
+                  'channels': 64,
+                  'flops': 10000,
+                  'graph': ''}
 
-    study_configuration = json.loads(self.study.study_configuration)
-    graph_content = study_configuration['graph']
+  def __init__(self, study, **kwargs):
+    super(DPCSearchSpace, self).__init__(study, **kwargs)
+    self.branches = int(kwargs.get('branches', DPCSearchSpace.default_params['branches']))
+    self.flops = float(kwargs.get('flops', DPCSearchSpace.default_params['flops']))
+    self.study = study
+    self.bo_min_samples = int(kwargs.get('bo_min_samples', DPCSearchSpace.default_params['bo_min_samples']))
+
+    # study_configuration = json.loads(self.study.study_configuration)
+    # graph_content = study_configuration['graph']
+    graph_content = kwargs.get('graph', '')
     self.graph = Decoder().decode(graph_content)
     self.graph.layer_factory = BaseLayerFactory()
-    self.channels = kwargs.get('channels', 64)
+    self.channels = int(kwargs.get('channels', DPCSearchSpace.default_params['channels']))
 
     # get all completed trials
     self.trials = Trial.filter(study_name=self.study.name, status='Completed')
@@ -51,7 +59,7 @@ class DPCSearchSpace(AbstractSearchSpace):
     proposed_search_space = []
     while True:
       if try_count > 50:
-        logger.warn('couldnt find valid graph structure')
+        logger.warn('couldnt find valid graph structure for study %s'%self.study.name)
         return [(None, None)]
 
       # 1.step make a structure suggestion

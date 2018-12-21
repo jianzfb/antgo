@@ -59,6 +59,9 @@
             alert('success to upload architecture file '+file_name)
         }
 
+        var hyperparameter_table_obj = null;
+        var hyperparameter_table_rows = 0;
+
         $(document).ready(function(){
             $('tr[name=study]').each(function(){
                 $(this).on('click', function(){
@@ -150,32 +153,131 @@
                 })
             })
 
-            demoUserBrowser(upload_json_callback, 'upload_json','.json');
-            
             $('#study_submit').on('click', function () {
                 var study_name = $('#study_name').val();
                 var study_max_trials = $('#study_maxtrials').val();
                 var study_max_time = $('#study_maxtime').val();
-                var study_hyperparameter_search = $("#study_hyperparameter_search").find("option:selected").text();
-                var study_architecture_search = $("#study_architecture_search").find("option:selected").text();
-                var study_default_architecture = $('#upload_json').attr('file_name');
+                var study_hyperparameter_search = $("#study_hyperparameter_search").find("option:selected").attr('data');
+                var study_architecture_search = $("#study_architecture_search").find("option:selected").attr('data');
+                // var study_default_architecture = $('#upload_json').attr('file_name');
+                var architecture_search_params = {};
+                $('input[name=searchspace_param]').each(function(){
+                    var name = $(this).attr('key');
+                    var value = $(this).val();
 
-                var study_flops = $('#study_flops').val();
+                    architecture_search_params[name] = value;
+                })
+                if($('#upload_json').html() != undefined){
+                    architecture_search_params['graph'] = $('#upload_json').attr('file_name');
+                }
+
+                var study_architecture_search_params_str = '';
+                if(Object.keys(architecture_search_params).length > 0){
+                    study_architecture_search_params_str = JSON.stringify(architecture_search_params);
+                }
+
+                var study_hyperparameters = [];
+                $('input[name=hyparameter_name]').each(function(){
+                    var p_name = $(this).val();
+                    var p_type = $(this).parent().parent().find('input[name=hyparameter_type]').val();
+                    var p_scaling = $(this).parent().parent().find('input[name=hyparameter_scaling]').val();
+                    var p_params = $(this).parent().parent().find('input[name=hyparameter_params]').val();
+
+                    study_hyperparameters.push({'parameterName': p_name,
+                                                'type': p_type,
+                                                'scalingType': p_scaling,
+                                                'params': p_params})
+                })
+                var study_hyperparameters_str = '';
+                if(study_hyperparameters.length > 0){
+                    study_hyperparameters_str = JSON.stringify(study_hyperparameters);
+                }
 
                 $.post('/study/add/', {
                     'study_name': study_name,
                     'study_max_trials': study_max_trials,
                     'study_max_time': study_max_time,
                     'study_hyperparameter_search': study_hyperparameter_search,
-                    'study_hyperparameters': '',
+                    'study_hyperparameters': study_hyperparameters_str,
                     'study_architecture_search': study_architecture_search,
-                    'study_default_architecture': study_default_architecture,
-                    'study_flops': study_flops,
+                    'study_architecture_search_params': study_architecture_search_params_str,
                 }, function(data, status){
                     alert('success to add ' + study_name);
                 }).fail(function(data, status) {
                     alert(data.responseText);
                   })
+            })
+
+            $('#study_architecture_search').change(function(){
+                var searchspace_name = $(this).find('option:selected').attr('data');
+                $.post('/searchspace/get/', {
+                    'searchspace': searchspace_name,
+                }, function(data, status){
+                    var data_dict = eval('('+data+')');
+                    var params_num = Object.keys(data_dict).length;
+                    $('#searchspace_block').empty();
+                    if($('#demo_browser_form').html() != undefined){
+                        $('#demo_browser_form').remove();
+                    }
+
+                    if(params_num == 0){
+                        return;
+                    }
+
+                    var lt = LayoutTable('searchspace_params_table', params_num, 2)
+                    lt.create($('#searchspace_block'));
+                    var row_id = 0;
+                    for(var k in data_dict){
+                        var v = data_dict[k];
+
+                        if(k == 'graph'){
+                            // add file update button
+                            lt.append(row_id, 0, '<p>graph</p>')
+                            lt.append(row_id, 1, '<button id="upload_json" class="btn btn-default btn-blue-to-white" type="button" file_name="">upload</button>')
+                            demoUserBrowser(upload_json_callback, 'upload_json','.json');
+                        }
+                        else{
+                            lt.append(row_id, 0, '<p>{0}</p>'.format(k));
+                            lt.append(row_id, 1, '<input type="text" name=searchspace_param key="{0}" value="{1}">'.format(k, v))
+                        }
+
+                        row_id += 1;
+                    }
+
+                }).fail(function(data, status){
+                    alert(searchspace_name + "dont support")
+                })
+            })
+
+            $('#study_hyperparameter_search').change(function () {
+                var hyperparameter_alg_name = $(this).find('option:selected').attr('data');
+                // clear
+                $('#hyperparameter_block').empty();
+                hyperparameter_table_obj = null;
+                hyperparameter_table_rows = 0;
+
+                if(hyperparameter_alg_name != ''){
+                    // create table
+                    hyperparameter_table_obj = LayoutTable('hyperparameter_table', 1, 4);
+                    hyperparameter_table_obj.create2($('#hyperparameter_block'), ["name", "type", "scaling", "params"]);
+                    hyperparameter_table_obj.append(0, 0, '<input type="text" name=hyparameter_name>');
+                    hyperparameter_table_obj.append(0, 1, '<input type="text" name=hyparameter_type>');
+                    hyperparameter_table_obj.append(0, 2, '<input type="text" name=hyparameter_scaling>');
+                    hyperparameter_table_obj.append(0, 3, '<input type="text" name=hyparameter_params>');
+
+                    hyperparameter_table_rows = 1;
+                }
+            })
+
+            $('#study_add_hyperparameter').on('click', function(){
+                if(hyperparameter_table_obj != null){
+                    hyperparameter_table_obj.extend_rows(1)
+                    hyperparameter_table_obj.append(hyperparameter_table_rows, 0,'<input type="text" name=hyparameter_name>');
+                    hyperparameter_table_obj.append(hyperparameter_table_rows, 1, '<input type="text" name=hyparameter_type>');
+                    hyperparameter_table_obj.append(hyperparameter_table_rows, 2, '<input type="text" name=hyparameter_scaling>');
+                    hyperparameter_table_obj.append(hyperparameter_table_rows, 3, '<input type="text" name=hyparameter_params>');
+                    hyperparameter_table_rows += 1;
+                }
             })
         })
 
@@ -500,16 +602,21 @@
                         <td><input type="number" id="study_maxtime"></td>
                     </tr>
                     <tr>
-                        <td>HyperParameterSearch<span class="label label-default" id="study_add_parameter">+</span></td>
+                        <td>HyperParameterSearch<a href="javascript:void(0)" id="study_add_hyperparameter"><span class="badge">+</span></a></td>
                         <td>
                             <form role="form">
                               <div class="form-group">
                                 <select class="form-control" id="study_hyperparameter_search">
-                                  <option></option>
-                                  <option>grid_search</option>
+                                  <option name="hyperparameter" data="">-</option>
+                                    {% for s in automl['hyperparameter'] %}
+                                    <option name="hyperparameter" data="{{s}}">{{s}}</option>
+                                    {% end %}
                                 </select>
                               </div>
                             </form>
+                            <div id="hyperparameter_block">
+
+                            </div>
                         </td>
                     </tr>
                     <tr>
@@ -518,17 +625,17 @@
                             <form role="form">
                               <div class="form-group">
                                 <select class="form-control" id="study_architecture_search">
-                                    <option></option>
-                                    <option>dense_architecture</option>
+                                    <option name="searchspace" data="">-</option>
+                                    {% for s in automl['searchspace'] %}
+                                    <option name="searchspace" data="{{s}}">{{s}}</option>
+                                    {% end %}
                                 </select>
                               </div>
                             </form>
-                            <button id="upload_json" class="btn btn-default btn-blue-to-white" type="button" file_name="">upload</button>
+                            <div id="searchspace_block">
+
+                            </div>
                         </td>
-                    </tr>
-                    <tr>
-                        <td>Flops</td>
-                        <td><input type="number" id="study_flops"></td>
                     </tr>
                 </tbody>
             </table>

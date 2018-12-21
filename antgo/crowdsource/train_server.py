@@ -242,8 +242,8 @@ def request_suggestion_process(experiment_records, server_records):
       if experiment_record['status'] != 'stop':
         train_p = experiment_record['pid']
 
-        if train_p.poll() == 0:
-          train_p.wait()
+        if train_p.poll() is not None:
+          # experiment process has exit
           # release occupied devices
           free_devices = experiment_record['devices']
           server_records['occupied_devices'] = \
@@ -417,12 +417,24 @@ class IndexHanlder(BaseHandler):
 
         study_info['name'] = study_name
         study_info['index'] = s_i
-        study_info['objective_value'] = trials[0][-1] if len(trials) > 0 else -1
+        study_info['objective_value'] = '%0.4f'%float(trials[0][-1]) if len(trials) > 0 else -1
         study_info['status'] = study_status
         study_info['created_time'] = '-' if study_created_time is None else datetime.fromtimestamp(study_created_time).strftime('%Y-%m-%d')
 
         study_infos.append(study_info)
-      self.render(self.html_template, automl={'study': study_infos})
+
+
+      self.client_socket.send_json({'cmd': 'searchspace/all'})
+      response = yield self.client_socket.recv_json()
+      searchspace_names = response['result']
+
+      self.client_socket.send_json({'cmd': 'hyperparameter/all'})
+      response = yield self.client_socket.recv_json()
+      hyperparameter_names = response['result']
+
+      self.render(self.html_template, automl={'study': study_infos,
+                                              'searchspace': searchspace_names,
+                                              'hyperparameter': hyperparameter_names})
 
 
 class StudyStartorStopHandler(BaseHandler):
@@ -456,7 +468,7 @@ class StudyGetHandler(BaseHandler):
     trials_list = [{'trial_name': t[0],
                     'trial_created_time': datetime.fromtimestamp(t[1]).strftime('%Y-%m-%d %H:%M:%S'),
                     'trial_status': t[2],
-                    'trial_objective_value': t[3]} for t in trials[0:20]]
+                    'trial_objective_value': '%0.4f'%float(t[3])} for t in trials[0:20]]
     self.write(json.dumps(trials_list))
     self.finish()
 
@@ -470,8 +482,8 @@ class StudyAddHandler(BaseHandler):
     study_hyperparameter_search = self.get_argument('study_hyperparameter_search', '')
     study_hyperparameters = self.get_argument('study_hyperparameters', '')
     study_architecture_search = self.get_argument('study_architecture_search', '')
-    study_default_architecture = self.get_argument('study_default_architecture', '')
-    study_flops = self.get_argument('study_flops', 0)
+    # study_default_architecture = self.get_argument('study_default_architecture', '')
+    study_architecture_search_params = self.get_argument('study_architecture_search_params', '')
 
     if len(study_name) == 0:
       self.set_status(500)
@@ -487,29 +499,51 @@ class StudyAddHandler(BaseHandler):
       self.finish()
       return
 
-    if len(study_default_architecture) > 0 and len(study_architecture_search) == 0:
+    if len(study_architecture_search_params) > 0 and len(study_architecture_search) == 0:
       self.set_status(500)
       self.write(json.dumps({'code': 'InvalidInput',
                              'message': 'must set architecture search space'}))
       self.finish()
       return
 
-    if len(study_hyperparameters) == 0 and len(study_architecture_search) == 0:
+    if len(study_hyperparameter_search) == 0 and len(study_architecture_search) == 0:
       self.set_status(500)
       self.write(json.dumps({'code': 'InvalidInput',
-                             'message': 'must set study_hyperparameters or study_architecture'}))
+                             'message': 'must set study_hyperparameter_search or study_architecture_search'}))
       self.finish()
       return
 
-    upload_file_path = ''
-    if len(study_default_architecture) > 0:
-      upload_file_path = os.path.join(self.main_folder, 'static', 'upload', study_default_architecture)
+    if len(study_architecture_search_params) > 0:
+      study_architecture_search_params = json.loads(study_architecture_search_params)
+      if 'graph' in study_architecture_search_params:
+        if study_architecture_search_params['graph'] == '':
+          self.set_status(404)
+          self.write(json.dumps({'code': 'InvaildUploadFile'}))
+          self.finish()
+          return
 
-    if not os.path.exists(upload_file_path):
-      self.set_status(404)
-      self.write(json.dumps({'code': 'InvaildUploadFile'}))
-      self.finish()
-      return
+        upload_file_path = os.path.join(self.main_folder, 'static', 'upload', study_architecture_search_params['graph'])
+        if (not os.path.isfile(upload_file_path)) or (not os.path.exists(upload_file_path)):
+          self.set_status(404)
+          self.write(json.dumps({'code': 'InvaildUploadFile'}))
+          self.finish()
+          return
+
+        study_architecture_search_params['graph'] = upload_file_path
+
+      if 'flops' in study_architecture_search_params:
+        if study_architecture_search_params['flops'] == '':
+          self.set_status(400)
+          self.write(json.dumps({'code': 'InvaildInput', 'message': 'invalid flops'}))
+          self.finish()
+          return
+
+        study_architecture_search_params['flops'] = float(study_architecture_search_params['flops'])
+
+    if len(study_hyperparameters) > 0:
+      study_hyperparameters = json.loads(study_hyperparameters)
+    else:
+      study_hyperparameters = []
 
     study_max_time = '%dd'%int(study_max_time)
     self.client_socket.send_json({'cmd': 'study/add',
@@ -519,8 +553,7 @@ class StudyAddHandler(BaseHandler):
                                   'study_hyperparameter_search': study_hyperparameter_search,
                                   'study_hyperparameters': study_hyperparameters,
                                   'study_architecture_search': study_architecture_search,
-                                  'study_default_architecture': upload_file_path,
-                                  'study_flops': study_flops})
+                                  'study_architecture_parameters': study_architecture_search_params,})
 
     response = yield self.client_socket.recv_json()
 
@@ -530,6 +563,34 @@ class StudyAddHandler(BaseHandler):
       self.finish()
       return
 
+    self.finish()
+
+
+class SearchspaceGetHandler(BaseHandler):
+  @gen.coroutine
+  def post(self):
+    searchspace_name = self.get_argument('searchspace', '')
+    if searchspace_name == '':
+      self.write(json.dumps({}))
+      self.finish()
+      return
+
+    self.client_socket.send_json({'cmd': 'searchspace/get',
+                                  'searchspace': searchspace_name})
+
+    response = yield self.client_socket.recv_json()
+    if len(response) == 0:
+      self.set_status(500)
+      self.finish()
+      return
+
+    if response['status'] == 'fail':
+      self.set_status(404)
+      self.finish()
+      return
+
+    searchspace_params = response['result']
+    self.write(json.dumps(searchspace_params))
     self.finish()
 
 
@@ -939,6 +1000,7 @@ def train_server_start(main_file,
                                               ('/study/delete/', StudyDeleteHandler),
                                               ('/study/get/', StudyGetHandler),
                                               ('/study/add/', StudyAddHandler),
+                                              ('/searchspace/get/', SearchspaceGetHandler),
                                               ('/trial/([^/]+)/', TrialInfoHanlder),
                                               ('/trial/download/([^/]+)/([^/]+)/configure/', TrialDownloadConfigureHandler),
                                               ('/trial/download/([^/]+)/([^/]+)/experiment/', TrialDownloadExperimentHandler),
