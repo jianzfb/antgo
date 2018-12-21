@@ -37,8 +37,6 @@ class DPCSearchSpace(AbstractSearchSpace):
     self.study = study
     self.bo_min_samples = int(kwargs.get('bo_min_samples', DPCSearchSpace.default_params['bo_min_samples']))
 
-    # study_configuration = json.loads(self.study.study_configuration)
-    # graph_content = study_configuration['graph']
     graph_content = kwargs.get('graph', '')
     self.graph = Decoder().decode(graph_content)
     self.graph.layer_factory = BaseLayerFactory()
@@ -48,7 +46,12 @@ class DPCSearchSpace(AbstractSearchSpace):
     self.trials = Trial.filter(study_name=self.study.name, status='Completed')
 
     # initialize bayesian optimizer
-    self.bo = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
+    study_configuration = json.loads(study.study_configuration)
+    if study_configuration['goal'] == 'MAXIMIZE':
+      self.bo = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
+    else:
+      self.bo = BayesianOptimizer(0.0001, Loss, 0.1, 2.576)
+
     x_queue = [np.array(trial.structure_encoder) for trial in self.trials]
     y_queue = [trial.objective_value for trial in self.trials]
     if len(x_queue) > self.bo_min_samples:

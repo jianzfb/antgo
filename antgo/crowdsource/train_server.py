@@ -477,6 +477,7 @@ class StudyAddHandler(BaseHandler):
   @gen.coroutine
   def post(self):
     study_name = self.get_argument('study_name', '')
+    study_goal = self.get_argument('study_goal', 'MAXIMIZE')
     study_max_trials = int(self.get_argument('study_max_trials', '10'))
     study_max_time = int(self.get_argument('study_max_time', '10'))
     study_hyperparameter_search = self.get_argument('study_hyperparameter_search', '')
@@ -548,6 +549,7 @@ class StudyAddHandler(BaseHandler):
     study_max_time = '%dd'%int(study_max_time)
     self.client_socket.send_json({'cmd': 'study/add',
                                   'study_name': study_name,
+                                  'study_goal': study_goal,
                                   'study_max_trials': int(study_max_trials),
                                   'study_max_time': study_max_time,
                                   'study_hyperparameter_search': study_hyperparameter_search,

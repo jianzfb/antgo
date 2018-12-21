@@ -209,7 +209,7 @@ def bourgain_embedding_matrix(distance_matrix):
     return rbf_kernel(distort_elements, distort_elements)
 
 
-class BayesianOptimizer:
+class BayesianOptimizer(object):
     """
 
     gpr: A GaussianProcessRegressor for bayesian optimization.
@@ -254,7 +254,7 @@ class BayesianOptimizer:
             if ap >= random.uniform(0, 1):
                 for model_x, model in searcher.random(1):
                     # UCB acquisition function
-                    temp_acq_value = self.acq(np.expand_dims(model_x,0))[0]
+                    temp_acq_value = self.acq(np.expand_dims(model_x, 0))[0]
                     pq.put(elem_class(temp_acq_value, model))
 
                     if self._accept_new_acq_value(opt_acq, temp_acq_value):

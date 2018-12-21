@@ -9,8 +9,7 @@ from abc import abstractmethod
 from sklearn.metrics import accuracy_score, mean_squared_error
 
 
-class Metric:
-
+class Metric(object):
   @classmethod
   @abstractmethod
   def higher_better(cls):
@@ -41,3 +40,9 @@ class Accuracy(Metric):
   @classmethod
   def evaluate(cls, prediction, target):
     return accuracy_score(prediction, target)
+
+
+class Loss(Metric):
+  @classmethod
+  def higher_better(cls):
+    return False

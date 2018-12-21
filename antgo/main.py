@@ -290,25 +290,25 @@ def main():
 
   ant_context.name = name
 
-  # # 8.4 step load experiment
-  # if FLAGS.from_experiment() is not None and \
-  #         FLAGS.running_platform() == 'local' and \
-  #         ant_cmd not in ['release']:
-  #   experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
-  #   if not os.path.exists(experiment_path):
-  #     process = multiprocessing.Process(target=experiment_download_dht,
-  #                                       args=(dump_dir, FLAGS.from_experiment(), token, token))
-  #     process.start()
-  #     process.join()
-  #
-  #   if not os.path.exists(experiment_path):
-  #     logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
-  #     exit(-1)
-  #
-  #   if os.path.exists(os.path.join(dump_dir, FLAGS.from_experiment(), 'train')):
-  #     ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
-  #   else:
-  #     ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
+  # 8.4 step load experiment
+  if FLAGS.from_experiment() is not None and \
+          FLAGS.running_platform() == 'local' and \
+          ant_cmd not in ['release']:
+    experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
+    # if not os.path.exists(experiment_path):
+    #   process = multiprocessing.Process(target=experiment_download_dht,
+    #                                     args=(dump_dir, FLAGS.from_experiment(), token, token))
+    #   process.start()
+    #   process.join()
+
+    if not os.path.exists(experiment_path):
+      logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
+      exit(-1)
+
+    if os.path.exists(os.path.join(dump_dir, FLAGS.from_experiment(), 'train')):
+      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
+    else:
+      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
   
   # tools
   if ant_cmd == 'tools/tffrozen':

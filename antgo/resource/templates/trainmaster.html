@@ -155,6 +155,7 @@
 
             $('#study_submit').on('click', function () {
                 var study_name = $('#study_name').val();
+                var study_goal = $('#study_goal').find("option:selected").text();
                 var study_max_trials = $('#study_maxtrials').val();
                 var study_max_time = $('#study_maxtime').val();
                 var study_hyperparameter_search = $("#study_hyperparameter_search").find("option:selected").attr('data');
@@ -195,6 +196,7 @@
 
                 $.post('/study/add/', {
                     'study_name': study_name,
+                    'study_goal': study_goal,
                     'study_max_trials': study_max_trials,
                     'study_max_time': study_max_time,
                     'study_hyperparameter_search': study_hyperparameter_search,
@@ -594,6 +596,19 @@
                         <td><input type="text" id="study_name"></td>
                     </tr>
                     <tr>
+                        <td>Goal</td>
+                        <td>
+                            <form role="form">
+                              <div class="form-group">
+                                <select class="form-control" id="study_goal" style="width: 150px;">
+                                    <option>MAXIMIZE</option>
+                                    <option>MINIMIZE</option>
+                                </select>
+                              </div>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr>
                         <td>MaxTrials</td>
                         <td><input type="number" id="study_maxtrials"/></td>
                     </tr>
@@ -606,7 +621,7 @@
                         <td>
                             <form role="form">
                               <div class="form-group">
-                                <select class="form-control" id="study_hyperparameter_search">
+                                <select class="form-control" id="study_hyperparameter_search" style="width: 150px;">
                                   <option name="hyperparameter" data="">-</option>
                                     {% for s in automl['hyperparameter'] %}
                                     <option name="hyperparameter" data="{{s}}">{{s}}</option>
@@ -624,7 +639,7 @@
                         <td>
                             <form role="form">
                               <div class="form-group">
-                                <select class="form-control" id="study_architecture_search">
+                                <select class="form-control" id="study_architecture_search" style="width: 150px;">
                                     <option name="searchspace" data="">-</option>
                                     {% for s in automl['searchspace'] %}
                                     <option name="searchspace" data="{{s}}">{{s}}</option>

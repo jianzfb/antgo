@@ -95,6 +95,7 @@ class AntTrainServer(AntBase):
 
   def add_study(self, query):
     study_name = query.get('study_name', '')
+    study_goal = query.get('study_goal', 'MAXIMIZE')
     study_max_trials = query.get('study_max_trials', 100)
     study_max_time = query.get('study_max_time', '1d')
     study_hyperparameter_search = query.get('study_hyperparameter_search', '')
@@ -110,7 +111,7 @@ class AntTrainServer(AntBase):
       return {'status': 'fail'}
 
     study_configuration = {
-      "goal": "MAXIMIZE",
+      "goal": study_goal,
       "maxTrials": study_max_trials,
       "maxTime": study_max_time,
       "searchSpace": {},
