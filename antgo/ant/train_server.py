@@ -13,8 +13,9 @@ from antgo.automl.suggestion.searchspace.dpc import *
 from antgo.automl.suggestion.searchspace.searchspace_factory import *
 from antgo.automl.suggestion.algorithm.hyperparameters_factory import *
 from antgo.automl.graph import *
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
-
 import json
 
 import socket

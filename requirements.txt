@@ -20,3 +20,4 @@ imageio
 qiniu
 pycryptodome
 sklearn
+matplotlib
