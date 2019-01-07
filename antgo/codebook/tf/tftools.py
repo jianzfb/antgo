@@ -86,7 +86,7 @@ def tftool_frozen_graph(ctx,
   # 5.step build optimized graph
   with tf.Graph().as_default() as graph:
     input_graph_def = graph.as_graph_def()
-    with open(output_graph_path, 'rb') as f:
+    with tf.gfile.FastGFile(output_graph_path,'rb') as f:
       input_graph_def.ParseFromString(f.read())
 
       _ = tf.import_graph_def(input_graph_def, name="")
@@ -99,7 +99,7 @@ def tftool_frozen_graph(ctx,
                                                                        tf.float32.as_datatype_enum)
 
   optimized_path = os.path.join(dump_dir, "optimized_model.pb")
-  f = tf.gfile.FastGFile(optimized_path, "w")
+  f = tf.gfile.FastGFile(optimized_path, "wb")
   f.write(output_graph_def.SerializeToString())
 
 

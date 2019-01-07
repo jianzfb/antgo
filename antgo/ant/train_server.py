@@ -13,6 +13,8 @@ from antgo.automl.suggestion.searchspace.dpc import *
 from antgo.automl.suggestion.searchspace.searchspace_factory import *
 from antgo.automl.suggestion.algorithm.hyperparameters_factory import *
 from antgo.automl.graph import *
+import matplotlib.pyplot as plt
+
 import json
 
 import socket
@@ -178,6 +180,26 @@ class AntTrainServer(AntBase):
 
     return{'status': 'ok', 'result': all_trails_result}
 
+  def study_visualization(self, query):
+    study_name = query.get('study_name', None)
+    study = Study.get(name=study_name)
+    if study is None:
+      return {'status': 'fail'}
+
+    dump_dir = query.get('dump_dir', None)
+    if dump_dir is None:
+      return {'status': 'fail'}
+
+    all_trails = Trial.filter(study_name=study_name, status='Completed')
+    all_trails = sorted(all_trails, key=lambda x: x.created_time)
+    plt.xlabel('time(hours)')
+    plt.ylabel('test accuracy')
+    x = [(m.created_time-study.created_time)/3600 for m in all_trails]
+    y = [m.objective_value for m in all_trails]
+    plt.scatter(x=x, y=y, c='r',marker='o')
+    plt.savefig('%s/study_%s_vis.png'%(dump_dir, study_name))
+    return {'status': 'ok', 'result': 'study_%s_vis.png'%study_name}
+
   def get_studys(self, query):
     studys = [(s.name, s.created_time, s.id, s.status) for s in Study.contents]
     return {'status': 'ok', 'result': studys}
@@ -252,6 +274,8 @@ class AntTrainServer(AntBase):
           response = self.get_searchspace_all(client_query)
         elif cmd == 'hyperparameter/all':
           response = self.get_hyperparameter_all(client_query)
+        elif cmd == "study/visualization":
+          response = self.study_visualization(client_query)
 
         self._backend.send_json(response)
       except:

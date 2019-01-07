@@ -85,6 +85,9 @@ class BaseHandler(tornado.web.RequestHandler):
   def html_template(self):
     return self.settings['html_template']
 
+  @property
+  def image_folder(self):
+    return self.settings['static_path']
 
 def update_suggestion_process(server_records, experiment_records):
   running_experiments = []
@@ -543,6 +546,45 @@ class StudyAddHandler(BaseHandler):
 
     if len(study_hyperparameters) > 0:
       study_hyperparameters = json.loads(study_hyperparameters)
+      for hp in study_hyperparameters:
+        if hp['type'] not in ['DOUBLE', 'INTEGER', 'DISCRETE', 'CATEGORICAL']:
+          self.set_status(400)
+          self.write(json.dumps({'code': 'InvaildInput', 'message': 'invalid hyperparameter'}))
+          self.finish()
+          return
+        if hp['scalingType'] not in ['LINEAR']:
+          self.set_status(400)
+          self.write(json.dumps({'code': 'InvaildInput', 'message': 'invalid hyperparameter'}))
+          self.finish()
+          return
+
+        if hp['type'] in ['DOUBLE', 'INTEGER']:
+          try:
+            min_val, max_val = hp['params'].split(',')
+            if hp['type'] == 'DOUBLE':
+              min_val = float(min_val)
+              max_val = float(max_val)
+              assert(min_val <= max_val)
+
+            if hp['type'] == 'INTEGER':
+              min_val = int(min_val)
+              max_val = int(min_val)
+              assert(min_val <= max_val)
+
+            hp.pop('params')
+            hp['minValue'] = min_val
+            hp['maxValue'] = max_val
+          except:
+            self.set_status(400)
+            self.write(json.dumps({'code': 'InvaildInput', 'message': 'invalid hyperparameter'}))
+            self.finish()
+            return
+
+        if hp['type'] in ['DISCRETE', 'CATEGORICAL']:
+          feasiblePoints = hp['params'].split(',')
+          hp.pop('params')
+          hp['feasiblePoints'] = feasiblePoints
+
     else:
       study_hyperparameters = []
 
@@ -567,6 +609,24 @@ class StudyAddHandler(BaseHandler):
 
     self.finish()
 
+
+class StudyVisHandler(BaseHandler):
+  @gen.coroutine
+  def get(self, study_name):
+    self.client_socket.send_json({'cmd': 'study/visualization',
+                                  'study_name': study_name,
+                                  'dump_dir': self.image_folder})
+
+    response = yield self.client_socket.recv_json()
+    if len(response) == 0 or response['status'] != 'ok':
+      self.set_status(404)
+      self.write(json.dumps({'code': 'InvalidServer'}))
+      self.finish()
+      return
+
+    study_image_url = response['result']
+    self.write(json.dumps({'url': study_image_url}))
+    self.finish()
 
 class SearchspaceGetHandler(BaseHandler):
   @gen.coroutine
@@ -1002,6 +1062,7 @@ def train_server_start(main_file,
                                               ('/study/delete/', StudyDeleteHandler),
                                               ('/study/get/', StudyGetHandler),
                                               ('/study/add/', StudyAddHandler),
+                                              ('/study/([^/]+)/vis/', StudyVisHandler),
                                               ('/searchspace/get/', SearchspaceGetHandler),
                                               ('/trial/([^/]+)/', TrialInfoHanlder),
                                               ('/trial/download/([^/]+)/([^/]+)/configure/', TrialDownloadConfigureHandler),

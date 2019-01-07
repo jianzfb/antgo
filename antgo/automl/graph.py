@@ -706,7 +706,7 @@ class Graph(object):
   def size(self):
     return sum(list(map(lambda x: x.size(), self.layer_list)))
 
-  def materialization(self, input_nodes=None, output_nodes=None, layer_factory=None):
+  def materialization(self, input_nodes=None, output_nodes=None, layer_factory=None, batch_size=1):
     self.layers = []
 
     # Input
@@ -714,12 +714,25 @@ class Graph(object):
     node_list = deepcopy(self.node_list)
     if input_nodes is None:
       input_id = topo_node_list[0]
-      input_tensor = self.layer_factory.input(shape=self.node_list[input_id].shape)()
-      node_list[input_id] = input_tensor
+      input_shape = self.node_list[input_id].shape
+      input_shape[0] = batch_size
+      if layer_factory is None:
+        input_tensor = self.layer_factory.input(shape=input_shape)()
+        node_list[input_id] = input_tensor
+      else:
+        input_tensor = layer_factory.input(shape=input_shape)()
+        node_list[input_id] = input_tensor
     elif type(input_nodes[0]) == int:
       for n_i in input_nodes:
-        input_tensor = self.layer_factory.input(shape=self.node_list[n_i].shape)()
-        node_list[n_i] = input_tensor
+        input_shape = self.node_list[n_i].shape
+        input_shape[0] = batch_size
+
+        if layer_factory is None:
+          input_tensor = self.layer_factory.input(shape=input_shape)()
+          node_list[n_i] = input_tensor
+        else:
+          input_tensor = layer_factory.input(shape=input_shape)()
+          node_list[n_i] = input_tensor
     else:
       for n_i, n_tensor in enumerate(input_nodes):
         node_list[n_i] = n_tensor

@@ -180,8 +180,8 @@
                 var study_hyperparameters = [];
                 $('input[name=hyparameter_name]').each(function(){
                     var p_name = $(this).val();
-                    var p_type = $(this).parent().parent().find('input[name=hyparameter_type]').val();
-                    var p_scaling = $(this).parent().parent().find('input[name=hyparameter_scaling]').val();
+                    var p_type = $(this).parent().parent().find('select[name=hyparameter_type]').find("option:selected").text()
+                    var p_scaling = $(this).parent().parent().find('select[name=hyparameter_scaling]').find("option:selected").text()
                     var p_params = $(this).parent().parent().find('input[name=hyparameter_params]').val();
 
                     study_hyperparameters.push({'parameterName': p_name,
@@ -262,10 +262,12 @@
                     // create table
                     hyperparameter_table_obj = LayoutTable('hyperparameter_table', 1, 4);
                     hyperparameter_table_obj.create2($('#hyperparameter_block'), ["name", "type", "scaling", "params"]);
-                    hyperparameter_table_obj.append(0, 0, '<input type="text" name=hyparameter_name>');
-                    hyperparameter_table_obj.append(0, 1, '<input type="text" name=hyparameter_type>');
-                    hyperparameter_table_obj.append(0, 2, '<input type="text" name=hyparameter_scaling>');
-                    hyperparameter_table_obj.append(0, 3, '<input type="text" name=hyparameter_params>');
+                    hyperparameter_table_obj.append(0, 0, '<input type="text" name="hyparameter_name">');
+                    // hyperparameter_table_obj.append(0, 1, '<input type="text" name=hyparameter_type>');
+                    hyperparameter_table_obj.append(0, 1, '<form role="form"><div class="form-group"><select class="form-control" name="hyparameter_type" style="width: 100px;"><option>DOUBLE</option><option>INTEGER</option><option>DISCRETE</option><option>CATEGORICAL</option></select></div></form>');
+                    // hyperparameter_table_obj.append(0, 2, '<input type="text" name=hyparameter_scaling>');
+                    hyperparameter_table_obj.append(0, 2, '<form role="form"><div class="form-group"><select class="form-control" name="hyparameter_scaling" style="width: 100px;"><option>LINEAR</option></select></div></form>');
+                    hyperparameter_table_obj.append(0, 3, '<input type="text" name="hyparameter_params">');
 
                     hyperparameter_table_rows = 1;
                 }
@@ -274,13 +276,33 @@
             $('#study_add_hyperparameter').on('click', function(){
                 if(hyperparameter_table_obj != null){
                     hyperparameter_table_obj.extend_rows(1)
-                    hyperparameter_table_obj.append(hyperparameter_table_rows, 0,'<input type="text" name=hyparameter_name>');
-                    hyperparameter_table_obj.append(hyperparameter_table_rows, 1, '<input type="text" name=hyparameter_type>');
-                    hyperparameter_table_obj.append(hyperparameter_table_rows, 2, '<input type="text" name=hyparameter_scaling>');
+                    hyperparameter_table_obj.append(hyperparameter_table_rows, 0,'<input type="text" name="hyparameter_name">');
+                    // hyperparameter_table_obj.append(hyperparameter_table_rows, 1, '<input type="text" name=hyparameter_type>');
+                    hyperparameter_table_obj.append(hyperparameter_table_rows, 1, '<form role="form"><div class="form-group"><select class="form-control" name="hyparameter_type" style="width: 100px;"><option>DOUBLE</option><option>INTEGER</option><option>DISCRETE</option><option>CATEGORICAL</option></select></div></form>');
+                    // hyperparameter_table_obj.append(hyperparameter_table_rows, 2, '<input type="text" name=hyparameter_scaling>');
+                    hyperparameter_table_obj.append(hyperparameter_table_rows, 2, '<form role="form"><div class="form-group"><select class="form-control" name="hyparameter_scaling" style="width: 100px;"><option>LINEAR</option></select></div></form>');
                     hyperparameter_table_obj.append(hyperparameter_table_rows, 3, '<input type="text" name=hyparameter_params>');
                     hyperparameter_table_rows += 1;
                 }
             })
+
+            $('a[name=studyvis]').each(function(){
+                $(this).on('click', function(event){
+                    var study_name = $(this).parent().attr('study_name');
+                    $.get('/study/{0}/vis/'.format(study_name), {
+                        'study_name': study_name,
+                    }, function(data, status){
+                        var data_obj = eval('('+data+')');
+                        var img_url = data_obj['url'];
+
+                        $('#study_show_vis_img').attr('src', '/static/{0}'.format(img_url));
+                        $('#study_show_modal').modal()
+                    })
+
+                    event.stopPropagation()
+                })
+            })
+
         })
 
     </script>
@@ -493,6 +515,17 @@
     </style>
 </head>
 
+<div class="modal fade" id="study_show_modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-body">
+            <img src="" id="study_show_vis_img">
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal -->
+</div>
+
+
 <div class="modal fade" id="trail_modal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -505,6 +538,7 @@
         </div><!-- /.modal-content -->
     </div><!-- /.modal -->
 </div>
+
 
 
 <body>
@@ -543,6 +577,7 @@
                       <th scope="col">Error Trail</th>
                       <th scope="col">Objective Value</th>
                       <th scope="col">Status</th>
+                      <th scope="col">Show</th>
                       <th scope="col">Operator</th>
                       <th scope="col">Delete</th>
                     </tr>
@@ -558,6 +593,7 @@
                         <th>{{s['error_trial']}}</th>
                         <th>{{s['objective_value']}}</th>
                         <th name="status">{{s['status']}}</th>
+                        <th study_name="{{s['name']}}"> <a href="javascript:void(0)" name="studyvis"><span class="badge">show</span></a></th>
                         <th>
                             {%if s['status'] == 'running'%}
                                 <a href="javascript:void(0)" name="studyop"><span class="badge">stop</span></a>
