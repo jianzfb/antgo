@@ -13,6 +13,7 @@ from six.moves import urllib
 import uuid
 
 def qiniu_upload(file_path, bucket='mltalker', out_url_base = 'http://experiment.mltalker.com', max_size=10):
+  return 'qiniu:%s/%s' % ('http:127.0.0.1', 'aaa')
   access_key = 'ZSC-X2p4HG5uvEtfmn5fsTZ5nqB3h54oKjHt0tU6'
   secret_key = 'Ya8qYwIDXZn6jSJDMz_ottWWOZqlbV8bDTNfCGO0'
   q = Auth(access_key, secret_key)
