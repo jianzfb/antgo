@@ -570,7 +570,7 @@ class EvolutionSearchSpace(AbstractSearchSpace):
 
           cell_id_offset += cell_num[block_id]
 
-        default_graph.visualization('aa.png')
+        # default_graph.visualization('aa.png')
 
         graph_encoder_str = Encoder(skipkeys=True).encode(default_graph)
         self.current_population.append(graph_encoder_str)
