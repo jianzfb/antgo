@@ -14,4 +14,3 @@ def _global_import(name):
         globals()[k] = p.__dict__[k]
 
 _global_import('utils')
-_global_import('net')
