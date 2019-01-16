@@ -20,4 +20,4 @@ imageio
 qiniu
 pycryptodome
 sklearn
-matplotlib
+matplotlib==2.2.3

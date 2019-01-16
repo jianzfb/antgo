@@ -19,7 +19,7 @@ class BaseStubWeightBiasLayer(StubLayer):
 
 class BaseStubDense(BaseStubWeightBiasLayer):
   def __init__(self, input_units, units, input=None, output=None, **kwargs):
-    super(BaseStubDense, self).__init__(input, output)
+    super(BaseStubDense, self).__init__(input, output, **kwargs)
     self.input_units = input_units
     self.units = units
     self.layer_type = 'dense'
@@ -36,10 +36,17 @@ class BaseStubDense(BaseStubWeightBiasLayer):
   def flops(self):
     return self.input_units * self.units + (self.input_units - 1) + self.units
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.dense(self.input_units, self.units, block_name=self.block_name, cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubConv2d(BaseStubWeightBiasLayer):
   def __init__(self, input_channel, filters, kernel_size_h, kernel_size_w, rate_h=1, rate_w=1, stride=1, input=None, output=None, **kwargs):
-    super(BaseStubConv2d, self).__init__(input, output)
+    super(BaseStubConv2d, self).__init__(input, output, **kwargs)
     self.input_channel = input_channel
     self.filters = filters
     self.kernel_size_h = kernel_size_h
@@ -76,10 +83,25 @@ class BaseStubConv2d(BaseStubWeightBiasLayer):
 
     return total_flops_per_layer
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.conv2d(self.input_channel,
+                                        self.filters,
+                                        self.kernel_size_h,
+                                        self.kernel_size_w,
+                                        self.rate_h,
+                                        self.rate_w,
+                                        self.stride,
+                                        block_name=self.block_name,
+                                        cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubSeparableConv2d(BaseStubWeightBiasLayer):
   def __init__(self, input_channel, filters, kernel_size_h, kernel_size_w, rate_h=1, rate_w=1, stride=1, input=None, output=None, **kwargs):
-    super(BaseStubSeparableConv2d, self).__init__(input, output)
+    super(BaseStubSeparableConv2d, self).__init__(input, output, **kwargs)
     self.input_channel = input_channel
     self.filters = filters
     self.kernel_size_h = kernel_size_h
@@ -123,10 +145,25 @@ class BaseStubSeparableConv2d(BaseStubWeightBiasLayer):
 
     return total_flops_per_layer_step_1+total_flops_per_layer_step_2
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.separable_conv2d(self.input_channel,
+                                                  self.filters,
+                                                  self.kernel_size_h,
+                                                  self.kernel_size_w,
+                                                  self.rate_h,
+                                                  self.rate_w,
+                                                  self.stride,
+                                                  block_name=self.block_name,
+                                                  cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubSPP(BaseStubWeightBiasLayer):
   def __init__(self, grid_h, grid_w, input=None, output=None, **kwargs):
-    super(BaseStubSPP, self).__init__(input, output)
+    super(BaseStubSPP, self).__init__(input, output, **kwargs)
     self.grid_h = grid_h
     self.grid_w = grid_w
     self.layer_type = 'spp'
@@ -155,12 +192,23 @@ class BaseStubSPP(BaseStubWeightBiasLayer):
 
     return flops_step_1 + flops_step_2 + flops_step_3
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.spp(self.grid_h,
+                                     self.grid_w,
+                                     self.input,
+                                     block_name=self.block_name,
+                                     cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubConcatenate(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
     if input is None:
       input = []
-    super(BaseStubConcatenate, self).__init__(input, output)
+    super(BaseStubConcatenate, self).__init__(input, output, **kwargs)
     self.layer_type = 'concat'
     self.layer_name = 'concat'
 
@@ -172,10 +220,18 @@ class BaseStubConcatenate(StubLayer):
     ret = tuple(self.input[0].shape[:-1]) + (ret,)
     return ret
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.concat(block_name=self.block_name,
+                                        cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubAdd(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
-    super(BaseStubAdd, self).__init__(input, output)
+    super(BaseStubAdd, self).__init__(input, output, **kwargs)
     self.layer_type = 'add'
     self.layer_name = 'add'
 
@@ -186,10 +242,18 @@ class BaseStubAdd(StubLayer):
   def flops(self):
     return self.input[0].shape[1] * self.input[0].shape[2] * self.input[0].shape[3] - 1
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.add(block_name=self.block_name,
+                                     cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubFlatten(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
-    super(BaseStubFlatten, self).__init__(input, output)
+    super(BaseStubFlatten, self).__init__(input, output, **kwargs)
     self.layer_type = 'flatten'
     self.layer_name = 'flatten'
 
@@ -200,40 +264,72 @@ class BaseStubFlatten(StubLayer):
       ret *= dim
     return ret,
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.flatten(block_name=self.block_name,
+                                         cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubReLU(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
-    super(BaseStubReLU, self).__init__(input, output)
+    super(BaseStubReLU, self).__init__(input, output, **kwargs)
     self.layer_type = 'relu'
     self.layer_name = 'relu'
 
   def flops(self):
     return self.input.shape[1] * self.input.shape[2] * self.input.shape[3]
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.relu(block_name=self.block_name,
+                                      cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubReLU6(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
-    super(BaseStubReLU6, self).__init__(input, output)
+    super(BaseStubReLU6, self).__init__(input, output, **kwargs)
     self.layer_type = 'relu6'
     self.layer_name = 'relu6'
 
   def flops(self):
     return self.input.shape[1] * self.input.shape[2] * self.input.shape[3]
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.relu6(block_name=self.block_name,
+                                       cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubSoftmax(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
-    super(BaseStubSoftmax, self).__init__(input, output)
+    super(BaseStubSoftmax, self).__init__(input, output, **kwargs)
     self.layer_type = 'softmax'
     self.layer_name = 'softmax'
 
   def flops(self):
     return 0
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.softmax(block_name=self.block_name,
+                                         cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubPooling(StubLayer):
   def __init__(self, kernel_size_h=2, kernel_size_w=2, input=None, output=None, **kwargs):
-    super(BaseStubPooling, self).__init__(input, output)
+    super(BaseStubPooling, self).__init__(input, output, **kwargs)
     self.kernel_size_h = kernel_size_h
     self.kernel_size_w = kernel_size_w
     self.is_spatial_change = True
@@ -261,6 +357,16 @@ class BaseStubAvgPooling2d(BaseStubPooling):
 
     return total_flops
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.avg_pool2d(self.kernel_size_h,
+                                            self.kernel_size_w,
+                                            block_name=self.block_name,
+                                            cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubMaxPooling2d(BaseStubPooling):
   def __init__(self, kernel_size_h=2, kernel_size_w=2, input=None, output=None, **kwargs):
@@ -275,10 +381,20 @@ class BaseStubMaxPooling2d(BaseStubPooling):
 
     return total_flops
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.max_pool2d(self.kernel_size_h,
+                                            self.kernel_size_w,
+                                            block_name=self.block_name,
+                                            cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubGlobalPooling(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
-    super(BaseStubGlobalPooling, self).__init__(input, output)
+    super(BaseStubGlobalPooling, self).__init__(input, output, **kwargs)
     self.layer_type = 'global_pool2d'
 
   @property
@@ -294,10 +410,17 @@ class BaseStubGlobalPooling2d(BaseStubGlobalPooling):
   def flops(self):
     return self.input.shape[1] * self.input.shape[2] * self.input.shape[3]
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.global_pool2d(block_name=self.block_name, cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubDropout(StubLayer):
   def __init__(self, rate, input=None, output=None, **kwargs):
-    super(BaseStubDropout, self).__init__(input, output)
+    super(BaseStubDropout, self).__init__(input, output, **kwargs)
     self.rate = rate
     self.layer_type = 'dropout'
 
@@ -307,18 +430,34 @@ class BaseStubDropout2d(BaseStubDropout):
     super(BaseStubDropout2d, self).__init__(rate, input, output, **kwargs)
     self.layer_name = 'dropout_2d'
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.dropout_2d(self.rate,
+                                            block_name=self.block_name,
+                                            cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubInput(StubLayer):
   def __init__(self, shape, input=None, output=None, **kwargs):
-    super(BaseStubInput, self).__init__(input, output)
+    super(BaseStubInput, self).__init__(input, output, **kwargs)
     self.shape = shape
     self.layer_type = 'placeholder'
     self.layer_name = 'input'
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.input(self.shape)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubBatchNormalization2d(StubLayer):
   def __init__(self, input=None, output=None, **kwargs):
-    super(BaseStubBatchNormalization2d, self).__init__(input, output)
+    super(BaseStubBatchNormalization2d, self).__init__(input, output, **kwargs)
     self.layer_type = 'bn'
     self.layer_name = 'bn2d'
     self.n_dim = 2
@@ -326,10 +465,18 @@ class BaseStubBatchNormalization2d(StubLayer):
   def flops(self):
     return self.input.shape[1]*self.input.shape[2]*self.input.shape[3]*2
 
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.bn2d(block_name=self.block_name,
+                                      cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 class BaseStubBilinearResize(StubLayer):
   def __init__(self, height, width, input=None, output=None, **kwargs):
-    super(BaseStubBilinearResize, self).__init__(input, output)
+    super(BaseStubBilinearResize, self).__init__(input, output, **kwargs)
     self.height = height
     self.width = width
     self.layer_type = 'resize'
@@ -341,6 +488,16 @@ class BaseStubBilinearResize(StubLayer):
 
   def flops(self):
     return self.input.shape[1] * self.input.shape[2] * self.input.shape[3] * 7
+
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.bilinear_resize(self.height,
+                                                 self.width,
+                                                 block_name=self.block_name,
+                                                 cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
 
 
 class BaseLayerFactory(object):

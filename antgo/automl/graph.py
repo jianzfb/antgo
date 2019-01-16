@@ -16,15 +16,16 @@ except ImportError:
 
 from copy import deepcopy
 from antgo.utils.serialize import *
+from antgo.utils.netvis import *
 
 
-class GraphNode:
+class GraphNode(object):
   def __init__(self, shape, id=-1):
     self.shape = shape
     self.id = id
 
 
-class NetworkDescriptor:
+class NetworkDescriptor(object):
   CONCAT_CONNECT = 'concat'
   ADD_CONNECT = 'add'
 
@@ -192,9 +193,6 @@ class Graph(object):
     layer.output = self.node_list[output_node_id]
     return output_node_id
 
-  def insert_layer(self, layer, output_id):
-    self._insert_new_layers(layer, output_id)
-
   def clear_operation_history(self):
     self.operation_history = []
 
@@ -283,12 +281,23 @@ class Graph(object):
     """Return the topological order of the node ids."""
     q = queue.Queue()
     in_degree = {}
-    for i in range(self.n_nodes):
+    for node in self.node_list:
+      i = node.id
+      if i not in self.adj_list:
+        continue
       in_degree[i] = 0
-    for u in range(self.n_nodes):
+
+    for node in self.node_list:
+      u = node.id
+      if u not in self.adj_list:
+        continue
       for v, _ in self.adj_list[u]:
         in_degree[v] += 1
-    for i in range(self.n_nodes):
+
+    for node in self.node_list:
+      i = node.id
+      if i not in self.adj_list:
+        continue
       if in_degree[i] == 0:
         q.put(i)
 
@@ -451,6 +460,7 @@ class Graph(object):
 
     self._add_edge(new_layers[-1], temp_output_id, self.adj_list[output_id][0][0])
     new_layers[-1].input = self.node_list[temp_output_id]
+    self.node_list[self.adj_list[output_id][0][0]].shape = new_layers[-1].output_shape
     new_layers[-1].output = self.node_list[self.adj_list[output_id][0][0]]
     self._redirect_edge(output_id, self.adj_list[output_id][0][0], new_node_id)
 
@@ -495,10 +505,7 @@ class Graph(object):
         end_id: The convolutional layer ID, after which to end the skip-connection.
     """
     self.operation_history.append(('to_add_skip_model', start_id, end_id))
-    # 默认卷积方式由(conv + bn)组成
     conv_block_input_id = self._conv_block_end_node(start_id)
-    conv_block_input_id = self.adj_list[conv_block_input_id][0][0]
-
     block_last_layer_input_id = self._conv_block_end_node(end_id)
 
     skip_output_id = -1
@@ -506,53 +513,60 @@ class Graph(object):
             self.node_list[conv_block_input_id].shape[2] > self.node_list[block_last_layer_input_id].shape[2]:
       # 1.step 从高分辨率到低分辨率的跳跃(使用pooling)
       # Add the pooling layer chain.
-      layer_list = self._get_pooling_layers(conv_block_input_id, block_last_layer_input_id)
+      # layer_list = self._get_pooling_layers(conv_block_input_id, block_last_layer_input_id)
+      # skip_output_id = conv_block_input_id
+      # for index, layer_id in enumerate(layer_list):
+      #   skip_output_id = self.add_layer(deepcopy(self.layer_list[layer_id]), skip_output_id)
+      kh = self.node_list[conv_block_input_id].shape[1] / self.node_list[block_last_layer_input_id].shape[1]
+      kw = self.node_list[conv_block_input_id].shape[2] / self.node_list[block_last_layer_input_id].shape[2]
+      new_pool_layer = self.layer_factory.pool2d(kernel_size_h=kh, kernel_size_w=kw)
       skip_output_id = conv_block_input_id
-      for index, layer_id in enumerate(layer_list):
-        skip_output_id = self.add_layer(deepcopy(self.layer_list[layer_id]), skip_output_id)
-    else:
+      skip_output_id = self.add_layer(new_pool_layer, skip_output_id)
+    elif self.node_list[conv_block_input_id].shape[1] < self.node_list[block_last_layer_input_id].shape[1] or \
+            self.node_list[conv_block_input_id].shape[2] < self.node_list[block_last_layer_input_id].shape[2]:
       # 2.step 从低分辨率到高分辨率的跳跃(使用双线性插值)
-      height = self.node_list[conv_block_input_id].shape[1]
-      width = self.node_list[conv_block_input_id].shape[2]
+      height = self.node_list[block_last_layer_input_id].shape[1]
+      width = self.node_list[block_last_layer_input_id].shape[2]
       new_resize_layer = self.layer_factory.bilinear_resize(height=height, width=width)
       skip_output_id = conv_block_input_id
       skip_output_id = self.add_layer(new_resize_layer, skip_output_id)
+    else:
+      skip_output_id = conv_block_input_id
 
-    # Add the conv layer (relu + conv + bn)
-    new_relu_layer = self.layer_factory.relu()
-    skip_output_id = self.add_layer(new_relu_layer, skip_output_id)
-    new_conv_layer = self.layer_factory.conv2d(self.layer_list[start_id].filters, self.layer_list[end_id].filters, kernel_size=1)
-    skip_output_id = self.add_layer(new_conv_layer, skip_output_id)
-    new_bn_layer = self.layer_factory.bn2d(self.layer_list[end_id].filters)
-    skip_output_id = self.add_layer(new_bn_layer, skip_output_id)
+    aa = self._conv_block_start_node(end_id)
 
-    # Add the add layer.
-    block_last_layer_output_id = self.adj_list[block_last_layer_input_id][0][0]
-    add_input_node_id = self._add_node(deepcopy(self.node_list[block_last_layer_output_id]))
-    add_layer = self.layer_factory.add()
+    concat_input_node_id = self._add_node(deepcopy(self.node_list[block_last_layer_input_id]))
+    self._redirect_edge(aa, block_last_layer_input_id, concat_input_node_id)
 
-    self._redirect_edge(block_last_layer_input_id, block_last_layer_output_id, add_input_node_id)
-    self._add_edge(add_layer, add_input_node_id, block_last_layer_output_id)
-    self._add_edge(add_layer, skip_output_id, block_last_layer_output_id)
-    add_layer.input = [self.node_list[add_input_node_id], self.node_list[skip_output_id]]
-    add_layer.output = self.node_list[block_last_layer_output_id]
-    self.node_list[block_last_layer_output_id].shape = add_layer.output_shape
+    # add concatenate layer
+    concat_layer = self.layer_factory.add()
+    concat_layer.input = [self.node_list[concat_input_node_id], self.node_list[skip_output_id]]
 
-    # Set weights to the additional conv layer.
-    # if self.weighted:
-    #   filters_end = self.layer_list[end_id].filters
-    #   filters_start = self.layer_list[start_id].filters
-    #   filter_shape = (1,) * (len(self.layer_list[end_id].get_weights()[0].shape) - 2)
-    #   weights = np.zeros((filters_end, filters_start) + filter_shape)
-    #   bias = np.zeros(filters_end)
-    #   new_conv_layer.set_weights((add_noise(weights, np.array([0, 1])), add_noise(bias, np.array([0, 1]))))
+    self._add_edge(concat_layer, concat_input_node_id, block_last_layer_input_id)
+    self._add_edge(concat_layer, skip_output_id, block_last_layer_input_id)
+    concat_layer.output = self.node_list[block_last_layer_input_id]
+    self.node_list[block_last_layer_input_id].shape = concat_layer.output_shape
+
+
+    # # Add the conv layer (relu + conv + bn)
+    # new_relu_layer = self.layer_factory.relu()
+    # skip_output_id = self.add_layer(new_relu_layer, skip_output_id)
+    # new_conv_layer = self.layer_factory.conv2d(self.layer_list[start_id].filters, self.layer_list[end_id].filters, kernel_size=1)
+    # skip_output_id = self.add_layer(new_conv_layer, skip_output_id)
+    # new_bn_layer = self.layer_factory.bn2d(self.layer_list[end_id].filters)
+    # skip_output_id = self.add_layer(new_bn_layer, skip_output_id)
     #
-    #   n_filters = filters_end
-    #   new_weights = [add_noise(np.ones(n_filters, dtype=np.float32), np.array([0, 1])),
-    #                  add_noise(np.zeros(n_filters, dtype=np.float32), np.array([0, 1])),
-    #                  add_noise(np.zeros(n_filters, dtype=np.float32), np.array([0, 1])),
-    #                  add_noise(np.ones(n_filters, dtype=np.float32), np.array([0, 1]))]
-    #   new_bn_layer.set_weights(new_weights)
+    # # Add the add layer.
+    # block_last_layer_output_id = self.adj_list[block_last_layer_input_id][0][0]
+    # add_input_node_id = self._add_node(deepcopy(self.node_list[block_last_layer_output_id]))
+    # add_layer = self.layer_factory.add()
+    #
+    # self._redirect_edge(block_last_layer_input_id, block_last_layer_output_id, add_input_node_id)
+    # self._add_edge(add_layer, add_input_node_id, block_last_layer_output_id)
+    # self._add_edge(add_layer, skip_output_id, block_last_layer_output_id)
+    # add_layer.input = [self.node_list[add_input_node_id], self.node_list[skip_output_id]]
+    # add_layer.output = self.node_list[block_last_layer_output_id]
+    # self.node_list[block_last_layer_output_id].shape = add_layer.output_shape
 
   def to_concat_skip_model(self, start_id, end_id):
     """Add a weighted add concatenate connection from after start node to end node.
@@ -563,8 +577,6 @@ class Graph(object):
     """
     self.operation_history.append(('to_concat_skip_model', start_id, end_id))
     conv_block_input_id = self._conv_block_end_node(start_id)
-    conv_block_input_id = self.adj_list[conv_block_input_id][0][0]
-
     block_last_layer_input_id = self._conv_block_end_node(end_id)
 
     skip_output_id = -1
@@ -572,65 +584,189 @@ class Graph(object):
             self.node_list[conv_block_input_id].shape[2] > self.node_list[block_last_layer_input_id].shape[2]:
       # 1.step 从高分辨率到低分辨率的跳跃(使用pooling)
       # Add the pooling layer chain.
-      pooling_layer_list = self._get_pooling_layers(conv_block_input_id, block_last_layer_input_id)
+      # pooling_layer_list = self._get_pooling_layers(conv_block_input_id, block_last_layer_input_id)
+      # skip_output_id = conv_block_input_id
+      # for index, layer_id in enumerate(pooling_layer_list):
+      #   skip_output_id = self.add_layer(deepcopy(self.layer_list[layer_id]), skip_output_id)
+      #
+
+      kh = self.node_list[conv_block_input_id].shape[1] / self.node_list[block_last_layer_input_id].shape[1]
+      kw = self.node_list[conv_block_input_id].shape[2] / self.node_list[block_last_layer_input_id].shape[2]
+      new_pool_layer = self.layer_factory.pool2d(kernel_size_h=kh, kernel_size_w=kw)
       skip_output_id = conv_block_input_id
-      for index, layer_id in enumerate(pooling_layer_list):
-        skip_output_id = self.add_layer(deepcopy(self.layer_list[layer_id]), skip_output_id)
-    else:
+      skip_output_id = self.add_layer(new_pool_layer, skip_output_id)
+    elif self.node_list[conv_block_input_id].shape[1] < self.node_list[block_last_layer_input_id].shape[1] or \
+            self.node_list[conv_block_input_id].shape[2] < self.node_list[block_last_layer_input_id].shape[2]:
       # 2.step 从低分辨率到高分辨率的跳跃(使用双线性插值)
-      height = self.node_list[conv_block_input_id].shape[1]
-      width = self.node_list[conv_block_input_id].shape[2]
+      height = self.node_list[block_last_layer_input_id].shape[1]
+      width = self.node_list[block_last_layer_input_id].shape[2]
       new_resize_layer = self.layer_factory.bilinear_resize(height=height, width=width)
       skip_output_id = conv_block_input_id
       skip_output_id = self.add_layer(new_resize_layer, skip_output_id)
+    else:
+      # 3.step 相同分辨率
+      skip_output_id = conv_block_input_id
 
-    block_last_layer_output_id = self.adj_list[block_last_layer_input_id][0][0]
-    concat_input_node_id = self._add_node(deepcopy(self.node_list[block_last_layer_output_id]))
-    self._redirect_edge(block_last_layer_input_id, block_last_layer_output_id, concat_input_node_id)
+    aa = self._conv_block_start_node(end_id)
+
+    concat_input_node_id = self._add_node(deepcopy(self.node_list[block_last_layer_input_id]))
+    self._redirect_edge(aa, block_last_layer_input_id, concat_input_node_id)
 
     # add concatenate layer
     concat_layer = self.layer_factory.concat()
     concat_layer.input = [self.node_list[concat_input_node_id], self.node_list[skip_output_id]]
-    concat_output_node_id = self._add_node(GraphNode(shape=concat_layer.output_shape))
-    self._add_edge(concat_layer, concat_input_node_id, concat_output_node_id)
-    self._add_edge(concat_layer, skip_output_id, concat_output_node_id)
-    concat_layer.output = self.node_list[concat_output_node_id]
-    self.node_list[concat_output_node_id].shape = concat_layer.output_shape
 
-    # Add the convolution layer.(relu + conv + bn)
-    new_relu_layer = self.layer_factory.relu()
-    concat_output_node_id = self.add_layer(new_relu_layer, concat_output_node_id)
-    new_conv_layer = self.layer_factory.conv2d(self.layer_list[start_id].filters + self.layer_list[end_id].filters,
-                               self.layer_list[end_id].filters, 1)
-    concat_output_node_id = self.add_layer(new_conv_layer, concat_output_node_id)
-    new_bn_layer = self.layer_factory.bn2d(self.layer_list[end_id].filters)
+    self._add_edge(concat_layer, concat_input_node_id, block_last_layer_input_id)
+    self._add_edge(concat_layer, skip_output_id, block_last_layer_input_id)
+    concat_layer.output = self.node_list[block_last_layer_input_id]
+    self.node_list[block_last_layer_input_id].shape = concat_layer.output_shape
 
-    self._add_edge(new_bn_layer, concat_output_node_id, block_last_layer_output_id)
-    new_bn_layer.input = self.node_list[concat_output_node_id]
-    new_bn_layer.output = self.node_list[block_last_layer_output_id]
-    self.node_list[block_last_layer_output_id].shape = new_bn_layer.output_shape
+  def to_remove_skip_model(self, start_id, end_id):
+    start_layer_output_node_id = self._conv_block_end_node(start_id)
+    end_layer_output_node_id = self._conv_block_end_node(end_id)
 
-    # if self.weighted:
-    #   filters_end = self.layer_list[end_id].filters
-    #   filters_start = self.layer_list[start_id].filters
-    #   filter_shape = (1,) * (len(self.layer_list[end_id].get_weights()[0].shape) - 2)
-    #   weights = np.zeros((filters_end, filters_end) + filter_shape)
-    #   for i in range(filters_end):
-    #     filter_weight = np.zeros((filters_end,) + filter_shape)
-    #     center_index = (i,) + (0,) * self.n_dim
-    #     filter_weight[center_index] = 1
-    #     weights[i, ...] = filter_weight
-    #   weights = np.concatenate((weights,
-    #                             np.zeros((filters_end, filters_start) + filter_shape)), axis=1)
-    #   bias = np.zeros(filters_end)
-    #   new_conv_layer.set_weights((add_noise(weights, np.array([0, 1])), add_noise(bias, np.array([0, 1]))))
-    #
-    #   n_filters = filters_end
-    #   new_weights = [add_noise(np.ones(n_filters, dtype=np.float32), np.array([0, 1])),
-    #                  add_noise(np.zeros(n_filters, dtype=np.float32), np.array([0, 1])),
-    #                  add_noise(np.zeros(n_filters, dtype=np.float32), np.array([0, 1])),
-    #                  add_noise(np.ones(n_filters, dtype=np.float32), np.array([0, 1]))]
-    #   new_bn_layer.set_weights(new_weights)
+    has_skip = False
+    skip_layer = None
+    left_node = None
+    right_node = None
+    combine_node = None
+    for output_node, left_layer in self.adj_list[end_layer_output_node_id]:
+      for input_node, right_layer in self.reverse_adj_list[output_node]:
+        if input_node == start_layer_output_node_id and left_layer == right_layer:
+          has_skip = True
+          skip_layer = left_layer
+          left_node = start_layer_output_node_id
+          right_node = end_layer_output_node_id
+          combine_node = output_node
+          break
+        elif self.reverse_adj_list[input_node][0][0] == start_layer_output_node_id and \
+                self.layer_list[self.reverse_adj_list[input_node][0][1]].layer_type in ['resize', 'pool2d'] and \
+                left_layer == right_layer:
+          has_skip = True
+          skip_layer = left_layer
+          left_node = start_layer_output_node_id
+          right_node = end_layer_output_node_id
+          combine_node = output_node
+
+          self.to_remove_layer(self.reverse_adj_list[input_node][0][1])
+          break
+
+    if not has_skip:
+      return
+
+    self.to_remove_layer(skip_layer)
+    self.update()
+
+  def to_remove_layer(self, old_layer_id):
+    start_node_list = []
+    middle_node = None
+    keep_node = None
+    keey_layer = None
+
+    for layer_id, input_nodes in self.layer_id_to_input_node_ids.items():
+      if layer_id == old_layer_id:
+        for node_id in input_nodes:
+          for output_node, linked_layer in self.adj_list[node_id]:
+            if linked_layer == old_layer_id:
+              middle_node = output_node
+              start_node_list.append(node_id)
+
+              if len(self.adj_list[output_node]) > 0:
+                keep_node, keey_layer = self.adj_list[output_node][0]
+
+    if middle_node is None:
+      return
+
+    if keep_node is not None and keey_layer is not None:
+      nearest_input_node = None
+      nearest_length = 10000000
+
+      for input_node in start_node_list:
+        layer_list = []
+        node_list = [input_node]
+        self._depth_first_search(keep_node, layer_list, node_list)
+
+        if nearest_length > len(node_list):
+          nearest_length = len(node_list)
+          nearest_input_node = input_node
+
+      for input_node in start_node_list:
+        if input_node != nearest_input_node:
+          remove_index = -1
+          for i, kv in enumerate(self.adj_list[input_node]):
+            if kv[1] == old_layer_id:
+              remove_index = i
+              break
+
+          if remove_index != -1:
+            self.adj_list[input_node].pop(remove_index)
+
+      for i, kv in enumerate(self.adj_list[nearest_input_node]):
+        if kv[1] == old_layer_id:
+          self.adj_list[nearest_input_node][i] = (keep_node, keey_layer)
+          break
+
+      for i, kv in enumerate(self.reverse_adj_list[keep_node]):
+        if kv[0] == middle_node:
+          self.reverse_adj_list[keep_node][i] = (nearest_input_node, keey_layer)
+          break
+
+      self.adj_list.pop(middle_node)
+      self.reverse_adj_list.pop(middle_node)
+      self.layer_to_id.pop(self.layer_list[old_layer_id])
+
+      self.layer_id_to_input_node_ids.pop(old_layer_id)
+      self.layer_id_to_output_node_ids.pop(old_layer_id)
+      self.layer_list[keey_layer].input = self.node_list[nearest_input_node]
+      for mi, m in enumerate(self.layer_id_to_input_node_ids[keey_layer]):
+        if m == middle_node:
+          self.layer_id_to_input_node_ids[keey_layer][mi] = nearest_input_node
+          break
+    else:
+      for input_node in start_node_list:
+        remove_index = -1
+        for i, kv in enumerate(self.adj_list[input_node]):
+          if kv[1] == old_layer_id:
+            remove_index = i
+            break
+
+        if remove_index != -1:
+          self.adj_list[input_node].pop(remove_index)
+
+      self.adj_list.pop(middle_node)
+      self.reverse_adj_list.pop(middle_node)
+      self.layer_to_id.pop(self.layer_list[old_layer_id])
+
+      self.layer_id_to_input_node_ids.pop(old_layer_id)
+      self.layer_id_to_output_node_ids.pop(old_layer_id)
+      # self.layer_list[keey_layer].input = self.node_list[start_node_list[0]] if len(start_node_list) == 1 else [self.node_list[start_node_list[i]] for i in start_node_list]
+
+
+  def to_replace_layer(self, old_layer_id, layer):
+    self._replace_layer(old_layer_id, layer)
+    self.update()
+
+  def to_insert_layer(self, layer_id, layer):
+    output_id = self.layer_id_to_input_node_ids[layer_id][0]
+    self._insert_new_layers([layer], output_id)
+    self.update()
+
+  def has_skip(self, start_id, end_id):
+    conv_block_input_id = self._conv_block_end_node(start_id)
+    # conv_block_input_id = self.adj_list[conv_block_input_id][0][0]
+    block_last_layer_input_id = self._conv_block_end_node(end_id)
+
+    existed_skip = False
+    for linked_node, linked_layer in self.adj_list[conv_block_input_id]:
+      if self.layer_list[linked_layer].layer_name == 'bilinear_resize':
+        linked_node = self.adj_list[linked_node][0][0]
+
+      for upper_node, skip_layer in self.reverse_adj_list[linked_node]:
+        if upper_node == block_last_layer_input_id and self.layer_list[skip_layer].layer_name in ['add', 'concat']:
+          existed_skip = True
+          break
+
+    return existed_skip
 
   def extract_descriptor(self):
     ret = NetworkDescriptor()
@@ -748,10 +884,17 @@ class Graph(object):
         else:
           edge_input_tensor = node_list[u]
 
-        if layer_factory is None:
-          node_list[v] = getattr(self.layer_factory, layer.layer_name)(layer)(edge_input_tensor)
-        else:
-          node_list[v] = getattr(layer_factory, layer.layer_name)(layer)(edge_input_tensor)
+        layer.layer_factory = layer_factory if layer_factory is not None else self.layer_factory
+        node_list[v] = layer(edge_input_tensor)
+
+        # if getattr(layer_factory, layer.layer_name) != None:
+        #   if layer_factory is None:
+        #     node_list[v] = getattr(self.layer_factory, layer.layer_name)(layer)(edge_input_tensor)
+        #   else:
+        #     node_list[v] = getattr(layer_factory, layer.layer_name)(layer)(edge_input_tensor)
+        # else:
+        #   layer.layer_factory = layer_factory if layer_factory is not None else self.layer_factory
+        #   node_list[v] = layer(edge_input_tensor)
 
     output_tensors = []
     if output_nodes is None:
@@ -762,6 +905,57 @@ class Graph(object):
         output_tensors.append(node_list[n_i])
 
     return output_tensors
+
+  def visualization(self, target_path):
+    gv = GraphVis(name='computing graph')
+    node_to_blocks = {}
+    node_to_cells = {}
+    for node in self.node_list:
+      if node.id in self.adj_list:
+        for output_node, layer_id in self.adj_list[node.id]:
+          node_to_blocks[output_node] = self.layer_list[layer_id].block_name
+          node_to_cells[output_node] = self.layer_list[layer_id].cell_name
+
+    for node in self.node_list:
+      tag = {}
+      if node.id in node_to_blocks:
+        tag.update({'block': node_to_blocks[node.id]})
+      if node.id in node_to_cells:
+        tag.update({'cell': node_to_cells[node.id]})
+
+      gv.add_node(node.id, '%s-(%d,%d,%d)'%(str(node.id), node.shape[1], node.shape[2], node.shape[3]), '', tag=tag)
+
+    for k,v in self.adj_list.items():
+      for output_node, layer_id in v:
+        gv.add_link(k, output_node, Link(label=self.layer_list[layer_id].nickname if self.layer_list[layer_id].nickname != '' else self.layer_list[layer_id].layer_name, args=''))
+
+    graphviz_net_svg(gv, target_path)
+
+  def update(self):
+    # udpate graph information
+    for node_id in self.topological_order:
+      for output_id, layer_id in self.adj_list[node_id]:
+        if self.layer_list[layer_id].layer_name == 'add':
+          # 检查 add 所对应的所有输入节点是否通道数一致
+          is_consistent = True
+          max_channels = self.node_list[self.layer_id_to_input_node_ids[layer_id][0]].shape[-1]
+          for layer_input_id in self.layer_id_to_input_node_ids[layer_id][1:]:
+            if self.node_list[layer_input_id].shape[-1] != max_channels:
+              is_consistent = False
+
+            if self.node_list[layer_input_id].shape[-1] > max_channels:
+              max_channels = self.node_list[layer_input_id].shape[-1]
+
+          if not is_consistent:
+            for layer_input_id in self.layer_id_to_input_node_ids[layer_id]:
+              if self.node_list[layer_input_id].shape[-1] != max_channels and \
+                      len(self.reverse_adj_list[layer_input_id]) == 1 and \
+                      self.layer_list[self.reverse_adj_list[layer_input_id][0][-1]].layer_name == 'conv2d':
+                self.layer_list[self.reverse_adj_list[layer_input_id][0][-1]].filters = max_channels
+                self.node_list[layer_input_id].shape = \
+                  self.layer_list[self.reverse_adj_list[layer_input_id][0][-1]].output_shape
+
+        self.node_list[output_id].shape = self.layer_list[layer_id].output_shape
 
 #from random import randrange, sample
 #mport random

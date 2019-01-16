@@ -16,7 +16,7 @@ from antgo.dataflow.common import *
 from antgo.dataflow.recorder import *
 from antgo.measures.statistic import *
 from antgo.task.task import *
-from antgo.utils.net import *
+from antgo.utils.netvis import *
 from antgo.utils.serialize import *
 from antgo.resource.html import *
 from antgo.utils.concurrency import *

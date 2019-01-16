@@ -8,7 +8,7 @@ from __future__ import print_function
 
 
 class StubLayer(object):
-  def __init__(self, input=None, output=None):
+  def __init__(self, input=None, output=None, **kwargs):
     self.input = input
     self.output = output
     self.id = -1
@@ -18,6 +18,10 @@ class StubLayer(object):
     self._layer_name = None
     self._n_dim = -1
     self._layer_width = 0
+    self.nickname = kwargs['nickname'] if 'nickname' in kwargs else ''
+    self.cell_name = kwargs['cell_name'] if 'cell_name' in kwargs else ''
+    self.block_name = kwargs['block_name'] if 'block_name' in kwargs else ''
+    self._layer_factory = None
 
   def set_input(self, node):
     self.input = node
@@ -69,6 +73,10 @@ class StubLayer(object):
     self._layer_type = val
 
   @property
+  def layer_type_encoder(self):
+    return 0
+
+  @property
   def layer_name(self):
     return self._layer_name
   @layer_name.setter
@@ -92,3 +100,11 @@ class StubLayer(object):
 
   def flops(self):
     return 0
+
+  @property
+  def layer_factory(self):
+    return self._layer_factory
+
+  @layer_factory.setter
+  def layer_factory(self, val):
+    self._layer_factory = val
