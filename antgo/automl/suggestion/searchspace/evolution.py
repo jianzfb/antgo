@@ -689,7 +689,7 @@ class EvolutionSearchSpace(AbstractSearchSpace):
             break
           except:
             pass
-      graph.visualization('%s.png' % (str(uuid.uuid4())))
+      # graph.visualization('%s.png' % (str(uuid.uuid4())))
 
       graph_dna = self.dna(graph, graph_info)
 
