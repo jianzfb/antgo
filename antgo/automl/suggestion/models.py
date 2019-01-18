@@ -90,7 +90,8 @@ class Trial(object):
                status=None,
                created_time=None,
                updated_time=None,
-               address=None):
+               address=None,
+               tag=None):
     self.id = id
     self.study_name = study_name
     self.name = name
@@ -102,6 +103,7 @@ class Trial(object):
     self.created_time = created_time
     self.updated_time = updated_time
     self.address = address
+    self.tag = tag
 
   @staticmethod
   def get(**kwargs):

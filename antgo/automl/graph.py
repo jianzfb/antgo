@@ -210,6 +210,13 @@ class Graph(object):
   def flops(self):
     total_flops = 0
     for l in self.layer_list:
+      if l not in self.layer_to_id:
+        continue
+
+      if self.layer_to_id[l] not in self.layer_id_to_input_node_ids or\
+        self.layer_to_id[l] not in self.layer_id_to_output_node_ids:
+        continue
+
       total_flops += l.flops()
 
     return total_flops
@@ -954,8 +961,11 @@ class Graph(object):
                 self.layer_list[self.reverse_adj_list[layer_input_id][0][-1]].filters = max_channels
                 self.node_list[layer_input_id].shape = \
                   self.layer_list[self.reverse_adj_list[layer_input_id][0][-1]].output_shape
+              elif self.node_list[layer_input_id].shape[-1] != max_channels:
+                return False
 
         self.node_list[output_id].shape = self.layer_list[layer_id].output_shape
+    return True
 
 #from random import randrange, sample
 #mport random

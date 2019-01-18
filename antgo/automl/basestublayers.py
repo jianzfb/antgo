@@ -34,7 +34,7 @@ class BaseStubDense(BaseStubWeightBiasLayer):
     return self.input_units * self.units + self.units
 
   def flops(self):
-    return self.input_units * self.units + (self.input_units - 1) + self.units
+    return self.input.shape[-1] * self.units + (self.input.shape[-1] - 1) + self.units
 
   def __call__(self, *args, **kwargs):
     if self.layer_factory is not None:
@@ -73,7 +73,7 @@ class BaseStubConv2d(BaseStubWeightBiasLayer):
     return self.filters * self.kernel_size_h * self.kernel_size_w * self.input_channel + self.filters
 
   def flops(self):
-    n = self.input_channel * self.kernel_size_h * self.kernel_size_w  # vector_length
+    n = self.input.shape[-1] * self.kernel_size_h * self.kernel_size_w  # vector_length
     flops_per_instance = n + (n - 1)  # general defination for number of flops (n: multiplications and n-1: additions)
     num_instances_per_filter = ((self.input.shape[1] - self.kernel_size_h + self.kernel_size_h / 2) / self.stride) + 1  # for rows
     num_instances_per_filter *= ((self.input.shape[2] - self.kernel_size_w + self.kernel_size_w / 2) / self.stride) + 1  # multiplying with cols
@@ -138,7 +138,7 @@ class BaseStubSeparableConv2d(BaseStubWeightBiasLayer):
     total_flops_per_layer_step_1 = flops_per_filter_step_1 * self.filters     # multiply with number of filters
 
     # 2.step pointwise convolution
-    n = self.input_channel * 1 * 1
+    n = self.input.shape[-1] * 1 * 1
     flops_per_instance_step_2 = n + (n - 1)
     flops_per_filter_step_2 = num_instances_per_filter * flops_per_instance_step_2
     total_flops_per_layer_step_2 = flops_per_filter_step_2 * self.filters     # multiply with number of filters
@@ -240,6 +240,9 @@ class BaseStubAdd(StubLayer):
     return self.input[0].shape
 
   def flops(self):
+    if type(self.input) != list and type(self.input) != tuple:
+      print('hello')
+      return 0.0
     return self.input[0].shape[1] * self.input[0].shape[2] * self.input[0].shape[3] - 1
 
   def __call__(self, *args, **kwargs):
@@ -249,6 +252,29 @@ class BaseStubAdd(StubLayer):
       return layer(*args, **kwargs)
 
     raise NotImplementedError
+
+
+class BaseStubDot(StubLayer):
+  def __init__(self, input=None, output=None, **kwargs):
+    super(BaseStubDot, self).__init__(input, output, **kwargs)
+    self.layer_type = 'dot'
+    self.layer_name = 'dot'
+
+  @property
+  def output_shape(self):
+    return self.input[0].shape
+
+  def flops(self):
+    return self.input[0].shape[1] * self.input[0].shape[2] * self.input[0].shape[3] - 1
+
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.dot(block_name=self.block_name,
+                                     cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
 
 
 class BaseStubFlatten(StubLayer):
@@ -321,6 +347,24 @@ class BaseStubSoftmax(StubLayer):
   def __call__(self, *args, **kwargs):
     if self.layer_factory is not None:
       layer = self.layer_factory.softmax(block_name=self.block_name,
+                                         cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
+
+class BaseStubSigmoid(StubLayer):
+  def __init__(self, input=None, output=None, **kwargs):
+    super(BaseStubSigmoid, self).__init__(input, output, **kwargs)
+    self.layer_type = 'sigmoid'
+    self.layer_name = 'sigmoid'
+
+  def flops(self):
+    return 0
+
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.sigmoid(block_name=self.block_name,
                                          cell_name=self.cell_name)
       return layer(*args, **kwargs)
 
@@ -510,6 +554,7 @@ class BaseLayerFactory(object):
                     'separable_conv2d',
                     'concat',
                     'add',
+                    'dot',
                     'avg_pool2d',
                     'max_pool2d',
                     'global_pool2d',
@@ -518,6 +563,7 @@ class BaseLayerFactory(object):
                     'relu6',
                     'bn2d',
                     'softmax',
+                    'sigmoid',
                     'dropout_2d',
                     'bilinear_resize',
                     'spp',
@@ -537,6 +583,8 @@ class BaseLayerFactory(object):
         return BaseStubConcatenate(*args, **kwargs)
       elif item == 'add':
         return BaseStubAdd(*args, **kwargs)
+      elif item == 'dot':
+        return BaseStubDot(*args, **kwargs)
       elif item == 'avg_pool2d':
         return BaseStubAvgPooling2d(*args, **kwargs)
       elif item == 'max_pool2d':
@@ -553,6 +601,8 @@ class BaseLayerFactory(object):
         return BaseStubBatchNormalization2d(*args, **kwargs)
       elif item == 'softmax':
         return BaseStubSoftmax(*args, **kwargs)
+      elif item == 'sigmoid':
+        return BaseStubSigmoid(*args, **kwargs)
       elif item == 'dropout_2d':
         return BaseStubDropout2d(*args, **kwargs)
       elif item == 'bilinear_resize':

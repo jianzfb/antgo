@@ -13,7 +13,12 @@ class Cell(object):
   def __init__(self, branch_num, base_channel):
     self.branch_pool = {'convbn_branch': ConvBnBranch,
                         'seperableconv_branch': SeperableConvBranch,
-                        'spp_branch': SPPBranch}
+                        'spp_branch': SPPBranch,
+                        'focus_branch': FocusBranch,
+                        'se_branch': SEBranch,
+                        'regionse_branch': RegionSEBranch,
+                        'res_branch': ResBranch,
+                        'bottleneck_res_branch': BottleNeckResBranch}
     self.branch_num = branch_num
     self.base_channel = base_channel
 

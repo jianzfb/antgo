@@ -154,6 +154,20 @@ class StubAdd(BaseStubAdd):
     return functools.partial(tf.add)(args[0][0],args[0][1], **kwargs)
 
 
+class StubDot(BaseStubDot):
+  def __init__(self, input=None, output=None, **kwargs):
+    super(StubDot, self).__init__(input, output, **kwargs)
+
+  def __call__(self, *args, **kwargs):
+    # if self.block_name != '' and self.cell_name != '':
+    #   with tf.variable_scope(self.block_name, 'block'):
+    #       with tf.variable_scope(self.cell_name, 'cell'):
+    #         return functools.partial(tf.add)(*args, **kwargs)
+    # else:
+    return functools.partial(tf.multiply)(args[0][0], args[0][1], **kwargs)
+
+
+
 class StubFlatten(BaseStubFlatten):
   def __init__(self, input=None, output=None, **kwargs):
     super(StubFlatten, self).__init__(input, output, **kwargs)
@@ -204,6 +218,19 @@ class StubSoftmax(BaseStubSoftmax):
     #       return functools.partial(tf.nn.softmax)(*args, **kwargs)
     # else:
     return functools.partial(tf.nn.softmax)(*args, **kwargs)
+
+
+class StubSigmoid(BaseStubSigmoid):
+  def __init__(self, input=None, output=None, **kwargs):
+    super(StubSigmoid, self).__init__(input, output, **kwargs)
+
+  def __call__(self, *args, **kwargs):
+    # if self.block_name != '' and self.cell_name != '':
+    #   with tf.variable_scope(self.block_name, 'block'):
+    #     with tf.variable_scope(self.cell_name, 'cell'):
+    #       return functools.partial(tf.nn.softmax)(*args, **kwargs)
+    # else:
+    return functools.partial(tf.nn.sigmoid)(*args, **kwargs)
 
 
 class StubAvgPooling2d(BaseStubAvgPooling2d):
@@ -310,6 +337,7 @@ class LayerFactory(object):
                     'separable_conv2d',
                     'concat',
                     'add',
+                    'dot',
                     'avg_pool2d',
                     'max_pool2d',
                     'global_pool2d',
@@ -318,6 +346,7 @@ class LayerFactory(object):
                     'relu6',
                     'bn2d',
                     'softmax',
+                    'sigmoid',
                     'dropout_2d',
                     'bilinear_resize',
                     'spp',
@@ -340,6 +369,8 @@ class LayerFactory(object):
         return StubConcatenate(*args, **kwargs)
       elif item == 'add':
         return StubAdd(*args, **kwargs)
+      elif item == 'dot':
+        return StubDot(*args, **kwargs)
       elif item == 'avg_pool2d':
         return StubAvgPooling2d(*args, **kwargs)
       elif item == 'max_pool2d':
@@ -356,6 +387,8 @@ class LayerFactory(object):
         return StubBatchNormalization2d(*args, **kwargs)
       elif item == 'softmax':
         return StubSoftmax(*args, **kwargs)
+      elif item == 'sigmoid':
+        return StubSigmoid(*args, **kwargs)
       elif item == 'dropout_2d':
         return StubDropout2d(*args, **kwargs)
       elif item == 'bilinear_resize':

@@ -14,7 +14,7 @@ from antgo.automl.suggestion.searchspace.searchspace_factory import *
 from antgo.automl.suggestion.algorithm.hyperparameters_factory import *
 from antgo.automl.graph import *
 import matplotlib
-matplotlib.use('agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import json
 
@@ -352,6 +352,9 @@ class AntTrainServer(AntBase):
     if search_space_algorithm is not None:
       search_space_parameters = json.loads(trail.parameter_values) if trail is not None else {}
       trails = search_space_algorithm.get_new_suggestions(number=1, **search_space_parameters)
+      if trails is None:
+        return {'status': 'waiting', 'message': 'no new trial'}
+
       trail = trails[0] if len(trails) > 0 else None
 
     if trail is None:
@@ -364,7 +367,7 @@ class AntTrainServer(AntBase):
                 'created_time': trail.created_time,
                 'updated_time': trail.updated_time,
                 'hyperparameter': trail.parameter_values,
-                'structure': trail.structure,
+                'structure': trail.structure[0] if type(trail.structure) == list or type(trail.structure) == tuple else trail.structure,
                 'max_time': study_configuration['maxTime'],
                 'status': study.status}
     return response
