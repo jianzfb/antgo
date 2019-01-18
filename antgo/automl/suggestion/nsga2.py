@@ -9,7 +9,9 @@ import math
 import random
 import functools
 import copy
-# import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 
 class Population(object):
@@ -169,29 +171,46 @@ class Nsga2(object):
     for front in population.fronts:
       self.calculate_crowding_distance(front)
 
-    # 2.step generate next children generation
-    children = self.create_children(population)
-
-    # 3.step environment pooling
-    # 3.1.step expand population
-    population.extend(children)
-
-    # 3.2.step re-fast-nondominated-sort
-    self.fast_nondominated_sort(population)
-
-    # 3.3.step build new population
+    # next elite population
     new_population = Population()
-    front_num = 0
-    while len(new_population) + len(population.fronts[front_num]) <= population_size:
-      new_population.extend(population.fronts[front_num])
-      front_num += 1
+    # environment pooling population (parent + children)
+    expand_population = copy.deepcopy(population)
+    evolve_ok = False
+    while not evolve_ok:
+      # 2.step generate next children generation
+      children = self.create_children(population)
 
-    if len(new_population) < population_size:
-      self.calculate_crowding_distance(population.fronts[front_num])
-      population.fronts[front_num] = sorted(population.fronts[front_num],
-                                                 key=functools.cmp_to_key(self.crowding_operator),
-                                            reverse=True)
-      new_population.extend(population.fronts[front_num][0:population_size - len(new_population)])
+      # 3.step environment pooling
+      # 3.1.step expand population
+      expand_population.extend(children)
+
+      # 3.2.step re-fast-nondominated-sort
+      self.fast_nondominated_sort(expand_population)
+
+      # 3.3step select elite into next population
+      front_num = 0
+      while len(new_population) + len(expand_population.fronts[front_num]) <= population_size:
+        new_population.extend(expand_population.fronts[front_num])
+        front_num += 1
+        if front_num == len(expand_population.fronts):
+          break
+
+      if len(new_population) < population_size and front_num == len(expand_population.fronts):
+        continue
+
+      if len(new_population) + len(expand_population.fronts[front_num]) < population_size:
+        continue
+
+      if len(new_population) < population_size:
+        self.calculate_crowding_distance(expand_population.fronts[front_num])
+        expand_population.fronts[front_num] = sorted(expand_population.fronts[front_num],
+                                                   key=functools.cmp_to_key(self.crowding_operator),
+                                              reverse=True)
+        new_population.extend(expand_population.fronts[front_num][0:population_size - len(new_population)])
+
+      if len(new_population) == population_size:
+        evolve_ok = True
+
     return new_population
 
 
@@ -280,4 +299,5 @@ if __name__ == '__main__':
     plt.xlabel('Function 1', fontsize=15)
     plt.ylabel('Function 2', fontsize=15)
     plt.scatter(function1, function2, c='r')
+    plt.savefig('aa.png')
     plt.show()

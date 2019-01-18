@@ -18,6 +18,7 @@ import numpy as np
 import math
 from sklearn import gaussian_process
 from antgo.automl.suggestion.metric import *
+# import matplotlib.pyplot as plt
 
 
 class BayesianOptimizer(object):

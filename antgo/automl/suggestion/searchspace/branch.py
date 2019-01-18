@@ -668,16 +668,17 @@ class RegionSEBranch(Branch):
 
 
 class ResBranch(Branch):
-  def __init__(self, input=None, output=None, **kwargs):
+  def __init__(self, output_channel, input=None, output=None, **kwargs):
     super(ResBranch, self).__init__(input, output, **kwargs)
     self.layer_name = 'res_branch'
+    self.output_channel = output_channel
 
   @property
   def output_shape(self):
-    return self.input.shape
+    return (self.input.shape[0], self.input.shape[1], self.input.shape[2], self.output_channel)
 
   def flops(self):
-    group_1_conv = BaseStubConv2d(None, self.input.shape[-1], 3, 3, cell_name=self.cell_name, block_name=self.block_name)
+    group_1_conv = BaseStubConv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
     group_1_conv.input = self.input
 
     group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
@@ -686,7 +687,7 @@ class ResBranch(Branch):
     group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
     group_1_relu.input = DummyNode(group_1_bn.output_shape)
 
-    group_2_conv = BaseStubConv2d(None, self.input.shape[-1], 3, 3, cell_name=self.cell_name, block_name=self.block_name)
+    group_2_conv = BaseStubConv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
     group_2_conv.input = DummyNode(group_1_relu.output_shape)
 
     group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
@@ -707,7 +708,7 @@ class ResBranch(Branch):
            group_4.flops()
 
   def __call__(self, *args, **kwargs):
-    group_1_conv_c = self.layer_factory.conv2d(None, self.input.shape[-1], 3, 3, cell_name=self.cell_name, block_name=self.block_name)
+    group_1_conv_c = self.layer_factory.conv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
     group_1_conv = group_1_conv_c(*args, **kwargs)
 
     group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
@@ -716,7 +717,7 @@ class ResBranch(Branch):
     group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
     group_1_relu = group_1_relu_c(group_1_bn)
 
-    group_2_conv_c = self.layer_factory.conv2d(None, self.input.shape[-1], 3, 3, cell_name=self.cell_name, block_name=self.block_name)
+    group_2_conv_c = self.layer_factory.conv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
     group_2_conv = group_2_conv_c(group_1_relu)
 
     group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
@@ -737,16 +738,23 @@ class ResBranch(Branch):
 
 
 class BottleNeckResBranch(Branch):
-  def __init__(self, input=None, output=None, **kwargs):
+  def __init__(self, output_channel, input=None, output=None, **kwargs):
     super(BottleNeckResBranch, self).__init__(input, output, **kwargs)
     self.layer_name = 'bottleneck_res_branch'
+    self.output_channel = output_channel
+
+    self.candidate_bottleneck = [8, 16, 32, 64]
+    if 'bottleneck' not in kwargs:
+      self.bottleneck = random.choice(self.candidate_bottleneck)
+    else:
+      self.bottleneck = kwargs['bottleneck']
 
   @property
   def output_shape(self):
-    return self.input.shape
+    return (self.input.shape[0], self.input.shape[1], self.input.shape[2], self.output_channel)
 
   def flops(self):
-    group_1_conv = BaseStubConv2d(None, 64, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+    group_1_conv = BaseStubConv2d(None, self.bottleneck, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
     group_1_conv.input = self.input
 
     group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
@@ -755,7 +763,7 @@ class BottleNeckResBranch(Branch):
     group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
     group_1_relu.input = DummyNode(group_1_bn.output_shape)
 
-    group_2_conv = BaseStubConv2d(None, 64, 3, 3, cell_name=self.cell_name,block_name=self.block_name)
+    group_2_conv = BaseStubConv2d(None, self.bottleneck, 3, 3, cell_name=self.cell_name,block_name=self.block_name)
     group_2_conv.input = DummyNode(group_1_relu.output_shape)
 
     group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
@@ -764,7 +772,7 @@ class BottleNeckResBranch(Branch):
     group_2_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
     group_2_relu.input = DummyNode(group_2_bn.output_shape)
 
-    group_3_conv = BaseStubConv2d(None, self.input.shape[-1], 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+    group_3_conv = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
     group_3_conv.input = DummyNode(group_2_relu.output_shape)
 
     group_3_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
@@ -788,7 +796,7 @@ class BottleNeckResBranch(Branch):
            group_5.flops()
 
   def __call__(self, *args, **kwargs):
-    group_1_conv_c = self.layer_factory.conv2d(None, 64, 3, 3, cell_name=self.cell_name,
+    group_1_conv_c = self.layer_factory.conv2d(None, self.bottleneck, 1, 1, cell_name=self.cell_name,
                                                block_name=self.block_name)
     group_1_conv = group_1_conv_c(*args, **kwargs)
 
@@ -798,7 +806,7 @@ class BottleNeckResBranch(Branch):
     group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
     group_1_relu = group_1_relu_c(group_1_bn)
 
-    group_2_conv_c = self.layer_factory.conv2d(None, 64, 1, 1, cell_name=self.cell_name,
+    group_2_conv_c = self.layer_factory.conv2d(None, self.bottleneck, 3, 3, cell_name=self.cell_name,
                                                block_name=self.block_name)
     group_2_conv = group_2_conv_c(group_1_relu)
 
@@ -808,7 +816,7 @@ class BottleNeckResBranch(Branch):
     group_2_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
     group_2_relu = group_2_relu_c(group_2_bn)
 
-    group_3_conv_c = self.layer_factory.conv2d(None, self.input.shape[-1], 3, 3, cell_name=self.cell_name,
+    group_3_conv_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name,
                                                block_name=self.block_name)
     group_3_conv = group_3_conv_c(group_2_relu)
 
@@ -825,7 +833,13 @@ class BottleNeckResBranch(Branch):
   @property
   def layer_type_encoder(self):
     # 0.5 ~ 0.6
-    return 0.55
+    mi = -1
+    for i, m in enumerate(self.candidate_bottleneck):
+      if self.bottleneck == m:
+        mi = i
+
+    return 0.5 + 0.1 / len(self.candidate_bottleneck) * mi
+
 
 class PoolBranch(Branch):
   def __init__(self, input=None, output=None, **kwargs):
