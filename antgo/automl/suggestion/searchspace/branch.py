@@ -488,7 +488,7 @@ class SEBranch(Branch):
     group_3_sigmoid = group_3_sigmoid_c(group_2_bn)
 
     group_4_multiply_c = self.layer_factory.dot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply = group_4_multiply_c(*[[group_3_sigmoid, args[0][0]]], **kwargs)
+    group_4_multiply = group_4_multiply_c(*[[group_3_sigmoid, args[0]]], **kwargs)
 
     return group_4_multiply
 
@@ -646,7 +646,7 @@ class RegionSEBranch(Branch):
     group_resize = group_resize_c(group_3_sigmoid)
 
     group_4_multiply_c = self.layer_factory.dot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply = group_4_multiply_c(*[[group_resize, args[0][0]]], **kwargs)
+    group_4_multiply = group_4_multiply_c(*[[group_resize, args[0]]], **kwargs)
 
     return group_4_multiply
 
@@ -724,7 +724,7 @@ class ResBranch(Branch):
     group_2_bn = group_2_bn_c(group_2_conv)
 
     group_3_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_c = group_3_c(*[[group_2_bn, args[0][0]]], **kwargs)
+    group_3_c = group_3_c(*[[group_2_bn, args[0]]], **kwargs)
 
     group_4_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
     group_4 = group_4_c(group_3_c)
@@ -824,7 +824,7 @@ class BottleNeckResBranch(Branch):
     group_3_bn = group_3_bn_c(group_3_conv)
 
     group_3_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_c = group_3_c(*[[group_3_bn, args[0][0]]], **kwargs)
+    group_3_c = group_3_c(*[[group_3_bn, args[0]]], **kwargs)
 
     group_4_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
     group_4 = group_4_c(group_3_c)

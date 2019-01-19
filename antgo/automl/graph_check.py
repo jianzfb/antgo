@@ -296,8 +296,8 @@ def check_mutate_evolution():
 # 4.step test graph to cnn
 import json
 import os
-# import tensorflow as tf
-# from antgo.codebook.tf.stublayers import *
+import tensorflow as tf
+from antgo.codebook.tf.stublayers import *
 def check_graph_to_cnn():
   study_configuration = {'goal': 'MIN',
                          'current_population': [],
@@ -373,10 +373,10 @@ def check_graph_to_cnn():
               graph.update()
 
         print(graph.flops)
-        # if epoch == 2:
-        #   a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
-        #   b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
-        #   graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
+        if epoch == 4:
+          a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
+          b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
+          graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
         break
       except:
         pass
