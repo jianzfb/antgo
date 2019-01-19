@@ -515,14 +515,13 @@ class EvolutionSearchSpace(AbstractSearchSpace):
                  'branch_base_channel': 64,
                  'block_stack_mode': 'DECODER',
                  'population_size': 1,
-                 'flops': 100000,
                  'input_size': ''}
 
   def __init__(self, study, **kwargs):
     super(EvolutionSearchSpace, self).__init__(study, **kwargs)
     self.study = study
     self.study_configuration = json.loads(study.study_configuration)
-    self.study_goal = self.study_configuration['goal']
+    self.study_goal = 'MAXIMIZE'
 
     self.max_block_num = int(kwargs.get('max_block_num', EvolutionSearchSpace.default_params['max_block_num']))
     self.min_block_num = int(kwargs.get('min_block_num', EvolutionSearchSpace.default_params['min_block_num']))
@@ -561,11 +560,7 @@ class EvolutionSearchSpace(AbstractSearchSpace):
 
     # temp structure recommand
     # initialize bayesian optimizer
-    study_configuration = json.loads(study.study_configuration)
-    if study_configuration['goal'] == 'MAXIMIZE':
-      self.predictor = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
-    else:
-      self.predictor = BayesianOptimizer(0.0001, Loss, 0.1, 2.576)
+    self.predictor = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
 
     # get all completed trials
     all_completed_trials = Trial.filter(study_name=self.study.name, status='Completed')

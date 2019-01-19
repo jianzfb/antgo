@@ -167,8 +167,8 @@ def launch_train_process(server_records, experiment_records, content):
   os.makedirs(os.path.join(server_records['main_folder'], experiment_id))
 
   # prepare support files
-  if os.path.exists(os.path.join(server_records['main_folder'], 'trainer.tar.gz')):
-    shutil.copy(os.path.join(server_records['main_folder'], 'trainer.tar.gz'),
+  if os.path.exists(os.path.join(server_records['root_main_folder'], 'trainer.tar.gz')):
+    shutil.copy(os.path.join(server_records['root_main_folder'], 'trainer.tar.gz'),
                 os.path.join(server_records['main_folder'], experiment_id))
 
     untar_shell = 'openssl enc -d -aes256 -in %s.tar.gz -k %s | tar xz -C %s' % ('trainer', server_records['signature'], '.')
@@ -177,7 +177,7 @@ def launch_train_process(server_records, experiment_records, content):
 
   # prepare main param
   if server_records['main_param'] is not None and server_records['main_param'] != '':
-    with open(os.path.join(server_records['main_folder'], server_records['main_param']), 'r') as fp:
+    with open(os.path.join(server_records['root_main_folder'], server_records['main_param']), 'r') as fp:
       # load basic parameter
       main_param.update(yaml.load(fp))
 
@@ -196,7 +196,7 @@ def launch_train_process(server_records, experiment_records, content):
 
   # prepare main file
   main_file = 'main_file.py'
-  shutil.copy(os.path.join(server_records['main_folder'], server_records['main_file']),
+  shutil.copy(os.path.join(server_records['root_main_folder'], server_records['main_file']),
               os.path.join(server_records['main_folder'], experiment_id, 'main_file.py'))
 
   experiment_records[experiment_id]['main_file'] = os.path.join(server_records['main_folder'],
@@ -220,7 +220,7 @@ def launch_train_process(server_records, experiment_records, content):
     cmd_shell += ' --token=%s' % server_records['token']
 
   # start running
-  p = subprocess.Popen('%s > %s.log' % (cmd_shell, experiment_id), shell=True)
+  p = subprocess.Popen('%s > %s.log' % (cmd_shell, experiment_id), shell=True, cwd=os.path.join(server_records['main_folder'], experiment_id))
   experiment_records[experiment_id]['pid'] = p
   return True
 
@@ -971,8 +971,11 @@ def train_server_start(main_file,
 
     if is_worker:
       # tar all support files
-      tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % ('trainer', signature)
+      tar_shell = 'tar -czf - --exclude=static --exclude=template  --exclude=dump --exclude=work --exclude=trainer.tar.gz * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % ('trainer', signature)
       subprocess.call(tar_shell, shell=True, cwd=main_folder)
+
+      if not os.path.exists(os.path.join(main_folder, 'work')):
+        os.makedirs(os.path.join(main_folder, 'work'))
 
     # records db
     experiment_records = {}
@@ -982,7 +985,8 @@ def train_server_start(main_file,
 
     server_records = {'signature': signature,
                       'study_name': study_name,
-                      'main_folder': main_folder,
+                      'root_main_folder': main_folder,
+                      'main_folder': os.path.join(main_folder, 'work'),
                       'main_param': main_param,
                       'main_file': main_file,
                       'devices': devices,

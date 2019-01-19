@@ -1,0 +1,19 @@
+<task>
+    <task_name>xxx</task_name>
+    <task_type>xxx</task_type>
+    <input>
+        <source_data>
+            <data_set_name>xxx</data_set_name>
+        </source_data>
+        <evaluation_measures>
+            <evaluation_measure>xxx</evaluation_measure>
+	    </evaluation_measures>
+        <info>
+            <class_label>
+                <c>xxx</c>
+            </class_label>
+        </info>
+        <ext>
+        </ext>
+    </input>
+</task>

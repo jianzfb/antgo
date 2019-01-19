@@ -96,7 +96,7 @@ class AntTrainServer(AntBase):
     study_configuration = json.loads(study.study_configuration)
     return SearchspaceFactory.get(study.search_space)(study, **study_configuration['searchSpace'])
 
-  def add_study(self, query):
+  def add_study(self, query, status='stop'):
     study_name = query.get('study_name', '')
     study_goal = query.get('study_goal', 'MAXIMIZE')
     study_max_trials = query.get('study_max_trials', 100)
@@ -141,7 +141,8 @@ class AntTrainServer(AntBase):
                study_configuration=json.dumps(study_configuration),
                algorithm=study_hyperparameter_search,
                search_space=study_architecture_search,
-               created_time=time.time())
+               created_time=time.time(),
+               status=status)
     Study.create(ss)
     return {'status': 'ok'}
 
@@ -191,6 +192,7 @@ class AntTrainServer(AntBase):
     if dump_dir is None:
       return {'status': 'fail'}
 
+    time_str = datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f')
     all_trails = Trial.filter(study_name=study_name, status='Completed')
     all_trails = sorted(all_trails, key=lambda x: x.created_time)
     plt.xlabel('time(hours)')
@@ -198,8 +200,8 @@ class AntTrainServer(AntBase):
     x = [(m.created_time-study.created_time)/3600 for m in all_trails]
     y = [m.objective_value for m in all_trails]
     plt.scatter(x=x, y=y, c='r',marker='o')
-    plt.savefig('%s/study_%s_vis.png'%(dump_dir, study_name))
-    return {'status': 'ok', 'result': 'study_%s_vis.png'%study_name}
+    plt.savefig('%s/study_%s_%s.png'%(dump_dir, study_name, time_str))
+    return {'status': 'ok', 'result': '%s/study_%s_%s.png'%(dump_dir, study_name, time_str)}
 
   def get_studys(self, query):
     studys = [(s.name, s.created_time, s.id, s.status) for s in Study.contents]
@@ -244,9 +246,14 @@ class AntTrainServer(AntBase):
   def get_hyperparameter_all(self, query):
     return {'status': 'ok', 'result': HyperparametersFactory.all()}
 
-  def listening_and_command_dispatch(self):
+  def listening_and_command_dispatch(self, *args, **kwargs):
+    # initialize
+    if len(kwargs) > 0:
+      self.add_study(kwargs, 'running')
+
+    # listening and dispatch
     self._backend = zmq.Context().socket(zmq.REP)
-    self._backend.connect('ipc://%s'%str(os.getpid()))
+    self._backend.connect('ipc://%s' % str(os.getpid()))
 
     while True:
       client_query = self._backend.recv_json()
@@ -387,7 +394,38 @@ class AntTrainServer(AntBase):
     logger.info('launch train %s server'%'worker' if self.is_worker else 'master')
     pid = None
     if not self.is_worker:
-      process = multiprocessing.Process(target=self.listening_and_command_dispatch)
+      # config train master
+      automl_config = {}
+      if self.main_param is not None:
+        main_config_path = os.path.join(self.main_folder, self.main_param)
+        params = yaml.load(open(main_config_path, 'r'))
+
+        if 'automl' in params and 'study' in params['automl']:
+          # parse study
+          study_name = params['automl']['study'].get('study_name', '')
+          automl_config['study_name'] = study_name
+
+          study_goal = params['automl']['study'].get('goal', 'MAXIMIZE')
+          assert(study_goal in ['MAXIMIZE', 'MINIMIZE'])
+          automl_config['study_goal'] = study_goal
+
+          study_max_trials = params['automl']['study'].get('study_max_trials', 1000)
+          automl_config['study_max_trials'] = int(study_max_trials)
+
+          study_max_time = params['automl']['study'].get('study_max_time', '1d')
+          automl_config['study_max_time'] = study_max_time
+
+          study_hyperparameter_search = ''
+          study_hyperparameters = {}
+
+          study_architecture_search = params['automl']['study'].get('study_architecture_search', 'Evolution')
+          automl_config['study_architecture_search'] = study_architecture_search
+
+          study_architecture_parameters = params['automl']['study'].get('study_architecture_parameters', {})
+          automl_config['study_architecture_parameters'] = study_architecture_parameters
+
+      # launch command dispatch process
+      process = multiprocessing.Process(target=self.listening_and_command_dispatch, kwargs=automl_config)
       process.start()
       pid = process.pid
 

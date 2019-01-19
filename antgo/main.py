@@ -34,9 +34,9 @@ _ant_support_commands = ["train",
                          "challenge",
                          "dataset",
                          "batch",
-                         "template",
                          "demo",
                          "release",
+                         "startproject",
                          "tools/tffrozen",
                          "tools/tfrecords",
                          "tools/tfgraph"]
@@ -69,6 +69,7 @@ flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_indicator('support_user_upload', '')
 flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
+flags.DEFINE_indicator('automl', '')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
 flags.DEFINE_indicator('zoo', '')
@@ -188,12 +189,48 @@ def main():
   if ant_cmd not in _ant_support_commands:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
     return
-  
-  if ant_cmd == 'template':
-    tt = AntTemplate(dump_dir= os.path.abspath(os.curdir) if FLAGS.dump() is None else FLAGS.dump(),
-                    main_file= FLAGS.main_file(),
-                    main_param= FLAGS.main_param())
-    tt.start()
+
+  if ant_cmd == 'startproject':
+    project_name = FLAGS.name()
+    if project_name == "":
+      project_name = 'AntgoProject'
+
+    if os.path.exists(os.path.join(os.curdir, project_name)):
+      while True:
+        project_i = 0
+        if not os.path.exists(os.path.join(os.curdir, '%s-%d'%(project_name, project_i))):
+          project_name = '%s-%d'%(project_name, project_i)
+          break
+
+        project_i += 1
+
+    os.makedirs(os.path.join(os.curdir, project_name))
+
+    # generate main file and main param templates
+    template_file_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates')
+
+    shutil.copy(os.path.join(template_file_folder, 'task_main_file.py'),
+                os.path.join(os.curdir, project_name, '%s_main_file.py' % project_name.lower()))
+
+    shutil.copy(os.path.join(template_file_folder, 'task_main_param.yaml'),
+                os.path.join(os.curdir, project_name, '%s_main_param.py' % project_name.lower()))
+
+    shutil.copy(os.path.join(template_file_folder, 'task.xml'),
+                os.path.join(os.curdir, project_name, '%s.xml' % project_name.lower()))
+
+    if FLAGS.automl():
+      # worker shell
+      with open(os.path.join(os.curdir, project_name, 'woker_run.sh'), 'w') as fp:
+        fp.write('nohup antgo train --worker --main_file=%s --main_param=%s --task=%s --signature=%s --devices=xxx,xxx,xxx --servers=xxx.xxx.xxx.xxx:xxx,xxx.xxx.xxx.xxx:xxx > run.log 2>&1 &'%('%s_main_file.py' % project_name.lower(),'%s_main_param.py' % project_name.lower(), '%s.xml' % project_name.lower(), FLAGS.signature()))
+
+      # master shell
+      with open(os.path.join(os.curdir, project_name, 'master_run.sh'), 'w') as fp:
+        fp.write('nohup antgo train --master --main_param=%s --signature=%s --port=xxx > run.log 2>&1 &'%('%s_main_param.py' % project_name.lower(), FLAGS.signature()))
+
+    else:
+      with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
+        fp.write('nohup antgo xxx --main_file=%s --main_param=%s --task=%s > run.log 2>&1 &'%('%s_main_file.py' % project_name.lower(),'%s_main_param.py' % project_name.lower(), '%s.xml' % project_name.lower()))
+
     return
 
   if ant_cmd == 'tools/tfgraph':
