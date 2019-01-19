@@ -296,8 +296,8 @@ def check_mutate_evolution():
 # 4.step test graph to cnn
 import json
 import os
-import tensorflow as tf
-from antgo.codebook.tf.stublayers import *
+# import tensorflow as tf
+# from antgo.codebook.tf.stublayers import *
 def check_graph_to_cnn():
   study_configuration = {'goal': 'MIN',
                          'current_population': [],
@@ -362,6 +362,21 @@ def check_graph_to_cnn():
       except:
         pass
 
+    if random.random() < es.mutation_operator._mutate_rate_for_skip_cell:
+      for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_cell(graph_info):
+        try:
+          graph = es.mutation_operator._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
+
+          for l in graph.layer_list:
+            if l.layer_name == 'add':
+              input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
+              if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
+                print('asdf')
+                graph.update()
+          break
+        except:
+          pass
+
     for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_branch(graph_info):
       try:
         graph = es.mutation_operator._mutate_for_skip_branch(graph, start_layer_id, end_layer_id)
@@ -373,10 +388,10 @@ def check_graph_to_cnn():
               graph.update()
 
         print(graph.flops)
-        if epoch == 4:
-          a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
-          b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
-          graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
+        # if epoch == 4:
+        #   a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
+        #   b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
+        #   graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
         break
       except:
         pass

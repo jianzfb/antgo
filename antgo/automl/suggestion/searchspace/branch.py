@@ -678,6 +678,11 @@ class ResBranch(Branch):
     return (self.input.shape[0], self.input.shape[1], self.input.shape[2], self.output_channel)
 
   def flops(self):
+    group_0_short_cut = None
+    if self.input.shape[-1] != self.output_channel:
+      group_0_short_cut = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+      group_0_short_cut.input = self.input
+
     group_1_conv = BaseStubConv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
     group_1_conv.input = self.input
 
@@ -694,12 +699,15 @@ class ResBranch(Branch):
     group_2_bn.input = DummyNode(group_2_conv.output_shape)
 
     group_3 = BaseStubAdd(cell_name=self.cell_name, block_name=self.block_name)
-    group_3.input = [self.input, DummyNode(group_2_bn.output_shape)]
+    if self.input.shape[-1] != self.output_channel:
+      group_3.input = [DummyNode(group_0_short_cut.output_shape), DummyNode(group_2_bn.output_shape)]
+    else:
+      group_3.input = [self.input, DummyNode(group_2_bn.output_shape)]
 
     group_4 = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
     group_4.input = DummyNode(group_3.output_shape)
 
-    return group_1_conv.flops() + \
+    total_flops = group_1_conv.flops() + \
            group_1_bn.flops() +\
            group_1_relu.flops() +\
            group_2_conv.flops() +\
@@ -707,7 +715,16 @@ class ResBranch(Branch):
            group_3.flops() + \
            group_4.flops()
 
+    if group_0_short_cut is not None:
+      total_flops += group_0_short_cut.flops()
+    return total_flops
+
   def __call__(self, *args, **kwargs):
+    group_0_short_cut = None
+    if args[0].shape[-1] != self.output_channel:
+      group_0_short_cut_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+      group_0_short_cut = group_0_short_cut_c(*args, **kwargs)
+
     group_1_conv_c = self.layer_factory.conv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
     group_1_conv = group_1_conv_c(*args, **kwargs)
 
@@ -724,10 +741,14 @@ class ResBranch(Branch):
     group_2_bn = group_2_bn_c(group_2_conv)
 
     group_3_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_c = group_3_c(*[[group_2_bn, args[0]]], **kwargs)
+    group_3 = None
+    if group_0_short_cut is None:
+      group_3 = group_3_c(*[[group_2_bn, args[0]]], **kwargs)
+    else:
+      group_3 = group_3_c(*[[group_2_bn, group_0_short_cut]], **kwargs)
 
     group_4_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_4 = group_4_c(group_3_c)
+    group_4 = group_4_c(group_3)
 
     return group_4
 
@@ -754,6 +775,12 @@ class BottleNeckResBranch(Branch):
     return (self.input.shape[0], self.input.shape[1], self.input.shape[2], self.output_channel)
 
   def flops(self):
+    group_0_short_cut = None
+    if self.input.shape[-1] != self.output_channel:
+      group_0_short_cut = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name,
+                                         block_name=self.block_name)
+      group_0_short_cut.input = self.input
+
     group_1_conv = BaseStubConv2d(None, self.bottleneck, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
     group_1_conv.input = self.input
 
@@ -779,12 +806,15 @@ class BottleNeckResBranch(Branch):
     group_3_bn.input = DummyNode(group_3_conv.output_shape)
 
     group_4 = BaseStubAdd(cell_name=self.cell_name, block_name=self.block_name)
-    group_4.input = [self.input, DummyNode(group_3_bn.output_shape)]
+    if group_0_short_cut is not None:
+      group_4.input = [DummyNode(group_0_short_cut.output_shape), DummyNode(group_3_bn.output_shape)]
+    else:
+      group_4.input = [self.input, DummyNode(group_3_bn.output_shape)]
 
     group_5 = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
     group_5.input = DummyNode(group_4.output_shape)
 
-    return group_1_conv.flops() + \
+    total_flops = group_1_conv.flops() + \
            group_1_bn.flops() + \
            group_1_relu.flops() + \
            group_2_conv.flops() + \
@@ -795,7 +825,17 @@ class BottleNeckResBranch(Branch):
            group_4.flops() + \
            group_5.flops()
 
+    if group_0_short_cut is not None:
+      total_flops += group_0_short_cut.flops()
+
+    return total_flops
+
   def __call__(self, *args, **kwargs):
+    group_0_short_cut = None
+    if args[0].shape[-1] != self.output_channel:
+      group_0_short_cut_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+      group_0_short_cut = group_0_short_cut_c(*args, **kwargs)
+
     group_1_conv_c = self.layer_factory.conv2d(None, self.bottleneck, 1, 1, cell_name=self.cell_name,
                                                block_name=self.block_name)
     group_1_conv = group_1_conv_c(*args, **kwargs)
@@ -824,10 +864,14 @@ class BottleNeckResBranch(Branch):
     group_3_bn = group_3_bn_c(group_3_conv)
 
     group_3_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_c = group_3_c(*[[group_3_bn, args[0]]], **kwargs)
+    group_3 = None
+    if group_0_short_cut is None:
+      group_3 = group_3_c(*[[group_3_bn, args[0]]], **kwargs)
+    else:
+      group_3 = group_3_c(*[[group_3_bn, group_0_short_cut]], **kwargs)
 
     group_4_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_4 = group_4_c(group_3_c)
+    group_4 = group_4_c(group_3)
     return group_4
 
   @property
