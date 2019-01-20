@@ -88,7 +88,6 @@ class Graph(object):
       vis: A dictionary of temporary storage for whether an local operation has been done
           during the network morphism.
   """
-
   def __init__(self, *args, **kwargs):
     self.weighted = kwargs.get('weighted', False)
     self.node_list = kwargs.get('node_list', [])            # record nodes
@@ -771,6 +770,26 @@ class Graph(object):
       for upper_node, skip_layer in self.reverse_adj_list[linked_node]:
         if upper_node == block_last_layer_input_id and self.layer_list[skip_layer].layer_name in ['add', 'concat']:
           existed_skip = True
+          break
+
+    return existed_skip
+
+  def has_skip2(self, start_id, end_id):
+    conv_block_input_id = self._conv_block_end_node(start_id)
+    # conv_block_input_id = self.adj_list[conv_block_input_id][0][0]
+    block_last_layer_input_id = self._conv_block_end_node(end_id)
+
+    existed_skip = Constant.NO_SKIP
+    for linked_node, linked_layer in self.adj_list[conv_block_input_id]:
+      if self.layer_list[linked_layer].layer_name == 'bilinear_resize':
+        linked_node = self.adj_list[linked_node][0][0]
+
+      for upper_node, skip_layer in self.reverse_adj_list[linked_node]:
+        if upper_node == block_last_layer_input_id and self.layer_list[skip_layer].layer_name in ['add', 'concat']:
+          if self.layer_list[skip_layer].layer_name == 'add':
+            existed_skip = Constant.ADD_SKIP
+          else:
+            existed_skip = Constant.CONCAT_SKIP
           break
 
     return existed_skip

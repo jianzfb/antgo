@@ -296,8 +296,8 @@ def check_mutate_evolution():
 # 4.step test graph to cnn
 import json
 import os
-# import tensorflow as tf
-# from antgo.codebook.tf.stublayers import *
+import tensorflow as tf
+from antgo.codebook.tf.stublayers import *
 def check_graph_to_cnn():
   study_configuration = {'goal': 'MIN',
                          'current_population': [],
@@ -308,17 +308,8 @@ def check_graph_to_cnn():
   study_configuration = json.dumps(study_configuration)
   s = Study('aa', study_configuration=study_configuration, algorithm='', search_space=None)
 
-  es = EvolutionSearchSpace(s, population_size=1, input_size='1,128,128,3;1,512,512,3')
+  es = EvolutionSearchSpace(s, population_size=100, input_size='1,128,128,3;1,512,512,3')
   es._initialize_population()
-
-  aa = json.loads(s.study_configuration)
-  graph_encoder_str = aa['searchSpace']['current_population'][0]
-  graph = Decoder().decode(graph_encoder_str)
-  graph.layer_factory = BaseLayerFactory()
-  graph.visualization('aa.png')
-
-  graph_info = aa['searchSpace']['current_population_info'][0]
-  # ss= es.dna(graph, graph_info)
 
   # es.mutation_operator._mutate_for_block(graph, aa['searchSpace']['current_population_info'][0], ['ADD'])
   # graph.visualization('bb.png')
@@ -326,6 +317,12 @@ def check_graph_to_cnn():
   # train_writer = tf.summary.FileWriter('summary/', tf.get_default_graph())
 
   for epoch in range(200):
+    aa = json.loads(s.study_configuration)
+    graph_encoder_str = aa['searchSpace']['current_population'][0]
+    graph = Decoder().decode(graph_encoder_str)
+    graph.layer_factory = BaseLayerFactory()
+    graph_info = aa['searchSpace']['current_population_info'][0]
+
     for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_block(graph_info):
       try:
         graph = es.mutation_operator._mutate_for_skip_block(graph, start_layer_id, end_layer_id)
@@ -388,10 +385,11 @@ def check_graph_to_cnn():
               graph.update()
 
         print(graph.flops)
-        # if epoch == 4:
-        #   a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
-        #   b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
-        #   graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
+        if epoch == 50:
+          a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
+          b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
+          graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
+
         break
       except:
         pass

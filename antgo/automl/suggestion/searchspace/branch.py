@@ -27,9 +27,19 @@ class ConvBnBranch(Branch):
     self.layer_name = 'convbn_branch'
 
     self.output_channel = output_channel
-    self.layer_1 = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
-    self.layer_2 = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    self.layer_3 = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
+    self.layer_1 = BaseStubConv2d(None,
+                                  self.output_channel,
+                                  1,
+                                  1,
+                                  cell_name=self.cell_name,
+                                  block_name=self.block_name,
+                                  group=self)
+    self.layer_2 = BaseStubBatchNormalization2d(cell_name=self.cell_name,
+                                                block_name=self.block_name,
+                                                group=self)
+    self.layer_3 = BaseStubReLU(cell_name=self.cell_name,
+                                block_name=self.block_name,
+                                group=self)
 
   @property
   def output_shape(self):
@@ -45,15 +55,20 @@ class ConvBnBranch(Branch):
     return self.layer_1.flops() + self.layer_2.flops() + self.layer_3.flops()
 
   def __call__(self, *args, **kwargs):
-    layer_1_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
-    layer_1 = layer_1_c(*args, **kwargs)
+    # layer_1_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+    # layer_1 = layer_1_c(*args, **kwargs)
+    #
+    # layer_2_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # layer_2 = layer_2_c(layer_1)
+    #
+    # layer_3_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
+    # layer_3 = layer_3_c(layer_2)
+    # return layer_3
 
-    layer_2_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    layer_2 = layer_2_c(layer_1)
-
-    layer_3_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    layer_3 = layer_3_c(layer_2)
-    return layer_3
+    layer_1_tensor = self.layer_1(*args, **kwargs)
+    layer_2_tensor = self.layer_2(layer_1_tensor)
+    layer_3_tensor = self.layer_3(layer_2_tensor)
+    return layer_3_tensor
 
   @property
   def layer_type_encoder(self):
@@ -88,12 +103,15 @@ class SeperableConvBranch(Branch):
                                            rate_h=self.rate_h,
                                            rate_w=self.rate_w,
                                            cell_name=self.cell_name,
-                                           block_name=self.block_name)
+                                           block_name=self.block_name,
+                                           group=self)
 
     self.layer_2 = BaseStubBatchNormalization2d(cell_name=self.cell_name,
-                                                block_name=self.block_name)
+                                                block_name=self.block_name,
+                                                group=self)
     self.layer_3 = BaseStubReLU(cell_name=self.cell_name,
-                                block_name=self.block_name)
+                                block_name=self.block_name,
+                                group=self)
 
   @property
   def output_shape(self):
@@ -109,22 +127,27 @@ class SeperableConvBranch(Branch):
     return self.layer_1.flops() + self.layer_2.flops() + self.layer_3.flops()
 
   def __call__(self, *args, **kwargs):
-    layer_1_c = self.layer_factory.separable_conv2d(input_channel=None,
-                                                    filters=self.output_channel,
-                                                    kernel_size_h=3,
-                                                    kernel_size_w=3,
-                                                    rate_h=self.rate_h,
-                                                    rate_w=self.rate_w,
-                                                    cell_name=self.cell_name,
-                                                    block_name=self.block_name)
-    layer_1 = layer_1_c(*args, **kwargs)
+    # layer_1_c = self.layer_factory.separable_conv2d(input_channel=None,
+    #                                                 filters=self.output_channel,
+    #                                                 kernel_size_h=3,
+    #                                                 kernel_size_w=3,
+    #                                                 rate_h=self.rate_h,
+    #                                                 rate_w=self.rate_w,
+    #                                                 cell_name=self.cell_name,
+    #                                                 block_name=self.block_name)
+    # layer_1 = layer_1_c(*args, **kwargs)
+    #
+    # layer_2_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # layer_2 = layer_2_c(layer_1)
+    #
+    # layer_3_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
+    # layer_3 = layer_3_c(layer_2)
 
-    layer_2_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    layer_2 = layer_2_c(layer_1)
+    layer_1_tensor = self.layer_1(*args, **kwargs)
+    layer_2_tensor = self.layer_2(layer_1_tensor)
+    layer_3_tensor = self.layer_3(layer_2_tensor)
 
-    layer_3_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    layer_3 = layer_3_c(layer_2)
-    return layer_3
+    return layer_3_tensor
 
   @property
   def layer_type_encoder(self):
@@ -159,7 +182,8 @@ class SPPBranch(Branch):
     self.layer_1 = BaseStubSPP(grid_h=self.grid_h,
                                grid_w=self.grid_w,
                                cell_name=self.cell_name,
-                               block_name=self.block_name)
+                               block_name=self.block_name,
+                               group=self)
 
   @property
   def output_shape(self):
@@ -171,13 +195,15 @@ class SPPBranch(Branch):
     return self.layer_1.flops()
 
   def __call__(self, *args, **kwargs):
-    layer_1_c = self.layer_factory.spp(grid_h=self.grid_h,
-                                       grid_w=self.grid_w,
-                                       cell_name=self.cell_name,
-                                       block_name=self.block_name)
-    layer_1_c.input = self.input
-    layer_1 = layer_1_c(*args, **kwargs)
-    return layer_1
+    # layer_1_c = self.layer_factory.spp(grid_h=self.grid_h,
+    #                                    grid_w=self.grid_w,
+    #                                    cell_name=self.cell_name,
+    #                                    block_name=self.block_name)
+    # layer_1_c.input = self.input
+    # layer_1 = layer_1_c(*args, **kwargs)
+
+    layer_1_tensor = self.layer_1(*args, **kwargs)
+    return layer_1_tensor
 
   @property
   def layer_type_encoder(self):
@@ -205,10 +231,11 @@ class FocusBranch(Branch):
                                                 rate_h=self.rate_list[0],
                                                 rate_w=self.rate_list[0],
                                                 cell_name=self.cell_name,
-                                                block_name=self.block_name)
+                                                block_name=self.block_name,
+                                                group=self)
 
-    self.group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name,block_name=self.block_name)
-    self.group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
+    self.group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name,block_name=self.block_name,group=self)
+    self.group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name,group=self)
 
     self.group_2_conv = BaseStubSeparableConv2d(input_channel=None,
                                                 filters=self.output_channel,
@@ -217,11 +244,12 @@ class FocusBranch(Branch):
                                                 rate_h=self.rate_list[1],
                                                 rate_w=self.rate_list[1],
                                                 cell_name=self.cell_name,
-                                                block_name=self.block_name)
-    self.group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name,block_name=self.block_name)
-    self.group_2_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
+                                                block_name=self.block_name,
+                                                group=self)
+    self.group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name,block_name=self.block_name,group=self)
+    self.group_2_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
 
-    self.group_12_add = BaseStubAdd()
+    self.group_12_add = BaseStubAdd(group=self)
     self.group_3_conv = BaseStubSeparableConv2d(input_channel=None,
                                                 filters=self.output_channel,
                                                 kernel_size_h=3,
@@ -229,12 +257,13 @@ class FocusBranch(Branch):
                                                 rate_h=self.rate_list[2],
                                                 rate_w=self.rate_list[2],
                                                 cell_name=self.cell_name,
-                                                block_name=self.block_name)
-    self.group_3_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name,block_name=self.block_name)
-    self.group_3_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
+                                                block_name=self.block_name,
+                                                group=self)
+    self.group_3_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name,block_name=self.block_name,group=self)
+    self.group_3_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
 
-    self.group_4_12_add = BaseStubAdd()
-    self.group_4_123_add = BaseStubAdd()
+    self.group_4_12_add = BaseStubAdd(group=self)
+    self.group_4_123_add = BaseStubAdd(group=self)
 
   @property
   def output_shape(self):
@@ -271,67 +300,84 @@ class FocusBranch(Branch):
            self.group_4_123_add.flops()
 
   def __call__(self, *args, **kwargs):
-    # group 1
-    group_1_conv_c = self.layer_factory.separable_conv2d(input_channel=None,
-                                                    filters=self.output_channel,
-                                                    kernel_size_h=3,
-                                                    kernel_size_w=3,
-                                                    rate_h=self.rate_list[0],
-                                                    rate_w=self.rate_list[0],
-                                                    cell_name=self.cell_name,
-                                                    block_name=self.block_name)
-    group_1_conv = group_1_conv_c(*args, **kwargs)
+    # # group 1
+    # group_1_conv_c = self.layer_factory.separable_conv2d(input_channel=None,
+    #                                                 filters=self.output_channel,
+    #                                                 kernel_size_h=3,
+    #                                                 kernel_size_w=3,
+    #                                                 rate_h=self.rate_list[0],
+    #                                                 rate_w=self.rate_list[0],
+    #                                                 cell_name=self.cell_name,
+    #                                                 block_name=self.block_name)
+    # group_1_conv = group_1_conv_c(*args, **kwargs)
+    #
+    # group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # group_1_bn = group_1_bn_c(group_1_conv)
+    #
+    # group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
+    # group_1_relu = group_1_relu_c(group_1_bn)
+    #
+    # # group 2
+    # group_2_conv_c = self.layer_factory.separable_conv2d(input_channel=None,
+    #                                                 filters=self.output_channel,
+    #                                                 kernel_size_h=3,
+    #                                                 kernel_size_w=3,
+    #                                                 rate_h=self.rate_list[1],
+    #                                                 rate_w=self.rate_list[1],
+    #                                                 cell_name=self.cell_name,
+    #                                                 block_name=self.block_name)
+    # group_2_conv = group_2_conv_c(group_1_relu)
+    #
+    # group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # group_2_bn = group_2_bn_c(group_2_conv)
+    #
+    # group_2_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
+    # group_2_relu = group_2_relu_c(group_2_bn)
+    #
+    # group_12_add_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
+    # group_12_add = group_12_add_c(*[[group_1_relu, group_2_relu]])
+    #
+    # # group 3
+    # group_3_conv_c = self.layer_factory.separable_conv2d(input_channel=None,
+    #                                                 filters=self.output_channel,
+    #                                                 kernel_size_h=3,
+    #                                                 kernel_size_w=3,
+    #                                                 rate_h=self.rate_list[2],
+    #                                                 rate_w=self.rate_list[2],
+    #                                                 cell_name=self.cell_name,
+    #                                                 block_name=self.block_name)
+    # group_3_conv = group_3_conv_c(group_12_add)
+    #
+    # group_3_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # group_3_bn = group_3_bn_c(group_3_conv)
+    #
+    # group_3_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
+    # group_3_relu = group_3_relu_c(group_3_bn)
+    #
+    # group_4_12_add_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
+    # group_4_12_add = group_4_12_add_c(*[[group_1_relu, group_2_relu]])
+    #
+    # group_4_123_add_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
+    # group_4_123_add = group_4_123_add_c(*[[group_4_12_add, group_3_relu]])
 
-    group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn = group_1_bn_c(group_1_conv)
+    group_1_conv_tensor = self.group_1_conv(*args, **kwargs)
+    group_1_bn_tensor = self.group_1_bn(group_1_conv_tensor)
+    group_1_relu_tensor = self.group_1_relu(group_1_bn_tensor)
 
-    group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu = group_1_relu_c(group_1_bn)
+    group_2_conv_tensor = self.group_2_conv(group_1_relu_tensor)
+    group_2_bn_tensor = self.group_2_bn(group_2_conv_tensor)
+    group_2_relu_tensor = self.group_2_relu(group_2_bn_tensor)
 
-    # group 2
-    group_2_conv_c = self.layer_factory.separable_conv2d(input_channel=None,
-                                                    filters=self.output_channel,
-                                                    kernel_size_h=3,
-                                                    kernel_size_w=3,
-                                                    rate_h=self.rate_list[1],
-                                                    rate_w=self.rate_list[1],
-                                                    cell_name=self.cell_name,
-                                                    block_name=self.block_name)
-    group_2_conv = group_2_conv_c(group_1_relu)
+    group_12_add = self.group_12_add(*[[group_1_relu_tensor, group_2_relu_tensor]])
 
-    group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn = group_2_bn_c(group_2_conv)
+    group_3_conv_tensor = self.group_3_conv(group_12_add)
+    group_3_bn_tensor = self.group_3_bn(group_3_conv_tensor)
+    group_3_relu_tensor = self.group_3_relu(group_3_bn_tensor)
 
-    group_2_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_relu = group_2_relu_c(group_2_bn)
+    group_4_12_add_tensor = self.group_4_12_add(*[[group_1_relu_tensor, group_2_relu_tensor]])
+    group_4_123_add_tensor = self.group_4_123_add(*[[group_4_12_add_tensor, group_3_relu_tensor]])
 
-    group_12_add_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_12_add = group_12_add_c(*[[group_1_relu, group_2_relu]])
-
-    # group 3
-    group_3_conv_c = self.layer_factory.separable_conv2d(input_channel=None,
-                                                    filters=self.output_channel,
-                                                    kernel_size_h=3,
-                                                    kernel_size_w=3,
-                                                    rate_h=self.rate_list[2],
-                                                    rate_w=self.rate_list[2],
-                                                    cell_name=self.cell_name,
-                                                    block_name=self.block_name)
-    group_3_conv = group_3_conv_c(group_12_add)
-
-    group_3_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_bn = group_3_bn_c(group_3_conv)
-
-    group_3_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_relu = group_3_relu_c(group_3_bn)
-
-    group_4_12_add_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_12_add = group_4_12_add_c(*[[group_1_relu, group_2_relu]])
-
-    group_4_123_add_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_123_add = group_4_123_add_c(*[[group_4_12_add, group_3_relu]])
-
-    return group_4_123_add
+    return group_4_123_add_tensor
 
   @property
   def layer_type_encoder(self):
@@ -362,135 +408,132 @@ class SEBranch(Branch):
     else:
       self.squeeze_channels = kwargs['squeeze_channels']
 
+    self.group_1 = BaseStubAvgPooling2d(kernel_size_h=None, kernel_size_w=None, group=self)
+    self.group_1_conv = BaseStubConv2d(input_channel=None,
+                                       filters=self.squeeze_channels,
+                                       kernel_size_h=1,
+                                       kernel_size_w=1,
+                                       rate_h=1,
+                                       rate_w=1,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+
+    self.group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
+    self.group_2_conv = BaseStubConv2d(input_channel=None,
+                                       filters=None,
+                                       kernel_size_h=1,
+                                       kernel_size_w=1,
+                                       rate_h=1,
+                                       rate_w=1,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+
+    self.group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_3_sigmoid = BaseStubSigmoid(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_4_multiply = BaseStubDot(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
+
   @property
   def output_shape(self):
-    group_1 = BaseStubAvgPooling2d(kernel_size_h=self.input.shape[1], kernel_size_w=self.input.shape[2])
-    group_1.input = self.input
+    self.group_1.input = self.input
+    self.group_1.kernel_size_h = self.input.shape[1]
+    self.group_1.kernel_size_w = self.input.shape[2]
 
-    group_1_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.squeeze_channels,
-                                           kernel_size_h=1,
-                                           kernel_size_w=1,
-                                           rate_h=1,
-                                           rate_w=1,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_1_conv.input = DummyNode(group_1.output_shape)
+    self.group_1_conv.input = DummyNode(self.group_1.output_shape)
+    self.group_1_bn.input = DummyNode(self.group_1_conv.output_shape)
+    self.group_1_relu.input = DummyNode(self.group_1_bn.output_shape)
 
-    group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn.input = DummyNode(group_1_conv.output_shape)
+    self.group_2_conv.input = DummyNode(self.group_1_relu.output_shape)
+    self.group_2_conv.filters = self.input.shape[-1]
+    self.group_2_bn.input = DummyNode(self.group_2_conv.output_shape)
+    self.group_3_sigmoid.input = DummyNode(self.group_2_bn.output_shape)
 
-    group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu.input = DummyNode(group_1_bn.output_shape)
+    self.group_4_multiply.input = [self.input, DummyNode(self.group_3_sigmoid.output_shape)]
 
-    group_2_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.input.shape[-1],
-                                           kernel_size_h=1,
-                                           kernel_size_w=1,
-                                           rate_h=1,
-                                           rate_w=1,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_2_conv.input = DummyNode(group_1_relu.output_shape)
-
-    group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn.input = DummyNode(group_2_conv.output_shape)
-
-    group_3_sigmoid = BaseStubSigmoid(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_sigmoid.input = DummyNode(group_2_bn.output_shape)
-
-    group_4_multiply = BaseStubDot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply.input = [self.input, DummyNode(group_3_sigmoid.output_shape)]
-
-    return group_4_multiply.output_shape
+    return self.group_4_multiply.output_shape
 
   def flops(self):
-    group_1 = BaseStubAvgPooling2d(kernel_size_h=self.input.shape[1], kernel_size_w=self.input.shape[2])
-    group_1.input = self.input
+    self.group_1.input = self.input
+    self.group_1.kernel_size_h = self.input.shape[1]
+    self.group_1.kernel_size_w = self.input.shape[2]
 
-    group_1_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.squeeze_channels,
-                                           kernel_size_h=1,
-                                           kernel_size_w=1,
-                                           rate_h=1,
-                                           rate_w=1,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_1_conv.input = DummyNode(group_1.output_shape)
+    self.group_1_conv.input = DummyNode(self.group_1.output_shape)
+    self.group_1_bn.input = DummyNode(self.group_1_conv.output_shape)
+    self.group_1_relu.input = DummyNode(self.group_1_bn.output_shape)
 
-    group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn.input = DummyNode(group_1_conv.output_shape)
+    self.group_2_conv.input = DummyNode(self.group_1_relu.output_shape)
+    self.group_2_conv.filters = self.input.shape[-1]
+    self.group_2_bn.input = DummyNode(self.group_2_conv.output_shape)
+    self.group_3_sigmoid.input = DummyNode(self.group_2_bn.output_shape)
 
-    group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu.input = DummyNode(group_1_bn.output_shape)
+    self.group_4_multiply.input = [self.input, DummyNode(self.group_3_sigmoid.output_shape)]
 
-    group_2_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.input.shape[-1],
-                                           kernel_size_h=1,
-                                           kernel_size_w=1,
-                                           rate_h=1,
-                                           rate_w=1,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_2_conv.input = DummyNode(group_1_relu.output_shape)
-
-    group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn.input = DummyNode(group_2_conv.output_shape)
-
-    group_3_sigmoid = BaseStubSigmoid(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_sigmoid.input = DummyNode(group_2_bn.output_shape)
-
-    group_4_multiply = BaseStubDot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply.input = [self.input, DummyNode(group_3_sigmoid.output_shape)]
-
-    return group_1.flops()+\
-           group_1_conv.flops()+\
-           group_1_bn.flops()+\
-           group_1_relu.flops()+\
-           group_2_conv.flops()+\
-           group_2_bn.flops()+\
-           group_3_sigmoid.flops()+\
-           group_4_multiply.flops()
+    return self.group_1.flops()+\
+           self.group_1_conv.flops()+\
+           self.group_1_bn.flops()+\
+           self.group_1_relu.flops()+\
+           self.group_2_conv.flops()+\
+           self.group_2_bn.flops()+\
+           self.group_3_sigmoid.flops()+\
+           self.group_4_multiply.flops()
 
   def __call__(self, *args, **kwargs):
-    group_1_layer_c = self.layer_factory.avg_pool2d(kernel_size_h=self.input.shape[1], kernel_size_w=self.input.shape[2])
-    group_1_layer = group_1_layer_c(*args, **kwargs)
+    # group_1_layer_c = self.layer_factory.avg_pool2d(kernel_size_h=self.input.shape[1], kernel_size_w=self.input.shape[2])
+    # group_1_layer = group_1_layer_c(*args, **kwargs)
+    #
+    # group_1_conv_c = self.layer_factory.conv2d(None,
+    #                                            filters=self.squeeze_channels,
+    #                                            kernel_size_h=1,
+    #                                            kernel_size_w=1,
+    #                                            cell_name=self.cell_name,
+    #                                            block_name=self.block_name
+    #                                            )
+    # group_1_conv = group_1_conv_c(group_1_layer)
+    #
+    # group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # group_1_bn = group_1_bn_c(group_1_conv)
+    #
+    # group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
+    # group_1_relu = group_1_relu_c(group_1_bn)
+    #
+    # group_2_conv_c = self.layer_factory.conv2d(None,
+    #                                        filters=self.input.shape[-1],
+    #                                        kernel_size_h=1,
+    #                                        kernel_size_w=1,
+    #                                        rate_h=1,
+    #                                        rate_w=1,
+    #                                        cell_name=self.cell_name,
+    #                                        block_name=self.block_name)
+    # group_2_conv = group_2_conv_c(group_1_relu)
+    #
+    # group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # group_2_bn = group_2_bn_c(group_2_conv)
+    #
+    # group_3_sigmoid_c = self.layer_factory.sigmoid(cell_name=self.cell_name, block_name=self.block_name)
+    # group_3_sigmoid = group_3_sigmoid_c(group_2_bn)
+    #
+    # group_4_multiply_c = self.layer_factory.dot(cell_name=self.cell_name, block_name=self.block_name)
+    # group_4_multiply = group_4_multiply_c(*[[group_3_sigmoid, args[0]]], **kwargs)
 
-    group_1_conv_c = self.layer_factory.conv2d(None,
-                                               filters=self.squeeze_channels,
-                                               kernel_size_h=1,
-                                               kernel_size_w=1,
-                                               cell_name=self.cell_name,
-                                               block_name=self.block_name
-                                               )
-    group_1_conv = group_1_conv_c(group_1_layer)
+    self.group_1.kernel_size_h = self.input.shape[1]
+    self.group_1.kernel_size_w = self.input.shape[2]
+    group_1_tensor = self.group_1(*args, **kwargs)
+    group_1_conv_tensor = self.group_1_conv(group_1_tensor)
+    group_1_bn_tensor = self.group_1_bn(group_1_conv_tensor)
+    group_1_relu_tensor = self.group_1_relu(group_1_bn_tensor)
 
-    group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn = group_1_bn_c(group_1_conv)
+    self.group_2_conv.filters = self.input.shape[-1]
+    group_2_conv_tensor = self.group_2_conv(group_1_relu_tensor)
+    group_2_bn_tensor = self.group_2_bn(group_2_conv_tensor)
 
-    group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu = group_1_relu_c(group_1_bn)
+    group_3_sigmoid_tensor = self.group_3_sigmoid(group_2_bn_tensor)
+    group_4_multiply_tensor = self.group_4_multiply(*[[group_3_sigmoid_tensor, args[0]]], **kwargs)
 
-    group_2_conv_c = self.layer_factory.conv2d(None,
-                                           filters=self.input.shape[-1],
-                                           kernel_size_h=1,
-                                           kernel_size_w=1,
-                                           rate_h=1,
-                                           rate_w=1,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_2_conv = group_2_conv_c(group_1_relu)
-
-    group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn = group_2_bn_c(group_2_conv)
-
-    group_3_sigmoid_c = self.layer_factory.sigmoid(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_sigmoid = group_3_sigmoid_c(group_2_bn)
-
-    group_4_multiply_c = self.layer_factory.dot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply = group_4_multiply_c(*[[group_3_sigmoid, args[0]]], **kwargs)
-
-    return group_4_multiply
+    return group_4_multiply_tensor
 
   @property
   def layer_type_encoder(self):
@@ -520,135 +563,136 @@ class RegionSEBranch(Branch):
     else:
       self.region_size = kwargs['region_size']
 
+    self.group_1 = BaseStubAvgPooling2d(kernel_size_h=self.region_size, kernel_size_w=self.region_size, group=self)
+    self.group_1_conv = BaseStubConv2d(input_channel=None,
+                                       filters=self.squeeze_channels,
+                                       kernel_size_h=3,
+                                       kernel_size_w=3,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+
+    self.group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
+    self.group_2_conv = BaseStubConv2d(input_channel=None,
+                                       filters=None,
+                                       kernel_size_h=3,
+                                       kernel_size_w=3,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+
+    self.group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_3_sigmoid = BaseStubSigmoid(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_resize = BaseStubBilinearResize(height=None, width=None, group=self)
+    self.group_4_multiply = BaseStubDot(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
   @property
   def output_shape(self):
-    group_1 = BaseStubAvgPooling2d(kernel_size_h=self.region_size, kernel_size_w=self.region_size)
-    group_1.input = self.input
+    self.group_1.input = self.input
+    self.group_1_conv.input = DummyNode(self.group_1.output_shape)
+    self.group_1_bn.input = DummyNode(self.group_1_conv.output_shape)
+    self.group_1_relu.input = DummyNode(self.group_1_bn.output_shape)
 
-    group_1_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.squeeze_channels,
-                                           kernel_size_h=3,
-                                           kernel_size_w=3,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_1_conv.input = DummyNode(group_1.output_shape)
+    self.group_2_conv.input = DummyNode(self.group_1_relu.output_shape)
+    self.group_2_conv.filters = self.input.shape[-1]
 
-    group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn.input = DummyNode(group_1_conv.output_shape)
+    self.group_2_bn.input = DummyNode(self.group_2_conv.output_shape)
+    self.group_3_sigmoid.input = DummyNode(self.group_2_bn.output_shape)
 
-    group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu.input = DummyNode(group_1_bn.output_shape)
+    self.group_resize.input = DummyNode(self.group_3_sigmoid.output_shape)
+    self.group_resize.height = self.input.shape[1]
+    self.group_resize.width = self.input.shape[2]
 
-    group_2_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.input.shape[-1],
-                                           kernel_size_h=3,
-                                           kernel_size_w=3,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_2_conv.input = DummyNode(group_1_relu.output_shape)
+    self.group_4_multiply.input = [self.input, DummyNode(self.group_resize.output_shape)]
 
-    group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn.input = DummyNode(group_2_conv.output_shape)
-
-    group_3_sigmoid = BaseStubSigmoid(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_sigmoid.input = DummyNode(group_2_bn.output_shape)
-
-    group_resize = BaseStubBilinearResize(height=self.input.shape[1], width=self.input.shape[2])
-    group_resize.input = DummyNode(group_3_sigmoid.output_shape)
-
-    group_4_multiply = BaseStubDot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply.input = [self.input, DummyNode(group_resize.output_shape)]
-
-    return group_4_multiply.output_shape
+    return self.group_4_multiply.output_shape
 
   def flops(self):
-    group_1 = BaseStubAvgPooling2d(kernel_size_h=self.region_size, kernel_size_w=self.region_size)
-    group_1.input = self.input
+    self.group_1.input = self.input
+    self.group_1_conv.input = DummyNode(self.group_1.output_shape)
+    self.group_1_bn.input = DummyNode(self.group_1_conv.output_shape)
+    self.group_1_relu.input = DummyNode(self.group_1_bn.output_shape)
 
-    group_1_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.squeeze_channels,
-                                           kernel_size_h=3,
-                                           kernel_size_w=3,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_1_conv.input = DummyNode(group_1.output_shape)
+    self.group_2_conv.input = DummyNode(self.group_1_relu.output_shape)
+    self.group_2_conv.filters = self.input.shape[-1]
 
-    group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn.input = DummyNode(group_1_conv.output_shape)
+    self.group_2_bn.input = DummyNode(self.group_2_conv.output_shape)
+    self.group_3_sigmoid.input = DummyNode(self.group_2_bn.output_shape)
 
-    group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu.input = DummyNode(group_1_bn.output_shape)
+    self.group_resize.input = DummyNode(self.group_3_sigmoid.output_shape)
+    self.group_resize.height = self.input.shape[1]
+    self.group_resize.width = self.input.shape[2]
 
-    group_2_conv = BaseStubConv2d(input_channel=None,
-                                           filters=self.input.shape[-1],
-                                           kernel_size_h=3,
-                                           kernel_size_w=3,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_2_conv.input = DummyNode(group_1_relu.output_shape)
+    self.group_4_multiply.input = [self.input, DummyNode(self.group_resize.output_shape)]
 
-    group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn.input = DummyNode(group_2_conv.output_shape)
-
-    group_3_sigmoid = BaseStubSigmoid(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_sigmoid.input = DummyNode(group_2_bn.output_shape)
-
-    group_resize = BaseStubBilinearResize(height=self.input.shape[1], width=self.input.shape[2])
-    group_resize.input = DummyNode(group_3_sigmoid.output_shape)
-
-    group_4_multiply = BaseStubDot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply.input = [self.input, DummyNode(group_resize.output_shape)]
-
-    return group_1.flops()+\
-           group_1_conv.flops()+\
-           group_1_bn.flops()+\
-           group_1_relu.flops()+\
-           group_2_conv.flops()+\
-           group_2_bn.flops()+\
-           group_3_sigmoid.flops()+ \
-           group_resize.flops()+\
-           group_4_multiply.flops()
+    return self.group_1.flops()+\
+           self.group_1_conv.flops()+\
+           self.group_1_bn.flops()+\
+           self.group_1_relu.flops()+\
+           self.group_2_conv.flops()+\
+           self.group_2_bn.flops()+\
+           self.group_3_sigmoid.flops()+ \
+           self.group_resize.flops()+\
+           self.group_4_multiply.flops()
 
   def __call__(self, *args, **kwargs):
-    group_1_layer_c = self.layer_factory.avg_pool2d(kernel_size_h=self.region_size, kernel_size_w=self.region_size)
-    group_1_layer = group_1_layer_c(*args, **kwargs)
+    # group_1_layer_c = self.layer_factory.avg_pool2d(kernel_size_h=self.region_size, kernel_size_w=self.region_size)
+    # group_1_layer = group_1_layer_c(*args, **kwargs)
+    #
+    # group_1_conv_c = self.layer_factory.conv2d(None,
+    #                                            filters=self.squeeze_channels,
+    #                                            kernel_size_h=3,
+    #                                            kernel_size_w=3,
+    #                                            cell_name=self.cell_name,
+    #                                            block_name=self.block_name
+    #                                            )
+    # group_1_conv = group_1_conv_c(group_1_layer)
+    #
+    # group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # group_1_bn = group_1_bn_c(group_1_conv)
+    #
+    # group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
+    # group_1_relu = group_1_relu_c(group_1_bn)
+    #
+    # group_2_conv_c = self.layer_factory.conv2d(None,
+    #                                        filters=self.input.shape[-1],
+    #                                        kernel_size_h=3,
+    #                                        kernel_size_w=3,
+    #                                        cell_name=self.cell_name,
+    #                                        block_name=self.block_name)
+    # group_2_conv = group_2_conv_c(group_1_relu)
+    #
+    # group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
+    # group_2_bn = group_2_bn_c(group_2_conv)
+    #
+    # group_3_sigmoid_c = self.layer_factory.sigmoid(cell_name=self.cell_name, block_name=self.block_name)
+    # group_3_sigmoid = group_3_sigmoid_c(group_2_bn)
+    #
+    # group_resize_c = self.layer_factory.bilinear_resize(height=self.input.shape[1], width=self.input.shape[2])
+    # group_resize = group_resize_c(group_3_sigmoid)
+    #
+    # group_4_multiply_c = self.layer_factory.dot(cell_name=self.cell_name, block_name=self.block_name)
+    # group_4_multiply = group_4_multiply_c(*[[group_resize, args[0]]], **kwargs)
 
-    group_1_conv_c = self.layer_factory.conv2d(None,
-                                               filters=self.squeeze_channels,
-                                               kernel_size_h=3,
-                                               kernel_size_w=3,
-                                               cell_name=self.cell_name,
-                                               block_name=self.block_name
-                                               )
-    group_1_conv = group_1_conv_c(group_1_layer)
+    group_1_tensor = self.group_1(*args, **kwargs)
+    group_1_conv_tensor = self.group_1_conv(group_1_tensor)
+    group_1_bn_tensor = self.group_1_bn(group_1_conv_tensor)
+    group_1_relu_tensor = self.group_1_relu(group_1_bn_tensor)
 
-    group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn = group_1_bn_c(group_1_conv)
+    self.group_2_conv.filters = self.input.shape[-1]
+    group_2_conv_tensor = self.group_2_conv(group_1_relu_tensor)
+    group_2_bn_tensor = self.group_2_bn(group_2_conv_tensor)
 
-    group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu = group_1_relu_c(group_1_bn)
+    group_3_sigmoid_tensor = self.group_3_sigmoid(group_2_bn_tensor)
 
-    group_2_conv_c = self.layer_factory.conv2d(None,
-                                           filters=self.input.shape[-1],
-                                           kernel_size_h=3,
-                                           kernel_size_w=3,
-                                           cell_name=self.cell_name,
-                                           block_name=self.block_name)
-    group_2_conv = group_2_conv_c(group_1_relu)
+    self.group_resize.height = self.input.shape[1]
+    self.group_resize.width = self.input.shape[2]
+    group_resize_tensor = self.group_resize(group_3_sigmoid_tensor)
+    group_4_multiply_tensor = self.group_4_multiply(*[[group_resize_tensor, args[0]]], **kwargs)
 
-    group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn = group_2_bn_c(group_2_conv)
-
-    group_3_sigmoid_c = self.layer_factory.sigmoid(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_sigmoid = group_3_sigmoid_c(group_2_bn)
-
-    group_resize_c = self.layer_factory.bilinear_resize(height=self.input.shape[1], width=self.input.shape[2])
-    group_resize = group_resize_c(group_3_sigmoid)
-
-    group_4_multiply_c = self.layer_factory.dot(cell_name=self.cell_name, block_name=self.block_name)
-    group_4_multiply = group_4_multiply_c(*[[group_resize, args[0]]], **kwargs)
-
-    return group_4_multiply
+    return group_4_multiply_tensor
 
   @property
   def layer_type_encoder(self):
@@ -673,50 +717,63 @@ class ResBranch(Branch):
     self.layer_name = 'res_branch'
     self.output_channel = output_channel
 
+    self.group_0_short_cut = None
+    self.group_1_conv = BaseStubConv2d(None,
+                                       self.output_channel,
+                                       3,
+                                       3,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+    self.group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
+    self.group_2_conv = BaseStubConv2d(None,
+                                       self.output_channel,
+                                       3,
+                                       3,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+    self.group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
+    self.group_3 = BaseStubAdd(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_4 = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
   @property
   def output_shape(self):
     return (self.input.shape[0], self.input.shape[1], self.input.shape[2], self.output_channel)
 
   def flops(self):
-    group_0_short_cut = None
+    self.group_0_short_cut = None
     if self.input.shape[-1] != self.output_channel:
-      group_0_short_cut = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
-      group_0_short_cut.input = self.input
+      self.group_0_short_cut = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+      self.group_0_short_cut.input = self.input
 
-    group_1_conv = BaseStubConv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
-    group_1_conv.input = self.input
+    self.group_1_conv.input = self.input
+    self.group_1_bn.input = DummyNode(self.group_1_conv.output_shape)
+    self.group_1_relu.input = DummyNode(self.group_1_bn.output_shape)
 
-    group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn.input = DummyNode(group_1_conv.output_shape)
+    self.group_2_conv.input = DummyNode(self.group_1_relu.output_shape)
+    self.group_2_bn.input = DummyNode(self.group_2_conv.output_shape)
 
-    group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu.input = DummyNode(group_1_bn.output_shape)
-
-    group_2_conv = BaseStubConv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
-    group_2_conv.input = DummyNode(group_1_relu.output_shape)
-
-    group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn.input = DummyNode(group_2_conv.output_shape)
-
-    group_3 = BaseStubAdd(cell_name=self.cell_name, block_name=self.block_name)
     if self.input.shape[-1] != self.output_channel:
-      group_3.input = [DummyNode(group_0_short_cut.output_shape), DummyNode(group_2_bn.output_shape)]
+      self.group_3.input = [DummyNode(self.group_0_short_cut.output_shape), DummyNode(self.group_2_bn.output_shape)]
     else:
-      group_3.input = [self.input, DummyNode(group_2_bn.output_shape)]
+      self.group_3.input = [self.input, DummyNode(self.group_2_bn.output_shape)]
 
-    group_4 = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_4.input = DummyNode(group_3.output_shape)
+    self.group_4.input = DummyNode(self.group_3.output_shape)
 
-    total_flops = group_1_conv.flops() + \
-           group_1_bn.flops() +\
-           group_1_relu.flops() +\
-           group_2_conv.flops() +\
-           group_2_bn.flops() + \
-           group_3.flops() + \
-           group_4.flops()
+    total_flops = self.group_1_conv.flops() + \
+           self.group_1_bn.flops() +\
+           self.group_1_relu.flops() +\
+           self.group_2_conv.flops() +\
+           self.group_2_bn.flops() + \
+           self.group_3.flops() + \
+           self.group_4.flops()
 
-    if group_0_short_cut is not None:
-      total_flops += group_0_short_cut.flops()
+    if self.group_0_short_cut is not None:
+      total_flops += self.group_0_short_cut.flops()
     return total_flops
 
   def __call__(self, *args, **kwargs):
@@ -725,32 +782,22 @@ class ResBranch(Branch):
       group_0_short_cut_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
       group_0_short_cut = group_0_short_cut_c(*args, **kwargs)
 
-    group_1_conv_c = self.layer_factory.conv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
-    group_1_conv = group_1_conv_c(*args, **kwargs)
+    group_1_conv_tensor = self.group_1_conv(*args, **kwargs)
+    group_1_bn_tensor = self.group_1_bn(group_1_conv_tensor)
+    group_1_relu_tensor = self.group_1_relu(group_1_bn_tensor)
 
-    group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn = group_1_bn_c(group_1_conv)
+    group_2_conv_tensor = self.group_2_conv(group_1_relu_tensor)
+    group_2_bn_tensor = self.group_2_bn(group_2_conv_tensor)
 
-    group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu = group_1_relu_c(group_1_bn)
-
-    group_2_conv_c = self.layer_factory.conv2d(None, self.output_channel, 3, 3, cell_name=self.cell_name, block_name=self.block_name)
-    group_2_conv = group_2_conv_c(group_1_relu)
-
-    group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn = group_2_bn_c(group_2_conv)
-
-    group_3_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_3 = None
+    group_3_tensor = None
     if group_0_short_cut is None:
-      group_3 = group_3_c(*[[group_2_bn, args[0]]], **kwargs)
+      group_3_tensor = self.group_3(*[[group_2_bn_tensor, args[0]]], **kwargs)
     else:
-      group_3 = group_3_c(*[[group_2_bn, group_0_short_cut]], **kwargs)
+      group_3_tensor = self.group_3(*[[group_2_bn_tensor, group_0_short_cut]], **kwargs)
 
-    group_4_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_4 = group_4_c(group_3)
+    group_4_tensor = self.group_4(group_3_tensor)
 
-    return group_4
+    return group_4_tensor
 
   @property
   def layer_type_encoder(self):
@@ -770,109 +817,118 @@ class BottleNeckResBranch(Branch):
     else:
       self.bottleneck = kwargs['bottleneck']
 
+    self.group_0_short_cut = None
+    self.group_1_conv = BaseStubConv2d(None,
+                                       self.bottleneck,
+                                       1,
+                                       1,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+    self.group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name,group=self)
+    self.group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
+    self.group_2_conv = BaseStubConv2d(None,
+                                       self.bottleneck,
+                                       3,
+                                       3,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+    self.group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name,group=self)
+    self.group_2_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
+    self.group_3_conv = BaseStubConv2d(None,
+                                       self.output_channel,
+                                       1,
+                                       1,
+                                       cell_name=self.cell_name,
+                                       block_name=self.block_name,
+                                       group=self)
+    self.group_3_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name,group=self)
+
+    self.group_4 = BaseStubAdd(cell_name=self.cell_name, block_name=self.block_name, group=self)
+    self.group_5 = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name, group=self)
+
   @property
   def output_shape(self):
     return (self.input.shape[0], self.input.shape[1], self.input.shape[2], self.output_channel)
 
   def flops(self):
-    group_0_short_cut = None
+    self.group_0_short_cut = None
     if self.input.shape[-1] != self.output_channel:
-      group_0_short_cut = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name,
-                                         block_name=self.block_name)
-      group_0_short_cut.input = self.input
+      self.group_0_short_cut = BaseStubConv2d(None,
+                                              self.output_channel,
+                                              1,
+                                              1,
+                                              cell_name=self.cell_name,
+                                              block_name=self.block_name)
+      self.group_0_short_cut.input = self.input
 
-    group_1_conv = BaseStubConv2d(None, self.bottleneck, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
-    group_1_conv.input = self.input
+    self.group_1_conv.input = self.input
+    self.group_1_bn.input = DummyNode(self.group_1_conv.output_shape)
+    self.group_1_relu.input = DummyNode(self.group_1_bn.output_shape)
 
-    group_1_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn.input = DummyNode(group_1_conv.output_shape)
+    self.group_2_conv.input = DummyNode(self.group_1_relu.output_shape)
+    self.group_2_bn.input = DummyNode(self.group_2_conv.output_shape)
+    self.group_2_relu.input = DummyNode(self.group_2_bn.output_shape)
 
-    group_1_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu.input = DummyNode(group_1_bn.output_shape)
+    self.group_3_conv.input = DummyNode(self.group_2_relu.output_shape)
+    self.group_3_bn.input = DummyNode(self.group_3_conv.output_shape)
 
-    group_2_conv = BaseStubConv2d(None, self.bottleneck, 3, 3, cell_name=self.cell_name,block_name=self.block_name)
-    group_2_conv.input = DummyNode(group_1_relu.output_shape)
-
-    group_2_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn.input = DummyNode(group_2_conv.output_shape)
-
-    group_2_relu = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_relu.input = DummyNode(group_2_bn.output_shape)
-
-    group_3_conv = BaseStubConv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
-    group_3_conv.input = DummyNode(group_2_relu.output_shape)
-
-    group_3_bn = BaseStubBatchNormalization2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_bn.input = DummyNode(group_3_conv.output_shape)
-
-    group_4 = BaseStubAdd(cell_name=self.cell_name, block_name=self.block_name)
-    if group_0_short_cut is not None:
-      group_4.input = [DummyNode(group_0_short_cut.output_shape), DummyNode(group_3_bn.output_shape)]
+    if self.group_0_short_cut is not None:
+      self.group_4.input = [DummyNode(self.group_0_short_cut.output_shape), DummyNode(self.group_3_bn.output_shape)]
     else:
-      group_4.input = [self.input, DummyNode(group_3_bn.output_shape)]
+      self.group_4.input = [self.input, DummyNode(self.group_3_bn.output_shape)]
 
-    group_5 = BaseStubReLU(cell_name=self.cell_name, block_name=self.block_name)
-    group_5.input = DummyNode(group_4.output_shape)
+    self.group_5.input = DummyNode(self.group_4.output_shape)
 
-    total_flops = group_1_conv.flops() + \
-           group_1_bn.flops() + \
-           group_1_relu.flops() + \
-           group_2_conv.flops() + \
-           group_2_bn.flops() + \
-           group_2_relu.flops() + \
-           group_3_conv.flops() + \
-           group_3_bn.flops() +\
-           group_4.flops() + \
-           group_5.flops()
+    total_flops = self.group_1_conv.flops() + \
+           self.group_1_bn.flops() + \
+           self.group_1_relu.flops() + \
+           self.group_2_conv.flops() + \
+           self.group_2_bn.flops() + \
+           self.group_2_relu.flops() + \
+           self.group_3_conv.flops() + \
+           self.group_3_bn.flops() +\
+           self.group_4.flops() + \
+           self.group_5.flops()
 
-    if group_0_short_cut is not None:
-      total_flops += group_0_short_cut.flops()
+    if self.group_0_short_cut is not None:
+      total_flops += self.group_0_short_cut.flops()
 
     return total_flops
 
   def __call__(self, *args, **kwargs):
     group_0_short_cut = None
     if args[0].shape[-1] != self.output_channel:
-      group_0_short_cut_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name, block_name=self.block_name)
+      group_0_short_cut_c = self.layer_factory.conv2d(None,
+                                                      self.output_channel,
+                                                      1,
+                                                      1,
+                                                      cell_name=self.cell_name,
+                                                      block_name=self.block_name)
       group_0_short_cut = group_0_short_cut_c(*args, **kwargs)
 
-    group_1_conv_c = self.layer_factory.conv2d(None, self.bottleneck, 1, 1, cell_name=self.cell_name,
-                                               block_name=self.block_name)
-    group_1_conv = group_1_conv_c(*args, **kwargs)
+    group_1_conv_tensor = self.group_1_conv(*args, **kwargs)
+    group_1_bn_tensor = self.group_1_bn(group_1_conv_tensor)
+    group_1_relu_tensor = self.group_1_relu(group_1_bn_tensor)
 
-    group_1_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_bn = group_1_bn_c(group_1_conv)
+    group_2_conv_tensor = self.group_2_conv(group_1_relu_tensor)
+    group_2_bn_tensor = self.group_2_bn(group_2_conv_tensor)
+    group_2_relu_tensor = self.group_2_relu(group_2_bn_tensor)
 
-    group_1_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_1_relu = group_1_relu_c(group_1_bn)
+    group_3_conv_tensor = self.group_3_conv(group_2_relu_tensor)
+    group_3_bn_tensor = self.group_3_bn(group_3_conv_tensor)
 
-    group_2_conv_c = self.layer_factory.conv2d(None, self.bottleneck, 3, 3, cell_name=self.cell_name,
-                                               block_name=self.block_name)
-    group_2_conv = group_2_conv_c(group_1_relu)
-
-    group_2_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_bn = group_2_bn_c(group_2_conv)
-
-    group_2_relu_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_2_relu = group_2_relu_c(group_2_bn)
-
-    group_3_conv_c = self.layer_factory.conv2d(None, self.output_channel, 1, 1, cell_name=self.cell_name,
-                                               block_name=self.block_name)
-    group_3_conv = group_3_conv_c(group_2_relu)
-
-    group_3_bn_c = self.layer_factory.bn2d(cell_name=self.cell_name, block_name=self.block_name)
-    group_3_bn = group_3_bn_c(group_3_conv)
-
-    group_3_c = self.layer_factory.add(cell_name=self.cell_name, block_name=self.block_name)
-    group_3 = None
+    group_4_tensor = None
     if group_0_short_cut is None:
-      group_3 = group_3_c(*[[group_3_bn, args[0]]], **kwargs)
+      group_4_tensor = self.group_4(*[[group_3_bn_tensor, args[0]]], **kwargs)
     else:
-      group_3 = group_3_c(*[[group_3_bn, group_0_short_cut]], **kwargs)
+      group_4_tensor = self.group_4(*[[group_3_bn_tensor, group_0_short_cut]], **kwargs)
 
-    group_4_c = self.layer_factory.relu(cell_name=self.cell_name, block_name=self.block_name)
-    group_4 = group_4_c(group_3)
-    return group_4
+    group_5_tensor = self.group_5(group_4_tensor)
+    return group_5_tensor
 
   @property
   def layer_type_encoder(self):

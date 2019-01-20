@@ -722,8 +722,9 @@ class EvolutionSearchSpace(AbstractSearchSpace):
         branch_id_in_block = cells[blocks[block_index][-1]][-1]
         branch_id_in_next_block = cells[blocks[next_block_index][-1]][-1]
 
-        if graph.has_skip(branch_id_in_block, branch_id_in_next_block):
-          dna_vector[dna_brancn_links_offset + block_id * self.max_block_num + next_block_id] = 1
+        skip_type = graph.has_skip2(branch_id_in_block, branch_id_in_next_block)
+        if skip_type != Constant.NO_SKIP:
+          dna_vector[dna_brancn_links_offset + block_id * self.max_block_num + next_block_id] = skip_type / 2.0
 
     # analyze cells links
     dna_cell_links_offset = unary_p + self.max_block_num*self.max_block_num
@@ -739,8 +740,9 @@ class EvolutionSearchSpace(AbstractSearchSpace):
           branch_id_in_cell = cells[cell_index][-1]
           branch_id_in_next_cell = cells[next_cell_index][-1]
 
-          if graph.has_skip(branch_id_in_cell, branch_id_in_next_cell):
-            dna_vector[dna_cell_links_offset + cell_index * self.max_cell_num + next_cell_index] = 1
+          skip_type = graph.has_skip(branch_id_in_cell, branch_id_in_next_cell)
+          if skip_type != Constant.NO_SKIP:
+            dna_vector[dna_cell_links_offset + cell_index * self.max_cell_num + next_cell_index] = skip_type / 2.0
 
     # analyze branchs links
     dna_branch_links_offset = unary_p + \
@@ -754,11 +756,12 @@ class EvolutionSearchSpace(AbstractSearchSpace):
             if next_branch_index <= branch_index:
               continue
 
-            if graph.has_skip(branch_id, next_branch_id):
+            skip_type = graph.has_skip(branch_id, next_branch_id)
+            if skip_type != Constant.NO_SKIP:
               dna_vector[dna_branch_links_offset +
                          block_id*self.max_cell_num*self.branch_num*self.branch_num +
                          cell_index*self.branch_num*self.branch_num +
-                         branch_index * self.branch_num + next_branch_index] = 1
+                         branch_index * self.branch_num + next_branch_index] = skip_type / 2.0
 
     return dna_vector
 
@@ -789,6 +792,7 @@ class EvolutionSearchSpace(AbstractSearchSpace):
             break
           except:
             pass
+
       # graph.visualization('%s.png' % (str(uuid.uuid4())))
       graph_dna = self.dna(graph, graph_info)
       trials = Trial.filter(study_name=self.study.name)
@@ -819,7 +823,13 @@ class EvolutionSearchSpace(AbstractSearchSpace):
     for trial in trials:
       if trial.status == 'Failed':
         # generate new individual
-        a, b, c = self.random()[0]
+        random_p = self.random()
+        if len(random_p) == 0:
+          # we have to try original one again
+          trial.status = None
+          continue
+
+        a, b, c = random_p[0]
         trial.structure = [b, c]
         trial.structure_encoder = a.tolist()
         trial.status = None

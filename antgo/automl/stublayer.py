@@ -21,7 +21,12 @@ class StubLayer(object):
     self.nickname = kwargs['nickname'] if 'nickname' in kwargs else ''
     self.cell_name = kwargs['cell_name'] if 'cell_name' in kwargs else ''
     self.block_name = kwargs['block_name'] if 'block_name' in kwargs else ''
-    self._layer_factory = None
+    self._layer_factory = kwargs['layer_factory'] if 'layer_factory' in kwargs else None
+
+    self.layer_group = []
+    group_parent = kwargs.get('group', None)
+    if group_parent is not None:
+      group_parent.add_to(self)
 
   def set_input(self, node):
     self.input = node
@@ -68,6 +73,7 @@ class StubLayer(object):
   @property
   def layer_type(self):
     return self._layer_type
+
   @layer_type.setter
   def layer_type(self, val):
     self._layer_type = val
@@ -79,6 +85,7 @@ class StubLayer(object):
   @property
   def layer_name(self):
     return self._layer_name
+
   @layer_name.setter
   def layer_name(self, val):
     self._layer_name = val
@@ -86,6 +93,7 @@ class StubLayer(object):
   @property
   def n_dim(self):
     return self._n_dim
+
   @n_dim.setter
   def n_dim(self, val):
     self._n_dim = val
@@ -108,3 +116,8 @@ class StubLayer(object):
   @layer_factory.setter
   def layer_factory(self, val):
     self._layer_factory = val
+    for v in self.layer_group:
+      v.layer_factory = val
+
+  def add_to(self, val):
+    self.layer_group.append(val)

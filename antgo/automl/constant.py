@@ -58,3 +58,8 @@ class Constant:
   FILE_PATH = "glove.zip"
   PRE_TRAIN_FILE_LINK = "http://nlp.stanford.edu/data/glove.6B.zip"
   PRE_TRAIN_FILE_NAME = "glove.6B.100d.txt"
+
+  # skip type
+  NO_SKIP = 0
+  ADD_SKIP = 1
+  CONCAT_SKIP = 2
