@@ -197,7 +197,7 @@ class AntTrainServer(AntBase):
     all_trails = sorted(all_trails, key=lambda x: x.created_time)
     plt.xlabel('time(hours)')
     plt.ylabel('test accuracy')
-    x = [(m.created_time-study.created_time)/3600 for m in all_trails]
+    x = [(m.created_time - study.created_time) / 3600.0 for m in all_trails]
     y = [m.objective_value for m in all_trails]
     plt.scatter(x=x, y=y, c='r',marker='o')
     plt.savefig('%s/study_%s_%s.png'%(dump_dir, study_name, time_str))
@@ -320,6 +320,7 @@ class AntTrainServer(AntBase):
           trail.status = 'Completed'
           trail.objective_value = objective_value
           trail.address = trail_address
+          trail.updated_time = time.time()
         else:
           trail.status = 'Failed'
 
