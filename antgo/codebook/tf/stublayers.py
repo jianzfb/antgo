@@ -112,7 +112,8 @@ class StubSPP(BaseStubSPP):
     #         return output
     # else:
     # 1.step average pooling
-    _, input_h, input_w, input_c = self.input.shape
+    # _, input_h, input_w, input_c = self.input.shape
+    _, input_h, input_w, input_c = args[0].shape
     grid_h = min(self.grid_h, input_h)
     grid_w = min(self.grid_w, input_w)
     output = functools.partial(slim.avg_pool2d,

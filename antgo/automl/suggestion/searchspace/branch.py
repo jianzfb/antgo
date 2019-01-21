@@ -201,7 +201,7 @@ class SPPBranch(Branch):
     #                                    block_name=self.block_name)
     # layer_1_c.input = self.input
     # layer_1 = layer_1_c(*args, **kwargs)
-
+    self.layer_1.input = self.input
     layer_1_tensor = self.layer_1(*args, **kwargs)
     return layer_1_tensor
 
