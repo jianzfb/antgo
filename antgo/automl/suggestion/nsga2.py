@@ -65,13 +65,14 @@ class Problem(object):
 
 
 class Nsga2(object):
-  def __init__(self, problem, mutation_op, crossover_op):
+  def __init__(self, problem, mutation_op, crossover_op, tournament_size=2):
     self.mutation_op = mutation_op
     self.crossover_op = crossover_op
 
     self.solution = []
     self.multi_objects = []
     self.problem = problem
+    self.tournament_size = tournament_size
 
   def fast_nondominated_sort(self, population):
     population.fronts = []
@@ -137,7 +138,7 @@ class Nsga2(object):
                     self.problem.max_objectives[m] - self.problem.min_objectives[m])
 
   def __tournament(self, population):
-    participants = random.sample(population.population, 2)
+    participants = random.sample(population.population, self.tournament_size)
     best = None
     for participant in participants:
       if best is None or self.crowding_operator(participant, best) == 1:
@@ -153,11 +154,14 @@ class Nsga2(object):
 
       structure = copy.deepcopy(best.features[0])
       structure_info = copy.deepcopy(best.features[1])
-      structure, structure_info = self.mutation_op.mutate(structure, structure_info)
+      structure, structure_info, structure_score_predicted = self.mutation_op.mutate(structure, structure_info)
+      if structure_score_predicted is None:
+        structure_score_predicted = self.problem.max_objectives[0] + 0.0001
 
       me = self.problem.generateIndividual()
       me.features = [structure, structure_info]
       me.type = 'offspring'
+      me.objectives[0] = structure_score_predicted
 
       self.problem.calculate_objectives(me)
       children.append(me)

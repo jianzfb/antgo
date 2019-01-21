@@ -21,10 +21,11 @@ from antgo.automl.suggestion.metric import *
 from antgo.automl.suggestion.nsga2 import *
 from antgo.utils import logger
 import copy
+import functools
 
 
 class Mutation(object):
-  def __init__(self, cell, max_block_num=4, min_block_num=1, max_cell_num=10, min_cell_num=1):
+  def __init__(self, ess, cell, max_block_num=4, min_block_num=1, max_cell_num=10, min_cell_num=1):
     self._mutate_rate_for_skip_block = 0.5
     self._mutate_rate_for_block = 0.5
     self._mutate_rate_for_skip_cell = 0.5
@@ -35,13 +36,12 @@ class Mutation(object):
     self._min_block_num = min_block_num
     self._max_cell_num = max_cell_num
     self._min_cell_num = min_cell_num
-    self._cell_wider_mutate={}
+    self._cell_wider_mutate = {}
 
     self._cell = cell
+    self.ess = ess
 
-    # TODO mutation with selection
-
-  def mutate(self, graph, graph_info):
+  def __mutate(self, graph, graph_info):
     # block [[cell_id, cell_id,...],[],[]]
     # cells [[branch_id, branch_id,...],[],[]]
     try:
@@ -82,9 +82,19 @@ class Mutation(object):
           except:
             pass
 
-      return graph, graph_info
+      return [(self.ess.dna(graph, graph_info), (graph, graph_info))]
     except:
-      return graph, graph_info
+      return [(self.ess.dna(graph, graph_info), (graph, graph_info))]
+
+  def mutate(self, graph, graph_info):
+    if self.ess.bayesian.is_ok:
+      _, graph_score_predicted, c = self.ess.bayesian.optimize_acq(functools.partial(self.__mutate, graph, graph_info))
+      optimized_graph, optimized_graph_info = c
+      return optimized_graph, optimized_graph_info, graph_score_predicted
+    else:
+      _, c = self.__mutate(graph, graph_info)[0]
+      graph, graph_info = c
+      return graph, graph_info, None
 
   def _find_allowed_skip_block(self, graph_info):
     blocks = graph_info['blocks']
@@ -447,23 +457,22 @@ class CrossOver(object):
 
 
 class ModelProblem(Problem):
-  def __init__(self, ess, goal='MAXIMIZE'):
+  def __init__(self, goal='MAXIMIZE'):
     super(ModelProblem, self).__init__()
     self.max_objectives = [None, None]
     self.min_objectives = [None, None]
     self.goal = goal
-    self.ess = ess
 
   def generateIndividual(self):
     individual = Individual()
     individual.features = []
     individual.dominates = functools.partial(self.__dominates, individual1=individual)
+    individual.objectives = [None, None]
     return individual
 
   def calculate_objectives(self, individual):
-    individual.objectives = []
-    individual.objectives.append(self.__f1(individual))
-    individual.objectives.append(self.__f2(individual))
+    individual.objectives[0] = self.__f1(individual)
+    individual.objectives[1] = self.__f2(individual)
     for i in range(2):
       if self.min_objectives[i] is None or individual.objectives[i] < self.min_objectives[i]:
         self.min_objectives[i] = individual.objectives[i]
@@ -486,20 +495,7 @@ class ModelProblem(Problem):
 
   def __f1(self, m):
     # model performance
-    trials = Trial.filter(name=m.id)
-    if len(trials) > 0 and trials[0] is not None:
-      if trials[0].status != 'Completed':
-        if not self.ess.predictor.is_ok:
-          return self.min_objectives[0] - 0.0001
-
-        return self.ess.predictor.acq(self.ess.dna(m.features[0], m.features[1]))
-      else:
-        return trials[0].objective_value
-    else:
-      if not self.ess.predictor.is_ok:
-        return self.min_objectives[0] - 0.0001
-
-      return self.ess.predictor.acq(np.reshape(np.array(self.ess.dna(m.features[0], m.features[1])), [1,-1]))[0]
+    return m.objectives[0]
 
   def __f2(self, m):
     # model running time
@@ -551,30 +547,31 @@ class EvolutionSearchSpace(AbstractSearchSpace):
     self.current_population_info = self.study_configuration['current_population_info'] if 'current_population_info' in self.study_configuration else []
     self.cell = Cell(branch_num=self.branch_num,
                      base_channel=self.branch_base_channel)
-    self.mutation_operator = Mutation(self.cell,
+
+    # temp structure recommand
+    # initialize bayesian optimizer
+    self.bayesian = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
+
+    # get all completed trials
+    all_completed_trials = Trial.filter(study_name=self.study.name, status='Completed')
+    x_queue = [np.array(trial.structure_encoder) for trial in all_completed_trials]
+    y_queue = [trial.objective_value for trial in all_completed_trials]
+    if len(x_queue) > 20:
+      self.bayesian.fit(x_queue, y_queue)
+
+    self.mutation_operator = Mutation(self, self.cell,
                                       max_block_num=self.max_block_num,
                                       min_block_num=self.min_block_num,
                                       max_cell_num=self.max_cell_num,
                                       min_cell_num=self.min_cell_num)
     self.cross_over_operator = CrossOver()
 
-    # temp structure recommand
-    # initialize bayesian optimizer
-    self.predictor = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
-
-    # get all completed trials
-    all_completed_trials = Trial.filter(study_name=self.study.name, status='Completed')
-    x_queue = [np.array(trial.structure_encoder) for trial in all_completed_trials]
-    y_queue = [trial.objective_value for trial in all_completed_trials]
-    if len(x_queue) > 10:
-      self.predictor.fit(x_queue, y_queue)
-
     if len(Trial.filter(study_name=self.study.name)) == 0:
       # initialize search space (study)
       self._initialize_population()
 
     # build nsga2 evolution algorithm
-    self.nsga2 = Nsga2(ModelProblem(self, self.study_goal), self.mutation_operator, self.cross_over_operator)
+    self.nsga2 = Nsga2(ModelProblem(self.study_goal), self.mutation_operator, self.cross_over_operator)
 
   def _initialize_population(self, random_block_ini=False, random_cell_ini=False):
     # 1.step get default graph
@@ -766,12 +763,8 @@ class EvolutionSearchSpace(AbstractSearchSpace):
     return dna_vector
 
   def random(self, count=1):
+    # get study configuration
     study_configuration = json.loads(self.study.study_configuration)
-    random_p = random.choice(list(range(self.population_size)))
-    default_graph_str = study_configuration['searchSpace']['current_population'][random_p]
-    default_graph = Decoder().decode(default_graph_str)
-    default_graph.layer_factory = BaseLayerFactory()
-    default_graph_info = study_configuration['searchSpace']['current_population_info'][random_p]
 
     try_count = 0
     proposed_search_space = []
@@ -780,11 +773,29 @@ class EvolutionSearchSpace(AbstractSearchSpace):
         logger.warn('couldnt find valid graph structure for study %s'%self.study.name)
         return [(None, None)]
 
-      # 1.step skip branch in branch
-      graph, graph_info = self.mutation_operator._mutate_for_branch(copy.deepcopy(default_graph),
-                                                                    copy.deepcopy(default_graph_info))
+      random_p = random.choice(list(range(self.population_size)))
+      default_graph_str = study_configuration['searchSpace']['current_population'][random_p]
+      default_graph = Decoder().decode(default_graph_str)
+      default_graph.layer_factory = BaseLayerFactory()
+      default_graph_info = study_configuration['searchSpace']['current_population_info'][random_p]
 
-      # 2.step mutation branch in cell
+      # 1.step random mutate one cell
+      graph, graph_info = self.mutation_operator._mutate_for_cell(copy.deepcopy(default_graph),
+                                                                  copy.deepcopy(default_graph_info))
+
+      # 2.step skip branch in branch
+      graph, graph_info = self.mutation_operator._mutate_for_branch(graph, graph_info)
+
+      # 3.step random skip once between cells
+      if random.random() < self.mutation_operator._mutate_rate_for_skip_cell:
+        for start_layer_id, end_layer_id in self.mutation_operator._find_allowed_skip_cell(graph_info):
+          try:
+            graph = self.mutation_operator._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
+            break
+          except:
+            pass
+
+      # 4.step mutation branch in cell
       for _ in range(self.branch_num - 1):
         for start_layer_id, end_layer_id in self.mutation_operator._find_allowed_skip_branch(graph_info):
           try:
@@ -854,6 +865,7 @@ class EvolutionSearchSpace(AbstractSearchSpace):
         me.features = [Decoder().decode(t.structure[0]), t.structure[1]]
         me.features[0].layer_factory = BaseLayerFactory()
         me.type = 'parent'
+        me.objectives[0] = t.objective_value
 
         self.nsga2.problem.calculate_objectives(me)
         population.population.append(me)
@@ -871,6 +883,7 @@ class EvolutionSearchSpace(AbstractSearchSpace):
           trial.structure = [Encoder(skipkeys=True).encode(p.features[0]), p.features[1]]
           trial.structure_encoder = self.dna(p.features[0], p.features[1]).tolist()
           trial.tag = current_population_tag
+          trial.objective_value = p.objectives[0]   # predicted
 
           study_current_population.append(trial.structure[0])
           study_current_population_info.append(trial.structure[1])

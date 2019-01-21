@@ -294,175 +294,171 @@ def check_mutate_evolution():
 
 
 # 4.step test graph to cnn
-import json
-import os
-import tensorflow as tf
-from antgo.codebook.tf.stublayers import *
-def check_graph_to_cnn():
-  study_configuration = {'goal': 'MIN',
-                         'current_population': [],
-                         'current_population_info': [],
-                         'next_population': [],
-                         'next_population_info': [],
-                         'searchSpace': {}}
-  study_configuration = json.dumps(study_configuration)
-  s = Study('aa', study_configuration=study_configuration, algorithm='', search_space=None)
-
-  es = EvolutionSearchSpace(s, population_size=100, input_size='1,128,128,3;1,512,512,3')
-  es._initialize_population()
-
-  # es.mutation_operator._mutate_for_block(graph, aa['searchSpace']['current_population_info'][0], ['ADD'])
-  # graph.visualization('bb.png')
-  # # os.makedirs('summary')
-  # train_writer = tf.summary.FileWriter('summary/', tf.get_default_graph())
-
-  for epoch in range(200):
-    aa = json.loads(s.study_configuration)
-    graph_encoder_str = aa['searchSpace']['current_population'][0]
-    graph = Decoder().decode(graph_encoder_str)
-    graph.layer_factory = BaseLayerFactory()
-    graph_info = aa['searchSpace']['current_population_info'][0]
-
-    for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_block(graph_info):
-      try:
-        graph = es.mutation_operator._mutate_for_skip_block(graph, start_layer_id, end_layer_id)
-        for l in graph.layer_list:
-          if l.layer_name == 'add':
-            input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
-            if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
-              print('asdf')
-              graph.update()
-
-        print(graph.flops)
-        break
-      except:
-        pass
-
-    # random mutate one cell
-    graph, graph_info = es.mutation_operator._mutate_for_cell(graph, graph_info)
-
-    # random mutate one branch
-    graph, graph_info = es.mutation_operator._mutate_for_branch(graph, graph_info)
-
-    for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_cell(graph_info):
-      try:
-        graph = es.mutation_operator._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
-        for l in graph.layer_list:
-          if l.layer_name == 'add':
-            input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
-            if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
-              print('asdf')
-              graph.update()
-
-        print(graph.flops)
-        break
-      except:
-        pass
-
-    if random.random() < es.mutation_operator._mutate_rate_for_skip_cell:
-      for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_cell(graph_info):
-        try:
-          graph = es.mutation_operator._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
-
-          for l in graph.layer_list:
-            if l.layer_name == 'add':
-              input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
-              if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
-                print('asdf')
-                graph.update()
-          break
-        except:
-          pass
-
-    for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_branch(graph_info):
-      try:
-        graph = es.mutation_operator._mutate_for_skip_branch(graph, start_layer_id, end_layer_id)
-        for l in graph.layer_list:
-          if l.layer_name == 'add':
-            input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
-            if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
-              print('asdf')
-              graph.update()
-
-        print(graph.flops)
-        if epoch == 50:
-          a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
-          b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
-          graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
-
-        break
-      except:
-        pass
-
-
-
-  # graph.visualization('bb.png')
-  # a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
-  # b = tf.placeholder(dtype=tf.float32,shape=[1,256,256,3])
-  # graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
-  #
-  # graph.visualization('cc.png')
-  # ss= es.dna(graph, graph_info)
-  #
-  # mutate._mutate_for_cell(graph, graph_info)
-  # graph.visualization('dd.png')
-  #
-  # for start_layer_id, end_layer_id in mutate._find_allowed_skip_cell(graph_info):
-  #   try:
-  #     mutate._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
-  #     break
-  #   except:
-  #     pass
-  #
-  # graph.visualization('ee.png')
-  # pass
-  #
-  # ss = es.dna(graph, graph_info)
-  # mutate._mutate_for_branch(graph, graph_info)
-  # graph.visualization('mm.png')
-  #
-  # for start_layer_id, end_layer_id in mutate._find_allowed_skip_branch(graph_info):
-  #   try:
-  #     mutate._mutate_for_skip_branch(graph, start_layer_id, end_layer_id)
-  #     break
-  #   except:
-  #     pass
-  #
-  # graph.visualization('nn.png')
-  # ss = es.dna(graph, graph_info)
-
-check_graph_to_cnn()
-
-
-# # check evolution search space
-# def check_evolution_search_space():
-#   study_configuration = {'goal': 'MAXIMIZE',
+# import json
+# import os
+# import tensorflow as tf
+# from antgo.codebook.tf.stublayers import *
+# def check_graph_to_cnn():
+#   study_configuration = {'goal': 'MIN',
 #                          'current_population': [],
 #                          'current_population_info': [],
-#                          'searchSpace': {'current_population': [],
-#                                          'current_population_info': [],
-#                                          'current_population_tag': 0},
-#                          }
+#                          'next_population': [],
+#                          'next_population_info': [],
+#                          'searchSpace': {}}
 #   study_configuration = json.dumps(study_configuration)
 #   s = Study('aa', study_configuration=study_configuration, algorithm='', search_space=None)
-#   Study.create(s)
 #
-#   population_size = 20
-#   for i in range(200):
-#     es = EvolutionSearchSpace(s, input_size='1,128,128,3;1,512,512,3;', population_size=population_size)
-#     for _ in range(population_size):
-#       suggestion_1 = es.get_new_suggestions()
-#       print(suggestion_1)
+#   es = EvolutionSearchSpace(s, population_size=100, input_size='1,128,128,3;1,512,512,3')
+#   es._initialize_population()
 #
-#     dd = json.loads(s.study_configuration)
-#     current_population_tag = dd['searchSpace']['current_population_tag']
-#     trials = Trial.filter(study_name='aa', tag=current_population_tag)
-#     for trail in trials:
-#       trail.objective_value = random.random()
-#       trail.status = 'Completed'
+#   # es.mutation_operator._mutate_for_block(graph, aa['searchSpace']['current_population_info'][0], ['ADD'])
+#   # graph.visualization('bb.png')
+#   # # os.makedirs('summary')
+#   # train_writer = tf.summary.FileWriter('summary/', tf.get_default_graph())
+#
+#   for epoch in range(200):
+#     aa = json.loads(s.study_configuration)
+#     graph_encoder_str = aa['searchSpace']['current_population'][0]
+#     graph = Decoder().decode(graph_encoder_str)
+#     graph.layer_factory = BaseLayerFactory()
+#     graph_info = aa['searchSpace']['current_population_info'][0]
+#
+#     for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_block(graph_info):
+#       try:
+#         graph = es.mutation_operator._mutate_for_skip_block(graph, start_layer_id, end_layer_id)
+#         for l in graph.layer_list:
+#           if l.layer_name == 'add':
+#             input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
+#             if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
+#               print('asdf')
+#               graph.update()
+#
+#         print(graph.flops)
+#         break
+#       except:
+#         pass
+#
+#     # random mutate one cell
+#     graph, graph_info = es.mutation_operator._mutate_for_cell(graph, graph_info)
+#
+#     # random mutate one branch
+#     graph, graph_info = es.mutation_operator._mutate_for_branch(graph, graph_info)
+#
+#     for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_cell(graph_info):
+#       try:
+#         graph = es.mutation_operator._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
+#         for l in graph.layer_list:
+#           if l.layer_name == 'add':
+#             input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
+#             if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
+#               print('asdf')
+#               graph.update()
+#
+#         print(graph.flops)
+#         break
+#       except:
+#         pass
+#
+#     if random.random() < es.mutation_operator._mutate_rate_for_skip_cell:
+#       for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_cell(graph_info):
+#         try:
+#           graph = es.mutation_operator._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
+#
+#           for l in graph.layer_list:
+#             if l.layer_name == 'add':
+#               input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
+#               if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
+#                 print('asdf')
+#                 graph.update()
+#           break
+#         except:
+#           pass
+#
+#     for start_layer_id, end_layer_id in es.mutation_operator._find_allowed_skip_branch(graph_info):
+#       try:
+#         graph = es.mutation_operator._mutate_for_skip_branch(graph, start_layer_id, end_layer_id)
+#         for l in graph.layer_list:
+#           if l.layer_name == 'add':
+#             input_nodes = graph.layer_id_to_input_node_ids[graph.layer_to_id[l]]
+#             if graph.node_list[input_nodes[0]].shape[-1] != graph.node_list[input_nodes[1]].shape[-1]:
+#               print('asdf')
+#               graph.update()
+#
+#         print(graph.flops)
+#         if epoch == 50:
+#           a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
+#           b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
+#           graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
+#
+#         break
+#       except:
+#         pass
 #
 #
 #
+#   # graph.visualization('bb.png')
+#   # a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
+#   # b = tf.placeholder(dtype=tf.float32,shape=[1,256,256,3])
+#   # graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory())
+#   #
+#   # graph.visualization('cc.png')
+#   # ss= es.dna(graph, graph_info)
+#   #
+#   # mutate._mutate_for_cell(graph, graph_info)
+#   # graph.visualization('dd.png')
+#   #
+#   # for start_layer_id, end_layer_id in mutate._find_allowed_skip_cell(graph_info):
+#   #   try:
+#   #     mutate._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
+#   #     break
+#   #   except:
+#   #     pass
+#   #
+#   # graph.visualization('ee.png')
+#   # pass
+#   #
+#   # ss = es.dna(graph, graph_info)
+#   # mutate._mutate_for_branch(graph, graph_info)
+#   # graph.visualization('mm.png')
+#   #
+#   # for start_layer_id, end_layer_id in mutate._find_allowed_skip_branch(graph_info):
+#   #   try:
+#   #     mutate._mutate_for_skip_branch(graph, start_layer_id, end_layer_id)
+#   #     break
+#   #   except:
+#   #     pass
+#   #
+#   # graph.visualization('nn.png')
+#   # ss = es.dna(graph, graph_info)
 #
-#
-# check_evolution_search_space()
+# # check_graph_to_cnn()
+
+
+# check evolution search space
+def check_evolution_search_space():
+  study_configuration = {'goal': 'MAXIMIZE',
+                         'current_population': [],
+                         'current_population_info': [],
+                         'searchSpace': {'current_population': [],
+                                         'current_population_info': [],
+                                         'current_population_tag': 0},
+                         }
+  study_configuration = json.dumps(study_configuration)
+  s = Study('aa', study_configuration=study_configuration, algorithm='', search_space=None)
+  Study.create(s)
+
+  population_size = 20
+  for i in range(200):
+    es = EvolutionSearchSpace(s, input_size='1,128,128,3;1,512,512,3;', population_size=population_size)
+    for _ in range(population_size):
+      suggestion_1 = es.get_new_suggestions()
+      print(suggestion_1)
+
+    dd = json.loads(s.study_configuration)
+    current_population_tag = dd['searchSpace']['current_population_tag']
+    trials = Trial.filter(study_name='aa', tag=current_population_tag)
+    for trail in trials:
+      trail.objective_value = random.random()
+      trail.status = 'Completed'
+
+check_evolution_search_space()

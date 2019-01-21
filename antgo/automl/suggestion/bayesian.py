@@ -18,6 +18,7 @@ import numpy as np
 import math
 from sklearn import gaussian_process
 from antgo.automl.suggestion.metric import *
+import functools
 # import matplotlib.pyplot as plt
 
 
@@ -68,7 +69,7 @@ class BayesianOptimizer(object):
                 temp_exp = min((opt_acq - elem.metric_value) / t, 1.0)
             ap = math.exp(temp_exp)
             if ap >= random.uniform(0, 1):
-                for model_x, model in searcher.random(1):
+                for model_x, model in searcher():
                     # UCB acquisition function
                     temp_acq_value = self.acq(np.expand_dims(model_x, 0))[0]
                     pq.put(elem_class(temp_acq_value, model))
@@ -84,7 +85,7 @@ class BayesianOptimizer(object):
         if remaining_time < 0:
             raise TimeoutError
 
-        return opt_model_x, opt_model
+        return opt_model_x, opt_acq, opt_model
 
     def acq(self, x):
         mean, std = self.gp.predict(x,return_std=True)
@@ -127,13 +128,14 @@ if __name__ == '__main__':
     class AA(object):
         def __init__(self):
             pass
+
         def random(self, num):
             return [(np.array([random.random() * 2 - 1]), None)]
 
     target_func = lambda x: x**2
 
     bo = BayesianOptimizer(0.000000001, Loss, 0.1, 2.576)
-    x = [np.array([random.random()*2-1]) for _ in range(10)]
+    x = [np.array([random.random()*2-1]) for _ in range(100)]
     y = [target_func(xi[0]) for xi in x]
     bo.fit(x, y)
 
@@ -145,11 +147,12 @@ if __name__ == '__main__':
 
     suggestion_val_list = []
     suggestion_gt_list = []
-    for _ in range(10):
-        suggestion_val, _ = bo.optimize_acq(aa)
+    for _ in range(100):
+        suggestion_val, suggestion_score_predicted, _ = bo.optimize_acq(functools.partial(aa.random, 1))
         gt_val = target_func(suggestion_val)
         suggestion_val_list.append(suggestion_val)
         suggestion_gt_list.append(gt_val)
+        print('predict %f gt %f'%(suggestion_score_predicted, gt_val))
 
     plt.scatter(suggestion_val_list, suggestion_gt_list, c='r')
     plt.show()
