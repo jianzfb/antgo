@@ -37,6 +37,19 @@ FLAGS = flags.AntFLAGS
 Config = config.AntConfig
 
 
+class UnlabeledDataset(Dataset):
+  def __init__(self, dataset):
+    super(UnlabeledDataset, self).__init__()
+    self.dataset_proxy = dataset
+
+  def data_pool(self):
+    for a, b in self.dataset_proxy.unlabeled():
+      yield a, b
+
+  @property
+  def size(self):
+    return self.dataset_proxy.unlabeled_size()
+
 class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')

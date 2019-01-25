@@ -239,10 +239,10 @@ class EarlyStop(object):
 
   def on_epoch_end(self, loss):
     self.training_losses.append(loss)
-    if self._done and loss > (self.minimum_loss - self._min_loss_dec):
+    if self._done and loss >= (self.minimum_loss - self._min_loss_dec):
       return False
 
-    if loss > (self.minimum_loss - self._min_loss_dec):
+    if loss >= (self.minimum_loss - self._min_loss_dec):
       self.no_improvement_count += 1
     else:
       self.no_improvement_count = 0

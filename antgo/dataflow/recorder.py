@@ -442,3 +442,38 @@ class EvaluationRecorderNode():
         logger.error('couldnt push evaluation info to proxy')
 
     return result['statistic']['value'][0]['value']
+
+
+class ActiveLearningRecorderNode(Node):
+  def __init__(self, inputs):
+    super(ActiveLearningRecorderNode, self).__init__(name=None,
+                                                     action=self.action,
+                                                     inputs=inputs,
+                                                     auto_trigger=True)
+    self._annotation_cache = queue.Queue()
+    self._data_set = []
+
+  @property
+  def dump_dir(self):
+    return None
+
+  def action(self, *args, **kwargs):
+    a = copy.deepcopy(args[0])
+    if type(a) != list:
+      a = [a]
+
+    for aa in a:
+      self._annotation_cache.put(aa)
+
+  def record(self, feature):
+    binded_data = {}
+    binded_data['feature'] = feature
+
+    if self._annotation_cache.qsize() > 0:
+      binded_data['data'] = self._annotation_cache.get()
+
+    self._data_set.append(binded_data)
+
+  def iterator_value(self):
+    for data in self._data_set:
+      yield data

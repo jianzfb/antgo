@@ -198,13 +198,14 @@ class Context(object):
 
   def call_infer_process(self, data_source, dump_dir):
     is_inner_set = False
-    if self.recorder is not None and self.recorder.dump_dir == None:
-      self.recorder.dump_dir = os.path.join(dump_dir, 'record')
-      if os.path.exists(self.recorder.dump_dir):
-        shutil.rmtree(self.recorder.dump_dir)
-        os.makedirs(self.recorder.dump_dir)
-        
-      is_inner_set = True
+    if self.recorder is not None and self.recorder.dump_dir is None:
+      if dump_dir != '':
+        if os.path.exists(os.path.join(dump_dir, 'record')):
+          shutil.rmtree(os.path.join(dump_dir, 'record'))
+          os.makedirs(os.path.join(dump_dir, 'record'))
+
+        self.recorder.dump_dir = os.path.join(dump_dir, 'record')
+        is_inner_set = True
       
     self.data_source = data_source
     self.infer_process(data_source, dump_dir)

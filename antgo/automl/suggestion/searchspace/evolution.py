@@ -420,7 +420,7 @@ class Mutation(object):
     else:
       return graph, graph_info
 
-  def _mutate_for_branch(self, graph, graph_info, mutate_type=['CHNAGE', 'NOCHANGE']):
+  def _mutate_for_branch(self, graph, graph_info, mutate_type=['CHNAGE']):
     graph_cp = copy.deepcopy(graph)
     graph_info_cp = copy.deepcopy(graph_info)
 

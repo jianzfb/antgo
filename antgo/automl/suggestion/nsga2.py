@@ -235,13 +235,13 @@ class ZDT1(Problem):
 
     individual.features.append(min_x + (max_x - min_x) * random.random())
     individual.features.append(None)
+    individual.objectives = [None, None]
     individual.dominates = functools.partial(self.__dominates, individual1=individual)
     return individual
 
   def calculate_objectives(self, individual):
-    individual.objectives = []
-    individual.objectives.append(self.__f1(individual))
-    individual.objectives.append(self.__f2(individual))
+    individual.objectives[0] = self.__f1(individual)
+    individual.objectives[1] = self.__f2(individual)
     for i in range(2):
       if self.min_objectives[i] is None or individual.objectives[i] < self.min_objectives[i]:
         self.min_objectives[i] = individual.objectives[i]
@@ -263,8 +263,7 @@ class ZDT1(Problem):
       return worse_than_other and better_than_other
 
   def __f1(self, m):
-    value = (m.features[0]**2)
-    return value
+    return m.objectives[0]
 
   def __f2(self, m):
     value = (m.features[0]-2)**2
@@ -280,7 +279,7 @@ if __name__ == '__main__':
       min_x = -55
       max_x = 55
       v = min_x+(max_x-min_x)*random.random()
-      return v, b
+      return v, b, None
 
   problem = ZDT1('MINIMIZE')
   ss = Nsga2(problem, _ZDT1Mutation(), None)
@@ -289,12 +288,17 @@ if __name__ == '__main__':
   num_of_individuals = 20
   for _ in range(num_of_individuals):
     individual = problem.generateIndividual()
+    individual.objectives[0] = individual.features[0]**2
+
     problem.calculate_objectives(individual)
     population.population.append(individual)
 
   new_population = population
   for index in range(46):
     new_population = ss.evolve(new_population)
+
+    for p in new_population.population:
+      p.objectives[0] = p.features[0]**2
 
     function1_values = [m.objectives[0] for m in new_population.population]
     function2_values = [m.objectives[1] for m in new_population.population]
@@ -303,5 +307,5 @@ if __name__ == '__main__':
     plt.xlabel('Function 1', fontsize=15)
     plt.ylabel('Function 2', fontsize=15)
     plt.scatter(function1, function2, c='r')
-    plt.savefig('aa.png')
+    # plt.savefig('aa.png')
     plt.show()

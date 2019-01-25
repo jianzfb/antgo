@@ -16,6 +16,8 @@ include antgo/resource/static/crowdsource.js
 include antgo/resource/static/register.png
 include antgo/resource/static/banner.png
 include antgo/resource/static/holder.min.js
+recursive-include antgo/resource/css/ *
+recursive-include antgo/resource/js/ *
 include antgo/config.xml
 include requirements.txt
 include README.rst

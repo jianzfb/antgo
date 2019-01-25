@@ -22,16 +22,57 @@ import subprocess
 from antgo.utils.dht import *
 from antgo.utils.serialize import *
 import copy
+try:
+    import queue
+except:
+    import Queue as queue
+import functools
 
 Config = config.AntConfig
+
 
 def imread(file):
   img = scipy.misc.imread(file)
   return img
 
 
+def imwrite(file, img):
+  scipy.misc.imsave(file, img)
+
+
 def imresize(image,size):
   return scipy.misc.imresize(image,size)
+
+
+class DataIOThread(threading.Thread):
+  def __init__(self, func, data_queue):
+    super(DataIOThread, self).__init__()
+    self.func = func
+    self.data_queue = data_queue
+
+  def run(self):
+    for a, b in self.func():
+      self.data_queue.put((a, b))
+
+    self.data_queue.put((None,None))
+
+
+def dataset_thread(capacity_size=16):
+  def dataio_warp(func):
+    def warp_func(*args, **kwargs):
+      data_queue = queue.Queue(maxsize=capacity_size)
+      data_thread = DataIOThread(functools.partial(func, *args, **kwargs), data_queue)
+      data_thread.start()
+
+      while True:
+        a, b = data_queue.get()
+        if a is None and b is None:
+          raise StopIteration
+
+        yield a, b
+
+    return warp_func
+  return dataio_warp
 
 
 class Dataset(BaseNode):
@@ -73,6 +114,134 @@ class Dataset(BaseNode):
   
   def close(self):
     pass
+
+  @property
+  def unlabeled_tag(self):
+    return 'unlabeled'
+
+  @property
+  def unlabeled_folder(self):
+    return os.path.join(self.dir, self.unlabeled_tag)
+
+  @property
+  def candidate_folder(self):
+    return os.path.join(self.dir, 'candidates')
+
+  def unlabeled_size(self):
+    unlabeled_folder = os.path.join(self.dir, self.unlabeled_tag)
+    if not os.path.exists(unlabeled_folder):
+      return 0
+
+    if not os.path.exists(os.path.join(self.dir, 'unlabeled_list.txt')):
+      with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'w') as fp:
+        for file in os.listdir(unlabeled_folder):
+          if file[0] == '.':
+            continue
+          fp.write('%s,%d\n' % (file, 0))
+
+    has_labeled_list = []
+    if os.path.exists(os.path.join(self.dir, 'candidates.txt')):
+      with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+        line_content = fp.readline()
+        while line_content:
+          data_file, _ = line_content.split(',')
+          has_labeled_list.append(data_file)
+          line_content = fp.readline()
+
+    unlabeled_list = []
+
+    with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'r') as fp:
+      line_content = fp.readline()
+      while line_content:
+        file_name, _ = line_content.split(',')
+        if file_name not in has_labeled_list:
+          unlabeled_list.append(file_name)
+
+        line_content = fp.readline()
+
+    return len(unlabeled_list)
+
+  def unlabeled(self, tag=''):
+    unlabeled_folder = os.path.join(self.dir, self.unlabeled_tag)
+    if not os.path.exists(unlabeled_folder):
+      raise StopIteration
+
+    if not os.path.exists(os.path.join(self.dir, 'unlabeled_list.txt')):
+      with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'w') as fp:
+        for file in os.listdir(unlabeled_folder):
+          if file[0] == '.':
+            continue
+          fp.write('%s,%d\n' % (file, 0))
+
+    has_labeled_list = []
+    if os.path.exists(os.path.join(self.dir, 'candidates.txt')):
+      with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+        line_content = fp.readline()
+        while line_content:
+          data_file, _ = line_content.split(',')
+          has_labeled_list.append(data_file)
+          line_content = fp.readline()
+
+    unlabeled_list = []
+    with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'r') as fp:
+      line_content = fp.readline()
+      while line_content:
+        file_name, _ = line_content.split(',')
+        unlabeled_list.append(file_name)
+
+        line_content = fp.readline()
+
+    count = 0
+    for file in unlabeled_list:
+      if file not in has_labeled_list:
+        yield os.path.join(self.dir, self.unlabeled_tag, file), {'id': count, 'file_id': file}
+
+      count += 1
+
+    raise StopIteration
+
+  def make_candidate(self, unlabeled_file, label_file, status=''):
+    # status: 'SKIP/OK'
+    if not os.path.exists(os.path.join(self.dir, 'candidates')):
+      os.makedirs(os.path.join(self.dir, 'candidates'))
+      os.makedirs(os.path.join(self.dir, 'candidates', 'data'))
+      os.makedirs(os.path.join(self.dir, 'candidates', 'label'))
+
+    with open(os.path.join(self.dir, 'candidates.txt'), 'a') as fp:
+      if status == 'OK':
+        # copy data file to candidates/data
+        shutil.copy(os.path.join(self.dir, self.unlabeled_tag, unlabeled_file), os.path.join(self.dir, 'candidates', 'data'))
+
+        # copy label file to candidates/label
+        shutil.copy(label_file, os.path.join(self.dir, 'candidates', 'label'))
+
+        # record how map
+        fp.write('%s,%s\n'%(unlabeled_file, label_file.split('/')[-1]))
+
+  def candidates(self, candidate_type='IMAGE'):
+    '''
+
+    :return:
+    '''
+    if not os.path.exists(os.path.join(self.dir, 'candidates.txt')):
+      raise StopIteration
+
+    with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+      line_content = fp.readline()
+      while line_content:
+        data_file, label_file = line_content.split(',')
+        data_file = data_file.strip()
+        label_file = label_file.strip()
+        if candidate_type == 'IMAGE':
+          yield imread(os.path.join(self.dir, 'candidates', 'data', data_file)), \
+                imread(os.path.join(self.dir, 'candidates', 'label', label_file))
+        else:
+          yield os.path.join(self.dir, 'candidates', 'data', data_file), \
+                os.path.join(self.dir, 'candidates', 'label', label_file)
+
+        line_content = fp.readline()
+
+    raise StopIteration
 
   @property
   def ids(self):

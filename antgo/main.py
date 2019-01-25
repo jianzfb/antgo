@@ -11,6 +11,7 @@ from antgo.ant.generate import *
 from antgo.ant.demo import *
 from antgo.ant.release import *
 from antgo.ant.batch import *
+from antgo.ant.activelearning import *
 from antgo.ant.train_server import *
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
@@ -32,6 +33,7 @@ def _check_environment():
 
 _ant_support_commands = ["train",
                          "challenge",
+                         "activelearning",
                          "dataset",
                          "batch",
                          "demo",
@@ -66,12 +68,14 @@ flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
 flags.DEFINE_string('port', 10000, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
+flags.DEFINE_string('option', '', '')
 flags.DEFINE_indicator('support_user_upload', '')
 flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
 flags.DEFINE_indicator('automl', '')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
+flags.DEFINE_indicator('unlabel','')
 flags.DEFINE_indicator('zoo', '')
 flags.DEFINE_string('support_user_constraint', 'file_type:;file_size:', '')
 flags.DEFINE_indicator('skip_training', '')
@@ -447,7 +451,8 @@ def main():
                                name,
                                data_factory,
                                dump_dir,
-                               task)
+                               task,
+                               unlabel=FLAGS.unlabel())
     running_process.start()
   elif ant_cmd == "release":
     running_process = AntRelease(ant_context,
@@ -462,6 +467,26 @@ def main():
                                  support_user_input=FLAGS.support_user_interaction(),
                                  support_user_interaction=FLAGS.support_user_interaction(),
                                  support_upload_formats=FLAGS.support_upload_formats())
+    running_process.start()
+  elif ant_cmd == "activelearning":
+    running_process = AntActiveLearning(ant_context,
+                                        name,
+                                        data_factory,
+                                        dump_dir,
+                                        token,
+                                        task,
+                                        main_file=main_file,
+                                        main_folder=main_folder,
+                                        main_param=main_param,
+                                        time_stamp=time_stamp,
+                                        running_platform=FLAGS.running_platform(),
+                                        max_time=FLAGS.max_time(),
+                                        port=FLAGS.port(),
+                                        task=FLAGS.task(),
+                                        skip_training=FLAGS.skip_training(),
+                                        option=FLAGS.option(),
+                                        from_experiment=FLAGS.from_experiment(),
+                                        devices=FLAGS.devices())
     running_process.start()
   elif ant_cmd == 'dataset':
     running_process = AntGenerate(ant_context,
