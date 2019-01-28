@@ -553,15 +553,19 @@ class TFTrainer(Trainer):
           data = next(data_generator)
 
           for k, v in kwargs.items():
-            if k not in self.cache:
+            cache_name = '{}:0'.format(k)
+            if len(self.clones) > 1:
+              cache_name = '{}/{}:0'.format(clone[1][:-1], k)
+
+            if cache_name not in self.cache:
               placeholder_tensor = None
               if len(self.clones) > 1:
                 placeholder_tensor = self.graph.get_tensor_by_name('{}/{}:0'.format(clone[1][:-1], k))
               else:
                 placeholder_tensor = self.graph.get_tensor_by_name('{}:0'.format(k))
-              self.cache[k] = placeholder_tensor
+              self.cache[cache_name] = placeholder_tensor
 
-            feed_dict[self.cache[k]] = data[v] if (type(data) == tuple or type(data) == list) else data
+            feed_dict[self.cache[cache_name]] = data[v] if (type(data) == tuple or type(data) == list) else data
 
       return self._run_by_feed(feed_dict=feed_dict, **kwargs)
 

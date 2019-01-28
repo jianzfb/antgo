@@ -243,6 +243,19 @@ class Dataset(BaseNode):
 
     raise StopIteration
 
+  def candidates_size(self):
+    if not os.path.exists(os.path.join(self.dir, 'candidates.txt')):
+      return 0
+
+    count = 0
+    with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+      line_content = fp.readline()
+      while line_content:
+        count += 1
+        line_content = fp.readline()
+
+    return count
+
   @property
   def ids(self):
     return self._ids

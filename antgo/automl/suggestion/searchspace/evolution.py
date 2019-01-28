@@ -22,10 +22,13 @@ from antgo.automl.suggestion.nsga2 import *
 from antgo.utils import logger
 import copy
 import functools
+from antgo.automl.suggestion.mutation import *
+from antgo.automl.suggestion.crossover import *
 
 
-class Mutation(object):
+class GraphMutation(Mutation):
   def __init__(self, ess, cell, max_block_num=4, min_block_num=1, max_cell_num=10, min_cell_num=1):
+    super(GraphMutation, self).__init__('based_matrices', -1, adaptive=True, generation=10, max_generation=100, k0=0.2, k1=1.0)
     self._mutate_rate_for_skip_block = 0.5
     self._mutate_rate_for_block = 0.5
     self._mutate_rate_for_skip_cell = 0.5
@@ -38,8 +41,113 @@ class Mutation(object):
     self._min_cell_num = min_cell_num
     self._cell_wider_mutate = {}
 
+    self._block_num = 4
+    self._cell_num = 4
+    self._branch_num = 4
+
     self._cell = cell
     self.ess = ess
+    self._op_region = (0, 10)                       # op type (0~1)
+    self._op_region_offset = 10
+
+    self._block_connection_region_1 = (10, 20)      # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._block_connection_region_2 = (20,25)       # 0(no connection), 1(connection)
+    self._block_connection_offset = 10
+
+    self._cell_connection_region_1 = (10, 25)       # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._cell_connection_region_2 = (10, 25)       # 0(no connection), 1(connection)
+    self._cell_connection_offset = 10
+
+    self._branch_connection_region_1 = (30, 40)     # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._branch_connection_region_2 = (30, 40)     # 0(no connection), 1(connection)
+    self._branch_connection_offset = 10
+
+  def graph_mutate(self, *args, **kwargs):
+    population = kwargs['population']
+
+    # gene format:  op region:_,_,_,...,_,;
+    #               block connection region 1:
+    #               block connection region 2: _,_,_,..._,;
+    #               cell connection region 1:
+    #               cell connection region 2: _,_,_,...,_;
+    #               branch connection region 1:
+    #               branch connection region 2: _,_,_,...,_;
+
+    fitness_values = []
+    mutation_individuals = self.adaptive_mutate(fitness_values=fitness_values)
+
+    for individual in mutation_individuals:
+      if individual[-1] is not None:
+        individual_index = individual[0]
+        graph, graph_info = population.population[individual_index].features
+        mutation_position = individual[-1]
+        mutation_position = sorted(mutation_position)
+
+        for p in mutation_position:
+          if p >= self._op_region[0] and p < self._op_region[1]:
+            # change op as p
+            blocks = graph_info['blocks']
+            cells = graph_info['cells']
+            block_i = int(p) / int(self._cell_num*self._branch_num)
+            cell_i = (int(p) - int(self._cell_num*self._branch_num)) / int(self._branch_num)
+            branch_i = (int(p) - int(self._cell_num*self._branch_num)) % int(self._branch_num)
+            new_branch_id = self._cell.change(graph, cells[cell_i][branch_i])
+            cells[cell_i][branch_i] = new_branch_id
+            graph_info['cells'] = cells
+          elif p >= self._block_connection_region_1[0] and p < self._block_connection_region_1[1]:
+            # change block connection type
+            graph_info['connection']['block'][p-self._block_connection_offset] = random.choice([0, 0.5, 1])
+            if graph_info['connection']['block'][p-self._block_connection_offset] == 0:
+              graph_info['connection']['block_connection'] = np.zeros((self._block_num*self._block_num))
+            elif graph_info['connection']['block'][p-self._block_connection_offset] == 1:
+              graph_info['connection']['block_connection'] = np.ones((self._block_num*self._block_num)) - np.eye(self._block_num)
+          elif p >= self._block_connection_region_2[0] and p < self._block_connection_region_2[1]:
+            if graph_info['connection']['block'][0] != 0 and graph_info['connection']['block'][0] != 1:
+              block_i = int(p - self._block_connection_offset - 1) / int(self._block_num)
+              block_j = int(p - self._block_connection_offset - 1) % int(self._block_num)
+              if block_i != block_j:
+                target = random.choice([0, 1])
+                graph_info['connection']['block_connection'][block_i * self._block_num + block_j] = target
+                graph_info['connection']['block_connection'][block_j * self._block_num + block_i] = target
+          elif p >= self._cell_connection_region_1[0] and p < self._cell_connection_region_1[1]:
+            # change cell connection type (range size: self._block_num)
+            graph_info['connection']['cell'][p - self._cell_connection_offset] = random.choice([0, 0.5, 1])
+            block_i = p - self._cell_connection_offset
+            if graph_info['connection']['cell'][block_i] == 0:
+              graph_info['connection']['cell_connection'][block_i] = np.zeros((self._cell_num*self._cell_num))
+            elif graph_info['connection']['cell'][block_i] == 1:
+              graph_info['connection']['cell_connection'][block_i] = np.ones((self._cell_num*self._cell_num)) - np.eye(self._cell_num)
+          elif p >= self._cell_connection_region_2[0] and p < self._cell_connection_region_2[1]:
+            block_i = int(p - self._cell_connection_offset - self._block_num) / int(self._cell_num * self._cell_num)
+            if graph_info['connection']['cell'][block_i] != 0 and graph_info['connection']['cell'][block_i] != 1:
+              cell_i = (int(p - self._cell_connection_offset - self._block_num) - block_i * int(self._cell_num * self._cell_num)) / int(self._cell_num)
+              cell_j = (int(p - self._cell_connection_offset - self._block_num) - block_i * int(self._cell_num * self._cell_num)) % int(self._cell_num)
+              if cell_i != cell_j:
+                target = random.random([0,1])
+                graph_info['connection']['cell_connection'][block_i][cell_i*self._cell_num+cell_j] = target
+                graph_info['connection']['cell_connection'][block_i][cell_j * self._cell_num + cell_i] = target
+          elif p >= self._branch_connection_region_1[0] and p < self._branch_connection_region_1[1]:
+            # change branch connection (range size: self._cell_num * self._block_num)
+            cell_i = p - self._branch_connection_offset
+            graph_info['connection']['branch'][cell_i] = random.choice([0, 0.5, 1])
+            if graph_info['connection']['branch'][cell_i] == 0:
+              graph_info['connection']['branch_connection'][cell_i] = np.zeros((self._branch_num*self._branch_num))
+            elif graph_info['connection']['branch'][cell_i] == 1:
+              graph_info['connection']['branch_connection'][cell_i] = np.ones((self._branch_num*self._branch_num)) - np.eye(self._branch_num)
+          elif p >= self._branch_connection_region_2[0] and p < self._branch_connection_region_2[1]:
+            cell_i = int(p - self._branch_connection_offset - self._cell_num * self._block_num) / int(self._branch_num*self._branch_num)
+            if graph_info['connection']['branch'][cell_i] != 0 and graph_info['connection']['branch'][cell_i] != 1:
+              branch_i = int(p - self._branch_connection_offset - self._block_num * self._cell_num) / int(self._branch_num * self._block_num)
+              branch_j = int(p - self._branch_connection_offset - self._block_num * self._cell_num) % int(self._branch_num * self._block_num)
+              if branch_i != branch_j:
+                target = random.random([0,1])
+                graph_info['connection']['branch_connection'][cell_i][branch_i * self._branch_num + branch_j] = target
+                graph_info['connection']['branch_connection'][cell_i][branch_j * self._branch_num + branch_i] = target
+
+        individual.features = [graph, graph_info]
+
+    return population
+
 
   def __mutate(self, graph, graph_info):
     # block [[cell_id, cell_id,...],[],[]]
@@ -451,9 +559,79 @@ class Mutation(object):
       return graph, graph_info
 
 
-class CrossOver(object):
+class GraphCrossOver(CrossOver):
   def __init__(self):
-    pass
+    super(GraphCrossOver, self).__init__('based_matrices', -1, adaptive=True, generation=10, max_generation=100, k0=0.2, k1=1.0)
+    self._block_num = 4
+    self._cell_num = 4
+    self._branch_num = 4
+
+    self._op_region = (0, 10)                       # op type (0~1)
+    self._op_region_offset = 10
+
+    self._block_connection_region_1 = (10, 20)      # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._block_connection_region_2 = (20,25)       # 0(no connection), 1(connection)
+    self._block_connection_offset = 10
+
+    self._cell_connection_region_1 = (10, 25)       # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._cell_connection_region_2 = (10, 25)       # 0(no connection), 1(connection)
+    self._cell_connection_offset = 10
+
+    self._branch_connection_region_1 = (30, 40)     # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._branch_connection_region_2 = (30, 40)     # 0(no connection), 1(connection)
+    self._branch_connection_offset = 10
+
+  def graph_crossover(self, *args, **kwargs):
+    population = kwargs['population']
+
+    # gene format:  op region:_,_,_,...,_,;
+    #               block connection region 1:
+    #               block connection region 2: _,_,_,..._,;
+    #               cell connection region 1:
+    #               cell connection region 2: _,_,_,...,_;
+    #               branch connection region 1:
+    #               branch connection region 2: _,_,_,...,_;
+
+    fitness_values = []
+    cross_over_population = copy.deepcopy(population)
+    crossover_individuals = self.adaptive_crossover(fitness_values=fitness_values)
+    for individual in crossover_individuals:
+      first_index = individual[0]
+      second_index = individual[-2]
+
+      first_graph, first_graph_info = copy.deepcopy(population.population[first_index].features)
+      second_graph, second_graph_info = population.population[second_index].features
+
+      op_crossover_p = individual[-1][0]
+      # ....
+
+      block_connection_crossover_p = individual[-1][1]
+      if block_connection_crossover_p != -1:
+        first_graph_info['connection']['block'][block_connection_crossover_p - self._block_connection_offset] = \
+          second_graph_info['connection']['block'][block_connection_crossover_p - self._block_connection_offset]
+
+        first_graph_info['connection']['block_connection'] = second_graph_info['connection']['block_connection']
+
+      cell_connection_corssover_p = individual[-1][2]
+      if cell_connection_corssover_p != -1:
+        block_i = cell_connection_corssover_p - self._cell_connection_offset
+        first_graph_info['connection']['cell'][block_i] = \
+          second_graph_info['connection']['cell'][block_i]
+
+        first_graph_info['connection']['cell_connection'][block_i] = second_graph_info['connection']['cell_connection'][block_i]
+
+      branch_connection_corssover_p = individual[-1][3]
+      if branch_connection_corssover_p != -1:
+        cell_i = branch_connection_corssover_p - self._branch_connection_offset
+        first_graph_info['connection']['branch'][cell_i] = \
+          second_graph_info['connection']['branch'][cell_i]
+
+        first_graph_info['connection']['branch_connection'][cell_i] = \
+          second_graph_info['connection']['branch_connection'][cell_i]
+
+      cross_over_population.cross_over_population[first_index].features = [first_graph, first_graph_info]
+
+    return cross_over_population
 
 
 class ModelProblem(Problem):
@@ -559,7 +737,7 @@ class EvolutionSearchSpace(AbstractSearchSpace):
     if len(x_queue) > 20:
       self.bayesian.fit(x_queue, y_queue)
 
-    self.mutation_operator = Mutation(self, self.cell,
+    self.mutation_operator = GraphMutation(self, self.cell,
                                       max_block_num=self.max_block_num,
                                       min_block_num=self.min_block_num,
                                       max_cell_num=self.max_cell_num,
