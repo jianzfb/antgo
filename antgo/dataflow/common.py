@@ -730,7 +730,7 @@ class MultiThreadPipe(Node):
 class ActionDataset(Node):
   def __init__(self, name, func, input):
     super(ActionDataset, self).__init__(name, func, input)
-    self.dataset = input[0]
+    self.dataset = input[0][0]
 
   @property
   def size(self):
