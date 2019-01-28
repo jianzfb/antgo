@@ -66,7 +66,8 @@ class AntActiveLearning(AntBase):
 
     self.skip_first_training = kwargs.get('skip_training', False)
     self.max_time = kwargs.get('max_time', '1d')
-    self.max_iterators = kwargs.get('max_iterators', 100)
+    self.max_iterators = getattr(self.context.params,'max_iterators', 100)
+    self.min_label_ratio = getattr(self.context.params,'min_label_ratio', 0.1)
     self.dump_dir = ant_dump_dir
 
     self.web_server_port = kwargs.get('port', None)
@@ -259,7 +260,7 @@ class AntActiveLearning(AntBase):
         data_file_id = gt['file_id']
         unlabeled_pool.append({'file_id': data_file_id, 'feature': feature})
 
-      select_size = int(len(unlabeled_pool) * 0.1)
+      select_size = int(len(unlabeled_pool) * self.min_label_ratio)
       if select_size == 0:
         select_size = len(unlabeled_pool)
 
