@@ -423,7 +423,7 @@ class IndexHanlder(BaseHandler):
 
         study_info['name'] = study_name
         study_info['index'] = s_i
-        objective_values = [t.objective_value for t in trials if t.status == 'Completed']
+        objective_values = [t[3] for t in trials if t[2] == 'Completed']
         study_info['objective_value'] = '%0.4f'%float(np.max(objective_values)) if len(objective_values) > 0 else -1.0
         study_info['status'] = study_status
         study_info['created_time'] = '-' if study_created_time is None else datetime.fromtimestamp(study_created_time).strftime('%Y-%m-%d')
