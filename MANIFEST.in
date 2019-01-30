@@ -1,6 +1,6 @@
 include antgo/utils/_mask.pyx
 include antgo/cutils/maskApi.h
-recursive-include include antgo/resource/templates/ *
+recursive-include antgo/resource/templates/ *
 include antgo/resource/static/antgo.ico
 include antgo/resource/static/antgo.js
 include antgo/resource/static/antgo.css
