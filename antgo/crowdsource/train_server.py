@@ -470,7 +470,7 @@ class StudyGetHandler(BaseHandler):
 
     response = yield self.client_socket.recv_json()
     trials = response['result']
-    filted_trails = [t for t in trials if t.status == 'Completed']
+    filted_trails = [t for t in trials if t[2] == 'Completed']
 
     trials_list = [{'trial_name': t[0],
                     'trial_created_time': datetime.fromtimestamp(t[1]).strftime('%Y-%m-%d %H:%M:%S'),
