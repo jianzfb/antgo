@@ -67,6 +67,8 @@ class AntDemo(AntBase):
     self.support_user_interaction = kwargs.get('support_user_interaction', False)
     self.support_user_constraint = kwargs.get('support_user_constraint', None)
 
+    self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
+
   def start(self):
     # 0.step loading demo task
     running_ant_task = None

@@ -30,6 +30,8 @@ class AntBatch(AntBase):
         self.ant_context.ant = self
         self.running_ant_task = create_task_from_xml(ant_task_config, self.context)
         self.unlabel = kwargs.get('unlabel', False)
+        self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
+
         if self.running_ant_task is None:
             logger.error('couldnt load task')
             exit(-1)

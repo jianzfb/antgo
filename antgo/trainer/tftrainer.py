@@ -655,7 +655,8 @@ class TFTrainer(Trainer):
       # Session
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
-      config.gpu_options.visible_device_list = ','.join(str(x) for x in self.devices) if len(self.devices) > 0 else ''
+      devices = self.ctx.devices if len(self.ctx.devices) > 0 else self.devices
+      config.gpu_options.visible_device_list = ','.join(str(x) for x in devices) if len(devices) > 0 else ''
       self.sess = tf.Session(graph=graph, config=config)
       
       #######################
@@ -837,7 +838,9 @@ class TFTrainer(Trainer):
       # Session
       config = tf.ConfigProto(allow_soft_placement=True)
       config.gpu_options.allow_growth = True
-      config.gpu_options.visible_device_list = ','.join(str(x) for x in self.devices) if len(self.devices) > 0 else ''
+
+      devices = self.ctx.devices if len(self.ctx.devices) > 0 else self.devices
+      config.gpu_options.visible_device_list = ','.join(str(x) for x in devices) if len(devices) > 0 else ''
 
       self.sess = tf.Session(graph=graph, config=config)
 

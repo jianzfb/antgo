@@ -415,7 +415,8 @@ def main():
                                  skip_training=FLAGS.skip_training(),
                                  running_platform=FLAGS.running_platform(),
                                  proxy=FLAGS.proxy(),
-                                 signature=FLAGS.signature())
+                                 signature=FLAGS.signature(),
+                                 devices=FLAGS.devices())
       running_process.start()
   elif ant_cmd == 'challenge':
       running_process = AntChallenge(ant_context,
@@ -429,7 +430,8 @@ def main():
                                      main_folder=main_folder,
                                      main_param=main_param,
                                      time_stamp=time_stamp,
-                                     running_platform=FLAGS.running_platform())
+                                     running_platform=FLAGS.running_platform(),
+                                     devices=FLAGS.devices())
       running_process.start()
   elif ant_cmd == "demo":
     running_process = AntDemo(ant_context,
@@ -443,7 +445,8 @@ def main():
                               support_user_upload=FLAGS.support_user_upload(),
                               support_user_input=FLAGS.support_user_input(),
                               support_user_interaction=FLAGS.support_user_interaction(),
-                              support_user_constraint=FLAGS.support_user_constraint())
+                              support_user_constraint=FLAGS.support_user_constraint(),
+                              devices=FLAGS.devices())
 
     running_process.start()
   elif ant_cmd == "batch":
@@ -452,7 +455,8 @@ def main():
                                data_factory,
                                dump_dir,
                                task,
-                               unlabel=FLAGS.unlabel())
+                               unlabel=FLAGS.unlabel(),
+                               devices=FLAGS.devices())
     running_process.start()
   elif ant_cmd == "release":
     running_process = AntRelease(ant_context,

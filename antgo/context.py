@@ -85,6 +85,8 @@ class Context(object):
     self._from_experiment = None
     self._model = None
 
+    self._devices = []
+
     self._quiet = False
     self._debug = False
 
@@ -151,6 +153,14 @@ class Context(object):
   @stage.setter
   def stage(self, val):
     self.context_stage = val
+
+  @property
+  def devices(self):
+    return self._devices
+
+  @devices.setter
+  def devices(self, val):
+    self._devices = val
 
   @property
   def model(self):

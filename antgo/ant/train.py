@@ -105,7 +105,8 @@ class AntTrain(AntBase):
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
     self.skip_training = kwargs.get('skip_training', False)
-    
+    self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
+
   def error_analysis(self, running_ant_task, running_ant_dataset, task_running_statictic):
     # error analysis
     logger.info('start error analysis')

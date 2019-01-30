@@ -35,6 +35,7 @@ class AntChallenge(AntBase):
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
     self.ant_task_benchmark = ant_task_benchmark
+    self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
   def start(self):
     # 0.step loading challenge task
