@@ -58,7 +58,7 @@ class Mutation(object):
     sigma = np.sum(np.power(A - np.mean(A, 0), 2.0) * C, 0) / np.sum(C)
     sigma = sigma / np.sum(sigma)
     sigma = np.power(sigma, gamma)
-    sigma = sigma / np.sum(sigma)
+    sigma = sigma / (np.sum(sigma) + 0.000000001)
 
     mutation_result = []
     for f in fitness_values:
@@ -68,6 +68,8 @@ class Mutation(object):
         multi_points = self.multi_points if self.multi_points > 0 else int(alpha[f[0]] * M)
         mutation_position = np.random.choice(list(range(f[2].shape[-1])), multi_points, False, sigma)
         mutation_result.append(f + (mutation_position,))
+
+    return mutation_result
 
   def _mutate_simple(self, *args, **kwargs):
     # fitness_values: [(index, fitness, gene, rate), (index, fitness, gene, rate), ...]

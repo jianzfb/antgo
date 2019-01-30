@@ -29,6 +29,7 @@ import functools
 import zmq
 from zmq.eventloop import future
 import requests
+import numpy as np
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -89,6 +90,7 @@ class BaseHandler(tornado.web.RequestHandler):
   def image_folder(self):
     return self.settings['static_path']
 
+
 def update_suggestion_process(server_records, experiment_records):
   running_experiments = []
   for experiment_id, experiment_record in experiment_records.items():
@@ -125,6 +127,7 @@ def launch_train_process(server_records, experiment_records, content):
     main_param = json.loads(content['hyperparameter'])
 
   structure = content['structure']
+  structure_connection = content['structure_connection']
   max_runtime = content['max_time']
 
   if experiment_id in experiment_records:
@@ -185,7 +188,7 @@ def launch_train_process(server_records, experiment_records, content):
   server_records['occupied_devices'].extend(experiment_devices)
   experiment_records[experiment_id]['devices'] = experiment_devices
   main_param.update({'devices': experiment_devices})
-  main_param.update({'automl': {'graph': structure}})
+  main_param.update({'automl': {'graph': structure, 'graph_connection': structure_connection}})
 
   with open(os.path.join(server_records['main_folder'], experiment_id, 'main_param.yaml'), 'w') as fp:
     fp.write(yaml.dump(main_param))
@@ -420,12 +423,12 @@ class IndexHanlder(BaseHandler):
 
         study_info['name'] = study_name
         study_info['index'] = s_i
-        study_info['objective_value'] = '%0.4f'%float(trials[0][-1]) if len(trials) > 0 else -1
+        objective_values = [t.objective_value for t in trials if t.status == 'Completed']
+        study_info['objective_value'] = '%0.4f'%float(np.max(objective_values)) if len(objective_values) > 0 else -1.0
         study_info['status'] = study_status
         study_info['created_time'] = '-' if study_created_time is None else datetime.fromtimestamp(study_created_time).strftime('%Y-%m-%d')
 
         study_infos.append(study_info)
-
 
       self.client_socket.send_json({'cmd': 'searchspace/all'})
       response = yield self.client_socket.recv_json()
@@ -467,11 +470,12 @@ class StudyGetHandler(BaseHandler):
 
     response = yield self.client_socket.recv_json()
     trials = response['result']
+    filted_trails = [t for t in trials if t.status == 'Completed']
 
     trials_list = [{'trial_name': t[0],
                     'trial_created_time': datetime.fromtimestamp(t[1]).strftime('%Y-%m-%d %H:%M:%S'),
                     'trial_status': t[2],
-                    'trial_objective_value': '%0.4f'%float(t[3])} for t in trials[0:20]]
+                    'trial_objective_value': '%0.4f'%float(t[3])} for t in filted_trails[0:20]]
     self.write(json.dumps(trials_list))
     self.finish()
 
@@ -709,6 +713,25 @@ class TrialDownloadConfigureHandler(BaseHandler):
 
     self.write(trial_configure_str)
     # stop
+    self.finish()
+
+
+class StudyDownloadExperimentHandler(BaseHandler):
+  @gen.coroutine
+  def get(self, study_name):
+    self.client_socket.send_json({'cmd': 'study/download',
+                                  'study_name': study_name})
+
+    response = yield self.client_socket.recv_json()
+    if len(response) == 0 or response['status'] == 'fail':
+      self.set_status(404)
+      self.finish()
+      return
+
+    self.set_header('Content-Type', 'application/octet-stream')
+    self.set_header('Content-Disposition', 'attachment; filename='+study_name+'.json')
+
+    self.write(response['result'])
     self.finish()
 
 
@@ -1071,6 +1094,7 @@ def train_server_start(main_file,
                                               ('/trial/([^/]+)/', TrialInfoHanlder),
                                               ('/trial/download/([^/]+)/([^/]+)/configure/', TrialDownloadConfigureHandler),
                                               ('/trial/download/([^/]+)/([^/]+)/experiment/', TrialDownloadExperimentHandler),
+                                              ('/study/download/([^/]+)/experiment/', StudyDownloadExperimentHandler),
                                               ('/submit/', FileHanlder),],
                                     **settings)
       http_server = tornado.httpserver.HTTPServer(app)

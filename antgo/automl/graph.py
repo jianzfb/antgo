@@ -8,6 +8,7 @@ from __future__ import print_function
 from antgo.automl.stublayer import *
 from antgo.automl.layer_transformer import *
 from antgo.automl.constant import *
+from antgo.automl.basestublayers import *
 
 try:
     import Queue as queue
@@ -154,7 +155,7 @@ class Graph(object):
     #####################################################
     self.operation_history = []
     self.vis = None
-    self._layer_factory = None              # layer factory
+    self._layer_factory = BaseLayerFactory()              # layer factory
     self.layer_transformer = None
     ######################################################
 
@@ -531,12 +532,34 @@ class Graph(object):
     elif self.node_list[conv_block_input_id].shape[1] < self.node_list[block_last_layer_input_id].shape[1] or \
             self.node_list[conv_block_input_id].shape[2] < self.node_list[block_last_layer_input_id].shape[2]:
       # 2.step 从低分辨率到高分辨率的跳跃(使用双线性插值)
+      # 2.1.step channel compatibility (3x3 conv2)
+      if self.node_list[conv_block_input_id].shape[-1] != self.node_list[block_last_layer_input_id].shape[-1]:
+        target_channel = self.node_list[block_last_layer_input_id].shape[-1]
+        transition_conv33 = self.layer_factory.conv2d(input_channel=None,
+                                                               filters=target_channel,
+                                                               kernel_size_h=3,
+                                                               kernel_size_w=3)
+
+        self.add_layer(transition_conv33, conv_block_input_id)
+        conv_block_input_id = self._conv_block_end_node(self.layer_to_id[transition_conv33])
+
+      # 2.2.step spatial compatibility (bilinear resize)
       height = self.node_list[block_last_layer_input_id].shape[1]
       width = self.node_list[block_last_layer_input_id].shape[2]
       new_resize_layer = self.layer_factory.bilinear_resize(height=height, width=width)
       skip_output_id = conv_block_input_id
       skip_output_id = self.add_layer(new_resize_layer, skip_output_id)
     else:
+      if self.node_list[conv_block_input_id].shape[-1] != self.node_list[block_last_layer_input_id].shape[-1]:
+        target_channel = self.node_list[block_last_layer_input_id].shape[-1]
+        transition_conv33 = self.layer_factory.conv2d(input_channel=None,
+                                                               filters=target_channel,
+                                                               kernel_size_h=3,
+                                                               kernel_size_w=3)
+
+        self.add_layer(transition_conv33, conv_block_input_id)
+        conv_block_input_id = self._conv_block_end_node(self.layer_to_id[transition_conv33])
+
       skip_output_id = conv_block_input_id
 
     aa = self._conv_block_start_node(end_id)
@@ -985,6 +1008,52 @@ class Graph(object):
 
         self.node_list[output_id].shape = self.layer_list[layer_id].output_shape
     return True
+
+  def update_by(self, graph_info):
+    block_connections = graph_info['connection']['block_connection']
+    cell_connections = graph_info['connection']['cell_connection']
+    branch_connections = graph_info['connection']['branch_connection']
+
+    blocks = graph_info['blocks']
+    cells = graph_info['cells']
+    block_num = len(blocks)
+    cell_num = len(cells)
+
+    # 1.step update connection among branchs
+    count = 0
+    for c in range(cell_num):
+      branch_num_in_cell = len(cells[c])
+      for bi in range(branch_num_in_cell):
+        for bj in range(branch_num_in_cell):
+          if bj > bi:
+            if branch_connections[c][bi * branch_num_in_cell + bj] == 1:
+              self.to_add_skip_model(cells[c][bi], cells[c][bj])
+
+              # self.visualization('%d.png'%count)
+              # count += 1
+
+    # 2.step update connection among cells
+    for b in range(block_num):
+      cell_num_in_block = len(blocks[b])
+      for ci in range(cell_num_in_block):
+        for cj in range(cell_num_in_block):
+          if cj > ci:
+            if cell_connections[b][ci * cell_num_in_block + cj] == 1:
+              self.to_add_skip_model(cells[blocks[b][ci]][-1], cells[blocks[b][cj]][-1])
+
+              # self.visualization('%d.png'%count)
+              # count += 1
+
+    # 3.step update connection among blocks
+    for bi in range(block_num):
+      for bj in range(block_num):
+        if bj > bi:
+          if block_connections[bi * block_num + bj] == 1:
+            self.to_add_skip_model(cells[blocks[bi][-1]][-1], cells[blocks[bj][-1]][-1])
+            # self.visualization('%d.png' % count)
+            # count += 1
+
+    # self.visualization('b.png')
 
 #from random import randrange, sample
 #mport random

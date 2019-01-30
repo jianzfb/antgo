@@ -10,10 +10,15 @@ import random
 
 
 class Branch(StubLayer):
+  LAYER_ENCODER_RANGE = (0.01, 0.09)
+
   def __init__(self, input=None, output=None, **kwargs):
     super(Branch, self).__init__(input, output, **kwargs)
     self.branch_name = kwargs.get('branch_name', '')
 
+  def encoder_scale(self, value, bias):
+    # value in [0,1]
+    return value * (Branch.LAYER_ENCODER_RANGE[1] - Branch.LAYER_ENCODER_RANGE[0]) + Branch.LAYER_ENCODER_RANGE[0] + bias
 
 class DummyNode(object):
   def __init__(self, shape, id=-1):
@@ -152,7 +157,7 @@ class SeperableConvBranch(Branch):
   @property
   def layer_type_encoder(self):
     # 0.1 ~ 0.2
-    return (self.rate_h_index * 8 + self.rate_w_index) / 720.0 + 0.1
+    return self.encoder_scale((self.rate_h_index * 8 + self.rate_w_index) / 63.0, 0.1)
 
 
 class SPPBranch(Branch):
@@ -208,7 +213,7 @@ class SPPBranch(Branch):
   @property
   def layer_type_encoder(self):
     # 0.2 ~ 0.3
-    return (self.grid_h_index * 4 + self.grid_w_index) / 200.0 + 0.2
+    return self.encoder_scale((self.grid_h_index * 4 + self.grid_w_index) / 15.0, 0.2)
 
 
 class FocusBranch(Branch):
@@ -394,7 +399,7 @@ class FocusBranch(Branch):
       if m == c:
         c_i = i
 
-    return (a_i * 25 + b_i * 5 + c_i) / 690.0 + 0.3
+    return self.encoder_scale((a_i * 25 + b_i * 5 + c_i) / 124.0, 0.3)
 
 
 class SEBranch(Branch):
@@ -699,16 +704,16 @@ class RegionSEBranch(Branch):
     # 0.4 ~ 0.5
     # region_size: 2, 4, 6, 8; squeeze_channels: 4, 8, 16
     sc_i = -1
-    for i, s in enumerate([4,8,16]):
+    for i, s in enumerate([4, 8, 16]):
       if self.squeeze_channels == s:
         sc_i = i
 
     rs_i = -1
-    for j,r in enumerate([2,4,6,8]):
+    for j,r in enumerate([2, 4, 6, 8]):
       if self.region_size == r:
         rs_i = j
 
-    return (sc_i * 4 + rs_i) / 160.0 + 0.4
+    return self.encoder_scale((sc_i * 4 + rs_i) / 11.0, 0.4)
 
 
 class ResBranch(Branch):
@@ -938,76 +943,4 @@ class BottleNeckResBranch(Branch):
       if self.bottleneck == m:
         mi = i
 
-    return 0.5 + 0.1 / len(self.candidate_bottleneck) * mi
-
-
-class PoolBranch(Branch):
-  def __init__(self, input=None, output=None, **kwargs):
-    super(PoolBranch, self).__init__(input, output, **kwargs)
-    # spatial pyramid pooling
-    # shape = clone_graph.node_list[output_node_id].shape
-    # min_hw = min(shape[1], shape[2])
-    self.layer_name = 'avg_branch'
-    self.is_avg_pool = False
-
-    if 'is_avg_pool' in kwargs:
-      self.is_avg_pool = kwargs['is_avg_pool']
-      if self.is_avg_pool:
-        self.layer_1 = BaseStubAvgPooling2d(kernel_size_h=3,
-                                            kernel_size_w=3,
-
-                                            cell_name=self.cell_name,
-                                            block_name=self.block_name)
-      else:
-        self.layer_1 = BaseStubMaxPooling2d(kernel_size_h=3,
-                                            kernel_size_w=3,
-                                            cell_name=self.cell_name,
-                                            block_name=self.block_name)
-
-    else:
-      if random.random() < 0.5:
-        self.layer_1 = BaseStubAvgPooling2d(kernel_size_h=3,
-                                            kernel_size_w=3,
-                                            cell_name=self.cell_name,
-                                            block_name=self.block_name)
-        self.is_avg_pool = True
-      else:
-        self.layer_1 = BaseStubMaxPooling2d(kernel_size_h=3,
-                                            kernel_size_w=3,
-                                            cell_name=self.cell_name,
-                                            block_name=self.block_name)
-        self.is_avg_pool = False
-
-  @property
-  def output_shape(self):
-    self.layer_1.input = self.input
-    return self.layer_1.output_shape
-
-  def flops(self):
-    self.layer_1.input = self.input
-    return self.layer_1.flops()
-
-  def __call__(self, *args, **kwargs):
-    if self.is_avg_pool:
-      layer_1_c = self.layer_factory.avg_pool2d(kernel_size_h=3,
-                                                kernel_size_w=3,
-                                                cell_name=self.cell_name,
-                                                block_name=self.block_name)
-      layer_1_c.input = self.input
-      layer_1 = layer_1_c(*args, **kwargs)
-      return layer_1
-    else:
-      layer_1_c = self.layer_factory.max_pool2d(kernel_size_h=3,
-                                                kernel_size_w=3,
-                                                cell_name=self.cell_name,
-                                                block_name=self.block_name)
-      layer_1_c.input = self.input
-      layer_1 = layer_1_c(*args, **kwargs)
-      return layer_1
-
-  @property
-  def layer_type_encoder(self):
-    if self.is_avg_pool:
-      return 1 / 300.0
-    else:
-      return 2 / 300.0
+    return self.encoder_scale(float(mi) / len(self.candidate_bottleneck), 0.5)

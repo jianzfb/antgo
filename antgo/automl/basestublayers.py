@@ -161,6 +161,30 @@ class BaseStubSeparableConv2d(BaseStubWeightBiasLayer):
     raise NotImplementedError
 
 
+class BaseStubIdentity(StubLayer):
+  def __init__(self, input=None, output=None, **kwargs):
+    super(BaseStubIdentity, self).__init__(input, output,**kwargs)
+
+  @property
+  def output_shape(self):
+    return self.input.shape
+
+  def size(self):
+    return 0
+
+  def flops(self):
+    return 0.0
+
+  def __call__(self, *args, **kwargs):
+    if self.layer_factory is not None:
+      layer = self.layer_factory.identity(
+        block_name=self.block_name,
+        cell_name=self.cell_name)
+      return layer(*args, **kwargs)
+
+    raise NotImplementedError
+
+
 class BaseStubSPP(BaseStubWeightBiasLayer):
   def __init__(self, grid_h, grid_w, input=None, output=None, **kwargs):
     super(BaseStubSPP, self).__init__(input, output, **kwargs)
@@ -240,9 +264,6 @@ class BaseStubAdd(StubLayer):
     return self.input[0].shape
 
   def flops(self):
-    if type(self.input) != list and type(self.input) != tuple:
-      print('hello')
-      return 0.0
     return self.input[0].shape[1] * self.input[0].shape[2] * self.input[0].shape[3] - 1
 
   def __call__(self, *args, **kwargs):
@@ -567,6 +588,7 @@ class BaseLayerFactory(object):
                     'dropout_2d',
                     'bilinear_resize',
                     'spp',
+                    'identity',
                     'input']:
       return getattr(super(BaseLayerFactory, self), item)
 
@@ -607,6 +629,8 @@ class BaseLayerFactory(object):
         return BaseStubDropout2d(*args, **kwargs)
       elif item == 'bilinear_resize':
         return BaseStubBilinearResize(*args, **kwargs)
+      elif item == 'identity':
+        return BaseStubIdentity(*args, **kwargs)
       elif item == 'input':
         return BaseStubInput(*args, **kwargs)
 

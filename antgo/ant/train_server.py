@@ -182,6 +182,29 @@ class AntTrainServer(AntBase):
 
     return{'status': 'ok', 'result': all_trails_result}
 
+  def download_study(self, query):
+    study_name = query.get('study_name', None)
+    study = Study.get(name=study_name)
+    if study is None:
+      return {'status': 'fail'}
+
+    all_trails = Trial.filter(study_name=study_name, status='Completed')
+    study_configuration = json.loads(study.study_configuration)
+    study_content = {'study': study_name, 'goal': study_configuration['goal'], 'trials_num': len(all_trails),'trials': []}
+    for trail in all_trails:
+      trial_result = {}
+      trial_result['graph'] = trail.structure[0]
+      trial_result['graph_info'] = trail.structure[1]
+      trial_result['tag'] = trail.tag
+      trial_result['created_time'] = trail.created_time
+      trial_result['updated_time'] = trail.updated_time
+      trial_result['name'] = trail.name
+      trial_result['address'] = trail.address
+      trial_result['objective_value'] = trail.objective_value
+
+      study_content['trials'].append(trial_result)
+    return {'status': 'ok', 'result': json.dumps(study_content)}
+
   def study_visualization(self, query):
     study_name = query.get('study_name', None)
     study = Study.get(name=study_name)
@@ -195,11 +218,23 @@ class AntTrainServer(AntBase):
     time_str = datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f')
     all_trails = Trial.filter(study_name=study_name, status='Completed')
     all_trails = sorted(all_trails, key=lambda x: x.created_time)
+
+    plt.subplot(2, 1, 1)
+    plt.title('study visualization')
     plt.xlabel('time(hours)')
-    plt.ylabel('test accuracy')
+    plt.ylabel('accuracy')
     x = [(m.created_time - study.created_time) / 3600.0 for m in all_trails]
     y = [m.objective_value for m in all_trails]
-    plt.scatter(x=x, y=y, c='r',marker='o')
+    plt.scatter(x=x, y=y, c='r', marker='o')
+
+    plt.subplot(2, 1, 2)
+    plt.xlabel('ADDMUL/FLOPS')
+    plt.ylabel('accuracy')
+    x = [m.multi_objective_value[0] for m in all_trails]
+    y = [m.objective_value for m in all_trails]
+    plt.scatter(x=x, y=y, c='r', marker='o')
+    plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
+
     plt.savefig('%s/study_%s_%s.png'%(dump_dir, study_name, time_str))
     return {'status': 'ok', 'result': '%s/study_%s_%s.png'%(dump_dir, study_name, time_str)}
 
@@ -270,6 +305,8 @@ class AntTrainServer(AntBase):
           response = self.get_studys(client_query)
         elif cmd == 'study/get':
           response = self.get_study(client_query)
+        elif cmd == 'study/download':
+          response = self.download_study(client_query)
         elif cmd == 'trial/get':
           response = self.get_trial(client_query)
         elif cmd == 'suggestion/make':
@@ -376,6 +413,7 @@ class AntTrainServer(AntBase):
                 'updated_time': trail.updated_time,
                 'hyperparameter': trail.parameter_values,
                 'structure': trail.structure[0] if type(trail.structure) == list or type(trail.structure) == tuple else trail.structure,
+                'structure_connection': trail.structure[1] if type(trail.structure) == list or type(trail.structure) == tuple else '',
                 'max_time': study_configuration['maxTime'],
                 'status': study.status}
     return response

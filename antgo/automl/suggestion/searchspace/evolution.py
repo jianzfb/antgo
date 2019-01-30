@@ -24,45 +24,56 @@ import copy
 import functools
 from antgo.automl.suggestion.mutation import *
 from antgo.automl.suggestion.crossover import *
+from itertools import chain
 
 
-class GraphMutation(Mutation):
-  def __init__(self, ess, cell, max_block_num=4, min_block_num=1, max_cell_num=10, min_cell_num=1):
-    super(GraphMutation, self).__init__('based_matrices', -1, adaptive=True, generation=10, max_generation=100, k0=0.2, k1=1.0)
-    self._mutate_rate_for_skip_block = 0.5
-    self._mutate_rate_for_block = 0.5
-    self._mutate_rate_for_skip_cell = 0.5
-    self._mutate_rate_for_cell = 0.5
-    self._mutate_rate_for_branch = 0.5
-    self._mutate_rate_for_skip_branch = 0.5
-    self._max_block_num = max_block_num
-    self._min_block_num = min_block_num
-    self._max_cell_num = max_cell_num
-    self._min_cell_num = min_cell_num
-    self._cell_wider_mutate = {}
+class EvolutionMutation(Mutation):
+  def __init__(self,
+               evolution_s,
+               multi_points,
+               generation,
+               max_generation,
+               k0,
+               k1):
+    super(EvolutionMutation, self).__init__('based_matrices',
+                                            multi_points,
+                                            adaptive=True,
+                                            generation=generation,
+                                            max_generation=max_generation,
+                                            k0=k0,
+                                            k1=k1)
+    self._block_num = evolution_s.block_num
+    self._cell_num = evolution_s.cell_num
+    self._branch_num = evolution_s.branch_num
 
-    self._block_num = 4
-    self._cell_num = 4
-    self._branch_num = 4
+    self._cell = Cell(self._branch_num, evolution_s.base_channel)
+    self._dna_func = evolution_s.dna
 
-    self._cell = cell
-    self.ess = ess
-    self._op_region = (0, 10)                       # op type (0~1)
-    self._op_region_offset = 10
+    self._op_region = (0, self._block_num*self._cell_num*self._branch_num)                      # op type (0~1)
+    offset = self._block_num*self._cell_num*self._branch_num
 
-    self._block_connection_region_1 = (10, 20)      # 0(no connection), 0.5(random connection), 1(dense connection)
-    self._block_connection_region_2 = (20,25)       # 0(no connection), 1(connection)
-    self._block_connection_offset = 10
+    self._block_connection_region_1 = (offset, offset+1)                                        # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._block_connection_region_2 = (offset+1,offset+1+self._block_num*self._block_num)       # 0(no connection), 1(connection)
+    self._block_connection_offset = self._op_region[1]
+    offset = offset+1+self._block_num*self._block_num
 
-    self._cell_connection_region_1 = (10, 25)       # 0(no connection), 0.5(random connection), 1(dense connection)
-    self._cell_connection_region_2 = (10, 25)       # 0(no connection), 1(connection)
-    self._cell_connection_offset = 10
+    # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._cell_connection_region_1 = (offset, offset+self._block_num)
+    # 0(no connection), 1(connection)
+    self._cell_connection_region_2 = (offset+self._block_num,
+                                      offset+self._block_num+self._block_num*self._cell_num*self._cell_num)
+    self._cell_connection_offset = self._block_connection_region_2[1]
+    offset = offset+self._block_num+self._block_num*self._cell_num*self._cell_num
 
-    self._branch_connection_region_1 = (30, 40)     # 0(no connection), 0.5(random connection), 1(dense connection)
-    self._branch_connection_region_2 = (30, 40)     # 0(no connection), 1(connection)
-    self._branch_connection_offset = 10
+    # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._branch_connection_region_1 = (offset, offset+self._block_num*self._cell_num)
+    # 0(no connection), 1(connection)
+    self._branch_connection_region_2 = (offset+self._block_num*self._cell_num,
+                                        offset+self._block_num*self._cell_num+
+                                        self._block_num*self._cell_num*self._branch_num*self._branch_num)
+    self._branch_connection_offset = self._cell_connection_region_2[1]
 
-  def graph_mutate(self, *args, **kwargs):
+  def population_mutate(self, *args, **kwargs):
     population = kwargs['population']
 
     # gene format:  op region:_,_,_,...,_,;
@@ -74,6 +85,12 @@ class GraphMutation(Mutation):
     #               branch connection region 2: _,_,_,...,_;
 
     fitness_values = []
+    for individual_index, individual in enumerate(population.population):
+      fitness_values.append((individual_index,
+                             individual.objectives[0],
+                             self._dna_func(individual.features[0], individual.features[1]),
+                             None))
+
     mutation_individuals = self.adaptive_mutate(fitness_values=fitness_values)
 
     for individual in mutation_individuals:
@@ -86,24 +103,25 @@ class GraphMutation(Mutation):
         for p in mutation_position:
           if p >= self._op_region[0] and p < self._op_region[1]:
             # change op as p
-            blocks = graph_info['blocks']
             cells = graph_info['cells']
-            block_i = int(p) / int(self._cell_num*self._branch_num)
-            cell_i = (int(p) - int(self._cell_num*self._branch_num)) / int(self._branch_num)
-            branch_i = (int(p) - int(self._cell_num*self._branch_num)) % int(self._branch_num)
+            block_i = int(p) // int(self._cell_num*self._branch_num)
+            cell_i = (int(p) - block_i * int(self._cell_num*self._branch_num)) // int(self._branch_num)
+            branch_i = (int(p) - block_i * int(self._cell_num*self._branch_num)) % int(self._branch_num)
+            self._cell.use_channels(graph_info['block_info'][block_i]['base_channel'])
             new_branch_id = self._cell.change(graph, cells[cell_i][branch_i])
             cells[cell_i][branch_i] = new_branch_id
             graph_info['cells'] = cells
+
           elif p >= self._block_connection_region_1[0] and p < self._block_connection_region_1[1]:
             # change block connection type
             graph_info['connection']['block'][p-self._block_connection_offset] = random.choice([0, 0.5, 1])
             if graph_info['connection']['block'][p-self._block_connection_offset] == 0:
-              graph_info['connection']['block_connection'] = np.zeros((self._block_num*self._block_num))
+              graph_info['connection']['block_connection'] = np.zeros((self._block_num*self._block_num)).tolist()
             elif graph_info['connection']['block'][p-self._block_connection_offset] == 1:
-              graph_info['connection']['block_connection'] = np.ones((self._block_num*self._block_num)) - np.eye(self._block_num)
+              graph_info['connection']['block_connection'] = (np.ones((self._block_num*self._block_num)) - np.eye(self._block_num).flatten()).tolist()
           elif p >= self._block_connection_region_2[0] and p < self._block_connection_region_2[1]:
             if graph_info['connection']['block'][0] != 0 and graph_info['connection']['block'][0] != 1:
-              block_i = int(p - self._block_connection_offset - 1) / int(self._block_num)
+              block_i = int(p - self._block_connection_offset - 1) // int(self._block_num)
               block_j = int(p - self._block_connection_offset - 1) % int(self._block_num)
               if block_i != block_j:
                 target = random.choice([0, 1])
@@ -111,477 +129,91 @@ class GraphMutation(Mutation):
                 graph_info['connection']['block_connection'][block_j * self._block_num + block_i] = target
           elif p >= self._cell_connection_region_1[0] and p < self._cell_connection_region_1[1]:
             # change cell connection type (range size: self._block_num)
-            graph_info['connection']['cell'][p - self._cell_connection_offset] = random.choice([0, 0.5, 1])
             block_i = p - self._cell_connection_offset
+            graph_info['connection']['cell'][block_i] = random.choice([0, 0.5, 1])
             if graph_info['connection']['cell'][block_i] == 0:
-              graph_info['connection']['cell_connection'][block_i] = np.zeros((self._cell_num*self._cell_num))
+              graph_info['connection']['cell_connection'][block_i] = np.zeros((self._cell_num*self._cell_num)).tolist()
             elif graph_info['connection']['cell'][block_i] == 1:
-              graph_info['connection']['cell_connection'][block_i] = np.ones((self._cell_num*self._cell_num)) - np.eye(self._cell_num)
+              graph_info['connection']['cell_connection'][block_i] = (np.ones((self._cell_num*self._cell_num)) - np.eye(self._cell_num).flatten()).tolist()
           elif p >= self._cell_connection_region_2[0] and p < self._cell_connection_region_2[1]:
-            block_i = int(p - self._cell_connection_offset - self._block_num) / int(self._cell_num * self._cell_num)
+            block_i = int(p - self._cell_connection_offset - self._block_num) // int(self._cell_num * self._cell_num)
             if graph_info['connection']['cell'][block_i] != 0 and graph_info['connection']['cell'][block_i] != 1:
-              cell_i = (int(p - self._cell_connection_offset - self._block_num) - block_i * int(self._cell_num * self._cell_num)) / int(self._cell_num)
+              cell_i = (int(p - self._cell_connection_offset - self._block_num) - block_i * int(self._cell_num * self._cell_num)) // int(self._cell_num)
               cell_j = (int(p - self._cell_connection_offset - self._block_num) - block_i * int(self._cell_num * self._cell_num)) % int(self._cell_num)
               if cell_i != cell_j:
                 target = random.random([0,1])
-                graph_info['connection']['cell_connection'][block_i][cell_i*self._cell_num+cell_j] = target
+                graph_info['connection']['cell_connection'][block_i][cell_i * self._cell_num + cell_j] = target
                 graph_info['connection']['cell_connection'][block_i][cell_j * self._cell_num + cell_i] = target
           elif p >= self._branch_connection_region_1[0] and p < self._branch_connection_region_1[1]:
             # change branch connection (range size: self._cell_num * self._block_num)
             cell_i = p - self._branch_connection_offset
             graph_info['connection']['branch'][cell_i] = random.choice([0, 0.5, 1])
             if graph_info['connection']['branch'][cell_i] == 0:
-              graph_info['connection']['branch_connection'][cell_i] = np.zeros((self._branch_num*self._branch_num))
+              graph_info['connection']['branch_connection'][cell_i] = np.zeros((self._branch_num*self._branch_num)).tolist()
             elif graph_info['connection']['branch'][cell_i] == 1:
-              graph_info['connection']['branch_connection'][cell_i] = np.ones((self._branch_num*self._branch_num)) - np.eye(self._branch_num)
+              graph_info['connection']['branch_connection'][cell_i] = (np.ones((self._branch_num*self._branch_num)) - np.eye(self._branch_num).flatten()).tolist()
           elif p >= self._branch_connection_region_2[0] and p < self._branch_connection_region_2[1]:
-            cell_i = int(p - self._branch_connection_offset - self._cell_num * self._block_num) / int(self._branch_num*self._branch_num)
+            cell_i = int(p - self._branch_connection_offset - self._cell_num * self._block_num) // int(self._branch_num * self._branch_num)
             if graph_info['connection']['branch'][cell_i] != 0 and graph_info['connection']['branch'][cell_i] != 1:
-              branch_i = int(p - self._branch_connection_offset - self._block_num * self._cell_num) / int(self._branch_num * self._block_num)
-              branch_j = int(p - self._branch_connection_offset - self._block_num * self._cell_num) % int(self._branch_num * self._block_num)
+              branch_i = int(p - self._branch_connection_offset - self._block_num * self._cell_num - cell_i*self._branch_num*self._branch_num) // int(self._branch_num)
+              branch_j = int(p - self._branch_connection_offset - self._block_num * self._cell_num - cell_i*self._branch_num*self._branch_num) % int(self._branch_num)
               if branch_i != branch_j:
-                target = random.random([0,1])
+                target = random.choice([0, 1])
                 graph_info['connection']['branch_connection'][cell_i][branch_i * self._branch_num + branch_j] = target
                 graph_info['connection']['branch_connection'][cell_i][branch_j * self._branch_num + branch_i] = target
 
-        individual.features = [graph, graph_info]
+        population.population[individual_index].features = [graph, graph_info]
 
     return population
 
 
-  def __mutate(self, graph, graph_info):
-    # block [[cell_id, cell_id,...],[],[]]
-    # cells [[branch_id, branch_id,...],[],[]]
-    try:
-      # # random mutate one block
-      # if random.random() < self._mutate_rate_for_block:
-      #   graph, graph_info = self._mutate_for_block(graph, graph_info)
-
-      # random skip once between block
-      if random.random() < self._mutate_rate_for_skip_block:
-        for start_layer_id, end_layer_id in self._find_allowed_skip_block(graph_info):
-          try:
-            graph = self._mutate_for_skip_block(graph, start_layer_id, end_layer_id)
-            break
-          except:
-            pass
-
-      # random mutate one cell
-      graph, graph_info = self._mutate_for_cell(graph, graph_info)
-
-      # random mutate one branch
-      graph, graph_info = self._mutate_for_branch(graph, graph_info)
-
-      # random skip once between cells
-      if random.random() < self._mutate_rate_for_skip_cell:
-        for start_layer_id, end_layer_id in self._find_allowed_skip_cell(graph_info):
-          try:
-            graph = self._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
-            break
-          except:
-            pass
-
-      # random skip once between branches
-      if random.random() < self._mutate_rate_for_skip_branch:
-        for start_layer_id, end_layer_id in self._find_allowed_skip_branch(graph_info):
-          try:
-            graph = self._mutate_for_skip_branch(graph, start_layer_id, end_layer_id)
-            break
-          except:
-            pass
-
-      return [(self.ess.dna(graph, graph_info), (graph, graph_info))]
-    except:
-      return [(self.ess.dna(graph, graph_info), (graph, graph_info))]
-
-  def mutate(self, graph, graph_info):
-    if self.ess.bayesian.is_ok:
-      _, graph_score_predicted, c = self.ess.bayesian.optimize_acq(functools.partial(self.__mutate, graph, graph_info))
-      optimized_graph, optimized_graph_info = c
-      return optimized_graph, optimized_graph_info, graph_score_predicted
-    else:
-      _, c = self.__mutate(graph, graph_info)[0]
-      graph, graph_info = c
-      return graph, graph_info, None
-
-  def _find_allowed_skip_block(self, graph_info):
-    blocks = graph_info['blocks']
-    cells = graph_info['cells']
-
-    block_num = len(blocks)
-    if block_num < 1:
-      raise StopIteration
-
-    for _ in range(50):
-      a, b = random.sample(list(range(block_num)), 2)
-      start_n = a if a < b else b
-      end_n = a if a > b else b
-      if end_n - start_n < 1:
-        continue
-
-      start_branch_id = cells[blocks[start_n][-1]][-1]
-      end_branch_id = cells[blocks[end_n][-1]][-1]
-      yield start_branch_id, end_branch_id
-
-    raise StopIteration
-
-  def _find_allowed_skip_cell(self, graph_info):
-    blocks = graph_info['blocks']
-    cells = graph_info['cells']
-
-    cell_num = 0
-    random_block = []
-    for _ in range(50):
-      random_block = random.choice(blocks)
-      cell_num = len(random_block)
-      if cell_num <= 1:
-        continue
-      break
-
-    if cell_num <= 1:
-      raise StopIteration
-
-    for _ in range(50):
-      a, b = random.sample(list(range(cell_num)), 2)
-      start_n = a if a < b else b
-      end_n = a if a > b else b
-      if end_n - start_n < 1:
-        continue
-
-      start_branch_id = cells[random_block[start_n]][-1]
-      end_branch_id = cells[random_block[end_n]][-1]
-      yield start_branch_id, end_branch_id
-
-    raise StopIteration
-
-  def _find_allowed_skip_branch(self, graph_info):
-    blocks = graph_info['blocks']
-    cells = graph_info['cells']
-
-    random_cell_id = -1
-    for _ in range(50):
-      random_block_index = random.choice(list(range(len(blocks))))
-      random_cell_id = random.choice(blocks[random_block_index])
-
-      if len(cells[random_cell_id]) <= 1:
-        continue
-      break
-
-    if random_cell_id == -1 or len(cells[random_cell_id]) <= 1:
-      raise StopIteration
-
-    for _ in range(50):
-      a, b = random.sample(list(range(len(cells[random_cell_id]))), 2)
-      start_n = a if a < b else b
-      end_n = a if a > b else b
-      if end_n - start_n < 1:
-        continue
-
-      start_branch_id = cells[random_cell_id][start_n]
-      end_branch_id = cells[random_cell_id][end_n]
-      yield start_branch_id, end_branch_id
-
-    raise StopIteration
-
-  def _mutate_for_skip_block(self, graph, start_layer_id, end_layer_id, skip_type=['ADD', 'CONCAT'], random_remove=False):
-    graph_cp = copy.deepcopy(graph)
-
-    if graph_cp.has_skip(start_layer_id, end_layer_id) and random_remove:
-      graph_cp.to_remove_skip_model(start_layer_id, end_layer_id)
-    elif not graph_cp.has_skip(start_layer_id, end_layer_id):
-      start_layer_output_shape= graph_cp.layer_list[start_layer_id].output_shape
-      end_layer_output_shape = graph_cp.layer_list[end_layer_id].output_shape
-
-      if random.choice(skip_type) == 'ADD' and start_layer_output_shape[-1] == end_layer_output_shape[-1]:
-        graph_cp.to_add_skip_model(start_layer_id, end_layer_id)
-      else:
-        graph_cp.to_concat_skip_model(start_layer_id, end_layer_id)
-
-    if not graph_cp.update():
-      return graph
-    return graph_cp
-
-  def _mutate_for_skip_cell(self, graph, start_layer_id, end_layer_id, skip_type=['ADD', 'CONCAT'], random_remove=False):
-    graph_cp = copy.deepcopy(graph)
-
-    if graph_cp.has_skip(start_layer_id, end_layer_id) and random_remove:
-      graph_cp.to_remove_skip_model(start_layer_id, end_layer_id)
-    elif not graph_cp.has_skip(start_layer_id, end_layer_id):
-      start_layer_output_shape= graph_cp.layer_list[start_layer_id].output_shape
-      end_layer_output_shape = graph_cp.layer_list[end_layer_id].output_shape
-
-      if random.choice(skip_type) == 'ADD' and start_layer_output_shape[-1] == end_layer_output_shape[-1]:
-        graph_cp.to_add_skip_model(start_layer_id, end_layer_id)
-      else:
-        graph_cp.to_concat_skip_model(start_layer_id, end_layer_id)
-
-    if not graph_cp.update():
-      return graph
-
-    return graph_cp
-
-  def _mutate_for_skip_branch(self, graph, start_layer_id, end_layer_id, skip_type=['ADD','CONCAT'], random_remove=False):
-    graph_cp = copy.deepcopy(graph)
-
-    if graph_cp.has_skip(start_layer_id, end_layer_id) and random_remove:
-      graph_cp.to_remove_skip_model(start_layer_id, end_layer_id)
-    elif not graph_cp.has_skip(start_layer_id, end_layer_id):
-      start_layer_output_shape= graph_cp.layer_list[start_layer_id].output_shape
-      end_layer_output_shape = graph_cp.layer_list[end_layer_id].output_shape
-
-      if random.choice(skip_type) == 'ADD' and start_layer_output_shape[-1] == end_layer_output_shape[-1]:
-        graph_cp.to_add_skip_model(start_layer_id, end_layer_id)
-      else:
-        graph_cp.to_concat_skip_model(start_layer_id, end_layer_id)
-
-    if not graph_cp.update():
-      return graph
-
-    return graph_cp
-
-  def _mutate_for_block(self, graph, graph_info, mutate_type=['ADD','REMOVE']):
-    graph_cp = copy.deepcopy(graph)
-    graph_info_cp = copy.deepcopy(graph_info)
-
-    blocks = graph_info_cp['blocks']
-    cells = graph_info_cp['cells']
-    block_dict = graph_info_cp['block_info']     # {index: {'mode': 'u', 'size': 2}}
-    block_dict = {int(k): v for k,v in block_dict.items()}
-
-    block_num = len(blocks)
-    random_mutate_type = random.choice(mutate_type)
-    if block_num > 1 and random_mutate_type == 'REMOVE':
-      random_block_id = random.choice(list(range(block_num)))
-      random_block_id = 1
-
-      # 1.step update graph
-      for cell_id in blocks[random_block_id]:
-        for branch_id in cells[cell_id]:
-          graph_cp.to_remove_layer(branch_id)
-
-      if block_dict[random_block_id]['size'] != 0:
-        graph_cp.to_remove_layer(block_dict[random_block_id]['transition'])
-
-      if len(block_dict[random_block_id]['input_transition']) > 0:
-        # remove transition layer
-        graph_cp.to_remove_layer(block_dict[random_block_id]['input_transition'][0])
-
-        # remove add layer
-        graph_cp.to_remove_layer(block_dict[random_block_id]['input_transition'][-1])
-
-      # 2.step update blocks and cells record
-      blocks.pop(random_block_id)
-
-      # 3.step update graph info
-      block_order_index = 0
-      updated_block_dict = {}
-      for m in range(block_num):
-        if m != random_block_id:
-          updated_block_dict[block_order_index] = block_dict[m]
-          block_order_index += 1
-
-      graph_info_cp['blocks'] = blocks
-      graph_info_cp['cells'] = cells
-      graph_info_cp['block_info'] = updated_block_dict
-
-      if not graph_cp.update():
-        return graph, graph_info
-
-      return graph_cp, graph_info_cp
-    elif block_num < self._max_block_num and random_mutate_type == 'ADD':
-      occupied_placeholder = [(0, rate) for rate in range(self._max_block_num)]
-      for k, v in block_dict.items():
-        occupied_placeholder[int(v['size'])] = (1, int(v['size']))
-
-      random_placeholder = random.choice([m for m in occupied_placeholder if m[0] == 0])[1]
-
-      start_block_index = -1
-      for k, v in block_dict.items():
-        if v['size'] < random_placeholder and v['size'] > start_block_index:
-          start_block_index = k
-
-      blocks.insert(start_block_index+1, [len(cells)])
-
-      last_layer_id = cells[blocks[start_block_index][-1]][-1]
-
-      if random_placeholder != 0:
-        # 处理空间分辨率大小不一致
-        target_h = graph_cp.node_list[graph_cp.get_input()[0]].shape[1] * np.power(2,random_placeholder)
-        target_w = graph_cp.node_list[graph_cp.get_input()[0]].shape[2] * np.power(2,random_placeholder)
-
-        resize_layer = graph_cp.layer_factory.bilinear_resize(height=target_h, width=target_w)
-        graph_cp.to_insert_layer(last_layer_id, resize_layer)
-        last_layer_id = graph_cp.layer_to_id[resize_layer]
-
-      cells.append(self._cell.random(graph_cp,
-                                     last_layer_id,
-                                     block_name='block_%d'%random_placeholder,
-                                     cell_name='cell_%d'%len(cells)))
-
-      input_transition = []
-      if random_placeholder != 0:
-        target_h = graph_cp.node_list[graph_cp.get_input()[0]].shape[1] * np.power(2,random_placeholder)
-        target_w = graph_cp.node_list[graph_cp.get_input()[0]].shape[2] * np.power(2,random_placeholder)
-
-        # needed add skip add
-        if len(graph_cp.get_input()) > 1:
-          for index, input_id in enumerate(graph_cp.get_input()):
-            if index == 0:
-              continue
-
-            if graph_cp.node_list[input_id].shape[1] == target_h and \
-                    graph_cp.node_list[input_id].shape[2] == target_w:
-
-              # 3x3 convolution layer
-              transition_conv33 = graph_cp.layer_factory.conv2d(input_channel=None,
-                                                             filters=resize_layer.output_shape[-1],
-                                                             kernel_size_h=3,
-                                                             kernel_size_w=3)
-              graph_cp.add_layer(transition_conv33, input_id)
-
-              # add skip model
-              graph_cp.to_add_skip_model(graph_cp.layer_to_id[transition_conv33], graph_cp.layer_to_id[resize_layer])
-
-              input_transition = [graph_cp.layer_to_id[transition_conv33],
-                                  graph_cp.adj_list[graph_cp.layer_id_to_output_node_ids[graph_cp.layer_to_id[transition_conv33]][0]][0][1]]
-
-      graph_info_cp['blocks'] = blocks
-      graph_info_cp['cells'] = cells
-
-      updated_block_dict = {}
-      old_index = 0
-      for m in range(len(blocks)):
-        if m != start_block_index+1:
-          updated_block_dict[m] = block_dict[old_index]
-          old_index += 1
-        else:
-          updated_block_dict[m] = {'mode': 'u',
-                                   'size': random_placeholder,
-                                   'transition': -1 if random_placeholder == 0 else last_layer_id,
-                                   'input_transition': input_transition}
-
-      graph_info_cp['block_info'] = updated_block_dict
-
-      if not graph_cp.update():
-        return graph, graph_info
-
-      return graph_cp, graph_info_cp
-    else:
-      return graph, graph_info
-
-  def _mutate_for_cell(self, graph, graph_info, mutate_type=['ADD','REMOVE']):
-    graph_cp = copy.deepcopy(graph)
-    graph_info_cp = copy.deepcopy(graph_info)
-
-    # blocks [[cell_id, cell_id,...],[],[]]
-    # cells [[branch_id, branch_id,...],[],[]]
-    blocks = graph_info_cp['blocks']
-    cells = graph_info_cp['cells']
-
-    random_block_id = random.choice(list(range(len(blocks))))
-    cell_num = len(blocks[random_block_id])
-
-    random_mutate_type = random.choice(mutate_type)
-    if cell_num > 1 and random_mutate_type == 'REMOVE':
-      cell_id = random.choice(blocks[random_block_id])
-      for branch_id in cells[cell_id]:
-        graph_cp.to_remove_layer(branch_id)
-
-      # cells.pop(cell_id)
-      remove_cell_index = -1
-      for v_i, v in enumerate(blocks[random_block_id]):
-        if v == cell_id:
-          remove_cell_index = v_i
-          break
-
-      blocks[random_block_id].pop(remove_cell_index)
-
-      graph_info_cp['blocks'] = blocks
-      graph_info_cp['cells'] = cells
-
-      if not graph_cp.update():
-        return graph, graph_info
-
-      return graph_cp, graph_info_cp
-    elif cell_num < self._max_cell_num and random_mutate_type == 'ADD':
-      random_cell_id = random.choice(blocks[random_block_id])
-      new_cell = self._cell.random(graph_cp,
-                                   cells[random_cell_id][-1],
-                                   block_name='block_%d'%graph_info_cp['block_info'][random_block_id]['size'],
-                                   cell_name='cell_%d'%len(cells))
-      cells.append(new_cell)
-
-      middle_k = -1
-      for ki, k in enumerate(blocks[random_block_id]):
-        if k == random_cell_id:
-          middle_k = ki
-          break
-      blocks[random_block_id].insert(middle_k+1, len(cells)-1)
-
-      graph_info_cp['blocks'] = blocks
-      graph_info_cp['cells'] = cells
-
-      if not graph_cp.update():
-        return graph, graph_info
-
-      return graph_cp, graph_info_cp
-    else:
-      return graph, graph_info
-
-  def _mutate_for_branch(self, graph, graph_info, mutate_type=['CHNAGE']):
-    graph_cp = copy.deepcopy(graph)
-    graph_info_cp = copy.deepcopy(graph_info)
-
-    # blocks [[cell_id, cell_id,...],[],[]]
-    # cells [[branch_id, branch_id,...],[],[]]
-    blocks = graph_info_cp['blocks']
-    cells = graph_info_cp['cells']
-
-    random_block_id = random.choice(list(range(len(blocks))))
-    random_cell_id = random.choice(blocks[random_block_id])
-    if random.choice(mutate_type) == 'CHNAGE':
-      branch_id = random.choice(cells[random_cell_id])
-      new_branch_id = self._cell.change(graph_cp, branch_id)
-      ck = -1
-      for v_i, v in enumerate(cells[random_cell_id]):
-        if v == branch_id:
-          ck = v_i
-          break
-      cells[random_cell_id][ck] = new_branch_id
-
-      graph_info_cp['blocks'] = blocks
-      graph_info_cp['cells'] = cells
-      if not graph_cp.update():
-        return graph, graph_info
-
-      return graph_cp, graph_info_cp
-    else:
-      return graph, graph_info
-
-
-class GraphCrossOver(CrossOver):
-  def __init__(self):
-    super(GraphCrossOver, self).__init__('based_matrices', -1, adaptive=True, generation=10, max_generation=100, k0=0.2, k1=1.0)
-    self._block_num = 4
-    self._cell_num = 4
-    self._branch_num = 4
-
-    self._op_region = (0, 10)                       # op type (0~1)
-    self._op_region_offset = 10
-
-    self._block_connection_region_1 = (10, 20)      # 0(no connection), 0.5(random connection), 1(dense connection)
-    self._block_connection_region_2 = (20,25)       # 0(no connection), 1(connection)
-    self._block_connection_offset = 10
-
-    self._cell_connection_region_1 = (10, 25)       # 0(no connection), 0.5(random connection), 1(dense connection)
-    self._cell_connection_region_2 = (10, 25)       # 0(no connection), 1(connection)
-    self._cell_connection_offset = 10
-
-    self._branch_connection_region_1 = (30, 40)     # 0(no connection), 0.5(random connection), 1(dense connection)
-    self._branch_connection_region_2 = (30, 40)     # 0(no connection), 1(connection)
-    self._branch_connection_offset = 10
-
-  def graph_crossover(self, *args, **kwargs):
+class EvolutionCrossover(CrossOver):
+  def __init__(self,
+               evolution_s,
+               multi_points,
+               generation,
+               max_generation,
+               k0,
+               k1):
+    super(EvolutionCrossover, self).__init__('based_matrices',
+                                             multi_points,
+                                             adaptive=True,
+                                             generation=generation,
+                                             max_generation=max_generation,
+                                             k0=k0,
+                                             k1=k1)
+    self._cell = Cell(evolution_s.branch_num, evolution_s.base_channel)
+    self._block_num = evolution_s.block_num
+    self._cell_num = evolution_s.cell_num
+    self._branch_num = evolution_s.branch_num
+
+    self._dna_func = evolution_s.dna
+
+    self._op_region = (0, self._block_num*self._cell_num*self._branch_num)                      # op type (0~1)
+    offset = self._block_num*self._cell_num*self._branch_num
+
+    self._block_connection_region_1 = (offset, offset+1)                                        # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._block_connection_region_2 = (offset+1,offset+1+self._block_num*self._block_num)       # 0(no connection), 1(connection)
+    self._block_connection_offset = self._op_region[1]
+    offset = offset+1+self._block_num*self._block_num
+
+    # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._cell_connection_region_1 = (offset, offset+self._block_num)
+    # 0(no connection), 1(connection)
+    self._cell_connection_region_2 = (offset+self._block_num,
+                                      offset+self._block_num+self._block_num*self._cell_num*self._cell_num)
+    self._cell_connection_offset = self._block_connection_region_2[1]
+    offset = offset+self._block_num+self._block_num*self._cell_num*self._cell_num
+
+    # 0(no connection), 0.5(random connection), 1(dense connection)
+    self._branch_connection_region_1 = (offset, offset+self._block_num*self._cell_num)
+    # 0(no connection), 1(connection)
+    self._branch_connection_region_2 = (offset+self._block_num*self._cell_num,
+                                        offset+self._block_num*self._cell_num+
+                                        self._block_num*self._cell_num*self._branch_num*self._branch_num)
+    self._branch_connection_offset = self._cell_connection_region_2[1]
+
+  def population_crossover(self, *args, **kwargs):
     population = kwargs['population']
 
     # gene format:  op region:_,_,_,...,_,;
@@ -591,47 +223,67 @@ class GraphCrossOver(CrossOver):
     #               cell connection region 2: _,_,_,...,_;
     #               branch connection region 1:
     #               branch connection region 2: _,_,_,...,_;
-
     fitness_values = []
-    cross_over_population = copy.deepcopy(population)
-    crossover_individuals = self.adaptive_crossover(fitness_values=fitness_values)
+    for individual_index, individual in enumerate(population.population):
+      fitness_values.append((individual_index,
+                             individual.objectives[0],
+                             self._dna_func(individual.features[0], individual.features[1]),
+                             None))
+
+    crossover_individuals = self.adaptive_crossover(fitness_values=fitness_values,
+                                                    op_region=self._op_region,
+                                                    block_region=self._block_connection_region_1,
+                                                    cell_region=self._cell_connection_region_1,
+                                                    branch_region=self._branch_connection_region_1)
+    crossover_population = Population()
     for individual in crossover_individuals:
       first_index = individual[0]
-      second_index = individual[-2]
+      second_index = individual[-3]
 
-      first_graph, first_graph_info = copy.deepcopy(population.population[first_index].features)
+      crossover_individual = copy.deepcopy(population.population[first_index])
+      first_graph, first_graph_info = crossover_individual.features
       second_graph, second_graph_info = population.population[second_index].features
 
-      op_crossover_p = individual[-1][0]
-      # ....
+      op_region_crossover_points = individual[-2]
+      connection_region_crossover_points = individual[-1]
 
-      block_connection_crossover_p = individual[-1][1]
-      if block_connection_crossover_p != -1:
-        first_graph_info['connection']['block'][block_connection_crossover_p - self._block_connection_offset] = \
-          second_graph_info['connection']['block'][block_connection_crossover_p - self._block_connection_offset]
+      for p in op_region_crossover_points:
+        first_crossover_b = list(chain(*first_graph_info['cells']))
+        first_crossover_b = first_crossover_b[p]
 
-        first_graph_info['connection']['block_connection'] = second_graph_info['connection']['block_connection']
+        second_crossover_b = list(chain(*second_graph_info['cells']))
+        second_crossover_b = second_crossover_b[p]
+        second_crossover_type = second_graph.layer_list[second_crossover_b].layer_name
 
-      cell_connection_corssover_p = individual[-1][2]
-      if cell_connection_corssover_p != -1:
-        block_i = cell_connection_corssover_p - self._cell_connection_offset
-        first_graph_info['connection']['cell'][block_i] = \
-          second_graph_info['connection']['cell'][block_i]
+        target_block = p // (self._cell_num*self._branch_num)
+        self._cell.use_channels(first_graph_info['block_info'][target_block]['base_channel'])
+        self._cell.change(first_graph, first_crossover_b, second_crossover_type)
 
-        first_graph_info['connection']['cell_connection'][block_i] = second_graph_info['connection']['cell_connection'][block_i]
+      for p in connection_region_crossover_points:
+        if p >= self._block_connection_region_1[0] and p < self._block_connection_region_1[1]:
+          index = p - self._block_connection_region_1[0]
+          first_graph_info['connection']['block'][index] = second_graph_info['connection']['block'][index]
+          first_graph_info['connection']['block_connection'] = second_graph_info['connection']['block_connection']
+        elif p >= self._cell_connection_region_1[0] and p < self._cell_connection_region_1[1]:
+          block_i = p - self._cell_connection_offset
+          first_graph_info['connection']['cell'][block_i] = \
+            second_graph_info['connection']['cell'][block_i]
 
-      branch_connection_corssover_p = individual[-1][3]
-      if branch_connection_corssover_p != -1:
-        cell_i = branch_connection_corssover_p - self._branch_connection_offset
-        first_graph_info['connection']['branch'][cell_i] = \
-          second_graph_info['connection']['branch'][cell_i]
+          first_graph_info['connection']['cell_connection'][block_i] = \
+          second_graph_info['connection']['cell_connection'][block_i]
 
-        first_graph_info['connection']['branch_connection'][cell_i] = \
-          second_graph_info['connection']['branch_connection'][cell_i]
+        elif p >= self._branch_connection_region_1[0] and p < self._branch_connection_region_1[1]:
+          cell_i = p - self._branch_connection_offset
+          first_graph_info['connection']['branch'][cell_i] = \
+            second_graph_info['connection']['branch'][cell_i]
 
-      cross_over_population.cross_over_population[first_index].features = [first_graph, first_graph_info]
+          first_graph_info['connection']['branch_connection'][cell_i] = \
+            second_graph_info['connection']['branch_connection'][cell_i]
 
-    return cross_over_population
+      crossover_individual.features = [first_graph, first_graph_info]
+      crossover_population.population.append(crossover_individual)
+
+    return crossover_population
 
 
 class ModelProblem(Problem):
@@ -676,25 +328,31 @@ class ModelProblem(Problem):
     return m.objectives[0]
 
   def __f2(self, m):
-    # model running time
-    return 1.0 / m.features[0].flops
+    # model flops
+    return m.objectives[1]
 
 
 class EvolutionSearchSpace(AbstractSearchSpace):
   default_params={'max_block_num': 4,
-                 'min_block_num': 1,
-                 'max_cell_num': 1,
-                 'min_cell_num': 1,
-                 'branch_num': 5,
-                 'branch_base_channel': 64,
-                 'block_stack_mode': 'DECODER',
-                 'population_size': 1,
-                 'input_size': ''}
+                  'min_block_num': 1,
+                  'max_cell_num': 1,
+                  'min_cell_num': 1,
+                  'branch_num': 5,
+                  'base_channel': 64,
+                  'channel_mode': 'CONSTANT',
+                  'block_stack_mode': 'DECODER',
+                  'population_size': 1,
+                  'method': 'nsga2',
+                  'max_generation': 100,
+                  'mutation_multi_points': 5,
+                  'crossover_multi_points': 2,
+                  'k0': 0.2,
+                  'k1': 1.0,
+                  'input_size': ''}
 
   def __init__(self, study, **kwargs):
     super(EvolutionSearchSpace, self).__init__(study, **kwargs)
     self.study = study
-    self.study_configuration = json.loads(study.study_configuration)
     self.study_goal = 'MAXIMIZE'
 
     self.max_block_num = int(kwargs.get('max_block_num', EvolutionSearchSpace.default_params['max_block_num']))
@@ -704,8 +362,15 @@ class EvolutionSearchSpace(AbstractSearchSpace):
     self.min_cell_num = int(kwargs.get('min_cell_num', EvolutionSearchSpace.default_params['min_cell_num']))
 
     self.branch_num = int(kwargs.get('branch_num', EvolutionSearchSpace.default_params['branch_num']))
-    self.branch_base_channel = int(kwargs.get('branch_base_channel',
-                                              EvolutionSearchSpace.default_params['branch_base_channel']))
+    self.base_channel = int(kwargs.get('base_channel',
+                                       EvolutionSearchSpace.default_params['base_channel']))
+
+    # 'CONSTANT','UP','DOWN'
+    self.channel_mode = kwargs.get('channel_mode',
+                                   EvolutionSearchSpace.default_params['channel_mode'])
+
+    # ['ENCODER-DECODER', 'ENCODER', 'DECODER']
+    self.block_stack_mode = 'DECODER'
 
     self.input_size = []
     if kwargs.get('input_size') != '':
@@ -716,311 +381,333 @@ class EvolutionSearchSpace(AbstractSearchSpace):
         a,b,c,d = s.strip().split(',')
         self.input_size.append([int(a),int(b),int(c),int(d)])
 
-    # ['ENCODER-DECODER', 'ENCODER', 'DECODER']
-    self.block_stack_mode = 'DECODER'
+    self.block_num = 0
+    if len(self.input_size) > 1:
+      for index in range(self.max_block_num):
+        for input_index in range(len(self.input_size)):
+          if index == int(np.log2(self.input_size[input_index][1] / self.input_size[0][1])):
+            self.block_num += 1
+            break
+    else:
+      self.block_num = self.max_block_num
 
+    self.cell_num = self.max_cell_num
     self.population_size = int(kwargs.get('population_size', EvolutionSearchSpace.default_params['population_size']))
 
-    self.current_population = self.study_configuration['current_population'] if 'current_population' in self.study_configuration else []
-    self.current_population_info = self.study_configuration['current_population_info'] if 'current_population_info' in self.study_configuration else []
     self.cell = Cell(branch_num=self.branch_num,
-                     base_channel=self.branch_base_channel)
+                     base_channel=self.base_channel)
 
     # temp structure recommand
     # initialize bayesian optimizer
-    self.bayesian = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
+    # self.bayesian = BayesianOptimizer(0.0001, Accuracy, 0.1, 2.576)
 
     # get all completed trials
-    all_completed_trials = Trial.filter(study_name=self.study.name, status='Completed')
-    x_queue = [np.array(trial.structure_encoder) for trial in all_completed_trials]
-    y_queue = [trial.objective_value for trial in all_completed_trials]
-    if len(x_queue) > 20:
-      self.bayesian.fit(x_queue, y_queue)
+    # all_completed_trials = Trial.filter(study_name=self.study.name, status='Completed')
+    # x_queue = [np.array(trial.structure_encoder) for trial in all_completed_trials]
+    # y_queue = [trial.objective_value for trial in all_completed_trials]
+    # if len(x_queue) >= self.population_size:
+    #   self.bayesian.fit(x_queue, y_queue)
 
-    self.mutation_operator = GraphMutation(self, self.cell,
-                                      max_block_num=self.max_block_num,
-                                      min_block_num=self.min_block_num,
-                                      max_cell_num=self.max_cell_num,
-                                      min_cell_num=self.min_cell_num)
-    self.cross_over_operator = CrossOver()
-
+    self.current_population = []
+    self.current_population_info = []
     if len(Trial.filter(study_name=self.study.name)) == 0:
       # initialize search space (study)
-      self._initialize_population()
+      if self.block_stack_mode == 'DECODER':
+        self._initialize_decoder_population()
 
+    self.study_configuration = json.loads(study.study_configuration)
     # build nsga2 evolution algorithm
-    self.nsga2 = Nsga2(ModelProblem(self.study_goal), self.mutation_operator, self.cross_over_operator)
+    mutation_control = EvolutionMutation(self,
+                           multi_points=int(kwargs.get('mutation_multi_points', EvolutionSearchSpace.default_params['mutation_multi_points'])),
+                           generation=self.study_configuration['searchSpace']['current_population_tag'],
+                           max_generation=int(kwargs.get('max_generation', EvolutionSearchSpace.default_params['max_generation'])),
+                           k0=float(kwargs.get('k0', EvolutionSearchSpace.default_params['k0'])),
+                           k1=float(kwargs.get('k1', EvolutionSearchSpace.default_params['k1'])))
 
-  def _initialize_population(self, random_block_ini=False, random_cell_ini=False):
+    crossover_control = EvolutionCrossover(self,
+                                   multi_points=int(kwargs.get('crossover_multi_points', EvolutionSearchSpace.default_params['crossover_multi_points'])),
+                                   generation=self.study_configuration['searchSpace']['current_population_tag'],
+                                   max_generation=int(kwargs.get('max_generation', EvolutionSearchSpace.default_params['max_generation'])),
+                                   k0=float(kwargs.get('k0', EvolutionSearchSpace.default_params['k0'])),
+                                   k1=float(kwargs.get('k1', EvolutionSearchSpace.default_params['k1'])))
+
+    self.evolution_control = Nsga2(ModelProblem(self.study_goal), mutation_control, crossover_control)
+
+  def _initialize_decoder_population(self, random_block_ini=False, random_cell_ini=False):
     # 1.step get default graph
-    if self.block_stack_mode == 'DECODER':
-      self.current_population = []
-      for instance_index in range(self.population_size):
-        # 1.step get block number
-        blocks = [[]]
-        block_info = {0: {'mode': 'u', 'size': 0, 'transition': -1, 'input_transition': []}}
-        for index in range(self.max_block_num):
-          if index == 0:
-            continue
+    self.current_population = []
+    for _ in range(self.population_size):
+      self.cell.restore_channels()
+      graph_encoder_str, graph_info = self.random(random_block_ini, random_cell_ini)
 
-          if random.random() < 0.5 and random_block_ini:
-            block_info[len(blocks)] = {'mode': 'u', 'size': index, 'transition': -1, 'input_transition': []}
-            blocks.append([])
-          else:
-            if len(self.input_size) > 1:
-              if index == int(np.log2(self.input_size[1][1] / self.input_size[0][1])):
-                block_info[len(blocks)] = {'mode': 'u', 'size': index, 'transition': -1, 'input_transition': []}
-                blocks.append([])
-            else:
-              block_info[len(blocks)] = {'mode': 'u', 'size': index, 'transition': -1, 'input_transition': []}
-              blocks.append([])
+      self.current_population.append(graph_encoder_str)
+      self.current_population_info.append(graph_info)
 
-        block_num = len(blocks)
+    # write study table
+    study_configuration = json.loads(self.study.study_configuration)
+    study_configuration['searchSpace']['current_population'] = self.current_population
+    study_configuration['searchSpace']['current_population_info'] = self.current_population_info
+    study_configuration['searchSpace']['current_population_tag'] = 0
+    self.study.study_configuration = json.dumps(study_configuration)
 
-        # 2.step get cell number in every block
-        cell_num = []
-        for _ in range(block_num):
-          if random_cell_ini:
-            cell_num.append(random.choice(list(range(self.min_cell_num, self.max_cell_num))))
-          else:
-            cell_num.append(self.max_cell_num)
+    # write trials table
+    for graph_str, graph_info in zip(self.current_population, self.current_population_info):
+      trail_name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
+      trial = Trial.create(Trial(self.study.name, trail_name, created_time=time.time(), updated_time=time.time()))
+      trial.structure = [graph_str, graph_info]
+      trial.structure_encoder = None
+      trial.objective_value = -1
 
-        # 3.step generate cells
-        default_graph = Graph()
-        default_graph.layer_factory = BaseLayerFactory()
-        for input_s in self.input_size:
-          default_graph.add_input(shape=input_s)
-
-        last_layer_id = -1
-
-        cells = []
-        cell_id_offset = 0
-        for block_id in range(block_num):
-          if block_id == 0:
-            for cell_id in range(cell_num[block_id]):
-              cells.append(self.cell.random(default_graph,
-                                            last_layer_id,
-                                            cell_name='cell_%d'%(cell_id + cell_id_offset),
-                                            block_name='block_%d'%block_info[block_id]['size']))
-
-              last_layer_id = cells[-1][-1]
-              blocks[block_id].append(cell_id + cell_id_offset)
-          else:
-            base_size = int(np.power(2, block_info[block_id]['size']))
-            block_transition_layer = default_graph.layer_factory.bilinear_resize(height=self.input_size[0][1] * base_size,
-                                                                                 width=self.input_size[0][2] * base_size)
-            default_graph.add_layer(block_transition_layer, default_graph.layer_id_to_output_node_ids[last_layer_id][0])
-            last_layer_id = default_graph.layer_to_id[block_transition_layer]
-            block_info[block_id]['transition'] = last_layer_id
-
-            for cell_id in range(cell_num[block_id]):
-              cells.append(self.cell.random(default_graph,
-                                            last_layer_id,
-                                            cell_name='cell_%d'%(cell_id + cell_id_offset),
-                                            block_name='block_%d'%block_info[block_id]['size']))
-
-              last_layer_id = cells[-1][-1]
-              blocks[block_id].append(cell_id + cell_id_offset)
-
-            # link with compatible input
-            for input_i, input_s in enumerate(self.input_size):
-              if input_s[1] == self.input_size[0][1] * base_size and input_s[2] == self.input_size[0][2] * base_size:
-                # 3x3 convolution layer
-                transition_conv33 = default_graph.layer_factory.conv2d(input_channel=None,
-                                                                       filters=default_graph.layer_list[last_layer_id].output_shape[-1],
-                                                                       kernel_size_h=3,
-                                                                       kernel_size_w=3)
-                default_graph.add_layer(transition_conv33, default_graph.get_input()[input_i])
-
-                # add skip model
-                default_graph.to_add_skip_model(default_graph.layer_to_id[transition_conv33],block_info[block_id]['transition'])
-
-                input_transition = [default_graph.layer_to_id[transition_conv33],
-                                    default_graph.adj_list[
-                                    default_graph.layer_id_to_output_node_ids[default_graph.layer_to_id[transition_conv33]][0]][0][1]]
-                block_info[block_id]['input_transition'] = input_transition
-
-          cell_id_offset += cell_num[block_id]
-
-        graph_encoder_str = Encoder(skipkeys=True).encode(default_graph)
-        self.current_population.append(graph_encoder_str)
-        self.current_population_info.append({'blocks': blocks, 'cells': cells, 'block_info': block_info})
-
-      # write study table
-      study_configuration = json.loads(self.study.study_configuration)
-      study_configuration['searchSpace']['current_population'] = self.current_population
-      study_configuration['searchSpace']['current_population_info'] = self.current_population_info
-      study_configuration['searchSpace']['current_population_tag'] = 0
-      self.study.study_configuration = json.dumps(study_configuration)
-
-      # write trials table
-      for graph_str, graph_info in zip(self.current_population, self.current_population_info):
-        trail_name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
-        trial = Trial.create(Trial(self.study.name, trail_name, created_time=time.time(), updated_time=time.time()))
-        trial.structure = [graph_str, graph_info]
-        trial.structure_encoder = self.dna(Decoder().decode(graph_str), graph_info)
-        trial.tag = 0     # 0 generation
+      temp_graph = Decoder().decode(graph_str)
+      temp_graph.update_by(graph_info)
+      trial.multi_objective_value = [1.0 / temp_graph.flops]
+      trial.tag = 0     # 0 generation
 
   def dna(self, graph, graph_info):
-    unary_p = self.max_block_num * self.max_cell_num * self.branch_num
-    pairwise_p = self.max_block_num * self.max_block_num + \
-                 self.max_block_num * self.max_cell_num * self.max_cell_num +\
-                 self.max_block_num * self.max_cell_num * self.branch_num * self.branch_num
+    # graph only include no skip connection
+    block_num = len(graph_info['blocks'])
+    op_length = block_num * self.max_cell_num * self.branch_num
+    connection_length = 1 + block_num * block_num + \
+                        block_num + block_num * self.max_cell_num * self.max_cell_num + \
+                        block_num * self.max_cell_num + \
+                        block_num * self.max_cell_num * self.branch_num * self.branch_num
 
-    dna_vector = np.zeros((unary_p + pairwise_p))
+    dna_vector = np.zeros((op_length+connection_length))
+
     blocks = graph_info['blocks']
     cells = graph_info['cells']
-    block_dict = graph_info['block_info']     # {index: {'mode': 'u', 'size': 2}}
-    block_dict = {int(k): v for k, v in block_dict.items()}
-
-    # analyze cell type
+    # for op region
     for block_index, block in enumerate(blocks):
-      block_id = block_dict[block_index]['size']      # 0, 1, 2, ..., max_block_num
-      dna_block_offset = block_id * self.max_cell_num * self.branch_num
+      dna_block_offset = block_index * self.max_cell_num * self.branch_num
 
       for cell_index, cell_id in enumerate(block):
         dna_cell_offset = cell_index * self.branch_num
+
         for branch_index, branch_id in enumerate(cells[cell_id]):
           dna_vector[dna_block_offset + dna_cell_offset + branch_index] =\
             graph.layer_list[branch_id].layer_type_encoder
 
-    # analyze blocks links
-    dna_brancn_links_offset = unary_p
-    for block_index in range(len(blocks)):
-      for next_block_index in range(len(blocks)):
-        if next_block_index <= block_index:
-          continue
+    # for connection region
+    # 1.step block connection region
+    offset = op_length
+    dna_vector[offset] = graph_info['connection']['block'][0]
+    dna_vector[offset+1:offset+1+block_num*block_num] = np.array(graph_info['connection']['block_connection'])
 
-        block_id = block_dict[block_index]['size']
-        next_block_id = block_dict[next_block_index]['size']
+    # 2.step cell connection region
+    offset += 1 + block_num * block_num
+    dna_vector[offset:offset+block_num] = np.array(graph_info['connection']['cell'])
 
-        branch_id_in_block = cells[blocks[block_index][-1]][-1]
-        branch_id_in_next_block = cells[blocks[next_block_index][-1]][-1]
+    long_v = []
+    for bb in range(block_num):
+      long_v += graph_info['connection']['cell_connection'][bb]
 
-        skip_type = graph.has_skip2(branch_id_in_block, branch_id_in_next_block)
-        if skip_type != Constant.NO_SKIP:
-          dna_vector[dna_brancn_links_offset + block_id * self.max_block_num + next_block_id] = skip_type / 2.0
+    dna_vector[offset+block_num:
+               offset+block_num+block_num * self.max_cell_num * self.max_cell_num] = np.array(long_v)
 
-    # analyze cells links
-    dna_cell_links_offset = unary_p + self.max_block_num*self.max_block_num
-    for block_index in range(len(blocks)):
-      block_id = block_dict[block_index]['size']
-      dna_cell_links_offset += block_id * self.max_cell_num * self.max_cell_num
 
-      for cell_index, cell_id in enumerate(blocks[block_index]):
-        for next_cell_index, next_cell_id in enumerate(blocks[block_index]):
-          if next_cell_index <= cell_index:
-            continue
+    # 3.step branch connection region
+    offset += block_num + block_num * self.max_cell_num * self.max_cell_num
+    dna_vector[offset:offset+block_num * self.max_cell_num] = np.array(graph_info['connection']['branch'])
+    offset_in = offset + block_num * self.max_cell_num
 
-          branch_id_in_cell = cells[cell_index][-1]
-          branch_id_in_next_cell = cells[next_cell_index][-1]
+    long_v = []
+    for cc in range(len(cells)):
+      long_v += graph_info['connection']['branch_connection'][cc]
 
-          skip_type = graph.has_skip(branch_id_in_cell, branch_id_in_next_cell)
-          if skip_type != Constant.NO_SKIP:
-            dna_vector[dna_cell_links_offset + cell_index * self.max_cell_num + next_cell_index] = skip_type / 2.0
-
-    # analyze branchs links
-    dna_branch_links_offset = unary_p + \
-                              self.max_block_num*self.max_block_num + \
-                              self.max_block_num*self.max_cell_num*self.max_cell_num
-    for block_index in range(len(blocks)):
-      block_id = block_dict[block_index]['size']
-      for cell_index, cell_id in enumerate(blocks[block_index]):
-        for branch_index, branch_id in enumerate(cells[cell_id]):
-          for next_branch_index, next_branch_id in enumerate(cells[cell_id]):
-            if next_branch_index <= branch_index:
-              continue
-
-            skip_type = graph.has_skip(branch_id, next_branch_id)
-            if skip_type != Constant.NO_SKIP:
-              dna_vector[dna_branch_links_offset +
-                         block_id*self.max_cell_num*self.branch_num*self.branch_num +
-                         cell_index*self.branch_num*self.branch_num +
-                         branch_index * self.branch_num + next_branch_index] = skip_type / 2.0
-
+    dna_vector[offset_in:] = np.array(long_v)
     return dna_vector
 
-  def random(self, count=1):
-    # get study configuration
-    study_configuration = json.loads(self.study.study_configuration)
-
-    try_count = 0
-    proposed_search_space = []
-    while True:
-      if try_count > 50:
-        logger.warn('couldnt find valid graph structure for study %s'%self.study.name)
-        return [(None, None)]
-
-      random_p = random.choice(list(range(self.population_size)))
-      default_graph_str = study_configuration['searchSpace']['current_population'][random_p]
-      default_graph = Decoder().decode(default_graph_str)
-      default_graph.layer_factory = BaseLayerFactory()
-      default_graph_info = study_configuration['searchSpace']['current_population_info'][random_p]
-
-      # 1.step random mutate one cell
-      graph, graph_info = self.mutation_operator._mutate_for_cell(copy.deepcopy(default_graph),
-                                                                  copy.deepcopy(default_graph_info))
-
-      # 2.step skip branch in branch
-      graph, graph_info = self.mutation_operator._mutate_for_branch(graph, graph_info)
-
-      # 3.step random skip once between cells
-      if random.random() < self.mutation_operator._mutate_rate_for_skip_cell:
-        for start_layer_id, end_layer_id in self.mutation_operator._find_allowed_skip_cell(graph_info):
-          try:
-            graph = self.mutation_operator._mutate_for_skip_cell(graph, start_layer_id, end_layer_id)
-            break
-          except:
-            pass
-
-      # 4.step mutation branch in cell
-      for _ in range(self.branch_num - 1):
-        for start_layer_id, end_layer_id in self.mutation_operator._find_allowed_skip_branch(graph_info):
-          try:
-            graph = self.mutation_operator._mutate_for_skip_branch(graph, start_layer_id, end_layer_id)
-            break
-          except:
-            pass
-
-      # graph.visualization('%s.png' % (str(uuid.uuid4())))
-      graph_dna = self.dna(graph, graph_info)
-      trials = Trial.filter(study_name=self.study.name)
-      is_not_valid = False
-      for t in trials:
-        if str(t.structure_encoder) == str(graph_dna.tolist()):
-          is_not_valid = True
-          break
-
-      if is_not_valid:
-        try_count += 1
+  def random(self, random_block_ini=False, random_cell_ini=False, mode='decoder'):
+    # 1.step get block number
+    blocks = [[]]
+    block_info = {0: {'mode': 'u', 'size': 0, 'transition': -1, 'input_transition': [], 'base_channel': self.base_channel}}
+    for index in range(self.max_block_num):
+      if index == 0:
         continue
 
-      proposed_search_space.append((graph_dna, Encoder(skipkeys=True).encode(graph), graph_info))
-      if len(proposed_search_space) == count:
-        break
+      if random.random() < 0.5 and random_block_ini:
+        block_info[len(blocks)] = {'mode': 'u', 'size': index, 'transition': -1, 'input_transition': [], 'base_channel': self.base_channel}
+        blocks.append([])
+      else:
+        if len(self.input_size) > 1:
+          for input_index in range(len(self.input_size)):
+            if index == int(np.log2(self.input_size[input_index][1] / self.input_size[0][1])):
+              block_info[len(blocks)] = {'mode': 'u', 'size': index, 'transition': -1, 'input_transition': [], 'base_channel': self.base_channel}
+              blocks.append([])
+              break
+        else:
+          block_info[len(blocks)] = {'mode': 'u', 'size': index, 'transition': -1, 'input_transition': [], 'base_channel': self.base_channel}
+          blocks.append([])
 
-    return proposed_search_space
+    block_num = len(blocks)
+
+    # 2.step get cell number in every block
+    cell_num = []
+    for _ in range(block_num):
+      if random_cell_ini:
+        cell_num.append(random.choice(list(range(self.min_cell_num, self.max_cell_num))))
+      else:
+        cell_num.append(self.max_cell_num)
+
+    # 3.step generate cells and branches
+    default_graph = Graph()
+    default_graph.layer_factory = BaseLayerFactory()
+    for input_s in self.input_size:
+      default_graph.add_input(shape=input_s)
+
+    last_layer_id = -1
+
+    cells = []
+    cell_id_offset = 0
+    last_channel = self.cell.current_channel
+    for block_id in range(block_num):
+      if block_id == 0:
+        for cell_id in range(cell_num[block_id]):
+          cells.append(self.cell.random(default_graph,
+                                        last_layer_id,
+                                        cell_name='cell_%d' % (cell_id + cell_id_offset),
+                                        block_name='block_%d' % block_info[block_id]['size']))
+
+          last_layer_id = cells[-1][-1]
+          blocks[block_id].append(cell_id + cell_id_offset)
+      else:
+        # adjust block channels
+        if self.channel_mode == 'UP':
+          self.cell.increase_channels(2.0)
+        elif self.channel_mode == 'DOWN':
+          self.cell.decrease_channels(0.5)
+
+        block_info[block_id]['base_channel'] = self.cell.current_channel
+
+        # 1.step channel compatibility
+        if self.cell.current_channel != last_channel:
+          # 3x3 convolution layer
+          transition_conv33 = default_graph.layer_factory.conv2d(input_channel=None,
+                                                                 filters=self.cell.current_channel,
+                                                                 kernel_size_h=3,
+                                                                 kernel_size_w=3)
+
+          default_graph.add_layer(transition_conv33, default_graph.layer_id_to_output_node_ids[last_layer_id][0])
+          last_layer_id = default_graph.layer_to_id[transition_conv33]
+          last_channel = self.cell.current_channel
+
+        # 2.step spatial compatibility
+        base_size = int(np.power(2, block_info[block_id]['size']))
+        block_transition_layer = default_graph.layer_factory.bilinear_resize(height=self.input_size[0][1] * base_size,
+                                                                             width=self.input_size[0][2] * base_size)
+        default_graph.add_layer(block_transition_layer, default_graph.layer_id_to_output_node_ids[last_layer_id][0])
+        last_layer_id = default_graph.layer_to_id[block_transition_layer]
+
+        block_info[block_id]['transition'] = last_layer_id
+
+        for cell_id in range(cell_num[block_id]):
+          cells.append(self.cell.random(default_graph,
+                                        last_layer_id,
+                                        cell_name='cell_%d' % (cell_id + cell_id_offset),
+                                        block_name='block_%d' % block_info[block_id]['size']))
+
+          last_layer_id = cells[-1][-1]
+          blocks[block_id].append(cell_id + cell_id_offset)
+
+        # 3.step link with compatible input
+        for input_i, input_s in enumerate(self.input_size):
+          if input_s[1] == self.input_size[0][1] * base_size and input_s[2] == self.input_size[0][2] * base_size:
+            # identity layer
+            identity_layer = default_graph.layer_factory.identity()
+            default_graph.add_layer(identity_layer, default_graph.get_input()[input_i])
+
+            # add skip model
+            default_graph.to_add_skip_model(default_graph.layer_to_id[identity_layer],
+                                            block_info[block_id]['transition'])
+            default_graph.update()
+
+      cell_id_offset += cell_num[block_id]
+
+    # 4.step build connection information between blocks,cells, branches
+    block_connection_type = random.choice([0,0.5,1])
+    block_connections = []
+    if block_connection_type == 0:
+      block_connections = np.zeros((block_num * block_num)).tolist()
+    elif block_connection_type == 1:
+      block_connections = (np.ones((block_num * block_num)) - np.eye(block_num).flatten()).tolist()
+    elif block_connection_type == 0.5:
+      block_connections = np.zeros((block_num * block_num)).tolist()
+      for bi in range(block_num):
+        for bj in range(block_num):
+          if bj > bi:
+            target = random.choice([0,1])
+            block_connections[bi * block_num + bj] = target
+            block_connections[bj * block_num + bi] = target
+
+    cell_connection_type = np.random.choice([0, 0.5, 1], block_num).tolist()
+    cell_connections = [np.zeros(self.max_cell_num * self.max_cell_num).tolist() for _ in range(block_num)]
+    for b in range(block_num):
+      if cell_connection_type[b] == 0:
+        cell_connections[b] = np.zeros(self.max_cell_num * self.max_cell_num).tolist()
+      elif cell_connection_type[b] == 1:
+        cell_connections[b] = (np.ones(self.max_cell_num * self.max_cell_num) - np.eye(self.max_cell_num).flatten()).tolist()
+      else:
+        cell_connections[b] = np.zeros(self.max_cell_num * self.max_cell_num).tolist()
+        for ci in range(self.max_cell_num):
+          for cj in range(self.max_cell_num):
+            if cj > ci:
+              target = random.choice([0, 1])
+              cell_connections[b][ci * self.max_cell_num + cj] = target
+              cell_connections[b][cj * self.max_cell_num + ci] = target
+
+    branch_connection_type = np.random.choice([0, 0.5, 1], block_num * self.max_cell_num).tolist()
+    branch_connections = [np.zeros(self.branch_num * self.branch_num).tolist() for _ in
+                          range(block_num * self.max_cell_num)]
+    for c in range(block_num * self.max_cell_num):
+      if branch_connection_type[c] == 0:
+        branch_connections[c] = np.zeros(self.branch_num * self.branch_num).tolist()
+      elif branch_connection_type[c] == 1:
+        branch_connections[c] = (np.ones(self.branch_num * self.branch_num)-np.eye(self.branch_num).flatten()).tolist()
+      else:
+        branch_connections[c] = np.zeros(self.branch_num * self.branch_num).tolist()
+        for bi in range(self.branch_num):
+          for bj in range(self.branch_num):
+            if bj > bi:
+              target = random.choice([0, 1])
+              branch_connections[c][bi * self.branch_num + bj] = target
+              branch_connections[c][bj * self.branch_num + bi] = target
+
+    default_graph.layer_factory = None
+    graph_encoder_str = Encoder(skipkeys=True).encode(default_graph)
+    graph_info = {'blocks': blocks,
+                  'cells': cells,
+                  'block_info': block_info,
+                  'connection': {'block': [block_connection_type],
+                                 'block_connection': block_connections,
+                                 'cell': cell_connection_type,
+                                 'cell_connection': cell_connections,
+                                 'branch': branch_connection_type,
+                                 'branch_connection': branch_connections}}
+
+    return graph_encoder_str, graph_info
 
   def get_new_suggestions(self, number=1, **kwargs):
     # get current population
     study_configuration = json.loads(self.study.study_configuration)
-    current_population = study_configuration['searchSpace']['current_population']
-    current_population_info = study_configuration['searchSpace']['current_population_info']
     current_population_tag = int(study_configuration['searchSpace']['current_population_tag'])
 
+    # update those failed trails (status=='Failed' or expired)
     trials = Trial.filter(study_name=self.study.name, tag=current_population_tag)
     for trial in trials:
-      if trial.status == 'Failed':
-        # generate new individual
-        random_p = self.random()
-        if len(random_p) == 0:
-          # we have to try original one again
-          trial.status = None
-          continue
+      if trial.status == 'Failed' or \
+              ((time.time() - float(trial.updated_time)) >= 2 * 60 * 60 and trial.status == 'UnCompleted'):
+        #
+        error_reason = 'running error' if trial.status == 'Failed' else 'expired'
+        logger.warn('trail (id%s) is error and rebuilded (reason: %s)'%(trial.name, error_reason))
 
-        a, b, c = random_p[0]
-        trial.structure = [b, c]
-        trial.structure_encoder = a.tolist()
+        # generate new individual
+        graph_encoder_str, graph_info = self.random()
+        trial.structure = [graph_encoder_str, graph_info]
+        trial.structure_encoder = None
+
+        temp_graph = Decoder().decode(graph_encoder_str)
+        temp_graph.update_by(graph_info)
+        trial.multi_objective_value = [1.0 / temp_graph.flops]
         trial.status = None
 
     candidate_trails = Trial.filter(study_name=self.study.name, tag=current_population_tag, status=None)
@@ -1031,46 +718,57 @@ class EvolutionSearchSpace(AbstractSearchSpace):
         # study not stop, all free worker should wait
         return None
 
-    try_count = 0
-    while len(candidate_trails) == 0 and try_count < 10:
-      # generate new population
-      population = Population()
+    while len(candidate_trails) == 0:
+      # get elite population
+      elite_population = Population()
       completed_trials = Trial.filter(study_name=self.study.name, tag=current_population_tag, status="Completed")
 
       for t in completed_trials:
-        me = self.nsga2.problem.generateIndividual()
+        me = self.evolution_control.problem.generateIndividual()
         me.id = t.name
         me.features = [Decoder().decode(t.structure[0]), t.structure[1]]
-        me.features[0].layer_factory = BaseLayerFactory()
         me.type = 'parent'
         me.objectives[0] = t.objective_value
+        me.objectives[1] = t.multi_objective_value[0]
+        self.evolution_control.problem.calculate_objectives(me)
+        elite_population.population.append(me)
 
-        self.nsga2.problem.calculate_objectives(me)
-        population.population.append(me)
+      if current_population_tag >= 1:
+        parent_population = Population()
+        parent_completed_trials = Trial.filter(study_name=self.study.name, tag=current_population_tag-1, status="Completed")
 
-      new_population = self.nsga2.evolve(population)
+        for t in parent_completed_trials:
+          me = self.evolution_control.problem.generateIndividual()
+          me.id = t.name
+          me.features = [Decoder().decode(t.structure[0]), t.structure[1]]
+          me.type = 'parent'
+          me.objectives[0] = t.objective_value
+          me.objectives[1] = t.multi_objective_value[0]
+          self.evolution_control.problem.calculate_objectives(me)
+          parent_population.population.append(me)
+
+        elite_population = self.evolution_control.evolve(parent_population, elite_population)
+
+      offspring_population = self.evolution_control.create_children(elite_population)
       current_population_tag += 1
 
       # generate trials
       study_current_population = []
       study_current_population_info = []
-      for p in new_population.population:
-        if p.type == 'offspring':
-          trail_name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
-          trial = Trial.create(Trial(self.study.name, trail_name, created_time=time.time(), updated_time=time.time()))
-          trial.structure = [Encoder(skipkeys=True).encode(p.features[0]), p.features[1]]
-          trial.structure_encoder = self.dna(p.features[0], p.features[1]).tolist()
-          trial.tag = current_population_tag
-          trial.objective_value = p.objectives[0]   # predicted
+      for p in offspring_population.population:
+        trail_name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
+        trial = Trial.create(Trial(self.study.name, trail_name, created_time=time.time(), updated_time=time.time()))
+        trial.structure = [Encoder(skipkeys=True).encode(p.features[0]), p.features[1]]
+        trial.structure_encoder = None
 
-          study_current_population.append(trial.structure[0])
-          study_current_population_info.append(trial.structure[1])
-        else:
-          trial = Trial.get(name=p.id)
-          trial.tag = current_population_tag
+        temp_graph = Decoder().decode(trial.structure[0])
+        temp_graph.update_by(trial.structure[1])
+        trial.objective_value = -1
+        trial.multi_objective_value = [1.0 / temp_graph.flops]
+        trial.tag = current_population_tag
 
-          study_current_population.append(trial.structure[0])
-          study_current_population_info.append(trial.structure[1])
+        study_current_population.append(trial.structure[0])
+        study_current_population_info.append(trial.structure[1])
 
       # update study configuration
       study_configuration['searchSpace']['current_population'] = study_current_population
@@ -1079,9 +777,6 @@ class EvolutionSearchSpace(AbstractSearchSpace):
 
       # regenerate candidate trials
       candidate_trails = Trial.filter(study_name=self.study.name, tag=current_population_tag, status=None)
-
-      # increment
-      try_count += 1
 
     self.study.study_configuration = json.dumps(study_configuration)
     trial_suggestion = random.choice(candidate_trails)

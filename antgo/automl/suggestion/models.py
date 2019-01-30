@@ -17,8 +17,7 @@ class Study(object):
                search_space=None,
                status='stop',
                created_time=None,
-               updated_time=None,
-               flops=0.0):
+               updated_time=None):
     self.id = None
     self.name = name
     self.study_configuration = study_configuration
@@ -91,7 +90,8 @@ class Trial(object):
                created_time=None,
                updated_time=None,
                address=None,
-               tag=None):
+               tag=None,
+               multi_objective_value=[]):
     self.id = id
     self.study_name = study_name
     self.name = name
@@ -99,6 +99,7 @@ class Trial(object):
     self.structure = structure
     self.structure_encoder = structure_encoder
     self.objective_value = objective_value
+    self.multi_objective_value = multi_objective_value
     self.status = status
     self.created_time = created_time
     self.updated_time = updated_time

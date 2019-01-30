@@ -303,6 +303,13 @@
                 })
             })
 
+            $('a[name=studydownload]').each(function(){
+                $(this).on('click', function(event){
+                    var study_name = $(this).parent().attr('study_name');
+                    window.location.href = "/study/download/{0}/experiment/".format(study_name);
+                    event.stopPropagation()
+                })
+            })
         })
 
     </script>
@@ -578,6 +585,7 @@
                       <th scope="col">Objective Value</th>
                       <th scope="col">Status</th>
                       <th scope="col">Show</th>
+                      <th scope="col">Download</th>
                       <th scope="col">Operator</th>
                       <th scope="col">Delete</th>
                     </tr>
@@ -594,6 +602,7 @@
                         <th>{{s['objective_value']}}</th>
                         <th name="status">{{s['status']}}</th>
                         <th study_name="{{s['name']}}"> <a href="javascript:void(0)" name="studyvis"><span class="badge">show</span></a></th>
+                        <th study_name="{{s['name']}}"> <a href="javascript:void(0)" name="studydownload"><span class="badge">Download</span></a></th>
                         <th>
                             {%if s['status'] == 'running'%}
                                 <a href="javascript:void(0)" name="studyop"><span class="badge">stop</span></a>

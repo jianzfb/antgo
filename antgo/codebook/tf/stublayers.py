@@ -328,6 +328,14 @@ class StubBilinearResize(BaseStubBilinearResize):
     return functools.partial(tf.image.resize_bilinear, size=(self.height, self.width))(*args, **kwargs)
 
 
+class StubIdentity(BaseStubIdentity):
+  def __init__(self, input=None, output=None, **kwargs):
+    super(StubIdentity, self).__init__(input, output, **kwargs)
+
+  def __call__(self, *args, **kwargs):
+    return tf.identity(*args, **kwargs)
+
+
 class LayerFactory(object):
   def __init__(self):
     pass
@@ -351,6 +359,7 @@ class LayerFactory(object):
                     'dropout_2d',
                     'bilinear_resize',
                     'spp',
+                    'identity',
                     'input']:
       if item.endswith('_branch'):
         return None
@@ -394,6 +403,8 @@ class LayerFactory(object):
         return StubDropout2d(*args, **kwargs)
       elif item == 'bilinear_resize':
         return StubBilinearResize(*args, **kwargs)
+      elif item == 'identity':
+        return StubIdentity(*args, **kwargs)
       elif item == 'input':
         return StubInput(*args, **kwargs)
 
@@ -425,3 +436,5 @@ if __name__ == '__main__':
     aa = sess.run(tf_softmax, feed_dict={tf_input: np.random.random([1,224,224,3])})
     print(aa)
   pass
+
+

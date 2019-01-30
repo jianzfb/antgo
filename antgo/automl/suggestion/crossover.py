@@ -99,17 +99,17 @@ class CrossOver(object):
       connection_region_crossover_points = np.random.choice(connection_information.shape[-1], multi_points_connection_region,replace=False, p=connection_information)
       connection_region_crossover_points = sorted(connection_region_crossover_points)
 
-      ss = []
+      rearrange_connection_region_crossover_points = []
       for pp in connection_region_crossover_points:
-        if pp <block_offset:
-          ss.append(pp)
-        elif pp>=block_offset and pp <cell_offset:
-          ss.append(pp-block_offset+cell_region[0])
+        if pp < block_offset:
+          rearrange_connection_region_crossover_points.append(pp + block_region[0])
+        elif pp >= block_offset and pp < cell_offset:
+          rearrange_connection_region_crossover_points.append(pp - block_offset + cell_region[0])
         else:
-          ss.append(pp-cell_offset+branch_region[0])
+          rearrange_connection_region_crossover_points.append(pp - cell_offset + branch_region[0])
 
-      crossovered_first = fitness_values[first] + (second, op_region_crossover_points, ss)
-      crossovered_second = fitness_values[second] + (first, op_region_crossover_points, ss)
+      crossovered_first = fitness_values[first] + (second, op_region_crossover_points, rearrange_connection_region_crossover_points)
+      crossovered_second = fitness_values[second] + (first, op_region_crossover_points, rearrange_connection_region_crossover_points)
 
       crossover_result.append(crossovered_first)
       if len(crossover_result) == N:

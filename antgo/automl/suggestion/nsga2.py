@@ -66,8 +66,8 @@ class Problem(object):
 
 class Nsga2(object):
   def __init__(self, problem, mutation_op, crossover_op, tournament_size=2):
-    self.mutation_op = mutation_op
-    self.crossover_op = crossover_op
+    self.mutation_controler = mutation_op
+    self.crossover_controler = crossover_op
 
     self.solution = []
     self.multi_objects = []
@@ -137,38 +137,17 @@ class Nsga2(object):
           front[index].crowding_distance += (front[index + 1].objectives[m] - front[index - 1].objectives[m]) / (
                     self.problem.max_objectives[m] - self.problem.min_objectives[m])
 
-  def __tournament(self, population):
-    participants = random.sample(population.population, self.tournament_size)
-    best = None
-    for participant in participants:
-      if best is None or self.crowding_operator(participant, best) == 1:
-        best = participant
-
-    return best
-
   def create_children(self, population):
-    children = []
-    pop_size = len(population)
-    while len(children) != pop_size:
-      best = self.__tournament(population)
+    population_cp = copy.deepcopy(population)
+    crossover_population = self.crossover_controler.population_crossover(population=population_cp)
+    mutate_population = self.mutation_controler.population_mutate(population=crossover_population)
 
-      structure = copy.deepcopy(best.features[0])
-      structure_info = copy.deepcopy(best.features[1])
-      structure, structure_info, structure_score_predicted = self.mutation_op.mutate(structure, structure_info)
-      if structure_score_predicted is None:
-        structure_score_predicted = self.problem.max_objectives[0] + 0.0001
+    for p in mutate_population:
+      p.type = 'offspring'
+      p.objectives = [None, None]
+    return mutate_population
 
-      me = self.problem.generateIndividual()
-      me.features = [structure, structure_info]
-      me.type = 'offspring'
-      me.objectives[0] = structure_score_predicted
-
-      self.problem.calculate_objectives(me)
-      children.append(me)
-
-    return children
-
-  def evolve(self, population):
+  def evolve(self, population, offspring_population):
     population_size = len(population)
     # 1.step compute nondominated_sort and crowding distance
     self.fast_nondominated_sort(population)
@@ -178,43 +157,38 @@ class Nsga2(object):
     # next elite population
     new_population = Population()
     # environment pooling population (parent + children)
-    expand_population = copy.deepcopy(population)
-    evolve_ok = False
-    while not evolve_ok:
-      # 2.step generate next children generation
-      children = self.create_children(population)
+    expand_population = population
 
-      # 3.step environment pooling
-      # 3.1.step expand population
-      expand_population.extend(children)
+    # 2.step generate next children generation
+    # children = self.create_children(population)
 
-      # 3.2.step re-fast-nondominated-sort
-      self.fast_nondominated_sort(expand_population)
+    # 3.step environment pooling
+    # 3.1.step expand population
+    expand_population.extend(offspring_population)
 
-      # 3.3step select elite into next population
-      front_num = 0
-      while len(new_population) + len(expand_population.fronts[front_num]) <= population_size:
-        new_population.extend(expand_population.fronts[front_num])
-        front_num += 1
-        if front_num == len(expand_population.fronts):
-          break
+    # 3.2.step re-fast-nondominated-sort
+    self.fast_nondominated_sort(expand_population)
 
-      if len(new_population) < population_size and front_num == len(expand_population.fronts):
-        continue
+    # 3.3step select elite into next population
+    front_num = 0
+    while len(new_population) + len(expand_population.fronts[front_num]) <= population_size:
+      new_population.extend(expand_population.fronts[front_num])
+      front_num += 1
+      if front_num == len(expand_population.fronts):
+        break
 
-      if len(new_population) + len(expand_population.fronts[front_num]) < population_size:
-        continue
+    if len(new_population) < population_size and front_num == len(expand_population.fronts):
+      return None
 
-      if len(new_population) < population_size:
-        self.calculate_crowding_distance(expand_population.fronts[front_num])
-        expand_population.fronts[front_num] = sorted(expand_population.fronts[front_num],
-                                                   key=functools.cmp_to_key(self.crowding_operator),
-                                              reverse=True)
-        new_population.extend(expand_population.fronts[front_num][0:population_size - len(new_population)])
+    if len(new_population) + len(expand_population.fronts[front_num]) < population_size:
+      return None
 
-      if len(new_population) == population_size:
-        evolve_ok = True
-
+    if len(new_population) < population_size:
+      self.calculate_crowding_distance(expand_population.fronts[front_num])
+      expand_population.fronts[front_num] = sorted(expand_population.fronts[front_num],
+                                                 key=functools.cmp_to_key(self.crowding_operator),
+                                            reverse=True)
+      new_population.extend(expand_population.fronts[front_num][0:population_size - len(new_population)])
     return new_population
 
 
