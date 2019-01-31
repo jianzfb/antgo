@@ -107,6 +107,14 @@ def update_suggestion_process(server_records, experiment_records):
 
 
 def launch_train_process(server_records, experiment_records, content):
+  # study name and trial name
+  study_name = content['study_name']
+  trail_name = content['trail_name']
+  experiment_id = trail_name
+  if experiment_id in experiment_records:
+    logger.error('existed experiment id %s'%experiment_id)
+    return False
+
   # 1.step check device resource
   if 'occupied_devices' not in server_records:
     server_records['occupied_devices'] = []
@@ -114,13 +122,8 @@ def launch_train_process(server_records, experiment_records, content):
   free_devices = [n for n in server_records['devices'] if n not in server_records['occupied_devices']]
   if len(free_devices) == 0:
     logger.error('have no free device resource')
-    return
+    return False
 
-  # record
-  study_name = content['study_name']
-  trail_name = content['trail_name']
-
-  experiment_id = trail_name
   start_time = time.time()
   main_param = {}
   if content['hyperparameter'] is not None and content['hyperparameter'] != '':
@@ -129,9 +132,6 @@ def launch_train_process(server_records, experiment_records, content):
   structure = content['structure']
   structure_connection = content['structure_connection']
   max_runtime = content['max_time']
-
-  if experiment_id in experiment_records:
-    logger.error('has existed experiment')
 
   # task token
   experiment_records[experiment_id] = {'start_time': start_time,
@@ -152,11 +152,10 @@ def launch_train_process(server_records, experiment_records, content):
 
   # apply devices
   apply_devices = 1
-  if apply_devices == 0:
-    apply_devices = 1
-
   if 'num_clones' in main_param:
     apply_devices = int(main_param['num_clones'])
+  if apply_devices == 0:
+    apply_devices = 1
 
   if apply_devices > len(free_devices):
     logger.error('have no free device resource')
@@ -167,7 +166,8 @@ def launch_train_process(server_records, experiment_records, content):
 
   # 2.step prepare running environment
   # prepare workspace
-  os.makedirs(os.path.join(server_records['main_folder'], experiment_id))
+  if not os.path.exists(os.path.join(server_records['main_folder'], experiment_id)):
+    os.makedirs(os.path.join(server_records['main_folder'], experiment_id))
 
   # prepare support files
   if os.path.exists(os.path.join(server_records['root_main_folder'], 'trainer.tar.gz')):
@@ -225,6 +225,7 @@ def launch_train_process(server_records, experiment_records, content):
   # start running
   p = subprocess.Popen('%s > %s.log' % (cmd_shell, experiment_id), shell=True, cwd=os.path.join(server_records['main_folder'], experiment_id))
   experiment_records[experiment_id]['pid'] = p
+  experiment_records[experiment_id]['status'] = 'running'
   return True
 
 
@@ -277,6 +278,7 @@ def request_suggestion_process(experiment_records, server_records):
             temp = {}
             result = launch_train_process(server_records, temp, suggestion)
             if result:
+              # add new experiment
               new_experiments.update(temp)
           elif suggestion['status'] == 'completed':
             logger.info('training server is notified to stop by center')

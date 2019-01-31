@@ -694,16 +694,14 @@ class EvolutionSearchSpace(AbstractSearchSpace):
     # update those failed trails (status=='Failed' or expired)
     trials = Trial.filter(study_name=self.study.name, tag=current_population_tag)
     for trial in trials:
-      if trial.status == 'Failed' or \
-              ((time.time() - float(trial.updated_time)) >= 2 * 60 * 60 and trial.status == 'UnCompleted'):
-        #
-        error_reason = 'running error' if trial.status == 'Failed' else 'expired'
-        logger.warn('trail (id%s) is error and rebuilded (reason: %s)'%(trial.name, error_reason))
+      if trial.status == 'Failed':
+        logger.warn('trail (id %s) is error and rebuilded'%(trial.name))
 
         # generate new individual
         graph_encoder_str, graph_info = self.random()
         trial.structure = [graph_encoder_str, graph_info]
         trial.structure_encoder = None
+        trial.name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
 
         temp_graph = Decoder().decode(graph_encoder_str)
         temp_graph.update_by(graph_info)
