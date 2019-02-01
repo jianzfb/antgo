@@ -8,7 +8,7 @@ from __future__ import print_function
 import json
 from antgo.automl.suggestion.models import *
 from antgo.automl.suggestion.searchspace.evolution import *
-import tensorflow as tf
+# import tensorflow as tf
 from antgo.codebook.tf.stublayers import *
 
 
@@ -43,11 +43,11 @@ def check_evolution_initialize():
       suggestion = es.get_new_suggestions()
       print(suggestion)
 
-      a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
-      b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
-      graph = Decoder().decode(suggestion[0].structure[0])
-      graph.update_by(suggestion[0].structure[1])
-      graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory(),batch_size=1)
+      # a = tf.placeholder(dtype=tf.float32,shape=[1,128,128,3])
+      # b = tf.placeholder(dtype=tf.float32,shape=[1,512,512,3])
+      # graph = Decoder().decode(suggestion[0].structure[0])
+      # graph.update_by(suggestion[0].structure[1])
+      # graph.materialization(input_nodes=[a,b],layer_factory=LayerFactory(),batch_size=1)
 
       suggestion[0].status = 'Completed'
       suggestion[0].objective_value = random.random()

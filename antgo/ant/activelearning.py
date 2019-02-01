@@ -292,7 +292,7 @@ class AntActiveLearning(AntBase):
         if activelearning_status['status'] == 'finish':
           break
 
-        time.sleep(10)
+        time.sleep(20*60)
 
       for sample_file in unlabeled_sample_file_list:
         if os.path.exists(os.path.join(annotation_folder, sample_file)):

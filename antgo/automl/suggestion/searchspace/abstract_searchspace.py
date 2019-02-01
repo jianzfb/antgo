@@ -14,6 +14,3 @@ class AbstractSearchSpace(object):
 
   def get_new_suggestions(self, number=1, **kwargs):
     raise NotImplementedError
-
-  def fit(self, x_queue, y_queue):
-    pass

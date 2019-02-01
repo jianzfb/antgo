@@ -5,21 +5,18 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.automl.suggestion.searchspace.dpc import *
 from antgo.automl.suggestion.searchspace.evolution import *
 
 
 class SearchspaceFactory(object):
   @staticmethod
   def get(name):
-    if name not in ['DPC', 'Evolution']:
+    if name not in ['Evolution']:
       return None
 
-    if name == 'DPC':
-      return DPCSearchSpace
-    elif name == 'Evolution':
+    if name == 'Evolution':
       return EvolutionSearchSpace
 
   @staticmethod
   def all():
-    return ['DPC', 'Evolution']
+    return ['Evolution']

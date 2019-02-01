@@ -212,8 +212,8 @@ class Context(object):
       if dump_dir != '':
         if os.path.exists(os.path.join(dump_dir, 'record')):
           shutil.rmtree(os.path.join(dump_dir, 'record'))
-          os.makedirs(os.path.join(dump_dir, 'record'))
 
+        os.makedirs(os.path.join(dump_dir, 'record'))
         self.recorder.dump_dir = os.path.join(dump_dir, 'record')
         is_inner_set = True
       

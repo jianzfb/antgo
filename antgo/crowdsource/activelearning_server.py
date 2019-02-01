@@ -255,7 +255,7 @@ def activelearning_web_server(activelearning_name,
     'db': db,
     'data_folder': os.path.join(main_folder, 'web', 'static', 'data', 'annotations'),
     'cookie_secret': str(uuid.uuid4()),
-    'label_num_per_time': 4,
+    'label_num_per_time': 10,
     'labels': task.class_label if task is not None else ['A', 'B']
   }
   app = tornado.web.Application(handlers=[(r"/", IndexHandler),
