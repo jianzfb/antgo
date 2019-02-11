@@ -109,9 +109,7 @@ class EvolutionMutation(Mutation):
             cell_i = (int(p) - block_i * int(self._cell_num*self._branch_num)) // int(self._branch_num)
             branch_i = (int(p) - block_i * int(self._cell_num*self._branch_num)) % int(self._branch_num)
             self._cell.use_channels(graph_info['block_info'][block_i]['base_channel'])
-            new_branch_id = self._cell.change(graph, cells[blocks[block_i][cell_i]][branch_i])
-            cells[cell_i][branch_i] = new_branch_id
-            graph_info['cells'] = cells
+            self._cell.change(graph, cells[blocks[block_i][cell_i]][branch_i])
           elif p >= self._block_connection_region_1[0] and p < self._block_connection_region_1[1]:
             # change block connection type
             graph_info['connection']['block'][p-self._block_connection_offset] = random.choice([0, 0.5, 1])
@@ -255,6 +253,7 @@ class EvolutionCrossover(CrossOver):
         second_crossover_type = second_graph.layer_list[second_crossover_b].layer_name
 
         target_block = p // (self._cell_num*self._branch_num)
+        # change graph
         self._cell.use_channels(first_graph_info['block_info'][target_block]['base_channel'])
         self._cell.change(first_graph, first_crossover_b, second_crossover_type)
 

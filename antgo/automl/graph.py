@@ -1027,6 +1027,8 @@ class Graph(object):
         for bj in range(branch_num_in_cell):
           if bj > bi:
             if branch_connections[c][bi * branch_num_in_cell + bj] == 1:
+              if self.node_list[self.layer_id_to_input_node_ids[cells[c][bi]][0]].shape[0]!=self.node_list[self.layer_id_to_input_node_ids[cells[c][bj]][0]].shape[0]:
+                print('sdfsag')
               self.to_add_skip_model(cells[c][bi], cells[c][bj])
 
               # self.visualization('%d.png'%count)
