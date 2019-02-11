@@ -90,14 +90,24 @@ class CrossOver(object):
       first, second = np.random.choice(ordered_fitness_index, size=2, replace=False, p=confidence)
 
       # op region cross over
-      multi_points_op_region = self.multi_points if self.multi_points > 0 else int(C[first] * op_information.shape[-1])
-      op_region_crossover_points = np.random.choice(op_information.shape[-1], multi_points_op_region, replace=False, p=op_information)
-      op_region_crossover_points = sorted(op_region_crossover_points)
+      op_region_crossover_points = []
+      if np.sum(op_information) > 0.000001:
+        multi_points_op_region = self.multi_points if self.multi_points > 0 else int(C[first] * op_information.shape[-1])
+        op_region_crossover_points = np.random.choice(op_information.shape[-1],
+                                                      multi_points_op_region,
+                                                      replace=False,
+                                                      p=op_information)
+        op_region_crossover_points = sorted(op_region_crossover_points)
 
       # connection region crossover
-      multi_points_connection_region = self.multi_points if self.multi_points > 0 else int(C[first]*connection_information.shape[-1])
-      connection_region_crossover_points = np.random.choice(connection_information.shape[-1], multi_points_connection_region,replace=False, p=connection_information)
-      connection_region_crossover_points = sorted(connection_region_crossover_points)
+      connection_region_crossover_points = []
+      if np.sum(connection_information) > 0.000001:
+        multi_points_connection_region = self.multi_points if self.multi_points > 0 else int(C[first]*connection_information.shape[-1])
+        connection_region_crossover_points = np.random.choice(connection_information.shape[-1],
+                                                              multi_points_connection_region,
+                                                              replace=False,
+                                                              p=connection_information)
+        connection_region_crossover_points = sorted(connection_region_crossover_points)
 
       rearrange_connection_region_crossover_points = []
       for pp in connection_region_crossover_points:
@@ -108,8 +118,12 @@ class CrossOver(object):
         else:
           rearrange_connection_region_crossover_points.append(pp - cell_offset + branch_region[0])
 
-      crossovered_first = fitness_values[first] + (second, op_region_crossover_points, rearrange_connection_region_crossover_points)
-      crossovered_second = fitness_values[second] + (first, op_region_crossover_points, rearrange_connection_region_crossover_points)
+      crossovered_first = fitness_values[first] + (second,
+                                                   op_region_crossover_points,
+                                                   rearrange_connection_region_crossover_points)
+      crossovered_second = fitness_values[second] + (first,
+                                                     op_region_crossover_points,
+                                                     rearrange_connection_region_crossover_points)
 
       crossover_result.append(crossovered_first)
       if len(crossover_result) == N:

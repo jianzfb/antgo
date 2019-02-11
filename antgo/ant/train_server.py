@@ -219,7 +219,13 @@ class AntTrainServer(AntBase):
     all_trails = Trial.filter(study_name=study_name, status='Completed')
     all_trails = sorted(all_trails, key=lambda x: x.created_time)
 
-    plt.subplot(2, 1, 1)
+    is_double_image = False
+    if len(all_trails) > 0 and len(all_trails[0].multi_objective_value) > 0:
+      is_double_image = True
+
+    if is_double_image:
+      plt.subplot(2, 1, 1)
+
     plt.title('study visualization')
     plt.xlabel('time(hours)')
     plt.ylabel('accuracy')
@@ -227,13 +233,21 @@ class AntTrainServer(AntBase):
     y = [m.objective_value for m in all_trails]
     plt.scatter(x=x, y=y, c='r', marker='o')
 
-    plt.subplot(2, 1, 2)
-    plt.xlabel('ADDMUL/FLOPS')
-    plt.ylabel('accuracy')
-    x = [m.multi_objective_value[0] for m in all_trails]
-    y = [m.objective_value for m in all_trails]
-    plt.scatter(x=x, y=y, c='r', marker='o')
-    plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
+    if is_double_image:
+      plt.subplot(2, 1, 2)
+      x = [m.multi_objective_value[0]for m in all_trails]
+      y = [m.objective_value for m in all_trails]
+
+      x_min = np.min(x)
+      x_max = np.max(x)
+      x_scale = 1.0 / (x_max - x_min)
+      x = [(xv - x_min)*x_scale for xv in x]
+
+      plt.xlabel('MULADD/FLOPS (scale=%0.6f)'%x_scale)
+      plt.ylabel('accuracy')
+
+      plt.scatter(x=x, y=y, c='r', marker='o')
+      plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
 
     plt.savefig('%s/study_%s_%s.png'%(dump_dir, study_name, time_str))
     return {'status': 'ok', 'result': '%s/study_%s_%s.png'%(dump_dir, study_name, time_str)}

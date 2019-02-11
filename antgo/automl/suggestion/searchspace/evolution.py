@@ -44,7 +44,7 @@ class EvolutionMutation(Mutation):
     self._branch_num = evolution_s.branch_num
 
     self._cell = Cell(self._branch_num, evolution_s.base_channel)
-    self._dna_func = evolution_s.dna
+    self._dna_func = evolution_s.encoder
 
     self._op_region = (0, self._block_num*self._cell_num*self._branch_num)                      # op type (0~1)
     offset = self._block_num*self._cell_num*self._branch_num
@@ -88,7 +88,10 @@ class EvolutionMutation(Mutation):
                              self._dna_func(individual.features[0], individual.features[1]),
                              None))
 
-    mutation_individuals = self.adaptive_mutate(fitness_values=fitness_values)
+    mutation_individuals = self.adaptive_mutate(fitness_values=fitness_values,
+                                                op_region=self._op_region,
+                                                connection_region=(self._block_connection_region_1[0],
+                                                                   self._branch_connection_region_2[1]),)
 
     for individual in mutation_individuals:
       if individual[-1] is not None:
@@ -101,14 +104,14 @@ class EvolutionMutation(Mutation):
           if p >= self._op_region[0] and p < self._op_region[1]:
             # change op as p
             cells = graph_info['cells']
+            blocks = graph_info['blocks']
             block_i = int(p) // int(self._cell_num*self._branch_num)
             cell_i = (int(p) - block_i * int(self._cell_num*self._branch_num)) // int(self._branch_num)
             branch_i = (int(p) - block_i * int(self._cell_num*self._branch_num)) % int(self._branch_num)
             self._cell.use_channels(graph_info['block_info'][block_i]['base_channel'])
-            new_branch_id = self._cell.change(graph, cells[cell_i][branch_i])
+            new_branch_id = self._cell.change(graph, cells[blocks[block_i][cell_i]][branch_i])
             cells[cell_i][branch_i] = new_branch_id
             graph_info['cells'] = cells
-
           elif p >= self._block_connection_region_1[0] and p < self._block_connection_region_1[1]:
             # change block connection type
             graph_info['connection']['block'][p-self._block_connection_offset] = random.choice([0, 0.5, 1])
@@ -138,7 +141,7 @@ class EvolutionMutation(Mutation):
               cell_i = (int(p - self._cell_connection_offset - self._block_num) - block_i * int(self._cell_num * self._cell_num)) // int(self._cell_num)
               cell_j = (int(p - self._cell_connection_offset - self._block_num) - block_i * int(self._cell_num * self._cell_num)) % int(self._cell_num)
               if cell_i != cell_j:
-                target = random.random([0,1])
+                target = random.choice([0, 1])
                 graph_info['connection']['cell_connection'][block_i][cell_i * self._cell_num + cell_j] = target
                 graph_info['connection']['cell_connection'][block_i][cell_j * self._cell_num + cell_i] = target
           elif p >= self._branch_connection_region_1[0] and p < self._branch_connection_region_1[1]:
@@ -184,13 +187,12 @@ class EvolutionCrossover(CrossOver):
     self._cell_num = evolution_s.cell_num
     self._branch_num = evolution_s.branch_num
 
-    self._dna_func = evolution_s.dna
-
+    self._dna_func = evolution_s.encoder
     self._op_region = (0, self._block_num*self._cell_num*self._branch_num)                      # op type (0~1)
     offset = self._block_num*self._cell_num*self._branch_num
 
     self._block_connection_region_1 = (offset, offset+1)                                        # 0(no connection), 0.5(random connection), 1(dense connection)
-    self._block_connection_region_2 = (offset+1,offset+1+self._block_num*self._block_num)       # 0(no connection), 1(connection)
+    self._block_connection_region_2 = (offset+1, offset+1+self._block_num*self._block_num)       # 0(no connection), 1(connection)
     self._block_connection_offset = self._op_region[1]
     offset = offset+1+self._block_num*self._block_num
 
@@ -344,7 +346,7 @@ class EvolutionSearchSpace(SearchSpace):
                   'max_generation': 100,
                   'mutation_multi_points': 5,
                   'crossover_multi_points': 2,
-                  'k0': 0.2,
+                  'k0': 0.1,
                   'k1': 1.0,}
 
   def __init__(self, study, **kwargs):
@@ -362,18 +364,26 @@ class EvolutionSearchSpace(SearchSpace):
     self.study_configuration = json.loads(study.study_configuration)
     # build nsga2 evolution algorithm
     mutation_control = EvolutionMutation(self,
-                           multi_points=int(kwargs.get('mutation_multi_points', EvolutionSearchSpace.default_params['mutation_multi_points'])),
+                           multi_points=int(kwargs.get('mutation_multi_points',
+                                                       EvolutionSearchSpace.default_params['mutation_multi_points'])),
                            generation=self.study_configuration['searchSpace']['current_population_tag'],
-                           max_generation=int(kwargs.get('max_generation', EvolutionSearchSpace.default_params['max_generation'])),
-                           k0=float(kwargs.get('k0', EvolutionSearchSpace.default_params['k0'])),
-                           k1=float(kwargs.get('k1', EvolutionSearchSpace.default_params['k1'])))
+                           max_generation=int(kwargs.get('max_generation',
+                                                         EvolutionSearchSpace.default_params['max_generation'])),
+                           k0=float(kwargs.get('k0',
+                                               EvolutionSearchSpace.default_params['k0'])),
+                           k1=float(kwargs.get('k1',
+                                               EvolutionSearchSpace.default_params['k1'])))
 
     crossover_control = EvolutionCrossover(self,
-                                   multi_points=int(kwargs.get('crossover_multi_points', EvolutionSearchSpace.default_params['crossover_multi_points'])),
+                                   multi_points=int(kwargs.get('crossover_multi_points',
+                                                               EvolutionSearchSpace.default_params['crossover_multi_points'])),
                                    generation=self.study_configuration['searchSpace']['current_population_tag'],
-                                   max_generation=int(kwargs.get('max_generation', EvolutionSearchSpace.default_params['max_generation'])),
-                                   k0=float(kwargs.get('k0', EvolutionSearchSpace.default_params['k0'])),
-                                   k1=float(kwargs.get('k1', EvolutionSearchSpace.default_params['k1'])))
+                                   max_generation=int(kwargs.get('max_generation',
+                                                                 EvolutionSearchSpace.default_params['max_generation'])),
+                                   k0=float(kwargs.get('k0',
+                                                       EvolutionSearchSpace.default_params['k0'])),
+                                   k1=float(kwargs.get('k1',
+                                                       EvolutionSearchSpace.default_params['k1'])))
 
     self.evolution_control = Nsga2(ModelProblem('MAXIMIZE'), mutation_control, crossover_control)
 
@@ -452,10 +462,10 @@ class EvolutionSearchSpace(SearchSpace):
         elite_population.population.append(me)
 
       if current_population_tag >= 1:
-        parent_population = Population()
-        parent_completed_trials = Trial.filter(study_name=self.study.name, tag=current_population_tag-1, status="Completed")
+        grandpa_population = Population()
+        grandpa_completed_trials = Trial.filter(study_name=self.study.name, tag=current_population_tag-1, status="Completed")
 
-        for t in parent_completed_trials:
+        for t in grandpa_completed_trials:
           me = self.evolution_control.problem.generateIndividual()
           me.id = t.name
           me.features = [Decoder().decode(t.structure[0]), t.structure[1]]
@@ -463,10 +473,11 @@ class EvolutionSearchSpace(SearchSpace):
           me.objectives[0] = t.objective_value
           me.objectives[1] = t.multi_objective_value[0]
           self.evolution_control.problem.calculate_objectives(me)
-          parent_population.population.append(me)
+          grandpa_population.population.append(me)
 
-        elite_population = self.evolution_control.evolve(parent_population, elite_population)
+        elite_population = self.evolution_control.evolve(grandpa_population, elite_population)
 
+      # cubate next generation by elite population
       offspring_population = self.evolution_control.create_children(elite_population)
       current_population_tag += 1
 

@@ -16,12 +16,14 @@ class Mutation(object):
     self.multi_points = multi_points    # -1: auto (simulated annealing)
     self.generation = kwargs.get('generation', 0)
     self.max_generation = kwargs.get('max_generation', 1)
-    self.k0 = kwargs.get('k0', 0.2)
+    self.k0 = kwargs.get('k0', 0.1)
     self.k1 = kwargs.get('k1', 1.0)
 
   def _mutate_based_matrices(self, *args, **kwargs):
     # fitness_values: [(index, fitness, gene, rate), (index, fitness, gene, rate), ...]
     fitness_values = kwargs['fitness_values']
+    op_region = kwargs['op_region']              # (start, end)
+    connection_region = kwargs['connection_region']
 
     N = len(fitness_values)
     M = fitness_values[0][2].shape[-1]
@@ -56,18 +58,39 @@ class Mutation(object):
 
     # which position in chromosome i should mutation
     sigma = np.sum(np.power(A - np.mean(A, 0), 2.0) * C, 0) / np.sum(C)
-    sigma = sigma / np.sum(sigma)
-    sigma = np.power(sigma, gamma)
-    sigma = sigma / (np.sum(sigma) + 0.000000001)
 
     mutation_result = []
     for f in fitness_values:
-      if random.random() >= alpha[f[0]]:
-        mutation_result.append(f + (None,))
-      else:
-        multi_points = self.multi_points if self.multi_points > 0 else int(alpha[f[0]] * M)
-        mutation_position = np.random.choice(list(range(f[2].shape[-1])), multi_points, False, sigma)
-        mutation_result.append(f + (mutation_position,))
+      # all individual should participate mutation process
+      # mutation points number
+      multi_points = self.multi_points if self.multi_points > 0 else int(alpha[f[0]] * M)
+
+      # op region mutation
+      op_multi_points = np.minimum(multi_points, op_region[1] - op_region[0])
+      op_sigma = sigma[op_region[0]:op_region[1]]
+      op_sigma = op_sigma / (np.sum(op_sigma) + 0.000000001)
+      op_sigma = np.power(op_sigma, gamma)
+      op_sigma = op_sigma / (np.sum(op_sigma) + 0.000000001)
+
+      op_mutation_position = np.random.choice(list(range(op_region[1]-op_region[0])),
+                                              op_multi_points,
+                                              False,
+                                              op_sigma)
+      op_mutation_position = np.arange(op_region[0],op_region[1])[op_mutation_position].tolist()
+
+      # connection region mutation
+      connection_multi_points = np.minimum(multi_points, connection_region[1] - connection_region[0])
+      connection_sigma = sigma[connection_region[0]:connection_region[1]]
+      connection_sigma = connection_sigma / (np.sum(connection_sigma) + 0.000000001)
+      connection_sigma = np.power(connection_sigma, gamma)
+      connection_sigma = connection_sigma / (np.sum(connection_sigma) + 0.000000001)
+
+      connection_mutation_position = np.random.choice(list(range(connection_region[1]-connection_region[0])),
+                                                      connection_multi_points,
+                                                      False,
+                                                      connection_sigma)
+      connection_mutation_position = np.arange(connection_region[0],connection_region[1])[connection_mutation_position].tolist()
+      mutation_result.append(f + (op_mutation_position+connection_mutation_position,))
 
     return mutation_result
 

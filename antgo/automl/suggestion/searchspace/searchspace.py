@@ -11,6 +11,7 @@ from antgo.automl.suggestion.searchspace.abstract_searchspace import *
 from antgo.automl.suggestion.searchspace.cell import *
 import numpy as np
 import random
+from itertools import chain
 
 
 class SearchSpace(AbstractSearchSpace):
@@ -110,6 +111,7 @@ class SearchSpace(AbstractSearchSpace):
     cells = []
     cell_id_offset = 0
     last_channel = self.cell.current_channel
+
     # reset cell channels
     self.cell.restore_channels()
     # build block stacks
@@ -244,11 +246,12 @@ class SearchSpace(AbstractSearchSpace):
                                  'cell': cell_connection_type,
                                  'cell_connection': cell_connections,
                                  'branch': branch_connection_type,
-                                 'branch_connection': branch_connections}}
+                                 'branch_connection': branch_connections},
+                  'ops': [default_graph.layer_list[s].layer_name for s in list(chain(*cells))]}
 
     return graph_encoder_str, graph_info
 
-  def dna(self, graph, graph_info):
+  def encoder(self, graph, graph_info):
     # graph only include no skip connection
     block_num = len(graph_info['blocks'])
     op_length = block_num * self.max_cell_num * self.branch_num
@@ -257,7 +260,7 @@ class SearchSpace(AbstractSearchSpace):
                         block_num * self.max_cell_num + \
                         block_num * self.max_cell_num * self.branch_num * self.branch_num
 
-    dna_vector = np.zeros((op_length+connection_length))
+    encoder_vector = np.zeros((op_length+connection_length))
 
     blocks = graph_info['blocks']
     cells = graph_info['cells']
@@ -269,35 +272,35 @@ class SearchSpace(AbstractSearchSpace):
         dna_cell_offset = cell_index * self.branch_num
 
         for branch_index, branch_id in enumerate(cells[cell_id]):
-          dna_vector[dna_block_offset + dna_cell_offset + branch_index] =\
+          encoder_vector[dna_block_offset + dna_cell_offset + branch_index] =\
             graph.layer_list[branch_id].layer_type_encoder
 
     # for connection region
     # 1.step block connection region
     offset = op_length
-    dna_vector[offset] = graph_info['connection']['block'][0]
-    dna_vector[offset+1:offset+1+block_num*block_num] = np.array(graph_info['connection']['block_connection'])
+    encoder_vector[offset] = graph_info['connection']['block'][0]
+    encoder_vector[offset+1:offset+1+block_num*block_num] = np.array(graph_info['connection']['block_connection'])
 
     # 2.step cell connection region
     offset += 1 + block_num * block_num
-    dna_vector[offset:offset+block_num] = np.array(graph_info['connection']['cell'])
+    encoder_vector[offset:offset+block_num] = np.array(graph_info['connection']['cell'])
 
     long_v = []
     for bb in range(block_num):
       long_v += graph_info['connection']['cell_connection'][bb]
 
-    dna_vector[offset+block_num:
+    encoder_vector[offset+block_num:
                offset+block_num+block_num * self.max_cell_num * self.max_cell_num] = np.array(long_v)
 
 
     # 3.step branch connection region
     offset += block_num + block_num * self.max_cell_num * self.max_cell_num
-    dna_vector[offset:offset+block_num * self.max_cell_num] = np.array(graph_info['connection']['branch'])
+    encoder_vector[offset:offset+block_num * self.max_cell_num] = np.array(graph_info['connection']['branch'])
     offset_in = offset + block_num * self.max_cell_num
 
     long_v = []
     for cc in range(len(cells)):
       long_v += graph_info['connection']['branch_connection'][cc]
 
-    dna_vector[offset_in:] = np.array(long_v)
-    return dna_vector
+    encoder_vector[offset_in:] = np.array(long_v)
+    return encoder_vector

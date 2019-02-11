@@ -24,12 +24,16 @@ class Cell(object):
     self.current_channel = base_channel
 
   def _branch(self, cell_name, block_name, output_channel, target_type=None):
-    branch_list = [v for k,v in self.branch_pool.items()]
+    branch_list = [v for k, v in self.branch_pool.items()]
     if target_type is None:
       branch_class = random.choice(branch_list)
-      return branch_class(output_channel=output_channel, cell_name=cell_name, block_name=block_name)
+      return branch_class(output_channel=output_channel,
+                          cell_name=cell_name,
+                          block_name=block_name)
     else:
-      return self.branch_pool[target_type](output_channel=output_channel, cell_name=cell_name, block_name=block_name)
+      return self.branch_pool[target_type](output_channel=output_channel,
+                                           cell_name=cell_name,
+                                           block_name=block_name)
 
   def random(self, graph, branch_start, cell_name='', block_name=''):
     cell_branches = []
