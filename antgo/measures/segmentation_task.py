@@ -278,21 +278,21 @@ class AntMeanIOUBoundary(AntMeasure):
         if l == 0:
           continue
 
-        # generate trimap for objects (predict)
-        predict_obj_map = np.zeros((rows, cols), dtype=np.int32)
-        predict_obj_map[np.where(predict == l)] = 1
-
-        predict_boundary = np.where((predict_obj_map[0:-1, 0:-1] - predict_obj_map[1:, 1:]) != 0)
-        predict_boundary = np.column_stack(predict_boundary)
-        predict_band_boundary = np.expand_dims(predict_boundary, 1) + offset
-        predict_band_boundary = predict_band_boundary.reshape(-1, 2)
-        index = np.where((predict_band_boundary[:, 0] > 0) &
-                         (predict_band_boundary[:, 1] > 0) &
-                         (predict_band_boundary[:, 0] < rows) &
-                         (predict_band_boundary[:, 1] < cols))
-        predict_trimap = np.zeros((rows, cols), dtype=np.int32)
-        predict_trimap[predict_band_boundary[index, 0], predict_band_boundary[index, 1]] = \
-          predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
+        # # generate trimap for objects (predict)
+        # predict_obj_map = np.zeros((rows, cols), dtype=np.int32)
+        # predict_obj_map[np.where(predict == l)] = 1
+        #
+        # predict_boundary = np.where((predict_obj_map[0:-1, 0:-1] - predict_obj_map[1:, 1:]) != 0)
+        # predict_boundary = np.column_stack(predict_boundary)
+        # predict_band_boundary = np.expand_dims(predict_boundary, 1) + offset
+        # predict_band_boundary = predict_band_boundary.reshape(-1, 2)
+        # index = np.where((predict_band_boundary[:, 0] > 0) &
+        #                  (predict_band_boundary[:, 1] > 0) &
+        #                  (predict_band_boundary[:, 0] < rows) &
+        #                  (predict_band_boundary[:, 1] < cols))
+        # predict_trimap = np.zeros((rows, cols), dtype=np.int32)
+        # predict_trimap[predict_band_boundary[index, 0], predict_band_boundary[index, 1]] = \
+        #   predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
 
         # generate trimap for object (gt)
         obj_map = np.zeros((rows, cols), dtype=np.int32)
@@ -310,6 +310,10 @@ class AntMeanIOUBoundary(AntMeasure):
         gt_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
           obj_map[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
 
+        predict_trimap = np.zeros((rows, cols), dtype=np.int32)
+        predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
+          predict[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
+
         # cv2.imshow("DD", (gt_trimap * 255).astype(np.uint8))
         # cv2.imshow("ZZ", (gt * 255).astype(np.uint8))
         # cv2.waitKey(0)
@@ -318,8 +322,7 @@ class AntMeanIOUBoundary(AntMeasure):
         sum_ti[l] += ti
 
         temp = np.zeros((rows, cols), dtype=np.int32)
-        temp[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
-          predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
+        temp[np.where(gt_trimap == 1)] = predict_trimap[np.where(gt_trimap == 1)]
 
         nii = len(np.where(temp == l)[0])
         sum_nii[l] += nii
