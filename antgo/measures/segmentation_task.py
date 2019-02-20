@@ -243,8 +243,6 @@ class AntMeanIOUBoundary(AntMeasure):
 
     super(AntMeanIOUBoundary, self).__init__(task, 'MeanIOUBoundary')
     assert(task.task_type == 'SEGMENTATION')
-    self._weight_with_texture = bool(getattr(self.task, 'MeanIOUBoundary_weight', 0))
-    self._texture_size = int(getattr(self.task, 'MeanIOUBoundary_texture_size', 25))
     self.is_support_rank = True
   
   def eva(self, data, label):
@@ -274,25 +272,27 @@ class AntMeanIOUBoundary(AntMeasure):
       
       gt_labels = set(gt.flatten())
       rows, cols = gt.shape[:2]
-      
-      # generate trimap for objects (predict)
-      predict_boundary = np.where((predict[0:-1, 0:-1] - predict[1:, 1:]) != 0)
-      predict_boundary = np.column_stack(predict_boundary)
-      predict_band_boundary = np.expand_dims(predict_boundary, 1) + offset
-      predict_band_boundary = predict_band_boundary.reshape(-1, 2)
-      index = np.where((predict_band_boundary[:, 0] > 0) &
-                       (predict_band_boundary[:, 1] > 0) &
-                       (predict_band_boundary[:, 0] < rows) &
-                       (predict_band_boundary[:, 1] < cols))
-      predict_trimap = np.zeros((rows, cols), dtype=np.int32)
-      predict_trimap[predict_band_boundary[index, 0], predict_band_boundary[index, 1]] = \
-          predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
 
-      
       for l in gt_labels:
         l = int(l)
         if l == 0:
           continue
+
+        # generate trimap for objects (predict)
+        predict_obj_map = np.zeros((rows, cols), dtype=np.int32)
+        predict_obj_map[np.where(predict == l)] = 1
+
+        predict_boundary = np.where((predict_obj_map[0:-1, 0:-1] - predict_obj_map[1:, 1:]) != 0)
+        predict_boundary = np.column_stack(predict_boundary)
+        predict_band_boundary = np.expand_dims(predict_boundary, 1) + offset
+        predict_band_boundary = predict_band_boundary.reshape(-1, 2)
+        index = np.where((predict_band_boundary[:, 0] > 0) &
+                         (predict_band_boundary[:, 1] > 0) &
+                         (predict_band_boundary[:, 0] < rows) &
+                         (predict_band_boundary[:, 1] < cols))
+        predict_trimap = np.zeros((rows, cols), dtype=np.int32)
+        predict_trimap[predict_band_boundary[index, 0], predict_band_boundary[index, 1]] = \
+          predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
 
         # generate trimap for object (gt)
         obj_map = np.zeros((rows, cols), dtype=np.int32)
@@ -306,54 +306,31 @@ class AntMeanIOUBoundary(AntMeasure):
                                  (gt_band_boundary[:, 1] > 0) &
                                  (gt_band_boundary[:, 0] < rows) &
                                  (gt_band_boundary[:, 1] < cols))
+        gt_trimap = np.zeros((rows, cols), dtype=np.int32)
+        gt_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
+          obj_map[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
 
-        # trimap = np.zeros((rows, cols), dtype=np.int32)
-        # trimap[gt_band_boundary[gt_band_index,0],gt_band_boundary[gt_band_index,1]] = 1
-        # cv2.imshow("DD", (trimap * 255).astype(np.uint8))
+        # cv2.imshow("DD", (gt_trimap * 255).astype(np.uint8))
         # cv2.imshow("ZZ", (gt * 255).astype(np.uint8))
         # cv2.waitKey(0)
+        # sum_ti[l] += len(obj_map[gt_band_index[0]])
+        ti = len(np.where(gt_trimap == 1)[0])
+        sum_ti[l] += ti
 
-        if self._weight_with_texture:
-          obj_texture = obj_map[0:-1, 0:-1] - obj_map[1:, 1:]
-          obj_texture = np.pad(obj_texture, [0,1], 'constant')
-          obj_texture = np.fabs(obj_texture)
+        temp = np.zeros((rows, cols), dtype=np.int32)
+        temp[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
+          predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
 
-          small_obj_texture = resize(obj_texture, (256, 256))
-          hot_kernel = np.ones((self._texture_size, self._texture_size))
-          weight_map = signal.convolve2d(small_obj_texture, hot_kernel, boundary='symm', mode='same')
-          
-          weight_map = weight_map / (np.max(weight_map) + 1e-6)
-          weight_map = resize(weight_map, (rows,cols))
-          
-          focus_weight = weight_map[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
-          sum_ti[l] += np.sum(focus_weight)
+        nii = len(np.where(temp == l)[0])
+        sum_nii[l] += nii
 
-          predicted_l = predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
-          nii_index = np.where(predicted_l == l)
-          nii = np.sum(focus_weight[nii_index])
-          sum_nii[l] += nii
-          
-          vv_index = np.where(predict_trimap == l)
-          vv = np.sum(weight_map[vv_index])
-          sum_ji[l] += vv
-          
-          if id is not None:
-            sample_scores.append(
-              {'id': id, 'score': float(nii) / float(np.sum(focus_weight) + vv - nii), 'category': l})
-        else:
-          sum_ti[l] += len(gt_band_index[0])
-  
-          predicted_l = predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
-          nii = len(np.where(predicted_l == l)[0])
-          sum_nii[l] += nii
-  
-          vv = len(np.where(predict_trimap == l)[0])
-          sum_ji[l] += vv
+        n_ji = len(np.where(predict_trimap == l)[0])
+        sum_ji[l] += n_ji
 
-          if id is not None:
-            sample_scores.append(
-              {'id': id, 'score': float(nii) / float(len(gt_band_index[0]) + vv - nii), 'category': l})
-      
+        if id is not None:
+          sample_scores.append(
+            {'id': id, 'score': float(nii) / float(ti + n_ji - nii), 'category': l})
+
     sum_nii = sum_nii[1:]
     sum_ti = sum_ti[1:]
     sum_ji = sum_ji[1:]

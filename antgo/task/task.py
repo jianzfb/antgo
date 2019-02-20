@@ -141,6 +141,9 @@ class AntTask(object):
   @property
   def class_label(self):
     return self._class_label
+  @class_label.setter
+  def class_label(self, val):
+    self._class_label = val
 
   @property
   def task_id(self):

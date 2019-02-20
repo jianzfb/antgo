@@ -441,9 +441,7 @@ class COCO2017(Dataset):
     self.task_test = getattr(self, 'task_test', None)
 
     assert(self.train_or_test in ['sample', 'train', 'val', 'test'])
-    if self.task_type == 'test':
-      assert (self.task_test in ['dev', 'challenge'])
-      assert(self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
+    assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
 
     # read sample data
     if self.train_or_test == 'sample':
@@ -547,6 +545,7 @@ class COCO2017(Dataset):
 
     return ann_file
 
+  @dataset_thread(16)
   def data_pool(self):
     if self.train_or_test == 'sample':
       sample_idxs = copy.copy(self.ids)
