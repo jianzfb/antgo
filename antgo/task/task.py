@@ -158,6 +158,8 @@ class AntTask(object):
     return ['OBJECT-DETECTION',
             'SEGMENTATION',
             'CLASSIFICATION',
+            'TRACK',
+            'PERSON_SEARCH',
             'IMAGETRANSFER',
             'STYLETRANSFER',
             'IMAGE_CAPTION',

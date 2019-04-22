@@ -73,10 +73,7 @@ class RecorderNode(Node):
     self._record_writer = RecordWriter(self._dump_dir)
 
   def action(self, *args, **kwargs):
-    value = copy.deepcopy(args[0])
-    if type(value) != list:
-      value = [value]
-    
+    value = [copy.deepcopy(args[0])]
     for entry in value:
       self._annotation_cache.put(copy.deepcopy(entry))
 

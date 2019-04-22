@@ -26,7 +26,6 @@ class AntVOCDet(AntMeasure):
   def __init__(self, task):
     super(AntVOCDet, self).__init__(task, 'VOC')
     assert(task.task_type == 'OBJECT-DETECTION')
-
     self.is_support_rank = True
 
   def eva(self, data, label):
@@ -44,17 +43,17 @@ class AntVOCDet(AntMeasure):
     # 1.step positive sample is overlap > 0.5
     for predict, gt in data:
       # sample id
-      sample_id = gt['id']
+      # sample_id = gt['id']
 
-      if predict is None:
+      if predict is None :
         for missed_gt_bi in range(len(gt['bbox'])):
           detection_label[gt['category_id'][missed_gt_bi]].append(1)
           detection_score[gt['category_id'][missed_gt_bi]].append(-float("inf"))
         continue
 
       det_bbox = predict['det-bbox']
-      det_score = predict['det-score'].flatten()
-      det_label = predict['det-label'].flatten()
+      det_score = predict['det-score']
+      det_label = predict['det-label']
 
       # ground truth bbox and categories
       gt_bbox = np.array(gt['bbox'])
@@ -101,12 +100,12 @@ class AntVOCDet(AntMeasure):
           detection_score[gt_category[m]].append(predict_score[dind])
           detection_label[gt_category[m]].append(1)
 
-          # record sample
-          samples_scores.append({'id': sample_id,
-                                 'score': 1,
-                                 'category': gt_category[m],
-                                 'box': gt_bbox[m].tolist(),
-                                 'index': sample_id * 100 + m})
+          # # record sample
+          # samples_scores.append({'id': sample_id,
+          #                        'score': 1,
+          #                        'category': gt_category[m],
+          #                        'box': gt_bbox[m].tolist(),
+          #                        'index': sample_id * 100 + m})
 
       # process none matched det
       for dind, d in enumerate(predict_box.tolist()):
@@ -120,20 +119,17 @@ class AntVOCDet(AntMeasure):
         detection_label[gt_category[missed_gt_bi]].append(1)
         detection_score[gt_category[missed_gt_bi]].append(-float("inf"))
 
-        # record sample
-        samples_scores.append({'id': sample_id,
-                               'score': 0,
-                               'category': gt_category[missed_gt_bi],
-                               'box': gt_bbox[missed_gt_bi].tolist(),
-                               'index': sample_id * 100 +  missed_gt_bi})
-
+        # # record sample
+        # samples_scores.append({'id': sample_id,
+        #                        'score': 0,
+        #                        'category': gt_category[missed_gt_bi],
+        #                        'box': gt_bbox[missed_gt_bi].tolist(),
+        #                        'index': sample_id * 100 + missed_gt_bi})
       #########################################################################
 
     # 2.step compute mean average precision
     voc_mean_map = []
     for predict, gt in zip(detection_label, detection_score):
-      # skip 0
-      
       result = vmap(predict, gt)
       if result is None:
         result = 0.0
@@ -174,8 +170,8 @@ class AntROCandAUCDet(AntMeasure):
                 continue
 
             det_bbox = predict['det-bbox']
-            det_score = predict['det-score'].flatten()
-            det_label = predict['det-label'].flatten()
+            det_score = predict['det-score']
+            det_label = predict['det-label']
 
             # ground truth bbox and categories
             gt_bbox = np.array(gt['bbox'])
@@ -291,8 +287,8 @@ class AntPRDet(AntMeasure):
                 continue
 
             det_bbox = predict['det-bbox']
-            det_score = predict['det-score'].flatten()
-            det_label = predict['det-label'].flatten()
+            det_score = predict['det-score']
+            det_label = predict['det-label']
 
             # ground truth bbox and categories
             gt_bbox = np.array(gt['bbox'])

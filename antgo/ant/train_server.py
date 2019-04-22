@@ -9,7 +9,7 @@ from antgo.ant.base import *
 from antgo.crowdsource.train_server import *
 from antgo.utils import logger
 from antgo.automl.suggestion.algorithm.grid_search import *
-from antgo.automl.suggestion.searchspace.dpc import *
+# from antgo.automl.suggestion.searchspace.dpc import *
 from antgo.automl.suggestion.searchspace.searchspace_factory import *
 from antgo.automl.suggestion.algorithm.hyperparameters_factory import *
 from antgo.automl.graph import *

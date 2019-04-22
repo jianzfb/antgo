@@ -8,13 +8,13 @@ import os.path
 from .simplecsvs import *
 from .simpleimages import *
 from .standard import *
-is_support_tf = True
-try:
-  from .tfrecordsreader import *
-  is_support_tf = True
-except:
-  is_support_tf = False
-
+# is_support_tf = True
+# try:
+#   from .tfrecordsreader import *
+#   is_support_tf = True
+# except:
+#   is_support_tf = False
+is_support_tf = False
 
 class AntDatasetFactory(object):
   factory_dataset = {}

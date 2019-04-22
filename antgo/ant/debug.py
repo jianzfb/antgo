@@ -16,6 +16,8 @@ import yaml
 from datetime import datetime
 from types import FunctionType
 from antgo import config
+from antgo.dataflow.recorder import *
+from antgo.dataflow.common import *
 
 def debug_training_process(dataset_func, param_config=None):
   # 0.step get global context
@@ -79,5 +81,7 @@ def debug_infer_process(dataset_func, param_config=None):
     config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
     Config.parse_xml(config_xml)
     dataset_obj = dataset_func('test', os.path.join(Config.data_factory, dataset_func.__name__))
+    dataset_obj = DataAnnotationBranch(Node.inputs(dataset_obj))
+    ctx.recorder = RecorderNode(Node.inputs(dataset_obj.output(1)))
 
-  ctx.call_infer_process(dataset_obj, dump_dir=dump_dir)
+  ctx.call_infer_process(dataset_obj.output(0), dump_dir=dump_dir)
