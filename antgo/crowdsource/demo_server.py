@@ -133,31 +133,17 @@ class BaseHandler(tornado.web.RequestHandler):
       ext_name = data_path.split('/')[-1].split('.')[-1].lower()
 
       if ext_name in ['jpg', 'jpeg', 'png', 'bmp', 'gif']:
-        image_data = Image.open(data_path)
-        img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
-        img_data = img_data.reshape((image_data.size[1], image_data.size[0], len(image_data.getbands())))
-        return img_data, data_name, 'IMAGE'
+        return data_path, data_name, 'IMAGE'
       elif ext_name in ['mp4', 'avi']:
-        reader = imageio.get_reader(data_path)
-        image_list = []
-        for im in reader:
-          img_data = np.fromstring(im.tobytes(), dtype=np.uint8)
-          img_data = img_data.reshape((im.shape[0], im.shape[1], im.shape[2]))
-          image_list.append(np.expand_dims(img_data, 0))
-
-        image_volume = np.vstack(image_list)
-        return image_volume, data_name, 'VIDEO'
+        return data_path, data_name, 'VIDEO'
       elif ext_name in ['txt']:
-        with open(data_path, 'r') as fp:
-          content = fp.read()
-          return content, data_name, 'FILE'
+        return data_path, data_name, 'FILE'
       else:
         # TODO: support video and sound
         logger.warn('dont support file type %s' % ext_name)
         return None, None, None
     else:
       return data, str(uuid.uuid4()), 'STRING'
-
 
   def postprocess_model_server(self, uuid_flag, demo_result):
     demo_predict = None
@@ -174,6 +160,8 @@ class BaseHandler(tornado.web.RequestHandler):
     demo_response = {'DATA': {}}
     if demo_predict['DATA'] is not None and demo_predict['TYPE'] is not None:
       demo_response = self._transfer('RESULT', demo_predict['DATA'], demo_predict['TYPE'], demo_response)
+    else:
+      demo_response = {'DATA': {'RESULT': {'DATA':'', 'TYPE': 'STRING'}}}
 
     for data in demo_predict_additional:
       data_type = data['TYPE']
@@ -251,6 +239,7 @@ class ClientQueryHandler(BaseHandler):
     model_datas = []
     model_data_names = []
     model_data_types = []
+    request_param = None
 
     data = self.get_argument('DATA', None)
     data_type = self.get_argument('DATA_TYPE', None)
@@ -295,8 +284,7 @@ class ClientQueryHandler(BaseHandler):
         model_data_names.append(model_data_name)
         model_data_types.append(model_data_type)
     else:
-      file_metas = self.request.files.get('file', None)
-      if not file_metas:
+      if len(self.request.files) == 0:
         self.set_status(400)
         self.write(json.dumps({'code': 'InvalidUploadFile', 'message': 'The input file is not uploaded correctly'}))
         self.finish()
@@ -304,12 +292,12 @@ class ClientQueryHandler(BaseHandler):
 
       file_paths = []
       file_names = []
-      for meta in file_metas:
-        _file_name = '%s_%s' % (str(uuid.uuid4()), meta['filename'])
+      for _, meta in self.request.files.items():
+        _file_name = '%s_%s' % (str(uuid.uuid4()), meta[0]['filename'])
         _file_path = os.path.join(upload_path, _file_name)
 
         with open(_file_path, 'wb') as fp:
-          fp.write(meta['body'])
+          fp.write(meta[0]['body'])
 
         file_paths.append(_file_path)
         file_names.append(_file_name)
@@ -362,8 +350,12 @@ class ClientQueryHandler(BaseHandler):
         model_data_names.append(model_data_name)
         model_data_types.append(model_data_type)
 
+      request_param = self.get_argument('params', None)
+      if request_param is not None:
+        request_param = json.loads(request_param)
+
     # no block
-    model_input = model_datas if len(model_datas) > 1 else model_datas[0]
+    model_input = (model_datas, model_data_types, request_param) if len(model_datas) > 1 else (model_datas[0], model_data_types[0], request_param)
     self.zmq_client_socket.send(dumps(model_input))
 
     # asyn
@@ -447,6 +439,7 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
     model_datas = []
     model_data_names = []
     model_data_types = []
+    request_param = None
 
     for file_path in file_paths:
       # check file basic infomation
@@ -468,7 +461,6 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
           self.write(json.dumps({'code': 'InvalidImageFormat', 'message': 'The input file is not in a valid image format that the service can support'}))
           self.finish()
           return
-
       try:
         model_data, model_data_name, model_data_type = self.preprocess_model_server(file_path, 'PATH')
       except:
@@ -476,7 +468,6 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
         self.write(json.dumps({'code': 'InvalidDetails', 'message': 'The input file parse error'}))
         self.finish()
         return
-
       if model_data is None:
         self.set_status(400)
         self.write(json.dumps({'code': 'InvalidDetails', 'message': 'The input file parse error'}))
@@ -488,7 +479,7 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
       model_data_types.append(model_data_type)
 
     # 3.step preprocess data, then submit to model
-    model_input = model_datas if len(model_datas) > 1 else model_datas[0]
+    model_input = (model_datas,model_data_types,request_param) if len(model_datas) > 1 else (model_datas[0], model_data_types[0], request_param)
 
     # no block
     self.zmq_client_socket.send(dumps(model_input))

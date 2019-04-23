@@ -114,6 +114,8 @@ class AntDemo(AntBase):
     demo_dataset._force_inputs_dirty()
     self.context.recorder = QueueRecorderNode(((), None), demo_dataset)
     self.context.recorder.dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'recorder')
+    if not os.path.exists(self.context.recorder.dump_dir):
+      os.makedirs(self.context.recorder.dump_dir)
 
     # 2.step prepare dump dir
     infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')

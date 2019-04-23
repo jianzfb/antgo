@@ -180,7 +180,6 @@ class QueueRecorderNode(Node):
 
       return transfer_result, transfer_result_type
 
-
   def record(self, val, **kwargs):
     results = []
     results_label = []
@@ -190,6 +189,8 @@ class QueueRecorderNode(Node):
           results.append({'RESULT': aa['RESULT'], 'RESULT_TYPE': aa['RESULT_TYPE']})
           aa.pop('RESULT')
           aa.pop('RESULT_TYPE')
+        else:
+          results.append({'RESULT': None, 'RESULT_TYPE': None})
 
         results_label.append(aa)
     else:
@@ -198,6 +199,8 @@ class QueueRecorderNode(Node):
           results.append({'RESULT': val['RESULT'], 'RESULT_TYPE': val['RESULT_TYPE']})
           val.pop('RESULT')
           val.pop('RESULT_TYPE')
+        else:
+          results.append({'RESULT': None, 'RESULT_TYPE': None})
 
         results_label.append(val)
       else:
@@ -221,14 +224,15 @@ class QueueRecorderNode(Node):
       #                           {'TYPE': 'AUDIO', 'PATH': ''}]
 
       # 1.step for main results
-      assert(result['RESULT_TYPE'] in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
       transfer_result = None
       transfer_result_type = None
-      try:
-        transfer_result, transfer_result_type = self._transfer_data(result, 'RESULT')
-      except:
-        transfer_result = None
-        transfer_result_type = None
+      if result['RESULT'] is not None and result['RESULT_TYPE'] is not None:
+        assert(result['RESULT_TYPE'] in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
+        try:
+          transfer_result, transfer_result_type = self._transfer_data(result, 'RESULT')
+        except:
+          transfer_result = None
+          transfer_result_type = None
 
       # 2.step for additional results
       transfer_additional_results = []
