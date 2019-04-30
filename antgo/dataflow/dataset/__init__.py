@@ -7,6 +7,7 @@ import os
 import os.path
 from .simplecsvs import *
 from .simpleimages import *
+from .simplevideos import *
 from .standard import *
 # is_support_tf = True
 # try:
@@ -33,10 +34,12 @@ class AntDatasetFactory(object):
     elif (parse_flag == 'tfrecord' or parse_flag == 'tfrecords') and is_support_tf:
       return TFRecordsReader
 
-    if name.startswith('tf') and is_support_tf:
+    if name.lower().startswith('tf') and is_support_tf:
       return TFRecordsReader
-    elif name.startswith('image'):
+    elif name.lower().startswith('image'):
       return SimpleImages
+    elif name.lower().startswith('video'):
+      return SimpleVideos
 
     return Standard
 
