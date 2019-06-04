@@ -1,10 +1,16 @@
-# simplization config version
-# set batch size
+# @Time    : {{ModelTime}}
+# @File    : {{ModelName}}_param.yaml
+# @Author  : {{ModelAuthor}}
+
 batch_size: 1
 # set how many model clone (every clone run on one device)
 num_clones: 1
 # set max run epoches
 max_epochs: 200
+# set model input size
+input_size: 32
+# set model output size
+output_size: 32
 # learning rate decay type
 learning_rate_decay_type: 'exponential'
 # learning rate decay factor

@@ -1,0 +1,428 @@
+# -*- coding: UTF-8 -*-
+# @Time    : {{ModelTime}}
+# @File    : {{ModelName}}_main.py
+# @Author  : {{ModelAuthor}}
+from __future__ import division
+from __future__ import unicode_literals
+from __future__ import print_function
+
+from antgo.dataflow.common import *
+from antgo.context import *
+from antgo.dataflow.dataset import *
+from antgo.measures import *
+from antgo.measures.base import *
+from antgo.trainer.trainer import *
+from antgo.ant.debug import *
+{% if tensorflow %}
+from antgo.trainer.tftrainer import *
+from antgo.codebook.tf.dataset import *
+import tensorflow as tf
+import tensorflow.contrib.slim as slim
+{% endif %}
+
+'''
+Antgo Machine Learning Running Framework Mechanism
++---------------------------------------------------------------+
+|                                                               |
+|                                                    MLTALKER   |
+|                                                               |
+| +----------------------------+          Experiment Manager    |
+| | AntGO                      |                                |
+| +--------+                   |          Experiment Analyse    |
+| ||Control|      Task         |                                |
+| +-+------+                   |          Experiment Vis        |
+| | |   Datasource    Measure  |                                |
+| | |       +   +        +     |                                |
+| | |       |or |        |     |                   ^            |
++---------------------------------------------------------------+
+  | |       |   v        |     |                   |
+  | |       |  framework |     |                   |
+  | |       |  dataflow  |     |                   |
+  | |       |  pipeline  |     |                   |
+  | |       |   +        |     |                   |
+  | |       v   v        |     |                   |
+  | | Framework Model    |     |                   |
+  | |    optimize        |     |                   |
+  | |       +            |     |                   |
+  | v       v            v     |                   |
+  | +-------+------------+-------------------------^
+  |                            |      Experiment Info
+  |                            |  (performance, and others)
+  |Customised Module           |
+  |   xx_main.py               |
+  +----------------------------+
+
+'''
+
+##################################################
+######## 1.step global interaction handle ########
+##################################################
+ctx = Context()
+
+
+##################################################
+###### 1.1.step build visualization chart  #######
+##################################################
+# every channel bind value type (NUMERIC, HISTOGRAM, IMAGE)
+loss_channel = ctx.job.create_channel("loss","NUMERIC")
+## bind channel to chart,every chart could include some channels
+ctx.job.create_chart([loss_channel], "Loss Curve", "step", "value")
+
+
+##################################################
+######## 2.step custom model building code  ######
+##################################################
+
+
+##################################################
+######## 2.1.step custom dataset parse code ######
+########    write dataset parse code if     ######
+#####  you want to parse your private dataset ####
+##################################################
+'''
+class {{ModelName}}Dataset(Dataset):
+  def __init__(self, train_or_test, dir=None, params=None):
+    super({{ModelName}}Dataset, self).__init__(train_or_test, dir, params)
+    # fill dataset
+    self.dataset = []
+    self.dataset_size = len(self.dataset)
+
+    # fill dataset annotation
+    self.label = []
+
+  @property
+  def size(self):
+    # return data size
+    return self.dataset_size
+
+  def split(self, split_params, split_method):
+    # set how to split dataset into val/test
+    assert (split_method == 'holdout')
+    return self, {{ModelName}}Dataset('val', self.dir, self.ext_params)
+
+  def data_pool(self):
+    for i in range(self.size):
+      yield self.dataset[i], self.label[i]
+
+  def model_fn(self, *args, **kwargs):
+    {% if tensorflow%}
+    # set tfrecords key features
+    keys_to_features = {
+        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
+        'image/format': tf.FixedLenFeature((), tf.string, default_value='jpg'),
+        'label/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
+        'label/format': tf.FixedLenFeature((), tf.string, default_value='jpg'),
+    }
+    items_to_handlers = {
+        'image': slim.tfexample_decoder.Image('image/encoded', 'image/format', channels=3),
+        'label': slim.tfexample_decoder.Image('label/encoded', 'label/format', channels=1),
+    }
+    decoder = slim.tfexample_decoder.TFExampleDecoder(keys_to_features, items_to_handlers)
+    
+    # set how to filter tfrecords by pattern
+    tfrecord_pattern = '*.tfrecords'
+    dataset = slim.dataset.Dataset(
+                data_sources=os.path.join(self.dir, self.train_or_test, tfrecord_pattern),
+                reader=tf.TFRecordReader,
+                decoder=decoder,
+                num_samples=self.size,
+                items_to_descriptions=None)
+    
+    # dataset provider
+    with tf.name_scope('dataset_data_provider'):
+        provider = slim.dataset_data_provider.DatasetDataProvider(
+            dataset,
+            num_readers=12,
+            common_queue_capacity=3000,
+            common_queue_min=1000,
+            shuffle=self.train_or_test,
+            num_epochs=None)
+
+        image, label = provider.get(['image', 'label'])
+        return image, label
+    {% endif %}
+'''
+
+##################################################
+######## 2.2.step custom metric code        ######
+##################################################
+'''
+class {{ModelName}}Measure(AntMeasure):
+  def __init__(self, task):
+    super({{ModelName}}Measure, self).__init__(task, '{{ModelName}}Measure')
+    self.is_support_rank = True
+
+  def eva(self, data, label):
+    if label is not None:
+        data = zip(data, label)
+
+    for predict, gt in data:
+      # predict come from your model
+      # gt come from annotation
+      pass
+
+    value = 0.0
+    return {'statistic': {'name': self.name,
+                          'value': [{'name': self.name, 'value': value, 'type': 'SCALAR'}]}}
+'''
+
+##################################################
+######## 2.3.step custom model code        ######
+##################################################
+{% if tensorflow %}
+'''
+there are three ways to feed data into tensorflow framework.
+method 1:
+independent tensorflow model pipeline
+
+method 2:
++--------------------------------------------------+
+|---------------+             +--------------------|
+||local dataflow+------------>+tensorflow pipeline||
+|---------------+             +--------------------|
++--------------------------------------------------+
+
+method 3:
++-----------------------------------------------+
+|---------------+             +-----------------|
+||local dataflow+------------>+tensorflow model||
+||              |             |     (feed)     ||
+|---------------+             +-----------------|
++-----------------------------------------------+
+'''
+{% endif %}
+# write your model code
+class {{ModelName}}Model(ModelDesc):
+  def __init__(self, model_data_source=None):
+    super({{ModelName}}Model, self).__init__({{ModelName}}Model, model_data_source=model_data_source)
+
+  {%if tensorflow %}
+  '''
+  if you want to adopt method 3 to connect datasource to tensorflow, you have to comment model_input
+  '''
+  def model_input(self, is_training, *args, **kwargs):
+    # online augmentation and preprocess module (for tensorflow)
+    # for method 1 and method 2, all data process operations must be finished inner tensorflow
+    if is_training:
+      # for train stage, get both data and label info
+      data, label = self.data_source.model_fn()
+
+      # step 1: online augmentation
+
+      # step 2: preprocess
+      # use ctx.params.input_size to resize data to fit your model
+      # ctx.params.input_size is set on {{ModelName}}_param.yaml
+
+      # step 3: warp to batch
+      # ctx.params.batch_size is set on {{ModelName}}_param.yaml
+      # ctx.params.num_clones is set on {{ModelName}}_param.yaml, which is computing hardware number
+      batch_data, batch_label = tf.train.shuffle_batch([data, label],
+                                                       batch_size=ctx.params.batch_size,
+                                                       num_threads=4,
+                                                       capacity=200,
+                                                       min_after_dequeue=100)
+      data_queue = slim.prefetch_queue.prefetch_queue([batch_data, batch_label],
+                                                      capacity=ctx.params.num_clones*2,
+                                                      num_threads=ctx.params.num_clones*2)
+      return data_queue
+    else:
+      # for non-train stage, only get data info
+      data = self.data_source.model_fn()
+
+      # step 1: preprocess
+      # ctx.params.batch_size is set on {{ModelName}}_param.yaml
+      batch_data = tf.train.batch([data],
+                                  batch_size=ctx.params.batch_size,
+                                  allow_smaller_final_batch=True)
+      return batch_data
+  {% endif %}
+
+  def model_fn(self, is_training=True, *args, **kwargs):
+    # write your own model code
+    {% if tensorflow %}
+    # for tensorflow
+    # step 1: unwarp data
+    batch_data = None
+    batch_label = None
+    if len(args) > 0:
+      # for method 1 and method 2
+      # on train or test stage, unwarp data from args (which comes from model_input())
+      if is_training:
+        batch_data, batch_label = args[0].dequeue()
+      else:
+        batch_data = args[0]
+    else:
+      # for method 3
+      # use placeholder
+      batch_data = tf.placeholder(tf.float32,
+                                  shape=[ctx.params.batch_size, ctx.params.input_size, ctx.params.input_size, 3],
+                                  name='data_node')
+
+      if not is_training:
+        batch_label = tf.placeholder(tf.int32,
+                                     shape=[ctx.params.batch_size, ctx.params.input_size, ctx.params.input_size, 1],
+                                     name='label_node')
+    {% else %}
+    # step 1: unwarp data
+    batch_data = None
+    batch_label = None
+    {% endif %}
+
+    # step 2: building model
+
+    logits = None
+
+    # step 3: output
+    if is_training:
+      # use logits to compute loss
+      loss = None
+      return loss
+    else:
+      # use logits to compute model predict
+      predict = None
+      return predict
+
+
+##################################################
+######## 3.step define training process  #########
+##################################################
+def training_callback(data_source, dump_dir):
+  {% if tensorflow %}
+  # 0.step bind data source and tensorflow data pipeline
+  # method 1
+  # use customized {{ModelName}}Dataset to parse dataset completely
+
+  # method 2
+  if data_source is not None and not data_source.name.startswith('{{ModelName}}Dataset'):
+    data_source = TFQueueDataset(data_source,
+                                 [tf.uint8,
+                                  tf.uint8],
+                                 [(None, None, 3),
+                                  (None,None,1)])
+
+  # 1.step build model and trainer
+  model = {{ModelName}}Model(data_source)
+
+  trainer = TFTrainer(dump_dir, is_training=True)
+  trainer.deploy(model)
+
+  # method 3
+  # # if you want to adopt 'method 3' feed data into model, you have to preprocess data by antgo provided methods
+  # # preprocess data
+  # # ...
+  # # warp data to batch
+  # batch_data_source = BatchData(Node.inputs(data_source), ctx.params.batch_size)
+  #
+  # for epoch in range(ctx.params.max_epochs):
+  #   while True:
+  #     try:
+  #       input_name = ''         # input_name is your defined input name in your model
+  #       input_binded_index = 0  # input_binded_index is binded index in your data source
+  #
+  #       label_name = ''         # label_name is your defined groundtruth name in your model
+  #       label_binded_index = 1  # label_binded_index is binded index in your data source
+  #       _, loss_val = trainer.run(batch_data_source.iterator_value(),
+  #                                 binds={input_name:input_binded_index, label_name:label_binded_index})
+  #
+  #       if trainer.iter_at % 100 == 0:
+  #         # record training info
+  #         loss_channel.send(trainer.iter_at, loss_val)
+  #
+  #     except:
+  #       break
+
+  # ctx.params.batch_size is set on {{ModelName}}_param.yaml
+  # ctx.params.num_clones is set on {{ModelName}}_param.yaml, which is computing hardware number
+  for epoch in range(ctx.params.max_epochs):
+    rounds = int(float(data_source.size) / float(ctx.params.batch_size * ctx.params.num_clones))
+    #logger.error(rounds)
+    for _ in range(rounds):
+      _, loss_val = trainer.run()
+      if trainer.iter_at % 100 == 0:
+        # record training info
+        loss_channel.send(trainer.iter_at, loss_val)
+
+    # save every epoch
+    trainer.snapshot(epoch)
+  {% else %}
+  pass
+  {% endif %}
+
+
+
+###################################################
+######## 4.step define infer process     ##########
+###################################################
+def infer_callback(data_source, dump_dir):
+  {% if tensorflow %}
+  # 0.step bind data source and tensorflow data pipeline
+  # method 1
+  # use customized {{ModelName}}Dataset to parse dataset completely
+
+  # method 2
+  if data_source is not None and not data_source.name.startswith('{{ModelName}}Dataset'):
+    data_source = TFQueueDataset(data_source,
+                                 [tf.uint8,
+                                  tf.uint8],
+                                 [(None, None, 3),
+                                  (None, None, 1)])
+
+  # 1.step build model and trainer
+  model = {{ModelName}}Model(data_source)
+
+  trainer = TFTrainer(dump_dir, is_training=False)
+  trainer.deploy(model)
+
+  # method 3
+  # # if you want to adopt 'method 3' feed data into model, you have to preprocess data by antgo provided methods
+  # # preprocess data
+  # # ...
+  # # warp data to batch
+  # batch_data_source = BatchData(Node.inputs(data_source), ctx.params.batch_size)
+  # for data in batch_data_source.iterator_value():
+  #   # execute infer process
+  #   input_data = data   # data from data source
+  #   input_name = ''     # input_name is your defined input name in your model
+  #
+  #   # run model inference
+  #   predict = trainer.run(**{input_name: input_data})
+  #
+  #   # post process predict result
+  #   # ...
+  #   post_process = predict
+  #
+  #   # record
+  #   ctx.recorder.record({'RESULT': post_process})
+  #
+  while True:
+    # run model inference
+    predict = trainer.run()
+    # post process predict result
+    # ...
+    post_process = predict
+
+    # record
+    ctx.recorder.record({'RESULT': post_process})
+
+  {% else %}
+  pass
+  {% endif %}
+
+###################################################
+####### 5.step link training and infer ############
+#######        process to context      ############
+###################################################
+ctx.training_process = training_callback
+ctx.infer_process = infer_callback
+
+
+###################################################
+###########    6.step test run         ############
+###########                            ############
+###################################################
+if __name__ == '__main__':
+  # 1.step debug training process
+  debug_training_process(lambda :(None,None), param_config='{{ModelName}}_param.yaml')
+
+  # 2.step debug infer process
+  debug_infer_process(lambda : (None), param_config='{{ModelName}}_param.yaml')

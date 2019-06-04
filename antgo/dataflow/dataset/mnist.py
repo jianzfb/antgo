@@ -182,7 +182,7 @@ class Mnist(Dataset):
         ids = [i for i in ids if i in filter_ids]
 
       for id in ids:
-        img = ds.images[id].reshape((28, 28))
+        img = ds.images[id].reshape((28, 28, 1))
         label = ds.labels[id]
 
         yield img, {'id': id, 'category_id': label}

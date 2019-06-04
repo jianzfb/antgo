@@ -29,14 +29,23 @@ class TFQueueDataset(object):
     self._coord = None
     self.sample_placeholder = []
     self.datasource = datasource
+    self._size = None
   
   @property
   def size(self):
-    return self.datasource.size
-  
+    if self._size is None:
+      return self.datasource.size
+    else:
+      return self._size
+
+  @size.setter
+  def size(self, val):
+    self._size = val
+
   @property
   def coord(self):
     return self._coord
+
   @coord.setter
   def coord(self, val):
     self._coord = val

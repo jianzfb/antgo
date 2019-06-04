@@ -1,5 +1,5 @@
 <task>
-    <task_name>xxx</task_name>
+    <task_name>{{ModelName}}</task_name>
     <task_type>xxx</task_type>
     <input>
         <source_data>

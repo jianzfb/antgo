@@ -18,6 +18,8 @@ from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
 from antgo.utils.dht import *
 from antgo import version
+from jinja2 import Environment, FileSystemLoader
+
 import multiprocessing
 import subprocess
 
@@ -61,6 +63,8 @@ flags.DEFINE_string('dump', None, 'dump dir')
 flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('proxy', None, 'proxy')
 flags.DEFINE_string('name', None, 'name')
+flags.DEFINE_string('author', None, 'author')
+flags.DEFINE_string('framework', None, 'tensorflow')
 flags.DEFINE_string('max_time', '10h', 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
@@ -212,15 +216,28 @@ def main():
 
     # generate main file and main param templates
     template_file_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates')
+    file_loader = FileSystemLoader(template_file_folder)
+    env = Environment(loader=file_loader)
+    template = env.get_template('task_main_file.template')
+    output = template.render(ModelTime=datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d'),
+                             ModelName=FLAGS.name(),
+                             ModelAuthor=FLAGS.author() if FLAGS.author() is not None else 'xxx',
+                             tensorflow=True if FLAGS.framework() == 'tensorflow' else False)
 
-    shutil.copy(os.path.join(template_file_folder, 'task_main_file.py'),
-                os.path.join(os.curdir, project_name, '%s_main_file.py' % project_name.lower()))
+    with open(os.path.join(os.curdir, project_name, '%s_main.py' % FLAGS.name()),'w') as fp:
+      fp.write(output)
 
-    shutil.copy(os.path.join(template_file_folder, 'task_main_param.yaml'),
-                os.path.join(os.curdir, project_name, '%s_main_param.py' % project_name.lower()))
+    template = env.get_template('task_main_param.template')
+    output = template.render(ModelTime=datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d'),
+                             ModelName=FLAGS.name(),
+                             ModelAuthor=FLAGS.author() if FLAGS.author() is not None else 'xxx')
+    with open(os.path.join(os.curdir, project_name, '%s_param.yaml' % FLAGS.name()),'w') as fp:
+      fp.write(output)
 
-    shutil.copy(os.path.join(template_file_folder, 'task.xml'),
-                os.path.join(os.curdir, project_name, '%s.xml' % project_name.lower()))
+    template = env.get_template('task.template')
+    output = template.render(ModelName=FLAGS.name())
+    with open(os.path.join(os.curdir, project_name, '%s_task.xml' % FLAGS.name()),'w') as fp:
+      fp.write(output)
 
     if FLAGS.automl():
       # worker shell
@@ -232,9 +249,12 @@ def main():
         fp.write('nohup antgo train --master --main_param=%s --signature=%s --port=xxx > run.log 2>&1 &'%('%s_main_param.py' % project_name.lower(), FLAGS.signature()))
 
     else:
-      with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
-        fp.write('nohup antgo xxx --main_file=%s --main_param=%s --task=%s > run.log 2>&1 &'%('%s_main_file.py' % project_name.lower(),'%s_main_param.py' % project_name.lower(), '%s.xml' % project_name.lower()))
-
+      if FLAGS.token() is None:
+        with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
+          fp.write('nohup antgo xxx --main_file=%s_main.py --main_param=%s_param.yaml --task=%s_task.xml > run.log 2>&1 &'%(FLAGS.name(),FLAGS.name(), FLAGS.name()))
+      else:
+        with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
+          fp.write('nohup antgo $1 --main_file=%s_main.py --main_param=%s_param.yaml --token=%s > run.log 2>&1 &'%(FLAGS.name(),FLAGS.name(), FLAGS.token()))
     return
 
   if ant_cmd == 'tools/tfgraph':

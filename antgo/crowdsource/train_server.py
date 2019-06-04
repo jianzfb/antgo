@@ -217,8 +217,8 @@ def launch_train_process(server_records, experiment_records, content):
 
   # prepare task xml file
   if server_records['token'] is None:
-    shutil.copy(server_records['task'], os.path.join(server_records['main_folder'], experiment_id, 'task.xml'))
-    cmd_shell += ' --task=task.xml'
+    shutil.copy(server_records['task'], os.path.join(server_records['main_folder'], experiment_id, 'task.template'))
+    cmd_shell += ' --task=task.template'
   else:
     cmd_shell += ' --token=%s' % server_records['token']
 
@@ -966,9 +966,9 @@ class TrainHanlder(BaseHandler):
         self.experiment_records.pop(experiment_id)
         return
 
-      shutil.copy(self.file_records[file_id], os.path.join(self.main_folder, experiment_id, 'task.xml'))
-      self.experiment_records[experiment_id]['task'] = os.path.join(self.main_folder, experiment_id, 'task.xml')
-      cmd_shell += ' --task=task.xml'
+      shutil.copy(self.file_records[file_id], os.path.join(self.main_folder, experiment_id, 'task.template'))
+      self.experiment_records[experiment_id]['task'] = os.path.join(self.main_folder, experiment_id, 'task.template')
+      cmd_shell += ' --task=task.template'
     else:
       cmd_shell += ' --token=%s'%token
 

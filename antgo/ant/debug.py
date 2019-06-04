@@ -19,6 +19,7 @@ from antgo import config
 from antgo.dataflow.recorder import *
 from antgo.dataflow.common import *
 
+
 def debug_training_process(dataset_func, param_config=None):
   # 0.step get global context
   ctx = get_global_context()
@@ -71,11 +72,13 @@ def debug_infer_process(dataset_func, param_config=None):
     os.makedirs(dump_dir)
   logger.info('start debug infer process')
   ctx.recorder = EmptyRecorderNode()
+  ctx.ant = True
 
   dataset_obj = None
   if isinstance(dataset_func, FunctionType):
     dataset_obj = RandomDataset('test', '')
     dataset_obj.data_func = dataset_func
+    ctx.call_infer_process(dataset_obj, dump_dir=dump_dir)
   else:
     Config = config.AntConfig
     config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
@@ -84,4 +87,4 @@ def debug_infer_process(dataset_func, param_config=None):
     dataset_obj = DataAnnotationBranch(Node.inputs(dataset_obj))
     ctx.recorder = RecorderNode(Node.inputs(dataset_obj.output(1)))
 
-  ctx.call_infer_process(dataset_obj.output(0), dump_dir=dump_dir)
+    ctx.call_infer_process(dataset_obj.output(0), dump_dir=dump_dir)
