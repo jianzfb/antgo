@@ -89,6 +89,31 @@ class PascalBase(Dataset):
                      'train',
                      'tvmonitor')
 
+    self._c_2_rgb = {0: (0, 0, 0),
+                     1: (128, 0, 0),
+                     2: (0, 128, 0),
+                     3: (128, 128, 0),
+                     4: (0, 0, 128),
+                     5: (128, 0, 128),
+                     6: (0, 128, 128),
+                     7: (128, 128, 128),
+                     8: (64, 0, 0),
+                     9: (192, 0, 0),
+                     10: (64, 128, 0),
+                     11: (192, 128, 0),
+                     12: (64, 0, 128),
+                     13: (192, 0, 128),
+                     14: (64, 128, 128),
+                     15: (192, 128, 128),
+                     16: (0, 64, 0),
+                     17: (128, 64, 0),
+                     18: (0, 192, 0),
+                     19: (128, 192, 0),
+                     20: (0, 64, 128)}
+    self._c_2_rgb_index = {}
+    for k, v in self._c_2_rgb.items():
+      self._c_2_rgb_index[k] = v[0]*255*255+v[1]*255+v[2]
+
     self._action_classes = {'phoning': 1,
                             'playinginstrument': 2,
                             'reading': 3,
@@ -275,12 +300,12 @@ class PascalBase(Dataset):
     objs = tree.findall('object')
 
     # Exclude the samples labeled as difficult
-    non_diff_objs = [
-        obj for obj in objs if int(obj.find('difficult').text) == 0]
+    # non_diff_objs = [
+    #     obj for obj in objs if int(obj.find('difficult').text) == 0]
     # if len(non_diff_objs) != len(objs):
     #     print 'Removed {} difficult objects'.format(
     #         len(objs) - len(non_diff_objs))
-    objs = non_diff_objs
+    # objs = non_diff_objs
 
     num_objs = len(objs)
 
@@ -303,6 +328,7 @@ class PascalBase(Dataset):
 
     # Load object bb and segmentation into a data frame.
     segmentation = []
+    segmentation_map = None
     person_action = []
     for ix, obj in enumerate(objs):
       bbox = obj.find('bndbox')
@@ -320,8 +346,15 @@ class PascalBase(Dataset):
 
       if has_seg and seg_img is not None:
         obj_seg = np.zeros((seg_img.shape[0], seg_img.shape[1]), np.uint8)
-        obj_seg[np.where(seg_img[:, :, 0] == cls)] = 255
+        seg_img_int = seg_img.astype(np.int32)
+        seg_img_index = seg_img_int[:,:,0]*255*255 + seg_img_int[:,:,1]*255 + seg_img_int[:,:,2]
+
+        obj_seg[np.where(seg_img_index == self._c_2_rgb_index[cls])] = cls
         segmentation.append(obj_seg)
+        if segmentation_map is None:
+          segmentation_map = np.zeros((seg_img.shape[0], seg_img.shape[1]), np.uint8)
+
+        segmentation_map[np.where(seg_img_index == self._c_2_rgb_index[cls])] = cls
 
       if category[-1] == 'person':
         action_cls = obj.find('actions')
@@ -345,8 +378,6 @@ class PascalBase(Dataset):
                   'person_action': person_action}
 
     if has_seg:
-      segmentation_map = seg_img[:, :, 0]
-      segmentation_map[np.where(segmentation_map == 255)] = 0
       annotation.update({'segmentation': segmentation, 'segmentation_map': segmentation_map})
 
     return annotation

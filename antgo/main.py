@@ -249,13 +249,21 @@ def main():
         fp.write('nohup antgo train --master --main_param=%s --signature=%s --port=xxx > run.log 2>&1 &'%('%s_main_param.py' % project_name.lower(), FLAGS.signature()))
 
     else:
-      if FLAGS.token() is None:
-        with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
-          fp.write('nohup antgo xxx --main_file=%s_main.py --main_param=%s_param.yaml --task=%s_task.xml > run.log 2>&1 &'%(FLAGS.name(),FLAGS.name(), FLAGS.name()))
+      template = env.get_template('task_shell.template')
+      output = ''
+      if FLAGS.token() is not None:
+        output = template.render(token=FLAGS.token(),
+                                 main_file='%s_main.py' % FLAGS.name(),
+                                 main_param='%s_param.yaml' % FLAGS.name())
       else:
-        with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
-          fp.write('nohup antgo $1 --main_file=%s_main.py --main_param=%s_param.yaml --token=%s > run.log 2>&1 &'%(FLAGS.name(),FLAGS.name(), FLAGS.token()))
-    return
+        output = template.render(task='%s_task.xml' % FLAGS.name(),
+                                 main_file='%s_main.py' % FLAGS.name(),
+                                 main_param='%s_param.yaml' % FLAGS.name())
+
+      with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
+        fp.write(output)
+
+      return
 
   if ant_cmd == 'tools/tfgraph':
     import antgo.codebook.tf.tftools as tftools

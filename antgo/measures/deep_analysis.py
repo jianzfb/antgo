@@ -27,7 +27,6 @@ def _whats_data(data_source, id, infos):
   
   return None
 
-#bug here#
 def discrete_multi_model_measure_analysis(samples_score, samples_map, data_source, filter_tag=None, random_sampling=5):
   # 95%, 52%, 42%, 13%, only best, 0%
   # correct is 1; error is 0
@@ -53,20 +52,20 @@ def discrete_multi_model_measure_analysis(samples_score, samples_map, data_sourc
 
   # sort cols
   cols_scores = np.sum(samples_score, axis=0)
-  cols_orders = np.argsort(-cols_scores)
+  cols_orders = np.argsort(-cols_scores)    # decending
   ordered_samples_score = samples_score[:, cols_orders]
   ordered_data_id = [samples_map[remained_id[i]]['id'] for i in cols_orders]
 
   # sort rows
   rows_scores = np.sum(ordered_samples_score, axis=1)
-  rows_orders = np.argsort(rows_scores)
+  rows_orders = np.argsort(-rows_scores)    # decending
   ordered_samples_score = ordered_samples_score[rows_orders, :]
   ordered_model_id = [i for i in rows_orders]
 
   score_hist = np.sum(ordered_samples_score, axis=0)
   score_hist = score_hist / float(model_num)
   # 95% (94% ~ 96%)
-  pos_95 = np.searchsorted(score_hist, [0.95])[0]
+  pos_95 = np.searchsorted(-score_hist, [-0.95])[0]
   pos_95_s = int(np.maximum(0, pos_95 - random_sampling/2))
   pos_95_e = int(np.minimum(samples_num, pos_95_s+random_sampling))
 
@@ -78,7 +77,7 @@ def discrete_multi_model_measure_analysis(samples_score, samples_map, data_sourc
                            samples_map[remained_id[index]]) for index in region_95]
 
   # 52%
-  pos_52 = np.searchsorted(score_hist, [0.52])[0]
+  pos_52 = np.searchsorted(-score_hist, [-0.52])[0]
   pos_52_s = int(np.maximum(0, pos_52 - random_sampling/2))
   pos_52_e = int(np.minimum(samples_num, pos_52_s+random_sampling))
   if pos_52_e <= pos_52_s:
@@ -89,7 +88,7 @@ def discrete_multi_model_measure_analysis(samples_score, samples_map, data_sourc
                            samples_map[remained_id[index]]) for index in region_52]
 
   # 42%
-  pos_42 = np.searchsorted(score_hist, [0.42])[0]
+  pos_42 = np.searchsorted(-score_hist, [-0.42])[0]
   pos_42_s = int(np.maximum(0, pos_42 - random_sampling/2))
   pos_42_e = int(np.minimum(samples_num, pos_42_s+random_sampling))
   if pos_42_e <= pos_42_s:
@@ -101,7 +100,7 @@ def discrete_multi_model_measure_analysis(samples_score, samples_map, data_sourc
                            samples_map[remained_id[index]]) for index in region_42]
   
   # 13%
-  pos_13 = np.searchsorted(score_hist, [0.13])[0]
+  pos_13 = np.searchsorted(-score_hist, [-0.13])[0]
   pos_13_s = int(np.maximum(0, pos_13 - random_sampling/2))
   pos_13_e = int(np.minimum(samples_num, pos_13_s+random_sampling))
   if pos_13_e <= pos_13_s:
@@ -113,7 +112,7 @@ def discrete_multi_model_measure_analysis(samples_score, samples_map, data_sourc
                            samples_map[remained_id[index]]) for index in region_13]
 
   # only best
-  pos_one = np.searchsorted(score_hist, [1.0/float(model_num)])[0]
+  pos_one = np.searchsorted(-score_hist, [-1.0])[0]
   pos_one_s = int(np.maximum(0, pos_one - random_sampling/2))
   pos_one_e = int(np.minimum(samples_num, pos_one_s+random_sampling))
   if pos_one_e <= pos_one_s:
@@ -125,7 +124,7 @@ def discrete_multi_model_measure_analysis(samples_score, samples_map, data_sourc
                             samples_map[remained_id[index]]) for index in region_one]
 
   # 0%
-  pos_zero = np.searchsorted(score_hist, [0.0])[0]
+  pos_zero = np.searchsorted(-score_hist, [0.0])[0]
   pos_zero_s = int(np.maximum(0, pos_zero - random_sampling / 2))
   pos_zero_e = int(np.minimum(samples_num, pos_zero_s + random_sampling))
   if pos_zero_e <= pos_zero_s:
@@ -166,18 +165,17 @@ def continuous_multi_model_measure_analysis(samples_score, samples_map, data_sou
   # low,  middle,  high
   model_num, samples_num = samples_score.shape[0:2]
 
-  # reorder rows (model)
-  model_score = np.sum(samples_score, axis=1)
-  reorganized_model_id = np.argsort(-model_score)
-
-  reorganized_samples_score = samples_score[reorganized_model_id.tolist(), :]
+  # reorder cols (samples)
+  model_score = np.sum(samples_score, axis=0)
+  reorganized_sample_id = np.argsort(-model_score)    # decending
+  output_reorganized_sample_id = [samples_map[remained_id[i]]['id'] for i in reorganized_sample_id]
+  reorganized_samples_score = samples_score[:, reorganized_sample_id]
   samples_score = reorganized_samples_score.copy()
 
-  # reorder cols (samples)
-  s = np.sum(reorganized_samples_score, axis=0)
-  reorganized_sample_id = np.argsort(-s)
-  output_reorganized_sample_id = [samples_map[remained_id[i]]['id'] for i in reorganized_sample_id]
-  reorganized_samples_score = samples_score[:, reorganized_sample_id.tolist()]
+  # reorder rows (models)
+  s = np.sum(reorganized_samples_score, axis=1)
+  reorganized_model_id = np.argsort(-s)               # decending
+  reorganized_samples_score = samples_score[reorganized_model_id, :]
 
   # high score region (0 ~ 1/10) - good
   region_start = 0
