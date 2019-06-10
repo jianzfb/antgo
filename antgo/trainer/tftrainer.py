@@ -184,8 +184,8 @@ def _get_init_fn(trainer_obj, model, dump_dir, ctx=None):
       
       if latest_checkpoint is not None:
         variables_to_restore = {}
-        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-
+        # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+        model_variables = tf.global_variables()
         exclusions = []
         checkpoint_exclude_scopes = getattr(trainer_obj, 'checkpoint_exclude_scopes', None)
         if checkpoint_exclude_scopes is not None:
@@ -231,8 +231,8 @@ def _get_init_fn(trainer_obj, model, dump_dir, ctx=None):
     # initilize model from dump_dir
     latest_checkpoint = tf.train.latest_checkpoint(dump_dir)
     variables_to_restore = {}
-    model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-
+    # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    model_variables = tf.global_variables()
     for var in model_variables:
       var_name = var.op.name
       variables_to_restore[var_name] = var
@@ -267,7 +267,8 @@ def _get_init_fn(trainer_obj, model, dump_dir, ctx=None):
   # TODO(sguada) variables.filter_variables()
   auxilary_variables_to_restore = []
   variables_to_restore = {}
-  model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+  # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+  model_variables = tf.global_variables()
   for var in model_variables:
     # transfer name
     var_name = var.op.name
@@ -497,9 +498,11 @@ class TFTrainer(Trainer):
     self.train_writer = None
 
     self._create_funcs = []
+    self._aux_init_funcs = []
 
   def restore_scopy_from(self, model, restore_scope, checkpoint_path):
-    model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    model_variables = tf.global_variables()
     variables_to_restore = {}
     for var in model_variables:
       if var.op.name.startswith(restore_scope):
@@ -710,8 +713,7 @@ class TFTrainer(Trainer):
         ####################################
         self.clones = tfmodel_deploy.create_clones(deploy_config,
                                                    network_fn,
-                                                   [data_queue] if data_queue is not None else None,
-                                                   {'trainer': self})
+                                                   [data_queue] if data_queue is not None else None)
         first_clone_scope = deploy_config.clone_scope(0)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, first_clone_scope)
 
@@ -810,8 +812,8 @@ class TFTrainer(Trainer):
           self.threads.extend(custom_threads)
         
         # Training saver
-        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-        self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=2)
+        # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+        self.saver = tf.train.Saver(max_to_keep=2)
 
         # Restore from checkpoint
         if not self.is_distribute_training or (self.is_distribute_training and self.rank == 0):
@@ -819,6 +821,10 @@ class TFTrainer(Trainer):
           if restore_fns is not None:
             for restore_fn in restore_fns:
               restore_fn(self.sess)
+
+          # Restore from custom auxilary init funcs
+          for func in self._aux_init_funcs:
+            func(self.sess)
 
         # resotre from auxilary checkpoint
         for auxilary_scope, auxilary_checkpoint in self.auxilary_checkpoints.items():
@@ -911,10 +917,14 @@ class TFTrainer(Trainer):
         if restore_fns is not None:
           for restore_fn in restore_fns:
             restore_fn(self.sess)
-        
+
+        # Restore from custom auxilary init funcs
+        for func in self._aux_init_funcs:
+          func(self.sess)
+
         # model saver
-        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-        self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
+        # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+        self.saver = tf.train.Saver(max_to_keep=1)
 
         # snapshot
         self.snapshot(0)
@@ -934,7 +944,8 @@ class TFTrainer(Trainer):
   def deploy(self, model, funcs=[]):
     # model context
     self.ctx.model = model
-    
+    model.trainer = self
+
     # deploy model
     if self.is_training:
       self.training_deploy(model, funcs)
@@ -960,4 +971,6 @@ class TFTrainer(Trainer):
     if self.coord is not None:
       self.coord.request_stop()
       self.coord.join(self.threads)
-  
+
+  def add_aux_init_func(self, func):
+    self._aux_init_funcs.append(func)

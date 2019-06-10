@@ -145,10 +145,18 @@ class ModelDesc(object):
     self._model_variables = None
 
     self._watch_vars = {}
+    self._trainer = None
 
   @property
   def name(self):
     return self.model_name
+
+  @property
+  def trainer(self):
+    return self._trainer
+  @trainer.setter
+  def trainer(self, val):
+    self._trainer = val
 
   # @property
   # def ctx(self):

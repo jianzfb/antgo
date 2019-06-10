@@ -15,6 +15,7 @@ from antgo.trainer.trainer import *
 from antgo.ant.debug import *
 {% if tensorflow %}
 from antgo.trainer.tftrainer import *
+from antgo.trainer.tfgantrainer import *
 from antgo.codebook.tf.dataset import *
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
@@ -243,6 +244,31 @@ class {{ModelName}}Model(ModelDesc):
 
   def model_fn(self, is_training=True, *args, **kwargs):
     # write your own model code
+    {% if GAN %}
+    {% if tensorflow %}
+    # step.1 build generative model
+
+    if is_training:
+      # step.2 build generative model loss
+      g_loss = None
+      # define generative loss tensor name
+      g_loss = tf.identity(g_loss, 'g_loss')
+
+      # step.3 build discriminative model
+
+      # step.4 build discriminative model loss
+      d_loss = None
+      # define discriminative loss tensor name
+      d_loss = tf.identity(d_loss, 'd_loss')
+
+      #
+      return {'g_loss': [], 'd_loss': []}
+    else:
+      # use generative model to create image
+      generate_img = None
+      return generate_img
+    {% endif %}
+    {% else %}
     {% if tensorflow %}
     # for tensorflow
     # step 1: unwarp data
@@ -273,7 +299,6 @@ class {{ModelName}}Model(ModelDesc):
     {% endif %}
 
     # step 2: building model
-
     logits = None
 
     # step 3: output
@@ -285,6 +310,7 @@ class {{ModelName}}Model(ModelDesc):
       # use logits to compute model predict
       predict = None
       return predict
+    {% endif %}
 
 
 ##################################################
@@ -304,19 +330,60 @@ def training_callback(data_source, dump_dir):
                                  [(None, None, 3),
                                   ()])
 
-  # 1.step build model and trainer
-  model = {{ModelName}}Model(data_source)
-
-  trainer = TFTrainer(dump_dir, is_training=True)
-  trainer.deploy(model)
-
   # method 1
   # # if you want to adopt 'method 1' feed data into model, you have to preprocess data by antgo provided methods
   # # preprocess data
   # # ...
   # # warp data to batch
   # batch_data_source = BatchData(Node.inputs(data_source), ctx.params.batch_size)
+
+  {% if GAN %}
+  model = {{ModelName}}Model(data_source)
+
+  trainer = TFGANTrainer(dump_dir, is_training=True)
+  # bind d_loss and its scope
+  # bind g_loss and its scope
+  trainer.deploy(model,
+                 d_loss={'scope': 'discriminator'},
+                 g_loss={'scope': 'generator'})
+
+  ##iterate run for method 1
+  #count = 0
+  #for epoch in range(ctx.params.max_epochs):
+  #  for batch_data in batch_data_source.iterator_value():
+  #      # step.1 run generative model
+  #      g_loss_val, ..., ... = trainer.g_loss_run(...=batch_data)
   #
+  #      # step.2 run discriminative model
+  #      d_loss_val, ..., ... = trainer.d_loss_run(...=...)
+  #
+  #      count += 1
+  #
+  #  # save model
+  #  trainer.snapshot(epoch, count)
+
+  count = 0
+  for epoch in range(ctx.params.max_epochs):
+    rounds = int(float(data_source.size) / float(ctx.params.batch_size * ctx.params.num_clones))
+    for _ in range(rounds):
+        # step.1 run generative model
+        g_loss_val, ..., ... = trainer.g_loss_run()
+
+        # step.2 run discriminative model
+        d_loss_val, ..., ... = trainer.d_loss_run()
+
+        count += 1
+
+    # save every epoch
+    trainer.snapshot(epoch, count)
+  {% else %}
+  # 1.step build model and trainer
+  model = {{ModelName}}Model(data_source)
+
+  trainer = TFTrainer(dump_dir, is_training=True)
+  trainer.deploy(model)
+
+  # # iterate run for method 1
   # for epoch in range(ctx.params.max_epochs):
   #   while True:
   #     try:
@@ -347,6 +414,7 @@ def training_callback(data_source, dump_dir):
 
     # save every epoch
     trainer.snapshot(epoch)
+  {% endif %}
   {% else %}
   pass
   {% endif %}
@@ -364,16 +432,8 @@ def infer_callback(data_source, dump_dir):
   # method 2
   if data_source is not None and not data_source.name.startswith('{{ModelName}}Dataset'):
     data_source = TFQueueDataset(data_source,
-                                 [tf.uint8,
-                                  tf.int32],
-                                 [(None, None, 3),
-                                  ()])
-
-  # 1.step build model and trainer
-  model = {{ModelName}}Model(data_source)
-
-  trainer = TFTrainer(dump_dir, is_training=False)
-  trainer.deploy(model)
+                                 [tf.uint8],
+                                 [(None, None, 3)])
 
   # method 1
   # # if you want to adopt 'method 1' feed data into model, you have to preprocess data by antgo provided methods
@@ -381,6 +441,38 @@ def infer_callback(data_source, dump_dir):
   # # ...
   # # warp data to batch
   # batch_data_source = BatchData(Node.inputs(data_source), ctx.params.batch_size)
+
+  {% if GAN %}
+  model = {{ModelName}}Model(data_source)
+
+  trainer = TFGANTrainer(dump_dir, is_training=False)
+  trainer.deploy(model)
+
+  ##iterate run for method 1
+  #for batch_data in batch_data_source.iterator_value():
+  #  fake_imgs = trainer.run(...=batch_data)
+  #  fake_imgs = np.split(fake_imgs, ctx.params.batch_size, 0)
+  #  # post process fake_imgs
+  #  # record
+  #  ctx.recorder.record([{'RESULT': fake_img} for fake_img in fake_imgs])
+
+  rounds = data_source.size // ctx.params.batch_size + 1
+  for _ in range(rounds):
+    fake_imgs = trainer.run()
+    fake_imgs = np.split(fake_imgs, ctx.params.batch_size, 0)
+
+    # post process fake_imgs
+
+    # record
+    ctx.recorder.record([{'RESULT': fake_img} for fake_img in fake_imgs])
+  {% else %}
+  # 1.step build model and trainer
+  model = {{ModelName}}Model(data_source)
+
+  trainer = TFTrainer(dump_dir, is_training=False)
+  trainer.deploy(model)
+
+  # # iterate run for method 1
   # while True:
   #   try:
   #     input_name = ''         # input_name is your defined input name in your model
@@ -404,6 +496,7 @@ def infer_callback(data_source, dump_dir):
     # record
     ctx.recorder.record([{'RESULT': result} for result in predict])
 
+  {% endif %}
   {% else %}
   pass
   {% endif %}

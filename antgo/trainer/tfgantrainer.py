@@ -17,6 +17,7 @@ import functools
 import os
 import re
 
+
 class TFGANTrainer(Trainer):
   def __init__(self, dump_dir, is_training=True):
     super(TFGANTrainer, self).__init__(is_training)
@@ -29,7 +30,6 @@ class TFGANTrainer(Trainer):
     self.saver = None
     self.sess = None
     self.graph = None
-    self.lr = None
 
     self.loss_list = {}
     self.update_list = {}
@@ -46,6 +46,8 @@ class TFGANTrainer(Trainer):
 
     self.summary_op = None
     self.train_writer = None
+
+    self.log_iter_at = {}
 
   def configure_optimizer(self, learning_rate):
     """Configures the optimizer used for training.
@@ -204,8 +206,8 @@ class TFGANTrainer(Trainer):
 
         if latest_checkpoint is not None:
           variables_to_restore = {}
-          model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-
+          # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+          model_variables = tf.global_variables()
           exclusions = []
           checkpoint_exclude_scopes = getattr(self, 'checkpoint_exclude_scopes', None)
           if checkpoint_exclude_scopes is not None:
@@ -251,7 +253,8 @@ class TFGANTrainer(Trainer):
       # initilize model from dump_dir
       latest_checkpoint = tf.train.latest_checkpoint(dump_dir)
       variables_to_restore = {}
-      model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+      # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+      model_variables = tf.global_variables()
 
       for var in model_variables:
         var_name = var.op.name
@@ -287,7 +290,8 @@ class TFGANTrainer(Trainer):
     # TODO(sguada) variables.filter_variables()
     auxilary_variables_to_restore = []
     variables_to_restore = {}
-    model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    model_variables = tf.global_variables()
     for var in model_variables:
       # transfer name
       var_name = var.op.name
@@ -342,7 +346,8 @@ class TFGANTrainer(Trainer):
     return func
 
   def restore_scopy_from(self, model, restore_scope, checkpoint_path):
-    model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+    model_variables = tf.global_variables()
     variables_to_restore = {}
     for var in model_variables:
       if var.op.name.startswith(restore_scope):
@@ -435,6 +440,9 @@ class TFGANTrainer(Trainer):
 
     # record iterator count
     self.iter_at += 1
+    if loss_name not in self.log_iter_at:
+      self.log_iter_at[loss_name] = 0
+    self.log_iter_at[loss_name] += 1
 
     if self.summary_op is not None:
       summary_op_val = result[0]
@@ -458,14 +466,17 @@ class TFGANTrainer(Trainer):
       self.loss_log[loss_name].add(loss_val)
 
       #
-      if self.iter_at % self.log_every_n_steps == 0:
+      if self.log_iter_at[loss_name] % self.log_every_n_steps == 0:
         if not self.is_distribute_training or (self.is_distribute_training and self.rank == 0):
           loss_log_str = ''
           for k,v in self.loss_log.items():
             loss_log_str = loss_log_str + ' %s %f'%(k, v.get())
 
           logger.info('(PID: %s) INFO: %s lr %f at iterator %d (%f sec/step)' %
-                      (str(os.getpid()),loss_log_str, self.sess.run(self.lr), self.iter_at,
+                      (str(os.getpid()),
+                       loss_log_str,
+                       self.sess.run(self.lr_list[loss_name]),
+                       self.log_iter_at[loss_name],
                        float(self.time_stat.get())))
     else:
       if not self.is_distribute_training or (self.is_distribute_training and self.rank == 0):
@@ -538,8 +549,7 @@ class TFGANTrainer(Trainer):
         #############################
         self.clones = tfmodel_deploy.create_clones(deploy_config,
                                                    network_fn,
-                                                   [data_queue] if data_queue is not None else None,
-                                                   {'trainer': self})
+                                                   [data_queue] if data_queue is not None else None)
 
         #########################################
         # Configure the optimization procedure. #
@@ -648,8 +658,8 @@ class TFGANTrainer(Trainer):
           self.threads.extend(custom_threads)
 
         # Training saver
-        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-        self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=2)
+        # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+        self.saver = tf.train.Saver(max_to_keep=2)
 
         # Restore from checkpoint
         restore_fns = self.get_init_fn(model, self.dump_dir, self.ctx)
@@ -730,8 +740,8 @@ class TFGANTrainer(Trainer):
             restore_fn(self.sess)
 
         # model saver
-        model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
-        self.saver = tf.train.Saver(var_list=model_variables, max_to_keep=1)
+        # model_variables = slim.get_model_variables() if model.model_variables is None else model.model_variables
+        self.saver = tf.train.Saver(max_to_keep=1)
 
         # snapshot
         self.snapshot(0)
@@ -750,6 +760,7 @@ class TFGANTrainer(Trainer):
   def deploy(self, model, *args, **kwargs):
     # model context
     self.ctx.model = model
+    model.trainer = self
 
     if self.is_training:
       self.training_deploy(model, *args, **kwargs)
