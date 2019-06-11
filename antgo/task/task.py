@@ -170,7 +170,8 @@ class AntTask(object):
             'IMAGE-GENERATION',
             'TTS',
             'LANDMARK',
-            'GENERATION']
+            'GENERATION',
+            'FACE_VERIFICATION']
 
 
 def create_dummy_task(task_type):

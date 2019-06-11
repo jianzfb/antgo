@@ -313,7 +313,19 @@ class CelebA(Dataset):
           boxes[0, 3] = int(y) + int(height)
           self._annotations[file_name]['bbox'] = boxes
         bounding_box_content = fp.readline()
-  
+
+    # 3.4 step person label
+    with open(os.path.join(self.dir, 'Anno', 'identity_CelebA.txt')) as fp:
+      content = fp.readline()
+      while content:
+        content = content.strip()
+        a, b = content.split(' ')
+        if a in self._annotations:
+          self._annotations[a]['category_id'] = int(b)
+          self._annotations[a]['category'] = b
+
+        content = fp.readline()
+
   @property
   def size(self):
     return len(self.ids)
