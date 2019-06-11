@@ -32,7 +32,7 @@ Config = config.AntConfig
 
 
 def imread(file):
-  img = scipy.misc.imread(file)
+  img = scipy.misc.imread(file,mode='RGB')
   return img
 
 
