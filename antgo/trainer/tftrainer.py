@@ -309,7 +309,7 @@ def _get_init_fn(trainer_obj, model, dump_dir, ctx=None):
     checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
   
   logger.info('load model from %s' % checkpoint_path)
-  return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=False) for vr in auxilary_variables_to_restore if len(vr) > 0]
+  return [slim.assign_from_checkpoint_fn(checkpoint_path, vr, ignore_missing_vars=True) for vr in auxilary_variables_to_restore if len(vr) > 0]
 
 
 def _convert_to_svg_graph(tf_graph_pb_file, dump_dir, scopes):
@@ -515,7 +515,7 @@ class TFTrainer(Trainer):
       checkpoint_path = tf.train.latest_checkpoint(checkpoint_path)
 
     logger.info('restore %s scope from %s' % checkpoint_path)
-    fn = slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore, ignore_missing_vars=False)
+    fn = slim.assign_from_checkpoint_fn(checkpoint_path, variables_to_restore, ignore_missing_vars=True)
     fn(self.sess)
 
   def run(self, *args, **kwargs):
