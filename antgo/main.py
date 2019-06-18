@@ -360,6 +360,8 @@ def main():
     ant_context.params = params
 
   ant_context.name = name
+  ant_context.data_factory = data_factory
+  ant_context.task_factory = task_factory
 
   # 8.4 step load experiment
   if FLAGS.from_experiment() is not None and \

@@ -240,11 +240,12 @@ if __name__ == '__main__':
       gt_second_x2 = gt_second_x1 + 0.1
       gt_second_y2 = gt_second_y1 + 0.2
 
-      det_result.append({'det-bbox': [[x1,y1,x2,y2],[second_x1,second_y1,second_x2,second_y2]],
-                         'det-score': [np.random.random(),np.random.random()],
+      det_result.append({'det-bbox': [[x1, y1, x2, y2], [second_x1, second_y1, second_x2, second_y2]],
+                         'det-score': [np.random.random(), np.random.random()],
                          'det-label': [0, 1]})
 
-      gt_result.append({'bbox':[[gt_x1,gt_y1,gt_x2,gt_y2],[gt_second_x1,gt_second_y1,gt_second_x2,gt_second_y2]],
+      gt_result.append({'bbox': [[gt_x1, gt_y1, gt_x2, gt_y2],
+                                 [gt_second_x1, gt_second_y1, gt_second_x2, gt_second_y2]],
                         'category_id': [0, 1]})
 
     data.append([det_result, gt_result])

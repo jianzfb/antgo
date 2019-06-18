@@ -347,7 +347,7 @@ class LocalRecorderNode(Node):
 
   def record(self, val, **kwargs):
     results = val
-    if type(val) != list or type(val) != tuple:
+    if type(val) != list and type(val) != tuple:
       results = [val]
 
     for index, result in enumerate(results):

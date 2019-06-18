@@ -91,6 +91,8 @@ class Context(object):
     self._debug = False
 
     self._name = ''
+    self._task_factory = None
+    self._data_factory = None
 
   def wait_until_clear(self):
     if self.job is not None:
@@ -315,3 +317,17 @@ class Context(object):
   @debug.setter
   def debug(self, val):
     self._debug = val
+
+  @property
+  def data_factory(self):
+    return self._data_factory
+  @data_factory.setter
+  def data_factory(self, val):
+    self._data_factory = val
+
+  @property
+  def task_factory(self):
+    return self._task_factory
+  @task_factory.setter
+  def task_factory(self, val):
+    self._task_factory = val

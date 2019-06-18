@@ -141,9 +141,29 @@ class PascalBase(Dataset):
 
     assert os.path.exists(self._data_path), 'path does not exist: {}'.format(self._data_path)
 
+    self._aug_dataset = []
+    self._aug_seg = []
+    if self._year == '2012':
+      train_aug = getattr(self, 'aug', None)
+      task_type = getattr(self, 'task_type', None)
+      if train_aug is not None and task_type == 'SEGMENTATION':
+        assert(os.path.exists(os.path.join(self.dir, 'SegmentationClassAug')))
+        assert(os.path.exists(os.path.join(self.dir, 'trainaug.txt')))
+        with open(os.path.join(self.dir, 'trainaug.txt'), 'r') as fp:
+          content = fp.readline()
+
+          while(content):
+            content = content.strip()
+            if content == "":
+              break
+
+            self._aug_dataset.append(os.path.join(self.dir, 'VOCdevkit/VOC2012/JPEGImages', '%s.jpg'%content))
+            self._aug_seg.append(os.path.join(self.dir, 'SegmentationClassAug', '%s.png'%content))
+            content = fp.readline()
+
   @property
   def size(self):
-    return len(self._image_index)
+    return len(self._image_index) + len(self._aug_dataset)
 
   def data_pool(self):
     if self.train_or_test == 'sample':
@@ -210,6 +230,27 @@ class PascalBase(Dataset):
         # [img, groundtruth]
         gt_roidb.update({'file_id': index})
         yield [image, gt_roidb]
+
+      if len(self._aug_dataset) > 0:
+        aug_indxs = np.arange(len(self._aug_dataset))
+        if self.rng:
+          self.rng.shuffle(aug_indxs)
+
+        for k in aug_indxs:
+          image_path = self._aug_dataset[k]
+          image_seg_path = self._aug_seg[k]
+
+          image = imread(image_path)
+          seg_img = imread(image_seg_path)
+          if len(seg_img.shape) == 3:
+            seg_img = seg_img[:,:,0]
+
+          seg_img[np.where(seg_img == 255)] = 0
+
+          yield image, {'segmentation_map': seg_img,
+                        'id': k+len(self._image_index),
+                        'info': (image.shape[0], image.shape[1], image.shape[2])}
+
   
   def at(self, id):
     if self.train_or_test == 'sample':

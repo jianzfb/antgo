@@ -14,17 +14,17 @@ __all__ = ['LFW']
 LFW_URL = 'http://vis-www.cs.umass.edu/lfw/index.html#download'
 class LFW(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
-    super(LFW, self).__init__(train_or_test, dir)
-    assert(train_or_test in ['train', 'sample'])
+    super(LFW, self).__init__(train_or_test, dir, params)
+    assert(train_or_test in ['train', 'test','sample'])
 
     # read sample data
     if self.train_or_test == 'sample':
       self.data_samples, self.ids = self.load_samples()
       return
 
-    image_flag = getattr(params, 'image', 'align')
+    self.image_flag = getattr(self, 'image', 'align')
     # 0.step maybe download
-    if image_flag == 'align':
+    if self.image_flag == 'align':
       if not os.path.exists(os.path.join(self.dir, 'lfw-deepfunneled')):
         self.download(self.dir,
                       file_names=[],
@@ -40,7 +40,7 @@ class LFW(Dataset):
                       is_gz=True)
     
     # 1.step data folder (wild or align)
-    if image_flag == 'align':
+    if self.image_flag == 'align':
       self._data_folder = os.path.join(self.dir, 'lfw-deepfunneled')
     else:
       self._data_folder = os.path.join(self.dir, 'lfw')
@@ -57,22 +57,86 @@ class LFW(Dataset):
         self._persons_id_str.append(person_id_str)
     
     id_set = set(self._persons_id_str)
-    person_id_map = {}
+    self.person_id_map = {}
     for s_i, s in enumerate(id_set):
-      person_id_map[s] = s_i
+      self.person_id_map[s] = s_i
     
     for person_id_str in self._persons_id_str:
-      person_id = person_id_map[person_id_str]
+      person_id = self.person_id_map[person_id_str]
       self._persons_id.append(person_id)
     
     self.ids = list(range(len(self._persons_list)))
 
     # fixed seed
     self.seed = time.time()
+
+    self.view = int(getattr(self, 'view', 0))
+    self.pairs = []
+    if self.view == 1:
+      if self.train_or_test == 'train':
+        with open(os.path.join(self.dir, 'pairsDevTrain.txt')) as fp:
+          same_pair_num = fp.readline()
+          same_pair_num = int(same_pair_num.strip())
+          for pair_i in range(same_pair_num):
+            content = fp.readline()
+            person_name, image_a, image_b = content.strip().split('\t')
+            person_a_image = '%s/%s_%04d.jpg'%(person_name, person_name, int(image_a))
+            person_b_image = '%s/%s_%04d.jpg'%(person_name, person_name, int(image_b))
+
+            self.pairs.append((person_a_image, person_b_image))
+
+          content = fp.readline()
+          while content:
+            content = content.strip()
+            if content == '':
+              break
+            diff_person_a_name, diff_person_a_index, diff_person_b_name, diff_person_b_index = \
+              content.split('\t')
+
+            diff_person_a_image = '%s/%s_%04d.jpg'%(diff_person_a_name, diff_person_a_name, int(diff_person_a_index))
+            diff_person_b_image = '%s/%s_%04d.jpg'%(diff_person_b_name, diff_person_b_name, int(diff_person_b_index))
+            self.pairs.append((diff_person_a_image, diff_person_b_image))
+
+            content = fp.readline()
+      elif self.train_or_test == 'test':
+        with open(os.path.join(self.dir, 'pairsDevTest.txt')) as fp:
+          same_pair_num = fp.readline()
+          same_pair_num = int(same_pair_num.strip())
+          for pair_i in range(same_pair_num):
+            content = fp.readline()
+            person_name, image_a, image_b = content.strip().split('\t')
+            person_a_image = '%s/%s_%04d.jpg' % (person_name, person_name, int(image_a))
+            person_b_image = '%s/%s_%04d.jpg' % (person_name, person_name, int(image_b))
+
+            self.pairs.append((person_a_image, person_b_image))
+
+          content = fp.readline()
+          while content:
+            content = content.strip()
+            if content == '':
+              break
+            diff_person_a_name, diff_person_a_index, diff_person_b_name, diff_person_b_index = \
+              content.split('\t')
+
+            diff_person_a_image = '%s/%s_%04d.jpg' % (diff_person_a_name, diff_person_a_name, int(diff_person_a_index))
+            diff_person_b_image = '%s/%s_%04d.jpg' % (diff_person_b_name, diff_person_b_name, int(diff_person_b_index))
+            self.pairs.append((diff_person_a_image, diff_person_b_image))
+
+            content = fp.readline()
+    else:
+      if os.path.exists(os.path.join(self.dir, 'pairs.txt')):
+        pass
+      if os.path.exists(os.path.join(self.dir, 'people.txt')):
+        pass
     
   @property
   def size(self):
-    return len(self.ids)
+    if self.view == 0:
+      return len(self.ids)
+    elif self.view == 1:
+      return len(self.pairs)
+    else:
+      return 0
   
   def data_pool(self):
     if self.train_or_test == 'sample':
@@ -91,35 +155,75 @@ class LFW(Dataset):
         break
       epoch += 1
     
-      # idxs = np.arange(len(self.ids))
-      idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(idxs)
-        
-      for k in idxs:
-        person_file = self._persons_list[k]
-        person_image = imread(person_file)
-        person_id_str = self._persons_id_str[k]
-        person_id = self._persons_id[k]
-        
-        yield [person_image, {'category_id': person_id,
-                              'category': person_id_str,
-                              'id': k,
-                              'info': [person_image.shape[0], person_image.shape[1], person_image.shape[2]]}]
-  
+      if self.view == 0:
+        idxs = copy.deepcopy(self.ids)
+        if self.rng:
+          self.rng.shuffle(idxs)
+
+        for k in idxs:
+          person_file = self._persons_list[k]
+          person_image = imread(person_file)
+          person_id_str = self._persons_id_str[k]
+          person_id = self._persons_id[k]
+
+          yield [person_image, {'category_id': person_id,
+                                'category': person_id_str,
+                                'id': k,
+                                'info': [person_image.shape[0], person_image.shape[1], person_image.shape[2]]}]
+      elif self.view == 1:
+        pair_ids = list(range(len(self.pairs)))
+        if self.rng:
+          self.rng.shuffle(pair_ids)
+        for pair_i in pair_ids:
+          person_a, person_b = self.pairs[pair_i]
+          person_a_name = person_a.split('/')[0]
+          person_b_name = person_b.split('/')[0]
+          person_a_path = os.path.join(self._data_folder, person_a)
+          person_a_image = imread(person_a_path)
+          person_b_path = os.path.join(self._data_folder, person_b)
+          person_b_image = imread(person_b_path)
+
+          data = np.stack([person_a_image, person_b_image],0)
+          yield data, {'a_category': person_a_name,
+                       'a_category_id': self.person_id_map[person_a_name],
+                       'b_category': person_b_name,
+                       'b_category_id': self.person_id_map[person_b_name],
+                       'id': pair_i}
+      else:
+        pass
+
   def at(self, id):
     if self.train_or_test == 'sample':
       return self.data_samples[id]
 
-    person_file = self._persons_list[id]
-    person_image = imread(person_file)
-    person_id_str = self._persons_id_str[id]
-    person_id = self._persons_id[id]
-  
-    return person_image, {'category_id': person_id,
-                          'category': person_id_str,
-                          'id': id,
-                          'info': [person_image.shape[0], person_image.shape[1], person_image.shape[2]]}
+    if self.view == 0:
+      person_file = self._persons_list[id]
+      person_image = imread(person_file)
+      person_id_str = self._persons_id_str[id]
+      person_id = self._persons_id[id]
+
+      return person_image, {'category_id': person_id,
+                            'category': person_id_str,
+                            'id': id,
+                            'info': [person_image.shape[0], person_image.shape[1], person_image.shape[2]]}
+    elif self.view == 1:
+      pair_i = id
+      person_a, person_b = self.pairs[pair_i]
+      person_a_name = person_a.split('/')[0]
+      person_b_name = person_b.split('/')[0]
+      person_a_path = os.path.join(self.dir, person_a)
+      person_a_image = imread(person_a_path)
+      person_b_path = os.path.join(self.dir, person_b)
+      person_b_image = imread(person_b_path)
+
+      data = np.stack([person_a_image, person_b_image], 0)
+      return data, {'a_category': person_a_name,
+                   'a_category_id': self.person_id_map[person_a_name],
+                   'b_category': person_b_name,
+                   'b_category_id': self.person_id_map[person_b_name],
+                   'id': pair_i}
+    else:
+      pass
   
   def split(self, split_params={}, split_method=''):
     assert (self.train_or_test == 'train')

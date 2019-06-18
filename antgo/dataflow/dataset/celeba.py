@@ -358,6 +358,7 @@ class CelebA(Dataset):
         image = imread(image_file)
 
         self._annotations[file_name].update({'id': k, 'info': [image.shape[0], image.shape[1], image.shape[2]]})
+        self._annotations[file_name].update({'name': file_name})
         yield [image, self._annotations[file_name]]
 
   def at(self, id):
@@ -368,6 +369,7 @@ class CelebA(Dataset):
     file_name = image_file.split('/')[-1]
     image = imread(image_file)
     self._annotations[file_name].update({'id': id, 'info': [image.shape[0], image.shape[1], image.shape[2]]})
+    self._annotations[file_name].update({'name': file_name})
     return image, self._annotations[file_name]
   
   def split(self, split_params={}, split_method='holdout'):

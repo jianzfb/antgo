@@ -20,7 +20,7 @@ class SimpleVideos(Dataset):
 
     self.data_files = []
     for data_file in os.listdir(os.path.join(self.dir, self.train_or_test)):
-      if data_file.lower().split('.')[-1] in ['mp4','mov']:
+      if data_file.lower().split('.')[-1] in ['mp4', 'mov', 'avi']:
         file_path = os.path.join(self.dir, self.train_or_test, data_file)
         self.data_files.append(file_path)
 
