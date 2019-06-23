@@ -14,7 +14,7 @@ class AntFaceVROC(AntMeasure):
   def __init__(self, task):
     super(AntFaceVROC, self).__init__(task, "FaceVROC")
     assert(task.task_type=='FACE_VERIFICATION')
-    self.dist_type = 'l2' # 'l2/inner product'
+    self.dist_type = getattr(self.task, 'dist_type', 'l2')
 
   def eva(self, data, label):
     if label is not None:

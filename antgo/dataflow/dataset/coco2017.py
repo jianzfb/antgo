@@ -593,7 +593,7 @@ class COCO2017(Dataset):
 
           for ix, obj in enumerate(annotation):
             x, y, w, h = obj['bbox']
-            boxes[ix, :] = [x, y, x + w - 1, y + h - 1]
+            boxes[ix, :] = [x, y, x + w, y + h]
 
             category_id[ix] = obj['category_id']
             category.append(category_id_name[obj['category_id']])

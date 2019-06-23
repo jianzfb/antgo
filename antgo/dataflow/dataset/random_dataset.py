@@ -30,7 +30,8 @@ class RandomDataset(Dataset):
     assert(self._data_func is not None)
 
     for _ in range(self.size):
-      yield self._data_func()
+      data = self._data_func()
+      yield data
 
   @property
   def data_func(self):

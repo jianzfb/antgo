@@ -136,7 +136,7 @@ class {{ModelName}}Dataset(Dataset):
             num_readers=12,
             common_queue_capacity=3000,
             common_queue_min=1000,
-            shuffle=self.train_or_test,
+            shuffle=self.train_or_test=='train',
             num_epochs=None)
 
         image, label = provider.get(['image', 'label'])
