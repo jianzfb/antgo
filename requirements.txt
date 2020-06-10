@@ -8,16 +8,14 @@ tqdm
 msgpack
 msgpack_numpy
 psutil
-pyzmq
 jinja2
 pyyaml
 requests
 tornado
 beautifulsoup4
 python-rocksdb
-ipfsapi
 imageio
-qiniu
 pycryptodome
 sklearn
 matplotlib==2.2.3
+prettytable

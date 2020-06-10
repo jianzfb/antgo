@@ -12,13 +12,14 @@ from antgo.measures.confusion_matrix import *
 import numpy as np
 
 
-__all__ = {'AntAccuracyMultiC': ('ACCURACY', 'CLASSIFICATION'),
+default = {'AntAccuracyMultiC': ('ACCURACY', 'CLASSIFICATION'),
            'AntConfusionMatrixMultiC': ('CONFUSION-MATRIX', 'CLASSIFICATION')}
 class AntAccuracyMultiC(AntMeasure):
   def __init__(self, task):
     super(AntAccuracyMultiC, self).__init__(task, 'ACCURACY')
     assert(task.task_type == 'CLASSIFICATION')
     self.is_support_rank = True
+    self.larger_is_better = 1
 
   def eva(self, data, label):
     '''

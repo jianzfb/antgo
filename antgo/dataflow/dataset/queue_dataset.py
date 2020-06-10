@@ -7,9 +7,9 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 from antgo.dataflow.dataset.dataset import Dataset
+from multiprocessing import Process,Queue
 import os
 import sys
-import zmq
 from antgo.utils.serialize import *
 from PIL import Image
 import imageio
@@ -17,11 +17,9 @@ import numpy as np
 
 
 class QueueDataset(Dataset):
-  def __init__(self):
+  def __init__(self, queue=None):
     super(QueueDataset, self).__init__('test', '', None)
-    context = zmq.Context()
-    self.socket = context.socket(zmq.REP)
-    self.socket.connect('ipc://%s'%str(os.getpid()))
+    self.queue = queue
 
   @property
   def size(self):
@@ -29,9 +27,6 @@ class QueueDataset(Dataset):
 
   def at(self, id):
     raise NotImplementedError
-
-  def put(self, data):
-    self.socket.send(dumps(data))
 
   def _video_iterator(self, video_path, request_param):
     reader = imageio.get_reader(video_path)
@@ -60,8 +55,7 @@ class QueueDataset(Dataset):
 
   def data_pool(self):
     while True:
-      data_pack = self.socket.recv()
-      data_pack = loads(data_pack)
+      data_pack = self.queue.get()
       if type(data_pack) == list and \
               (type(data_pack[0]) == list or type(data_pack[0]) == tuple):
         # multi-data

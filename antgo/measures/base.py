@@ -22,7 +22,7 @@ class AntMeasure(object):
     self._is_support_rank = False
     self._support_rank_index = 0
     self._crowdsource = False
-
+    self.larger_is_better = True
 
   @property
   def is_support_rank(self):
@@ -37,13 +37,6 @@ class AntMeasure(object):
   @support_rank_index.setter
   def support_rank_index(self, index):
     self._support_rank_index = index
-
-  @property
-  def is_inverse(self):
-    return self._is_inverse
-  @is_inverse.setter
-  def is_inverse(self, val):
-    self._is_inverse = val
 
   @property
   def crowdsource(self):

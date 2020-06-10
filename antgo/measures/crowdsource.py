@@ -8,7 +8,7 @@ from __future__ import print_function
 
 from antgo.task.task import *
 from antgo.measures.base import *
-from multiprocessing import Process, Pipe
+from multiprocessing import Process, Queue
 import numpy as np
 from antgo.utils.encode import *
 from antgo.utils import logger
@@ -18,7 +18,6 @@ import time
 import signal
 import requests
 from antgo.crowdsource.crowdsource_server import *
-import zmq
 
 
 def _is_open(check_ip, port):
@@ -42,6 +41,7 @@ def _pick_idle_port(from_port=40000, to_port=50000, check_count=20):
 
   return check_port
 
+
 class AntCrowdsource(AntMeasure):
   def __init__(self, task, name):
     super(AntCrowdsource, self).__init__(task, name)
@@ -55,10 +55,11 @@ class AntCrowdsource(AntMeasure):
     self._client_query_data = {}
     self._total_samples = 0
     self._client_html_template = ''
+    self._client_keywords_template = {}
 
     # {CLIENT_ID, {ID: [], RESPONSE: [], RESPONSE_TIME: [], START_TIME:, QUERY_INDEX:, IS_FINISHED:}}
     self._client_response_record = {}           # client response record
-    self._sample_finished_count = {}
+    self._sample_finished_count = {}            # sample number which has been finished
     self._dump_dir = ''
 
     # crowdsource measure flag
@@ -66,9 +67,6 @@ class AntCrowdsource(AntMeasure):
 
     self._app_token = None
     self._experiment_id = None
-
-    self._backend = zmq.Context().socket(zmq.REP)
-    self._backend.connect('ipc://%s'%str(os.getpid()))
 
     self._complex_degree = 0                    # 0,1,2,3,4,5 (subclass define)
     self._crowdsource_type = ''                 # (subclass define)
@@ -81,13 +79,23 @@ class AntCrowdsource(AntMeasure):
   @property
   def client_html_template(self):
     return self._client_html_template
+
   @client_html_template.setter
   def client_html_template(self, val):
     self._client_html_template = val
 
   @property
+  def client_keywords_template(self):
+    return self._client_keywords_template
+
+  @client_keywords_template.setter
+  def client_keywords_template(self, val):
+    self._client_keywords_template = val
+
+  @property
   def client_query_data(self):
     return self._client_query_data
+
   @client_query_data.setter
   def client_query_data(self, val):
     self._client_query_data = val
@@ -95,6 +103,7 @@ class AntCrowdsource(AntMeasure):
   @property
   def dump_dir(self):
     return self._dump_dir
+
   @dump_dir.setter
   def dump_dir(self, val):
     self._dump_dir = os.path.join(val,'static')
@@ -102,6 +111,7 @@ class AntCrowdsource(AntMeasure):
   @property
   def app_token(self):
     return self._app_token
+
   @app_token.setter
   def app_token(self, val):
     self._app_token = val
@@ -109,6 +119,7 @@ class AntCrowdsource(AntMeasure):
   @property
   def experiment_id(self):
     return self._experiment_id
+
   @experiment_id.setter
   def experiment_id(self, val):
     self._experiment_id = val
@@ -137,14 +148,6 @@ class AntCrowdsource(AntMeasure):
       self._crowdsource_estimated_time = estimated_time
       update_real_statistic['estimated_time'] = self._crowdsource_estimated_time
 
-    # notify api
-    if self.app_token is not None and len(update_real_statistic) > 0:
-      user_authorization = {'Authorization': "token " + self.app_token}
-      request_url = 'http://%s:%s/hub/api/crowdsource/evaluation/experiment/%s/info' % (Config.server_ip,
-                                                                                        Config.server_port,
-                                                                                        self.experiment_id)
-      requests.post(request_url, data=update_real_statistic, headers=user_authorization)
-
     # check is over?
     if len(self._sample_finished_count) == 0:
       return False
@@ -171,7 +174,7 @@ class AntCrowdsource(AntMeasure):
     response_data['PAGE_DATA'].update(custom_response)
     return response_data
 
-  def _prepare_next_page(self, client_id, query_index,record_db):
+  def _prepare_next_page(self, client_id, query_index, record_db):
     if query_index == len(self._client_response_record[client_id]['ID']) - 1:
       return self._prepare_stop_page()
 
@@ -181,29 +184,18 @@ class AntCrowdsource(AntMeasure):
     self._client_response_record[client_id]['QUERY_INDEX'] = query_index
     
     # 2.step server response
-    gt, predict = record_db.read(self._client_response_record[client_id]['ID'][query_index], 'groundtruth', 'predict')
+    tags = [b for a, b in self.client_keywords_template.items()]
+    datas = record_db.read(self._client_response_record[client_id]['ID'][query_index], *tags)
+    data_map = {}
+    for a, b in zip(tags, datas):
+      data_map[a] = b
+
     response_data = {}
     response_data['PAGE_DATA'] = {}
     # 2.1.step prepare page data
     for k, v in self.client_query_data['QUERY'].items():
       # k is name, v is type(IMAGE, SOUND, TEXT)
-      data = None
-      if k.startswith('GROUNDTRUTH_'):
-        k = k.replace('GROUNDTRUTH_', '')
-        if type(gt) == dict:
-          data = gt[k]
-        else:
-          data = gt
-
-        # ###test code ####
-        # data = (data * 255).astype(np.uint8)
-        # #################
-      elif k.startswith('PREDICT_'):
-        k = k.replace('PREDICT_', '')
-        if type(predict) == dict:
-          data = predict[k]
-        else:
-          data = predict
+      data = data_map[k]
 
       if v == 'IMAGE':
         # save to .png
@@ -290,27 +282,20 @@ class AntCrowdsource(AntMeasure):
       self._client_response_record[client_id] = client_record
 
       # 2.step server response
-      gt, predict = record_db.read(client_record['ID'][0], 'groundtruth', 'predict')
+      tags = [b for a,b in self.client_keywords_template.items()]
+      datas = record_db.read(client_record['ID'][0], *tags)
+      data_map = {}
+      for a,b in zip(tags, datas):
+        data_map[a] = b
+
       response_data = {}
       response_data['PAGE_STATUS'] = 'PREDICT'
       response_data['PAGE_DATA'] = {}
       # 2.1.step prepare page data
       for k, v in self.client_query_data['QUERY'].items():
         # k is name, v is type(IMAGE, SOUND, TEXT)
-        data = None
-        if k.startswith('GROUNDTRUTH_'):
-          k = k.replace('GROUNDTRUTH_', '')
-          if type(gt) == dict:
-            data = gt[k]
-          else:
-            data = gt
-        elif k.startswith('PREDICT_'):
-          k = k.replace('PREDICT_', '')
-          if type(predict) == dict:
-            data = predict[k]
-          else:
-            data = predict
-          
+        data = data_map[k]
+
         if v == 'IMAGE':
           # save to .png
           data_en = png_encode(data)
@@ -457,9 +442,12 @@ class AntCrowdsource(AntMeasure):
                         'time': self._crowdsource_start_time,
                         'complete': 0.0,
                         'bonus': self._crowdsource_bonum,
-                        'estimated_time':self._crowdsource_estimated_time}
+                        'estimated_time': self._crowdsource_estimated_time}
 
     # 1.step launch crowdsource server (independent process)
+    request_queue = Queue()
+    response_queue = Queue()
+
     process = multiprocessing.Process(target=crowdsrouce_server_start,
                                       args=(os.getpid(),
                                             self.experiment_id,
@@ -467,8 +455,11 @@ class AntCrowdsource(AntMeasure):
                                             '/'.join(os.path.normpath(self.dump_dir).split('/')[0:-1]),
                                             self.name,
                                             self.client_html_template,
+                                            self.client_keywords_template,
                                             idle_server_port,
-                                            crowdsource_info))
+                                            crowdsource_info,
+                                            request_queue,
+                                            response_queue))
     process.start()
 
     # 2.step listening crowdsource server is OK
@@ -495,17 +486,17 @@ class AntCrowdsource(AntMeasure):
       client_id = ''
       try:
         # 2.1 step receive request
-        client_query = self._backend.recv_json()
+        client_query = request_queue.get()
 
         # 2.2 step check query is legal
         if not self._query_is_legal(client_query):
           if self._client_response_record[client_query['CLIENT_ID']]['QUERY_INDEX'] == \
                   len(self._client_response_record[client_query['CLIENT_ID']]['ID']) - 1:
               # send stop page
-              self._backend.send_json(self._prepare_stop_page())
+              response_queue.put(self._prepare_stop_page())
           else:
             # send unknown page
-            self._backend.send_json({})
+            response_queue.put({})
           continue
           
         # client id
@@ -519,7 +510,7 @@ class AntCrowdsource(AntMeasure):
         if client_query['QUERY'] == 'START':
           logger.info('response client_id %s %s query'%(client_id, 'START'))
           response = self._start_click_branch(client_query, record_db)
-          self._backend.send_json(response)
+          response_queue.put(response)
           continue
 
         ########################################################
@@ -528,15 +519,15 @@ class AntCrowdsource(AntMeasure):
         if client_query['QUERY'] == 'NEXT':
           logger.info('response client_id %s %s query'%(client_id, 'NEXT'))
           response = self._next_click_branch(client_query, record_db)
-          self._backend.send_json(response)
+          response_queue.put(response)
           continue
 
         logger.error('client_id %s unknow error'%client_id)
-        self._backend.send_json({})
+        response_queue.put({})
         continue
       except:
         logger.error('client_id %s unknow error'%client_id)
-        self._backend.send_json({})
+        response_queue.put({})
     
     # save crowdsource client response
     with open(os.path.join(self.dump_dir, 'crowdsource_record.txt'), 'w') as fp:

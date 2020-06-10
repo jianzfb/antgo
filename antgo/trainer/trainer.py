@@ -8,7 +8,6 @@ from __future__ import unicode_literals
 import re
 from abc import ABCMeta, abstractmethod
 from antgo.context import *
-from antgo.automl.graph import *
 import collections
 
 

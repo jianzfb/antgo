@@ -9,7 +9,7 @@ from antgo.measures.base import *
 from antgo.utils._bbox import bbox_overlaps
 from antgo.task.task import *
 
-__all__={'AntTrackStability': ('TrackStability', 'TRACK')}
+default={'AntTrackStability': ('TrackStability', 'TRACK')}
 
 
 class AntTrackStability(AntMeasure):

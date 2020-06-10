@@ -197,9 +197,13 @@ def everything_to_html(data, dump_dir):
           eye_sample['SCORE'] = sample_score
           # 2.step warp data to eye sample
           if sample['data_type'] == 'IMAGE':
-            with open(os.path.join(dump_dir, 'eye_analysis', '%s.png' % str(sample_id)), 'wb') as fp:
-              fp.write(sample_data)
-            eye_sample['DATA'] = './eye_analysis/%s.png' % str(sample_id)
+            if type(sample_data) == str:
+              eye_sample['DATA'] = 'data:image/png;base64,%s' % sample_data
+            else:
+              with open(os.path.join(dump_dir, 'eye_analysis', '%s.png' % str(sample_id)), 'wb') as fp:
+                fp.write(sample_data)
+              eye_sample['DATA'] = './eye_analysis/%s.png' % str(sample_id)
+
             eye_sample['DATA_TYPE'] = 'IMAGE'
           elif sample['data_type'] == 'STRING':
             eye_sample['DATA'] = sample_data
@@ -207,9 +211,12 @@ def everything_to_html(data, dump_dir):
             
           # 3.step warp gt to eye sample
           if sample['category_type'] == 'IMAGE':
-            with open(os.path.join(dump_dir, 'eye_analysis', '%s_gt.png' % str(sample_id)), 'wb') as fp:
-              fp.write(sample_category)
-            eye_sample['GT'] = './eye_analysis/%s_gt.png' % str(sample_id)
+            if type(sample_category) == str:
+              eye_sample['GT'] = 'data:image/png;base64,%s' % sample_data
+            else:
+              with open(os.path.join(dump_dir, 'eye_analysis', '%s_gt.png' % str(sample_id)), 'wb') as fp:
+                fp.write(sample_category)
+              eye_sample['GT'] = './eye_analysis/%s_gt.png' % str(sample_id)
             eye_sample['GT_TYPE'] = 'IMAGE'
           elif sample['category_type'] == 'STRING':
             eye_sample['GT'] = sample_category
@@ -326,7 +333,8 @@ def _transform_statistic_to_visualization(statistic_info):
       elif sta_info['statistic']['value'][index]['type'] == 'IMAGE':
         image_value = sta_info['statistic']['value'][index]['value']
         # image
-        reorganized_statistic_value = _transform_image_data(image_value)
+        # reorganized_statistic_value = _transform_image_data(image_value)
+        reorganized_statistic_value = image_value
 
         sta_info_cpy = copy.deepcopy(sta_info)
         sta_info_cpy['statistic']['value'] = [sta_info['statistic']['value'][index]]
@@ -353,7 +361,7 @@ def _transform_analysis_to_visualization(analysis_info, dump_dir):
     analysis_data = data['analysis_data']
     item = {}
     item['name'] = '%s-%s'%(analysis_name, analysis_tag)
-    item['value'] = analysis_data['value'].tolist()
+    item['value'] = analysis_data['value'].tolist() if type(analysis_data['value']) != list else analysis_data['value']
     if type(analysis_data['x']) == list:
       item['x'] = analysis_data['x']
     else:
@@ -370,7 +378,7 @@ def _transform_analysis_to_visualization(analysis_info, dump_dir):
       mmm = []
       for sampling_data in sampling['data']:
         if sampling_data['type'] == 'IMAGE':
-          if type(sampling_data) == str:
+          if type(sampling_data['data']) == str:
             mmm.append({'data':'data:image/png;base64,%s'%sampling_data['data'], 'flag': '', 'type': sampling_data['type']})
           else:
             if not os.path.exists(os.path.join(dump_dir, 'statistic_analysis')):

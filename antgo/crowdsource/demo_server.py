@@ -15,7 +15,6 @@ from tornado import httpclient
 import tornado.web
 from antgo.utils import logger
 import os
-import zmq
 import shutil
 import json
 import numpy as np
@@ -25,7 +24,6 @@ from PIL import Image
 import imageio
 import uuid
 import signal
-from zmq.eventloop import future
 from ..utils.serialize import loads,dumps
 from antgo.crowdsource.utils import *
 import functools
@@ -96,8 +94,12 @@ class BaseHandler(tornado.web.RequestHandler):
     return user_demo_constraint
 
   @property
-  def zmq_client_socket(self):
-    return self.settings['zmq_client_socket']
+  def dataset_queue(self):
+    return self.settings['dataset_queue']
+
+  @property
+  def recorder_queue(self):
+    return self.settings['recorder_queue']
 
   def _transfer(self, data_key, data_value, data_type, demo_response):
     if data_type == 'IMAGE':
@@ -354,21 +356,13 @@ class ClientQueryHandler(BaseHandler):
       if request_param is not None:
         request_param = json.loads(request_param)
 
-    # no block
+    # push to backend
     model_input = (model_datas, model_data_types, request_param) if len(model_datas) > 1 else (model_datas[0], model_data_types[0], request_param)
-    self.zmq_client_socket.send(dumps(model_input))
+    self.dataset_queue.put(model_input)
 
-    # asyn
-    result = yield self.zmq_client_socket.recv()
-    demo_result = None
-    try:
-      result = loads(result)
-      _, demo_result = result
-    except:
-      self.set_status(500)
-      self.write(json.dumps({'code': 'FailedToProcess', 'message': 'Failed to Process'}))
-      self.finish()
-      return
+    # wating to get result from backend
+    result = self.recorder_queue.get()
+    _, demo_result = result
 
     # data type: 'FILE', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
     # data:       PATH,  '',        PATH,    PATH,    PATH
@@ -481,20 +475,9 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
     # 3.step preprocess data, then submit to model
     model_input = (model_datas,model_data_types,request_param) if len(model_datas) > 1 else (model_datas[0], model_data_types[0], request_param)
 
-    # no block
-    self.zmq_client_socket.send(dumps(model_input))
-
-    # asyn
-    result = yield self.zmq_client_socket.recv()
-    demo_result = None
-    try:
-      result = loads(result)
-      _, demo_result = result
-    except:
-      self.set_status(500)
-      self.write(json.dumps({'code': 'FailedToProcess', 'message': 'Failed to Process'}))
-      self.finish()
-      return
+    self.dataset_queue.put(model_input)
+    result = self.recorder_queue.get()
+    _, demo_result = result
 
     # data type: 'FILE', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
     # data:       PATH,  '',        PATH,    PATH,    PATH
@@ -550,17 +533,15 @@ def demo_server_start(demo_name,
                       demo_dump_dir,
                       html_template,
                       server_port,
-                      parent_id):
+                      parent_id,
+                      dataset_queue,
+                      recorder_queue):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
   
   try:
     # 0.step define http server port
     define('port', default=server_port, help='run on port')
-
-    zmq_ctx = future.Context.instance()
-    client_socket = zmq_ctx.socket(zmq.REQ)
-    client_socket.bind('ipc://%s'%str(parent_id))
 
     # 1.step prepare static resource
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
@@ -603,7 +584,8 @@ def demo_server_start(demo_name,
       'support_user_input': support_user_input,
       'support_user_interaction': support_user_interaction,
       'support_user_constraint': support_user_constraint,
-      'zmq_client_socket': client_socket,
+      'dataset_queue': dataset_queue,
+      'recorder_queue': recorder_queue
     }
     app = tornado.web.Application(handlers=[(r"/", IndexHandler),
                                             (r"/demo", IndexHandler),

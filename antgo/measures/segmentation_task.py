@@ -12,7 +12,7 @@ from antgo.dataflow.common import *
 from antgo.utils._resize import *
 from scipy import signal
 
-__all__ = {'AntPixelAccuracySeg': ('PixelAccuracy', 'SEGMENTATION'),
+default = {'AntPixelAccuracySeg': ('PixelAccuracy', 'SEGMENTATION'),
            'AntMeanAccuracySeg': ('MeanAccuracy', 'SEGMENTATION'),
            'AntMeanIOUSeg': ('MeanIOU', 'SEGMENTATION'),
            'AntFrequencyWeightedIOUSeg': ('FrequencyWeightedIOU', 'SEGMENTATION'),

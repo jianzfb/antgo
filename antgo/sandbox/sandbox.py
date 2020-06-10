@@ -84,15 +84,15 @@ def running_sandbox(*wargs, **kwargs):
     timer_thread.stop()
     timer_thread.join()
 
-  # launch experiment save process
-  logger.info('launch upload experiment record in the running end')
-  process = multiprocessing.Process(target=experiment_upload_dht,
-                                    args=(kwargs['sandbox_dump_dir'],
-                                          kwargs['sandbox_experiment'],
-                                          kwargs['sandbox_user_token'],
-                                          kwargs['sandbox_user_proxy'],
-                                          kwargs['sandbox_user_signature']))
-
-  process.start()
-  process.join()
+  # # launch experiment save process
+  # logger.info('launch upload experiment record in the running end')
+  # process = multiprocessing.Process(target=experiment_upload_dht,
+  #                                   args=(kwargs['sandbox_dump_dir'],
+  #                                         kwargs['sandbox_experiment'],
+  #                                         kwargs['sandbox_user_token'],
+  #                                         kwargs['sandbox_user_proxy'],
+  #                                         kwargs['sandbox_user_signature']))
+  #
+  # process.start()
+  # process.join()
   logger.info('exit antgo running environment')

@@ -9,7 +9,7 @@ from antgo.task.task import *
 from antgo.measures.base import *
 import numpy as np
 
-__all__ = {'AntAccuracyMultiL': ('MULTILABEL_ACCURACY', 'MULTILABEL'),
+default = {'AntAccuracyMultiL': ('MULTILABEL_ACCURACY', 'MULTILABEL'),
            'AntHammingLossMultiL': ('MULTILABEL_HAMMINGLOSS', 'MULTILABEL')}
 
 class AntAccuracyMultiL(AntMeasure):

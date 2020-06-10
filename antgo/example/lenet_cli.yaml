@@ -1,5 +1,0 @@
-batch_size: 12
-num_clones: 2
-max_epochs: 10
-learning_rate: 0.001
-optimizer: 'adam'

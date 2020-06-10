@@ -22,7 +22,6 @@ def main_context(main_file, source_paths):
   f, p, d = imp.find_module(key_model, [source_paths])
   module = imp.load_module('mm', f, p, d)
 
-
   for k, v in module.__dict__.items():
     # 2.step check user custom measure method
     if '_BASE_MEASURE' in dir(v) and k != 'AntMeasure':

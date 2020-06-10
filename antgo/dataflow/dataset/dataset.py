@@ -147,6 +147,10 @@ class Dataset(BaseNode):
           data_file, _ = line_content.split(',')
           has_labeled_list.append(data_file)
           line_content = fp.readline()
+    else:
+      # build empty candidates file
+      with open(os.path.join(self.dir, 'candidates.txt'), 'w') as fp:
+        pass
 
     unlabeled_list = []
 
@@ -181,6 +185,10 @@ class Dataset(BaseNode):
           data_file, _ = line_content.split(',')
           has_labeled_list.append(data_file)
           line_content = fp.readline()
+    else:
+      # build empty candidates file
+      with open(os.path.join(self.dir, 'candidates.txt'), 'w') as fp:
+        pass
 
     unlabeled_list = []
     with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'r') as fp:
@@ -217,6 +225,9 @@ class Dataset(BaseNode):
 
         # record how map
         fp.write('%s,%s\n'%(unlabeled_file, label_file.split('/')[-1]))
+
+  def check_candidate(self, unlabeled_files, candidate_folder):
+    return True
 
   def candidates(self, candidate_type='IMAGE'):
     '''

@@ -65,9 +65,9 @@ ctx = Context()
 ###### 1.1.step build visualization chart  #######
 ##################################################
 # every channel bind value type (NUMERIC, HISTOGRAM, IMAGE)
-loss_channel = ctx.job.create_channel("loss", "NUMERIC")
+loss_channel = ctx.dashboard.create_channel("loss", "NUMERIC")
 # bind channel to chart,every chart could include some channels
-ctx.job.create_chart([loss_channel], "Loss Curve", "step", "value")
+ctx.dashboard.create_chart([loss_channel], "Loss Curve", "step", "value")
 
 
 ##################################################

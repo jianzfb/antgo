@@ -251,10 +251,10 @@ class QueueRecorderNode(Node):
               transfer_additional_results.append({k: a, 'TYPE': b})
 
       if len(results_label) > 0:
-        self.recorder_output_queue.put((None, ({'DATA': transfer_result,
+        self.recorder_output_queue.put((-1, ({'DATA': transfer_result,
                                                 'TYPE': transfer_result_type},transfer_additional_results)))
       else:
-        self.recorder_output_queue.put((None, {'DATA': transfer_result,
+        self.recorder_output_queue.put((-1, {'DATA': transfer_result,
                                                'TYPE': transfer_result_type}))
 
   def action(self, *args, **kwargs):
@@ -399,50 +399,6 @@ class EmptyRecorderNode(Node):
 
   def record(self, val, **kwargs):
     pass
-
-
-class EvaluationRecorderNode():
-  def __init__(self, measure, proxy=None, signature=None):
-    self.proxy = proxy
-    self.signature = signature
-    self.measure = measure
-    self.record_cache = []
-    self.ctx = get_global_context()
-    self._dump_dir = ''
-
-  @property
-  def model_fn(self):
-    return None
-
-  @property
-  def dump_dir(self):
-    return self._dump_dir
-
-  @dump_dir.setter
-  def dump_dir(self, val):
-    self._dump_dir = val
-
-  def record(self, *args, **kwargs):
-    # 1.step record all result and concat its groundtruth
-    predict, gt = args
-    self.record_cache.append((predict, gt))
-
-  def finish(self):
-    # 2.step evaluation measure value
-    if self.measure is None:
-      return 10000.0
-
-    result = self.measure.eva(self.record_cache, None)
-    if self.proxy is not None:
-      try:
-        url = 'http://%s/update/model/%s/'%(self.proxy, self.ctx.name)
-        requests.post(url,
-                      data={'signature': self.signature,
-                            'evaluation_value': result['statistic']['value'][0]['value']})
-      except:
-        logger.error('couldnt push evaluation info to proxy')
-
-    return result['statistic']['value'][0]['value']
 
 
 class ActiveLearningRecorderNode(Node):

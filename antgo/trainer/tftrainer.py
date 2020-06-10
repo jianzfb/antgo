@@ -675,6 +675,10 @@ class TFTrainer(Trainer):
 
       # init some info
       with tf.device(deploy_config.inputs_device()):
+        # Create global_step
+        with tf.device(deploy_config.variables_device()):
+          global_step = slim.get_or_create_global_step()
+
         ###################################
         ####    define model input (CPU) ##
         ###################################
@@ -719,10 +723,6 @@ class TFTrainer(Trainer):
 
         for loss in tf.get_collection(tf.GraphKeys.LOSSES, first_clone_scope):
           summaries.add(tf.summary.scalar('losses/%s' % loss.op.name, loss))
-
-        # Create global_step
-        with tf.device(deploy_config.variables_device()):
-          global_step = slim.get_or_create_global_step()
 
         # create other func
         for create_func in funcs:
@@ -906,7 +906,8 @@ class TFTrainer(Trainer):
         self.coord = tf.train.Coordinator()
         self.threads = tf.train.start_queue_runners(sess=self.sess, coord=self.coord)
 
-        custom_dataset_queue = tf.get_collection('CUSTOM_DATASET_QUEUE')
+        custom_dataset_queue = tf\
+          .get_collection('CUSTOM_DATASET_QUEUE')
         if len(custom_dataset_queue) > 0:
           custom_dataset_queue[0].coord = self.coord
           custom_threads = custom_dataset_queue[0].start_threads(self.sess)

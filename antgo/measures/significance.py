@@ -34,7 +34,8 @@ def bootstrap_confidence_interval(data_source, seed, measure, replicas=50):
   delta_025 = int(replicas * 0.025)
   delta_975 = int(replicas * 0.975)
   
-  return (estimated_measure - sorted_delta_measure[delta_975], estimated_measure - sorted_delta_measure[delta_025])
+  return (estimated_measure - sorted_delta_measure[delta_975],
+          estimated_measure - sorted_delta_measure[delta_025])
 
 
 def bootstrap_direct_confidence_interval(bootstrap_estimated_measures):
@@ -48,7 +49,7 @@ def bootstrap_direct_confidence_interval(bootstrap_estimated_measures):
   measure_025 = sorted_measures[pos_025]
   measure_975 = sorted_measures[pos_975]
 
-  return (measure_025, measure_975)
+  return (float(measure_025), float(measure_975))
 
 
 def bootstrap_ab_significance_compare(ab_data_source, seed, measure, replicas=50):
@@ -79,19 +80,20 @@ def bootstrap_ab_significance_compare(ab_data_source, seed, measure, replicas=50
   pos_025 = int(replicas * 0.025)
   pos_975 = int(replicas * 0.975)
 
-  if sorted_diff_scores[pos_025] > 0.0:
-    if getattr(measure, 'larger', 0) == 1:
+  if getattr(measure, 'larger_is_better', 0) == 1:
+    if sorted_diff_scores[pos_025] > 0.0:
       # a is better
       return 1
-    else:
+
+    if sorted_diff_scores[pos_975] < 0.0:
+      # b is better
+      return -1
+  else:
+    if sorted_diff_scores[pos_025] > 0.0:
       # b is better
       return -1
 
-  if sorted_diff_scores[pos_975] < 0.0:
-    if getattr(measure, 'larger', 0) == 1:
-      # b is better
-      return -1
-    else:
+    if sorted_diff_scores[pos_975] < 0.0:
       # a is better
       return 1
 

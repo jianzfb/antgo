@@ -10,7 +10,7 @@ from antgo.measures.base import *
 import numpy as np
 
 
-__all__ = {'AntALIFashionAttributeError': ('FashionAttributeError', 'CLASSIFICATION')}
+default = {'AntALIFashionAttributeError': ('FashionAttributeError', 'CLASSIFICATION')}
 class AntALIFashionAttributeError(AntMeasure):
   def __init__(self, task):
     super(AntALIFashionAttributeError, self).__init__('FashionAttributeError')

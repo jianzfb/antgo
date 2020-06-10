@@ -23,7 +23,7 @@ def _whats_data(data_source, id, infos):
   elif data_source.dataset_type == "IMAGE":
     # image
     png_data = png_encode(d, True)
-    return {'type': 'IMAGE', 'data': png_data}
+    return {'type': 'IMAGE', 'data': base64.b64encode(png_data).decode('utf-8')}
   
   return None
 
@@ -135,7 +135,7 @@ def discrete_multi_model_measure_analysis(samples_score, samples_map, data_sourc
                             samples_map[remained_id[index]]['id'],
                             samples_map[remained_id[index]]) for index in region_zero]
 
-  return ordered_samples_score, \
+  return ordered_samples_score.tolist(), \
          ordered_model_id, \
          ordered_data_id, \
          region_95, \

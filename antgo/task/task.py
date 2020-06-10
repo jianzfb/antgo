@@ -39,6 +39,7 @@ class AntTask(object):
     if ext_params is not None:
       for k, v in ext_params.items():
         if k != 'self':
+          print(k)
           setattr(self, k, v)
     
     if self._dataset_params is None:
@@ -261,7 +262,8 @@ def create_task_from_json(task_config_json, ant_context=None):
                    ext_params=task_ext_params,
                    ant_context=ant_context)
   except:
-    return None
+    traceback.print_exc()
+    raise sys.exc_info()[0]
 
 
 def create_task_from_xml(task_config_xml, ant_context):

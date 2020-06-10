@@ -23,7 +23,6 @@ from antgo.utils.concurrency import *
 from antgo.measures.statistic import *
 from antgo.measures.repeat_statistic import *
 from antgo.measures.deep_analysis import *
-from antgo.ant.subgradientrpc import *
 import signal
 if sys.version > '3':
     PY3 = True
@@ -32,64 +31,6 @@ else:
 
 FLAGS = flags.AntFLAGS
 
-
-class EvaluationProcess(multiprocessing.Process):
-  def __init__(self, validation_dataset, evaluation_measures, dump_dir, ctx, name, interval=3600):
-    super(EvaluationProcess, self).__init__()
-    self._validation_dataset = validation_dataset
-    self._ctx = ctx
-    self._dump_dir = dump_dir
-    self._name = name
-    self._evaluation_measures = evaluation_measures
-    
-    self._evaluation_interval = interval
-    self.daemon = True
-  
-  def run(self):
-    # split data and label
-    data_annotation_branch = DataAnnotationBranch(Node.inputs(self._validation_dataset))
-    self._ctx.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
-    
-    # start evaluating afer self._evaluation_interval second
-    time.sleep(self._evaluation_interval)
-    
-    while True:
-      self.stage = 'EVALUATION-HOLDOUT-EVALUATION'
-      with safe_recorder_manager(self._ctx.recorder):
-        with performance_statistic_region(self._name):
-          try:
-            self._ctx.call_infer_process(data_annotation_branch.output(0), self._dump_dir)
-          except:
-            logger.error('couldnt start evaluation process, maybe model has not been generated')
-            time.sleep(self._evaluation_interval)
-            continue
-  
-      task_running_statictic = get_performance_statistic(self._name)
-      task_running_statictic = {self._name: task_running_statictic}
-      task_running_elapsed_time = task_running_statictic[self._name]['time']['elapsed_time']
-      task_running_statictic[self._name]['time']['elapsed_time_per_sample'] = \
-          task_running_elapsed_time / float(self._validation_dataset.size)
-  
-      logger.info('start evaluation process')
-      evaluation_measure_result = []
-  
-      with safe_recorder_manager(RecordReader(self._dump_dir)) as record_reader:
-        for measure in self._evaluation_measures:
-          record_generator = record_reader.iterate_read('predict', 'groundtruth')
-          result = measure.eva(record_generator, None)
-          evaluation_measure_result.append(result)
-        task_running_statictic[self._name]['measure'] = evaluation_measure_result
-      
-      now_time = datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d %H:%M:%S')
-      if not os.path.exists(os.path.join(self._dump_dir, now_time)):
-        os.makedirs(os.path.join(self._dump_dir, now_time))
-      
-      # generate experiment report
-      everything_to_html(task_running_statictic, os.path.join(self._dump_dir, now_time))
-      
-      # waiting, start new round evaluating after self._evaluation_interval seconds
-      time.sleep(self._evaluation_interval)
-      
 
 class AntTrain(AntBase):
   def __init__(self, ant_context,
@@ -177,7 +118,7 @@ class AntTrain(AntBase):
                 samples_map.append(sample)
         
             # order consistent
-            for sample_id, sample in enumerate(samples_map):
+            for sample_id, sample in enumerate(method_measure_data_order):
               method_measure_mat[method_id, sample_id] = sample['score']
       
           is_binary = False
@@ -291,8 +232,8 @@ class AntTrain(AntBase):
                 task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
     
     # stage-2 error eye analysis (all or subset in wrong samples)
-    custom_score_threshold = float(getattr(running_ant_task, 'badscore', 0.5))
-    eye_analysis_set_size = int(getattr(running_ant_task, 'eyeball', 100))
+    custom_score_threshold = float(getattr(running_ant_task, 'bad_score', 0.5))
+    eye_analysis_set_size = int(getattr(running_ant_task, 'eye_size', 100))
     
     for measure_result in task_running_statictic[self.ant_name]['measure']:
       # analyze measure result
@@ -314,7 +255,7 @@ class AntTrain(AntBase):
         sample_score = sample_result_info['score']
         sample_category = sample_result_info['category'] if 'category' in sample_result_info else '-'
         
-        if not measure_obj.is_inverse:
+        if measure_obj.larger_is_better:
           # larger is good
           if sample_score > custom_score_threshold:
             continue
@@ -329,8 +270,14 @@ class AntTrain(AntBase):
         continue
       
       eye_analysis_all_sort = sorted(eye_analysis_all, key=lambda x: x[1])
-      eye_analysis_set = eye_analysis_all_sort[0:eye_analysis_set_size]
-      
+
+      eye_analysis_set_size = min(eye_analysis_set_size, len(eye_analysis_all_sort))
+      eye_analysis_set = []
+      if measure_obj.larger_is_better:
+        eye_analysis_set = eye_analysis_all_sort[0:eye_analysis_set_size]
+      else:
+        eye_analysis_set = eye_analysis_all_sort[-eye_analysis_set_size:]
+
       for id, score, category in eye_analysis_set:
         data_attribute_info = {}
         data_attribute_info['id'] = '%d-(c %s)'%(id, str(category))
@@ -348,11 +295,11 @@ class AntTrain(AntBase):
           if len(sample.shape) == 2:
             image = ((sample - np.min(sample)) / (np.max(sample) - np.min(sample)) * 255).astype(np.uint8)
             data_attribute_info['data_type'] = 'IMAGE'
-            data_attribute_info['data'] = png_encode(image, True)
+            data_attribute_info['data'] = base64.b64encode(png_encode(image, True)).decode('utf-8')
           elif len(sample.shape) == 3:
             image = sample.astype(np.uint8)
             data_attribute_info['data_type'] = 'IMAGE'
-            data_attribute_info['data'] = png_encode(image, True)
+            data_attribute_info['data'] = base64.b64encode(png_encode(image, True)).decode('utf-8')
           elif type(sample) == str:
             data_attribute_info['data_type'] = 'STRING'
             data_attribute_info['data'] = sample
@@ -365,7 +312,7 @@ class AntTrain(AntBase):
         if running_ant_task.task_type == 'SEGMENTATION':
           label_map = label['segmentation_map']
           label_map = ((label_map - np.min(label_map)) / (np.max(label_map) - np.min(label_map)) * 255).astype(np.uint8)
-          data_attribute_info['category'] = png_encode(label_map, True)
+          data_attribute_info['category'] = base64.b64encode(png_encode(label_map, True)).decode('utf-8')
           data_attribute_info['category_type'] = 'IMAGE'
         eye_analysis_error.append(data_attribute_info)
       
@@ -373,211 +320,27 @@ class AntTrain(AntBase):
           task_running_statictic[self.ant_name]['eye'] = {}
 
       task_running_statictic[self.ant_name]['eye'][measure_name] = eye_analysis_error
-
-      ################
-      # 临时代码
-      # task_running_statictic[self.ant_name]['eye']['HMW'] = eye_analysis_error
-      ################
     return task_running_statictic
 
-  def apply_and_launch_computingpow(self, running_ant_task, ablation_blocks):
-    ctx = get_global_context()
-    main_param = ''
-    if ablation_blocks is not None:
-      main_param = 'ablation_param.yaml'
-    else:
-      main_param = 'main_param.yaml'
-
-    with open(os.path.join(self.main_folder, main_param), 'w') as fp:
-      main_params = copy.deepcopy(ctx.params.content)
-      if ablation_blocks is not None:
-        main_params['ablation'] = ablation_blocks
-        main_params['ablation_method'] = 'fixed'
-        main_params['devices'] = [0]
-      else:
-        if 'ablation' in main_params:
-          main_params.pop('ablation')
-        if 'ablation_method' in main_params:
-          main_params.pop('ablation_method')
-
-      yaml.dump(main_params, fp)
-
-    # 1.step pack codebase
-    self.package_codebase()
-
-    # 2.step apply computing pow
-    max_running_time = 0.0
-    computing_pow = {}
-
-    # transform max time unit
-    max_running_time_and_unit = FLAGS.max_time()
-    max_running_time = float(max_running_time_and_unit[0:-1])
-    max_running_time_unit = max_running_time_and_unit[-1]
-    if max_running_time_unit == 's':
-      # second
-      max_running_time = max_running_time / (60.0 * 60.0)
-    elif max_running_time_unit == 'm':
-      max_running_time = max_running_time / 60.0
-    elif max_running_time_unit == 'd':
-      max_running_time = max_running_time * 24
-    elif max_running_time_unit == 'h':
-      pass
-    else:
-      logger.error('max running time error')
-      return
-
-    computing_pow = self.subgradient_rpc.make_computingpow_order(max_running_time,
-                                                                 self.running_config['OS_PLATFORM'],
-                                                                 self.running_config['OS_VERSION'],
-                                                                 self.running_config['SOFTWARE_FRAMEWORK'],
-                                                                 self.running_config['CPU_MODEL'],
-                                                                 self.running_config['CPU_NUM'],
-                                                                 self.running_config['CPU_MEM'],
-                                                                 self.running_config['GPU_MODEL'],
-                                                                 self.running_config['GPU_NUM'],
-                                                                 self.running_config['GPU_MEM'],
-                                                                 running_ant_task.dataset_name,
-                                                                 FLAGS.max_fee())
-    if computing_pow is None:
-      logger.error('fail to find matched computing pow')
-      return
-
-    logger.info('success to apply computing pow order %s (%s:(rpc)%s or (ssh)%s)' % (computing_pow['order_id'],
-                                                                                     computing_pow['order_ip'],
-                                                                                     str(computing_pow['order_rpc_port']),
-                                                                                     str(computing_pow['order_ssh_port'])))
-
-    # 3.step exchange access token
-    secret, signature = self.subgradient_rpc.signature(computing_pow['order_id'])
-    result = self.subgradient_rpc.authorize(computing_pow['order_ip'],
-                                            computing_pow['order_rpc_port'],
-                                            order_id=computing_pow['order_id'],
-                                            secret=secret,
-                                            signature=signature)
-
-    if result['authorize'] != 'success':
-      logger.error('couldnt authorize order access token')
-      return
-
-    order_access_token = result['access_token']
-    order_launch_time = result['launch_time']
-    order_rental_time = result['rental_time']
-
-    logger.info('computing pow rental time is %0.2f Hour, its expire time is %s' % (order_rental_time,
-                                                                                    time.strftime('%Y-%m-%d %H:%M:%S',
-                                                                                                  time.localtime(
-                                                                                                    order_launch_time + order_rental_time * 60 * 60))))
-
-    remote_cmd = ''
-    if self.app_token is not None:
-      remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --token=%s --max_time=%s' % (
-        self.main_file, main_param, self.app_token, '%fh' % (max_running_time - 0.5))
-    else:
-      remote_cmd = 'antgo train --main_file=%s --main_param=%s --running_platform=local --task=%s --max_time=%s' % (
-        self.main_file, main_param, FLAGS.task(), '%fh' % (max_running_time - 0.5))
-
-    if FLAGS.from_experiment() is not None:
-      remote_cmd += ' --from_experiment=%s' % FLAGS.from_experiment()
-
-    self.subgradient_rpc.launch(computing_pow['order_ip'],
-                                computing_pow['order_rpc_port'],
-                                access_token=order_access_token,
-                                cmd=remote_cmd,
-                                code_address=codebase_address,
-                                code_address_code=codebase_address_code)
-
-    while True:
-      time.sleep(5)
-      status_response = self.subgradient_rpc.status(computing_pow['order_ip'],
-                                                    computing_pow['order_rpc_port'],
-                                                    access_token=order_access_token)
-
-      if status_response['authorize'] == 'fail' and \
-              status_response['reason'] == 'EXPIRE_ACCESS_TOKEN_ERROR':
-        # try refresh access token
-        refresh_result = self.subgradient_rpc.refresh(computing_pow['order_ip'],
-                                                      computing_pow['order_rpc_port'],
-                                                      access_token=order_access_token)
-
-        if refresh_result['authorize'] == 'fail':
-          logger.error('%s on computing pow server' % refresh_result['reason'])
-          return
-
-        order_access_token = refresh_result['refresh_access_token']
-      elif status_response['authorize'] == 'success':
-        logger.info('computing pow order is %s' % status_response['result'])
-
-        if status_response['result'] == 'running':
-          logger.info('you can access computing pow by \"ssh -p %d %s@%s\"' % (int(computing_pow['order_ssh_port']),
-                                                                               computing_pow['order_id'],
-                                                                               computing_pow['order_ip']))
-          return
-      else:
-        logger.error('computing pow order is abnormal')
-        return
-
-  def run_by_mpi(self, address_list):
-    # 0.step parse address_list str (ip:num,ip:num)
-    ip_num_list = address_list.split(',')
-    servers = ','.join([s.split(':')[0] for s in ip_num_list])
-    nodes_num = reduce(lambda x, y: x+y, [int(s.split(':')[1]) for s in ip_num_list], 0)
-
-    # 1.step modify yaml
-    with open(os.path.join(self.main_folder, 'main_param.yaml'), 'w') as fp:
-      main_params = copy.deepcopy(self.context.params.content)
-      main_params['is_distribute_training'] = True
-      yaml.dump(main_params, fp)
-
-    # 2.step pack codebase and distribute
-    self.package_codebase('scp:%s'%servers, target_path=self.main_folder, signature=self.signature)
-
-    # 3.step mpi run
-    kk = []
-    is_has_main_folder = False
-    for s in sys.argv[1:]:
-      if s.startswith('--main_folder'):
-        is_has_main_folder = True
-        s = '--main_folder=%s'%self.main_folder
-
-      if s.startswith('--running_platform'):
-        continue
-
-      if s.startswith('--main_param'):
-        continue
-
-      kk.append(s)
-
-    if not is_has_main_folder:
-      kk.append('--main_folder=%s'%self.main_folder)
-
-    kk.append('--name=%s'%self.name)
-    kk.append('--signature=%s'%self.signature)
-    kk.append('--main_param=main_param.yaml')
-
-    cmd_str = 'antgo ' + ' '.join(kk)
-    logger.info('launch mpi (%s)'%cmd_str)
-    subprocess.call(
-      "mpirun -np %d -H %s -bind-to none -map-by slot -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH -mca pml ob1 -mca btl ^openib %s" % (nodes_num,address_list,cmd_str),
-    shell=True)
-    return
-
   def start(self):
-    # 0.step loading challenge task
+    # 1.step 加载训练任务
     running_ant_task = None
     if self.token is not None:
-      # 0.step load challenge task
-      challenge_task_config = self.rpc("TASK-CHALLENGE")
-      if challenge_task_config is None:
+      # 1.1.step load train task
+      response = self.context.dashboard.challenge.get(command=type(self).__name__)
+      if response['status'] == 'ERROR':
         # invalid token
-        logger.error('couldnt load challenge task')
+        logger.error('couldnt load train task')
         self.token = None
-      elif challenge_task_config['status'] in ['OK', 'SUSPEND']:
+      elif response['status'] in ['OK', 'SUSPEND']:
+        content = response['content']
+
         # maybe user token or task token
-        if 'task' in challenge_task_config:
+        if 'task' in content:
           # task token
-          challenge_task = create_task_from_json(challenge_task_config)
+          challenge_task = create_task_from_json(content)
           if challenge_task is None:
-            logger.error('couldnt load challenge task')
+            logger.error('couldnt load train task')
             exit(-1)
           running_ant_task = challenge_task
       else:
@@ -585,26 +348,28 @@ class AntTrain(AntBase):
         logger.error('unknow error')
         exit(-1)
 
-    self.is_non_mltalker_task = False
     if running_ant_task is None:
-      # 0.step load custom task
+      # 1.2.step load custom task
       if self.ant_task_config is not None:
         custom_task = create_task_from_xml(self.ant_task_config, self.context)
         if custom_task is None:
           logger.error('couldnt load custom task')
           exit(-1)
         running_ant_task = custom_task
-        self.is_non_mltalker_task = True
 
     assert (running_ant_task is not None)
 
+    # 2.step 注册实验
+    experiment_uuid = self.context.experiment_uuid
+
+    # 3.step 分析消除配置
     # analyze ablation blocks
     # user custom devices
     apply_devices = getattr(self.context.params, 'devices', [])
     # ablation experiment
     ablation_blocks = getattr(self.context.params, 'ablation', None)
     ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
-    assert(ablation_method in ['regular', 'inregular','accumulate', 'any', 'fixed'])
+    assert(ablation_method in ['regular', 'inregular', 'accumulate', 'any', 'fixed'])
     ablation_experiments_devices_num = 0
     if ablation_blocks is not None:
       ablation_experiments_devices_num = 0
@@ -620,73 +385,17 @@ class AntTrain(AntBase):
         # fixed ablation method
         ablation_experiments_devices_num = 0
 
-    # running position
-    if self.running_platform == 'p2p':
-      traverse_ablation_blocks = []
-      if ablation_blocks is not None:
-        if ablation_method is None:
-          ablation_method = 'regular'
-
-        traverse_ablation_blocks = []
-        if ablation_method == 'regular':
-          # traverse all
-          traverse_ablation_blocks.extend(ablation_blocks)
-          # add an empty
-          traverse_ablation_blocks.append(None)
-        elif ablation_method == 'inregular':
-          for b in ablation_blocks:
-            traverse_ablation_blocks.append([m for m in ablation_blocks if m != b])
-          # add an inverse
-          traverse_ablation_blocks.append(ablation_blocks)
-        elif ablation_method == 'accumulate':
-          accumulate_blocks = []
-          for block in ablation_blocks:
-            accumulate_blocks.append(block)
-            traverse_ablation_blocks.append(copy.deepcopy(accumulate_blocks))
-          # add an empty
-          traverse_ablation_blocks.append(None)
-        elif ablation_method == 'any':
-          for i in range(len(ablation_blocks)):
-            aa = list(itertools.combinations(ablation_blocks, i + 1))
-            traverse_ablation_blocks.extend(aa)
-
-          traverse_ablation_blocks = [list(m) for m in traverse_ablation_blocks]
-          # add an empty
-          traverse_ablation_blocks.append(None)
-        else:
-          # fixed
-          traverse_ablation_blocks.append(ablation_blocks)
-      else:
-        # add an empty
-        traverse_ablation_blocks.append(None)
-
-      for experiment_ablation_blocks in traverse_ablation_blocks:
-        if experiment_ablation_blocks is not None and \
-                (type(experiment_ablation_blocks) != list or type(experiment_ablation_blocks) != tuple):
-          experiment_ablation_blocks = [experiment_ablation_blocks]
-
-        self.apply_and_launch_computingpow(running_ant_task,experiment_ablation_blocks)
-      logger.info('antgo have been deployed all train experiment')
-      return
-    elif self.running_platform == 'mpi':
-      self.run_by_mpi(FLAGS.server_list())
-      logger.info('antgo is runing on MPI envoriment')
-      return
-
-    # now time stamp
-    train_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
-
-    # 0.step warp model (main_file and main_param)
-    self.stage = 'MODEL'
+    # 4.step 打包代码，并上传至云端
+    self.stage = 'TRAIN'
     # - backup in dump_dir
     main_folder = self.main_folder
     main_param = FLAGS.main_param()
     main_file = FLAGS.main_file()
 
-    if not os.path.exists(os.path.join(self.ant_dump_dir, train_time_stamp)):
-      os.makedirs(os.path.join(self.ant_dump_dir, train_time_stamp))
+    if not os.path.exists(os.path.join(self.ant_dump_dir, experiment_uuid)):
+      os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
 
-    goldcoin = os.path.join(self.ant_dump_dir, train_time_stamp, '%s-goldcoin.tar.gz'%self.ant_name)
+    goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, '%s-goldcoin.tar.gz'%self.ant_name)
     
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
@@ -697,22 +406,17 @@ class AntTrain(AntBase):
       tar.add(os.path.join(main_folder, main_param), arcname=main_param)
     tar.close()
 
-    # - backup in cloud
-    if os.path.exists(goldcoin):
-      file_size = os.path.getsize(goldcoin) / 1024.0
-      if file_size < 500:
-        if not PY3 and sys.getdefaultencoding() != 'utf8':
-          reload(sys)
-          sys.setdefaultencoding('utf8')
-        # model file shouldn't too large (500KB)
-        with open(goldcoin, 'rb') as fp:
-          self.context.job.send({'DATA': {'MODEL': fp.read()}})
+    # 上传
+    self.context.dashboard.experiment.upload(MODEL=goldcoin,
+                                             APP_STAGE=self.stage)
 
-    # 1.step loading training dataset
+    # 5.step 加载训练数据集
     logger.info('loading train dataset %s'%running_ant_task.dataset_name)
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
+
+    # 6.step 消除实验
     if ablation_blocks is not None:
       if len(apply_devices) >= ablation_experiments_devices_num + 1:
         ablation_experiments = []
@@ -725,16 +429,12 @@ class AntTrain(AntBase):
                                                                 running_ant_task,
                                                                 ablation_blocks,
                                                                 ablation_method,
-                                                                train_time_stamp,
+                                                                experiment_uuid,
                                                                 ablation_experiments_devices)
           # launch all ablation experiments
           logger.info('waiting until all ablation experiments finish')
           for ablation_experiment in ablation_experiments:
             ablation_experiment.start()
-
-        if ablation_method == 'inregular':
-          for b in ablation_blocks:
-            self.ant_context.deactivate_block(b)
 
         if ablation_method == 'fixed':
           for b in ablation_blocks:
@@ -747,7 +447,7 @@ class AntTrain(AntBase):
           self.context.params.num_clones = len(apply_devices)
 
         self.stage = "TRAIN"
-        train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
+        train_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'train')
         if not os.path.exists(train_dump_dir):
           os.makedirs(train_dump_dir)
         
@@ -765,7 +465,7 @@ class AntTrain(AntBase):
           data_annotation_branch = DataAnnotationBranch(Node.inputs(validation_dataset))
           self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
 
-          intermediate_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'record')
+          intermediate_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'record')
           with safe_recorder_manager(self.context.recorder):
             self.context.recorder.dump_dir = intermediate_dump_dir
             with performance_statistic_region(self.ant_name):
@@ -790,14 +490,26 @@ class AntTrain(AntBase):
             task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
           
           # error analysis
-          task_running_statictic = self.error_analysis(running_ant_task, validation_dataset, task_running_statictic)
+          task_running_statictic = \
+            self.error_analysis(running_ant_task, validation_dataset, task_running_statictic)
           
           if task_running_statictic is not None and len(task_running_statictic) > 0:
             logger.info('generate model evaluation report')
             self.stage = 'EVALUATION-HOLDOUT-REPORT'
-            # send statistic report
-            self.context.job.send({'DATA': {'REPORT': task_running_statictic}})
-            everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, train_time_stamp))
+
+            # 更新实验统计信息
+            self.context.dashboard.experiment.patch(experiment_data=
+                                                    json.dumps([{'REPORT': task_running_statictic,
+                                                                 'APP_STAGE': self.stage}]))
+            # 生成实验报告
+            everything_to_html(task_running_statictic,
+                               os.path.join(self.ant_dump_dir, experiment_uuid))
+
+            # 上传实验报告
+            logger.info('uploading experiment report')
+            self.context.dashboard.experiment.upload(
+              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+              APP_STAGE=self.stage)
           
           logger.info('stop evaluation process with complete model')
         except:
@@ -811,28 +523,38 @@ class AntTrain(AntBase):
       
       logger.warn('couldnt enable ablation experiment until set devices in *.yaml')
 
-    # running_ant_task.estimation_procedure = 'holdout'
+    # 7.step 模型训练实验
     with safe_recorder_manager(ant_train_dataset):
-      # 2.step model evaluation (optional)
+      # 7.step 模型训练及评估
+      # 四种主流估计方法，holdout; repeated-holdout; bootstrap; kfold
       if running_ant_task.estimation_procedure is not None and \
-              running_ant_task.estimation_procedure.lower() in ["holdout","repeated-holdout","bootstrap","kfold"]:
-        logger.info('start model evaluation')
+              running_ant_task.estimation_procedure.lower() in ["holdout", "repeated-holdout", "bootstrap", "kfold"]:
+        logger.info('start model training and evaluation process')
 
         estimation_procedure = running_ant_task.estimation_procedure.lower()
         estimation_procedure_params = running_ant_task.estimation_procedure_params
         evaluation_measures = running_ant_task.evaluation_measures
 
         if estimation_procedure == 'holdout':
-          evaluation_statistic = self._holdout_validation(ant_train_dataset,running_ant_task,train_time_stamp)
+          evaluation_statistic = self._holdout_validation(ant_train_dataset, running_ant_task, experiment_uuid)
           
           if evaluation_statistic is not None and len(evaluation_statistic) > 0:
             logger.info('generate model evaluation report')
             self.stage = 'EVALUATION-HOLDOUT-REPORT'
-            # send statistic report
-            self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
-            everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
-          
-          return
+
+            # 更新实验统计信息
+            self.context.dashboard.experiment.patch(experiment_data=
+                                                    json.dumps([{'REPORT': evaluation_statistic,
+                                                                 'APP_STAGE': self.stage}]))
+            # 生成实验报告
+            everything_to_html(evaluation_statistic,
+                               os.path.join(self.ant_dump_dir, experiment_uuid))
+
+            # 上传实验报告
+            logger.info('uploading experiment report')
+            self.context.dashboard.experiment.upload(
+              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+              APP_STAGE=self.stage)
 
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 2              # default value
@@ -849,12 +571,23 @@ class AntTrain(AntBase):
                                                                    split_ratio,
                                                                    is_stratified_sampling,
                                                                    evaluation_measures,
-                                                                   train_time_stamp)
+                                                                   experiment_uuid)
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-REPEATEDHOLDOUT-REPORT'
-          # send statistic report
-          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
-          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
+
+          # 更新实验统计信息
+          self.context.dashboard.experiment.patch(experiment_data=
+                                                  json.dumps([{'REPORT': evaluation_statistic,
+                                                               'APP_STAGE': self.stage}]))
+          # 生成实验报告
+          everything_to_html(evaluation_statistic,
+                             os.path.join(self.ant_dump_dir, experiment_uuid))
+
+          # 上传实验报告
+          logger.info('uploading experiment report')
+          self.context.dashboard.experiment.upload(
+            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+            APP_STAGE=self.stage)
         elif estimation_procedure == "bootstrap":
           bootstrap_counts = 5
           if estimation_procedure_params is not None:
@@ -862,69 +595,78 @@ class AntTrain(AntBase):
           evaluation_statistic = self._bootstrap_validation(bootstrap_counts,
                                                             ant_train_dataset,
                                                             evaluation_measures,
-                                                            train_time_stamp)
+                                                            experiment_uuid)
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-BOOTSTRAP-REPORT'
-          # send statistic report
-          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
-          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
+
+          # 更新实验统计信息
+          self.context.dashboard.experiment.patch(experiment_data=
+                                                  json.dumps([{'REPORT': evaluation_statistic,
+                                                               'APP_STAGE': self.stage}]))
+          # 生成实验报告
+          everything_to_html(evaluation_statistic,
+                             os.path.join(self.ant_dump_dir, experiment_uuid))
+
+          # 上传实验报告
+          logger.info('uploading experiment report')
+          self.context.dashboard.experiment.upload(
+            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+            APP_STAGE=self.stage)
         elif estimation_procedure == "kfold":
           kfolds = 5
           if estimation_procedure_params is not None:
             kfolds = int(estimation_procedure_params.get('kfold', kfolds))
-          evaluation_statistic = self._kfold_cross_validation(kfolds, ant_train_dataset, evaluation_measures, train_time_stamp)
+          evaluation_statistic = self._kfold_cross_validation(kfolds,
+                                                              ant_train_dataset,
+                                                              evaluation_measures,
+                                                              experiment_uuid)
 
           logger.info('generate model evaluation report')
           self.stage = 'EVALUATION-KFOLD-REPORT'
-          # send statistic report
-          self.context.job.send({'DATA': {'REPORT': evaluation_statistic}})
-          everything_to_html(evaluation_statistic, os.path.join(self.ant_dump_dir, train_time_stamp))
 
-      # 3.step model training (whole dataset)
-      # if estimation procedure is 'holdout', dont need train again
+          # 更新实验统计信息
+          self.context.dashboard.experiment.patch(experiment_data=
+                                                  json.dumps([{'REPORT': evaluation_statistic,
+                                                               'APP_STAGE': self.stage}]))
+          # 生成实验报告
+          everything_to_html(evaluation_statistic,
+                             os.path.join(self.ant_dump_dir, experiment_uuid))
+
+          # 上传实验报告
+          logger.info('uploading experiment report')
+          self.context.dashboard.experiment.upload(
+            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+            APP_STAGE=self.stage)
+
+        return
+
+      # 8.step 模型训练
       self.stage = "TRAIN"
-      train_dump_dir = os.path.join(self.ant_dump_dir, train_time_stamp, 'train')
+      train_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'train')
       if not os.path.exists(train_dump_dir):
           os.makedirs(train_dump_dir)
 
       logger.info('start training process')
       ant_train_dataset.reset_state()
-
-      if len(running_ant_task.evaluation_measures) > 0:
-        for k in running_ant_task.evaluation_measures:
-          if k.is_support_rank:
-            self.context.recorder = EvaluationRecorderNode(k, self.proxy, self.signature)
-            break
-
       self.context.call_training_process(ant_train_dataset, train_dump_dir)
       logger.info('stop training process')
 
   def _holdout_validation(self, train_dataset, running_ant_task, now_time):
     # 1.step split train set and validation set
-    part_train_dataset, part_validation_dataset = train_dataset.split(split_params={}, split_method='holdout')
+    part_train_dataset, part_validation_dataset = \
+      train_dataset.split(split_params={},
+                          split_method='holdout')
     part_train_dataset.reset_state()
 
     # dump_dir
     dump_dir = os.path.join(self.ant_dump_dir, now_time, 'train')
     if not os.path.exists(dump_dir):
       os.makedirs(dump_dir)
-    
+
+    self.stage = 'EVALUATION-HOLDOUT-TRAIN'
     if not self.skip_training:
-      # launch evaluation process
-      evaluation_process = EvaluationProcess(part_validation_dataset,
-                                             running_ant_task.evaluation_measures,
-                                             dump_dir,
-                                             self.ant_context,
-                                             self.ant_name)
-      evaluation_process.start()
-      
-      # 2.step training model
-      self.stage = 'EVALUATION-HOLDOUT-TRAIN'
+      # training model
       self.context.call_training_process(part_train_dataset, dump_dir)
-      
-      # 3.step complete evaluation and error analysis
-      # kill all evaluation process
-      os.kill(evaluation_process.pid, signal.SIGTERM)
     
     data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
     self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
@@ -1003,7 +745,8 @@ class AntTrain(AntBase):
     task_running_statictic[self.ant_name]['measure'].extend(no_rank_measure)
     return task_running_statictic
 
-  def _repeated_holdout_validation(self, repeats,
+  def _repeated_holdout_validation(self,
+                                   repeats,
                                    train_dataset,
                                    split_ratio,
                                    is_stratified_sampling,
@@ -1022,6 +765,7 @@ class AntTrain(AntBase):
                                           'is_stratified': is_stratified_sampling},
                             split_method='repeated-holdout')
       part_train_dataset.reset_state()
+
       # dump_dir
       dump_dir = os.path.join(self.ant_dump_dir, nowtime, 'train', 'repeated-holdout-evaluation', 'repeat-%d'%repeat)
       if not os.path.exists(dump_dir):
@@ -1069,7 +813,9 @@ class AntTrain(AntBase):
       logger.info('stop evaluation process at repeathold %d round'%repeat)
       repeated_running_statistic.append(task_running_statictic)
 
-    evaluation_result = multi_repeats_measures_statistic(repeated_running_statistic, method='repeated-holdout')
+    evaluation_result = \
+      multi_repeats_measures_statistic(repeated_running_statistic,
+                                       method='repeated-holdout')
     return evaluation_result
 
   def _bootstrap_validation(self, bootstrap_rounds, train_dataset, evaluation_measures, nowtime):
@@ -1080,9 +826,10 @@ class AntTrain(AntBase):
       
     for bootstrap_i in range(bootstrap_rounds):
       # 1.step split train set and validation set
-      part_train_dataset, part_validation_dataset = train_dataset.split(split_params={},
-                                                                        split_method='bootstrap')
-      part_train_dataset.reset_state()
+      part_train_dataset, part_validation_dataset = \
+        train_dataset.split(split_params={},
+                            split_method='bootstrap')
+
       # dump_dir
       dump_dir = os.path.join(self.ant_dump_dir,
                               nowtime,
@@ -1134,7 +881,9 @@ class AntTrain(AntBase):
       
       bootstrap_running_statistic.append(task_running_statictic)
 
-    evaluation_result = multi_repeats_measures_statistic(bootstrap_running_statistic, method='bootstrap')
+    evaluation_result = \
+      multi_repeats_measures_statistic(bootstrap_running_statistic,
+                                       method='bootstrap')
     return evaluation_result
 
   def _kfold_cross_validation(self, kfolds, train_dataset, evaluation_measures, nowtime):
@@ -1146,9 +895,11 @@ class AntTrain(AntBase):
 
     for k in range(kfolds):
       # 1.step split train set and validation set
-      part_train_dataset, part_validation_dataset = train_dataset.split(split_params={'kfold': kfolds,
-                                                                                      'k': k},
-                                                                        split_method='kfold')
+      part_train_dataset, part_validation_dataset = \
+        train_dataset.split(split_params={'kfold': kfolds,
+                                          'k': k},
+                            split_method='kfold')
+
       part_train_dataset.reset_state()
       # dump_dir
       dump_dir = os.path.join(self.ant_dump_dir, nowtime, 'train', 'kfold-evaluation', 'fold-%d-evaluation' % k)
@@ -1200,7 +951,13 @@ class AntTrain(AntBase):
     evaluation_result = multi_repeats_measures_statistic(kfolds_running_statistic, method='kfold')
     return evaluation_result
 
-  def start_ablation_train_proc(self, data_source, challenge_task, ablation_blocks, ablation_method, time_stamp, spare_devices=None):
+  def start_ablation_train_proc(self,
+                                data_source,
+                                challenge_task,
+                                ablation_blocks,
+                                ablation_method,
+                                time_stamp,
+                                spare_devices=None):
     if ablation_method is None:
       ablation_method = 'regular'
     # check ablation method
@@ -1215,7 +972,7 @@ class AntTrain(AntBase):
                   spare_device,
                   skip_training):
       # 1.step proc_func is running in a independent process (clone running environment)
-      handle.clone()
+      handle.reset()
       # reassign running device
       handle.context.params.devices = [spare_device]
       # only one clone
@@ -1249,6 +1006,7 @@ class AntTrain(AntBase):
 
       # 2.step start training process
       handle.stage = 'ABLATION-%s-TRAIN' % ablation_block
+      logger.info('on {}'.format(handle.stage))
       if not skip_training:
         handle.context.call_training_process(part_train_dataset, ablation_dump_dir)
 
@@ -1259,6 +1017,7 @@ class AntTrain(AntBase):
         handle.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
   
         handle.stage = 'ABLATION-%s-EVALUATION' % ablation_block
+        logger.info('on {}'.format(handle.stage))
         with safe_recorder_manager(handle.context.recorder):
           handle.context.call_infer_process(data_annotation_branch.output(0), ablation_dump_dir)
   
@@ -1267,7 +1026,8 @@ class AntTrain(AntBase):
   
         ablation_running_statictic = {handle.ant_name: {}}
         ablation_evaluation_measure_result = []
-  
+
+        logger.info('compute measure')
         with safe_recorder_manager(RecordReader(ablation_dump_dir)) as record_reader:
           for measure in experiment_challenge_task.evaluation_measures:
             record_generator = record_reader.iterate_read('predict', 'groundtruth')
@@ -1276,10 +1036,22 @@ class AntTrain(AntBase):
   
         ablation_running_statictic[handle.ant_name]['measure'] = ablation_evaluation_measure_result
         handle.stage = 'ABLATION-%s-REPORT' % ablation_block
-  
-        # send statistic report
-        handle.context.job.send({'DATA': {'REPORT': ablation_running_statictic}})
+
+        logger.info('on {}'.format(handle.stage))
+        # 更新实验统计信息
+        logger.info('update experiment report')
+        handle.context.dashboard.experiment.patch(experiment_data=
+                                                  json.dumps([{'REPORT': ablation_running_statictic,
+                                                               'APP_STAGE': handle.stage}]))
+
+        # 生成消除实验报告
         everything_to_html(ablation_running_statictic, ablation_dump_dir)
+
+        # 上传实验报告
+        logger.info('uploading experiment report')
+        handle.context.dashboard.experiment.upload(
+          REPORT_HTML=os.path.join(ablation_dump_dir, 'statistic-report.html'),
+          APP_STAGE=handle.stage)
 
       handle.context.wait_until_clear()
     
@@ -1311,7 +1083,8 @@ class AntTrain(AntBase):
         try_ablation_blocks = [try_ablation_blocks]
       
       try_ablation_blocks = sorted(try_ablation_blocks)
-      
+
+      # launch ablation experiment process
       block_ablation_process = Process(target=proc_func,
                                        args=(self,
                                              data_source,

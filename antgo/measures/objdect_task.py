@@ -15,7 +15,7 @@ from antgo.utils._bbox import bbox_overlaps
 from collections import defaultdict
 import antgo.utils._mask as _mask
 
-__all__ = {'AntVOCDet': ('VOC', 'OBJECT-DETECTION'),
+default = {'AntVOCDet': ('VOC', 'OBJECT-DETECTION'),
            'AntROCandAUCDet': ('ROC_AUC', 'OBJECT-DETECTION'),
            'AntPRDet': ('PR', 'OBJECT-DETECTION'),
            'AntAPRFDet': ('APRF', 'OBJECT-DETECTION'),

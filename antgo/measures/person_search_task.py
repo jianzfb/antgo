@@ -10,7 +10,7 @@ from antgo.utils._bbox import bbox_overlaps
 from antgo.task.task import *
 
 
-__all__={'AntPersonSearchCMC': ('CMC', 'PERSON_SEARCH')}
+default={'AntPersonSearchCMC': ('CMC', 'PERSON_SEARCH')}
 
 
 class AntPersonSearchCMC(AntMeasure):

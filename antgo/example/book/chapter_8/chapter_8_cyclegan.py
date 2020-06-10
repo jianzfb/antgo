@@ -134,6 +134,7 @@ class CycleGANModel(ModelDesc):
       c1 = tf.nn.relu(instance_norm(conv2d(c0, options.gf_dim, 7, 1, padding='VALID', name='g_e1_c'), 'g_e1_bn'))
       c2 = tf.nn.relu(instance_norm(conv2d(c1, options.gf_dim * 2, 3, 2, name='g_e2_c'), 'g_e2_bn'))
       c3 = tf.nn.relu(instance_norm(conv2d(c2, options.gf_dim * 4, 3, 2, name='g_e3_c'), 'g_e3_bn'))
+
       # define G network with 9 resnet blocks
       r1 = residule_block(c3, options.gf_dim * 4, name='g_r1')
       r2 = residule_block(r1, options.gf_dim * 4, name='g_r2')
@@ -242,8 +243,8 @@ def preprocess_train_func(*args, **kwargs):
   if len(img_B.shape) == 2:
     img_B = np.concatenate((np.expand_dims(img_B, -1), np.expand_dims(img_B, -1), np.expand_dims(img_B, -1)), axis=2)
 
-  img_A = img_A[:,:,0:3]
-  img_B = img_B[:,:,0:3]
+  img_A = img_A[:, :, 0:3]
+  img_B = img_B[:, :, 0:3]
 
   if np.random.random() > 0.5:
     img_A = np.fliplr(img_A)
@@ -254,6 +255,7 @@ def preprocess_train_func(*args, **kwargs):
 
   img_AB = np.concatenate((img_A, img_B), axis=2)
   return img_AB
+
 
 class ImagePool(object):
   def __init__(self, maxsize=50):
@@ -304,17 +306,14 @@ def training_callback(data_source, dump_dir):
     # 4.2. 训练一次Generator网络，训练一次Discriminator网络
     for real_ab, _ in batch_node.iterator_value():
       # 更新 Generator 网络，并记录生成结果
-      g_loss_val, fake_A, fake_B = tf_trainer.run('g_loss',
-                                                       real_A_and_B_images=real_ab,
-                                                       lr=lr_val)
+      g_loss_val, fake_A, fake_B = tf_trainer.g_loss_run(real_A_and_B_images=real_ab, lr=lr_val)
 
       [fake_A, fake_B] = pool([fake_A, fake_B])
       # 更新 Discriminator 网络
-      d_loss_val = tf_trainer.run('d_loss',
-                                        real_A_and_B_images=real_ab,
-                                        fake_A_sample=fake_A,
-                                        fake_B_sample=fake_B,
-                                        lr=lr_val)
+      d_loss_val = tf_trainer.d_loss_run(real_A_and_B_images=real_ab,
+                                         fake_A_sample=fake_A,
+                                         fake_B_sample=fake_B,
+                                         lr=lr_val)
       # 每隔50步打印日志
       if count % 50 == 0:
         logger.info('g_loss %f d_loss %f at iterator %d in epoch %d (lr=%f)'%(g_loss_val, d_loss_val, count, epoch, lr_val))

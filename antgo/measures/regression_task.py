@@ -10,7 +10,7 @@ from antgo.measures.base import *
 from antgo.measures.regression_metric import *
 
 
-__all__ = {'AntMAPERegression': ('MAPE', 'REGRESSION'),
+default = {'AntMAPERegression': ('MAPE', 'REGRESSION'),
            'AntAlmostCRegression': ('ALMOST-CORRECT', 'REGRESSION')}
 class AntMAPERegression(AntMeasure):
   def __init__(self, task):

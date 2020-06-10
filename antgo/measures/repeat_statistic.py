@@ -98,12 +98,12 @@ def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'
     multi_statistics['time'] = {}
     series_elapsed_time_mean = np.mean(series_elapsed_time)
     series_elapsed_time_std = np.std(series_elapsed_time)
-    multi_statistics['time']['elapsed_time'] = series_elapsed_time_mean
-    multi_statistics['time']['elapsed_time_interval'] = series_elapsed_time_std
+    multi_statistics['time']['elapsed_time'] = float(series_elapsed_time_mean)
+    multi_statistics['time']['elapsed_time_interval'] = float(series_elapsed_time_std)
 
   if len(series_elapsed_time_per_sample) > 0:
-    series_elapsed_time_mean_per_sample = np.mean(series_elapsed_time_per_sample)
-    series_elapsed_time_std_per_sample = np.std(series_elapsed_time_per_sample)
+    series_elapsed_time_mean_per_sample = float(np.mean(series_elapsed_time_per_sample))
+    series_elapsed_time_std_per_sample = float(np.std(series_elapsed_time_per_sample))
     multi_statistics['time']['elapsed_time_per_sample'] = series_elapsed_time_mean_per_sample
     multi_statistics['time']['elapsed_time_per_sample_interval'] = series_elapsed_time_std_per_sample
 
@@ -114,34 +114,34 @@ def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'
 
     series_cpu_mean_usage_mean = np.mean(series_cpu_mean_usage)
     series_cpu_mean_usage_std = np.std(series_cpu_mean_usage)
-    multi_statistics['cpu']['cpu_mean_usage'] = series_cpu_mean_usage_mean
-    multi_statistics['cpu']['cpu_mean_usage_interval'] = series_cpu_mean_usage_std
+    multi_statistics['cpu']['cpu_mean_usage'] = float(series_cpu_mean_usage_mean)
+    multi_statistics['cpu']['cpu_mean_usage_interval'] = float(series_cpu_mean_usage_std)
 
     series_cpu_median_usage_mean = np.mean(series_cpu_median_usage)
     series_cpu_median_usage_std = np.std(series_cpu_median_usage)
-    multi_statistics['cpu']['cpu_median_usage'] = series_cpu_median_usage_mean
-    multi_statistics['cpu']['cpu_median_usage_interval'] = series_cpu_median_usage_std
+    multi_statistics['cpu']['cpu_median_usage'] = float(series_cpu_median_usage_mean)
+    multi_statistics['cpu']['cpu_median_usage_interval'] = float(series_cpu_median_usage_std)
 
     series_cpu_max_usage_mean = np.mean(series_cpu_max_usage)
     series_cpu_max_usage_std = np.std(series_cpu_max_usage)
-    multi_statistics['cpu']['cpu_max_usage'] = series_cpu_max_usage_mean
-    multi_statistics['cpu']['cpu_max_usage_interval'] = series_cpu_max_usage_std
+    multi_statistics['cpu']['cpu_max_usage'] = float(series_cpu_max_usage_mean)
+    multi_statistics['cpu']['cpu_max_usage_interval'] = float(series_cpu_max_usage_std)
 
     # memory
     series_mem_mean_usage_mean = np.mean(series_mem_mean_usage)
     series_mem_mean_usage_std = np.std(series_mem_mean_usage)
-    multi_statistics['cpu']['mem_mean_usage'] = series_mem_mean_usage_mean
-    multi_statistics['cpu']['mem_mean_usage_interval'] = series_mem_mean_usage_std
+    multi_statistics['cpu']['mem_mean_usage'] = float(series_mem_mean_usage_mean)
+    multi_statistics['cpu']['mem_mean_usage_interval'] = float(series_mem_mean_usage_std)
 
     series_mem_median_usage_mean = np.mean(series_mem_median_usage)
     series_mem_median_usage_std = np.std(series_mem_median_usage)
-    multi_statistics['cpu']['mem_median_usage'] = series_mem_median_usage_mean
-    multi_statistics['cpu']['mem_median_usage_interval'] = series_mem_median_usage_std
+    multi_statistics['cpu']['mem_median_usage'] = float(series_mem_median_usage_mean)
+    multi_statistics['cpu']['mem_median_usage_interval'] = float(series_mem_median_usage_std)
 
     series_mem_max_usage_mean = np.mean(series_mem_max_usage)
     series_mem_max_usage_std = np.std(series_mem_max_usage)
-    multi_statistics['cpu']['mem_max_usage'] = series_mem_max_usage_mean
-    multi_statistics['cpu']['mem_max_usage_interval'] = series_mem_max_usage_std
+    multi_statistics['cpu']['mem_max_usage'] = float(series_mem_max_usage_mean)
+    multi_statistics['cpu']['mem_max_usage_interval'] = float(series_mem_max_usage_std)
 
   # measure
   for measure in series_measures:
@@ -149,33 +149,33 @@ def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'
       if per_value['type'] == 'SCALAR':
         scalar_array = np.array(per_value['value'])
         if len(scalar_array.shape) == 1:
-          per_value['value'] = np.mean(scalar_array)
+          per_value['value'] = float(np.mean(scalar_array))
           if method == 'bootstrap':
             per_value['interval'] = bootstrap_direct_confidence_interval(scalar_array)
           else:
-            per_value['interval'] = np.std(scalar_array)
+            per_value['interval'] = float(np.std(scalar_array))
         else:
           assert(len(scalar_array.shape) == 2)
-          per_value['value'] = np.mean(scalar_array,axis=0).tolist()
-          per_value['interval'] = np.std(scalar_array,axis=0).tolist()
+          per_value['value'] = np.mean(scalar_array, axis=0).tolist()
+          per_value['interval'] = np.std(scalar_array, axis=0).tolist()
       elif per_value['type'] == 'CURVE':
         # shape (N,curves_num,point_num,2)
         scalar_array = np.array(per_value['value'])
         assert(len(scalar_array.shape) == 4)
-        x,y = np.split(scalar_array,2,axis=3)
-        x = np.squeeze(x,axis=3)
-        xt = np.transpose(x,[1,2,0])
-        x_mean = np.mean(xt,axis=2)
+        x, y = np.split(scalar_array, 2, axis=3)
+        x = np.squeeze(x, axis=3)
+        xt = np.transpose(x, [1, 2, 0])
+        x_mean = np.mean(xt, axis=2)
 
-        y = np.squeeze(y,axis=3)
-        yt = np.transpose(y,[1,2,0])
-        y_mean = np.mean(yt,axis=2) # (curves_num,point_num)
-        y_std = np.std(yt,axis=2)   # (curves_num,point_num)
+        y = np.squeeze(y, axis=3)
+        yt = np.transpose(y, [1, 2, 0])
+        y_mean = np.mean(yt, axis=2) # (curves_num,point_num)
+        y_std = np.std(yt, axis=2)   # (curves_num,point_num)
 
         # shape (curves_num,point_num,2)
-        xy = np.concatenate((np.expand_dims(x_mean,2),np.expand_dims(y_mean,2)),axis=2)
+        xy = np.concatenate((np.expand_dims(x_mean, 2), np.expand_dims(y_mean, 2)), axis=2)
         curves_num = xy.shape[0]
-        curves_list = np.split(xy,curves_num,axis=0)
+        curves_list = np.split(xy, curves_num, axis=0)
 
         xy_std = np.concatenate((np.expand_dims(x_mean,2),np.expand_dims(y_std,2)),axis=2)
         curves_std_list = np.split(xy_std,curves_num,axis=0)
@@ -186,11 +186,11 @@ def multi_repeats_measures_statistic(multi_statistics, method='repeated-holdout'
         # shape (N,rows,cols)
         scalar_array = np.array(per_value['value'])
         assert(len(scalar_array.shape) == 3)
-        m_mean = np.mean(scalar_array,axis=0)
-        m_std = np.std(scalar_array,axis=0)
+        m_mean = np.mean(scalar_array, axis=0)
+        m_std = np.std(scalar_array, axis=0)
 
-        per_value['value'] = m_mean
-        per_value['interval'] = m_std
+        per_value['value'] = m_mean.tolist()
+        per_value['interval'] = m_std.tolist()
 
   multi_statistics['measure'] = series_measures
   ant_statistic_warp = {}

@@ -11,7 +11,7 @@ from antgo.measures.base import *
 from antgo.dataflow.common import *
 from antgo.measures.error import *
 
-__all__ = {'AntSADMatting': ('MATTING-SAD', 'MATTING'),
+default = {'AntSADMatting': ('MATTING-SAD', 'MATTING'),
            'AntMSEMatting': ('MATTING-MSE', 'MATTING'),
            'AntGradientMatting': ('MATTING-GRADIENT', 'MATTING')}
 class AntSADMatting(AntMeasure):

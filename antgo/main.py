@@ -6,13 +6,11 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from antgo.ant.cmd import *
+from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
-from antgo.ant.release import *
 from antgo.ant.batch import *
 from antgo.ant.activelearning import *
-from antgo.ant.train_server import *
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
@@ -39,7 +37,6 @@ _ant_support_commands = ["train",
                          "dataset",
                          "batch",
                          "demo",
-                         "release",
                          "startproject",
                          "tools/tffrozen",
                          "tools/tfrecords",
@@ -54,8 +51,6 @@ flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('version', None, 'minist antgo version')
 flags.DEFINE_string('task', None, 'task file')
 flags.DEFINE_string('dataset', None, 'dataset')
-flags.DEFINE_boolean('public', False, 'public or private')
-flags.DEFINE_boolean('local', False, 'cloud or local')
 flags.DEFINE_string('signature', '123', 'signature')
 flags.DEFINE_string('devices', '', 'devices')
 flags.DEFINE_string('servers', '', '')
@@ -77,14 +72,13 @@ flags.DEFINE_string('option', '', '')
 flags.DEFINE_indicator('support_user_upload', '')
 flags.DEFINE_indicator('support_user_input', '')
 flags.DEFINE_indicator('support_user_interaction', '')
-flags.DEFINE_indicator('automl', '')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
 flags.DEFINE_indicator('unlabel','')
 flags.DEFINE_indicator('zoo', '')
 flags.DEFINE_string('support_user_constraint', 'file_type:;file_size:', '')
 flags.DEFINE_indicator('skip_training', '')
-flags.DEFINE_string('running_platform', 'local', '')
+flags.DEFINE_string('running_platform', 'local', 'local/cloud')
 flags.DEFINE_string('order_id', '', '')
 flags.DEFINE_string('order_ip', '', '')
 flags.DEFINE_integer('order_rpc_port', 0, '')
@@ -115,24 +109,24 @@ def main():
   main_logo()
 
   # 2.step check antgo support command
-  if len(sys.argv) == 1:
+  if len(sys.argv) >= 2 and \
+          ((not sys.argv[1].startswith('-')) and sys.argv[1] not in _ant_support_commands):
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
     sys.exit(-1)
 
   # 3.step parse antgo running params
-  if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
-    flags.cli_param_flags(sys.argv[1:])
-  else:
-    flags.cli_param_flags(sys.argv[2:])
+  if len(sys.argv) >= 2:
+    if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
+      flags.cli_param_flags(sys.argv[1:])
+    else:
+      flags.cli_param_flags(sys.argv[2:])
 
-  if FLAGS.running_platform == 'local' and FLAGS.version() is not None:
-    a,b,c = FLAGS.version().split('.')
-    sys_a, sys_b, sys_c = version.split('.')
-    if int(sys_a) < int(a) or int(sys_b) < int(b) or int(sys_c) < int(c):
-      logger.error('antgo version dont satisfy task minimum request (%s)'%FLAGS.version())
-      sys.exit(-1)
+  # token
+  token = FLAGS.token()
+  if not PY3 and token is not None:
+    token = unicode(token)
 
-  # 4.step load antgo global config
+  # load antgo global config
   if FLAGS.config() is not None:
     # 1.step parse config.xml
     Config.parse_xml(FLAGS.config())
@@ -160,6 +154,19 @@ def main():
     config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
     Config.parse_xml(config_xml)
 
+  if len(sys.argv) == 1 or sys.argv[1].startswith('-'):
+    # interactive control
+    shell_process = AntShell(token)
+    shell_process.start()
+    return
+
+  if FLAGS.running_platform == 'local' and FLAGS.version() is not None:
+    a,b,c = FLAGS.version().split('.')
+    sys_a, sys_b, sys_c = version.split('.')
+    if int(sys_a) < int(a) or int(sys_b) < int(b) or int(sys_c) < int(c):
+      logger.error('antgo version dont satisfy task minimum request (%s)'%FLAGS.version())
+      sys.exit(-1)
+
   # 4.1.step check factory
   factory = getattr(Config, 'factory', None)
   if factory is None or factory == '':
@@ -180,19 +187,7 @@ def main():
   task_factory = Config.task_factory
   data_factory = Config.data_factory
 
-  # 5.step parse antgo running token (secret)
-  token = FLAGS.token()
-  if not PY3 and token is not None:
-    token = unicode(token)
-
   # 6.step parse antgo execute command
-  # 6.1.step interactive control context
-  if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
-    # interactive control
-    cmd_process = AntCmd(token)
-    cmd_process.start()
-    return
-
   # 6.2.step other command (train, challenge, compose, deploy, server)
   ant_cmd = sys.argv[1]
   if ant_cmd not in _ant_support_commands:
@@ -241,31 +236,21 @@ def main():
     with open(os.path.join(os.curdir, project_name, '%s_task.xml' % FLAGS.name()),'w') as fp:
       fp.write(output)
 
-    if FLAGS.automl():
-      # worker shell
-      with open(os.path.join(os.curdir, project_name, 'woker_run.sh'), 'w') as fp:
-        fp.write('nohup antgo train --worker --main_file=%s --main_param=%s --task=%s --signature=%s --devices=xxx,xxx,xxx --servers=xxx.xxx.xxx.xxx:xxx,xxx.xxx.xxx.xxx:xxx > run.log 2>&1 &'%('%s_main_file.py' % project_name.lower(),'%s_main_param.py' % project_name.lower(), '%s.xml' % project_name.lower(), FLAGS.signature()))
-
-      # master shell
-      with open(os.path.join(os.curdir, project_name, 'master_run.sh'), 'w') as fp:
-        fp.write('nohup antgo train --master --main_param=%s --signature=%s --port=xxx > run.log 2>&1 &'%('%s_main_param.py' % project_name.lower(), FLAGS.signature()))
-
+    template = env.get_template('task_shell.template')
+    output = ''
+    if FLAGS.token() is not None:
+      output = template.render(token=FLAGS.token(),
+                               main_file='%s_main.py' % FLAGS.name(),
+                               main_param='%s_param.yaml' % FLAGS.name())
     else:
-      template = env.get_template('task_shell.template')
-      output = ''
-      if FLAGS.token() is not None:
-        output = template.render(token=FLAGS.token(),
-                                 main_file='%s_main.py' % FLAGS.name(),
-                                 main_param='%s_param.yaml' % FLAGS.name())
-      else:
-        output = template.render(task='%s_task.xml' % FLAGS.name(),
-                                 main_file='%s_main.py' % FLAGS.name(),
-                                 main_param='%s_param.yaml' % FLAGS.name())
+      output = template.render(task='%s_task.xml' % FLAGS.name(),
+                               main_file='%s_main.py' % FLAGS.name(),
+                               main_param='%s_param.yaml' % FLAGS.name())
 
-      with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
-        fp.write(output)
+    with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
+      fp.write(output)
 
-      return
+    return
 
   if ant_cmd == 'tools/tfgraph':
     import antgo.codebook.tf.tftools as tftools
@@ -277,10 +262,9 @@ def main():
   time_stamp = timestamp()
   name = FLAGS.name()
   if name is None:
-    name = '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(time_stamp).strftime('%Y%m%d-%H%M%S-%f'))
-    if not PY3:
-      name = unicode(name)
-  
+    logger.error('must set name')
+    return
+
   # 7.2 check main folder (all related model code, includes main_file and main_param)
   main_folder = FLAGS.main_folder()
   if main_folder is None:
@@ -405,29 +389,6 @@ def main():
     return
 
   if ant_cmd == "train":
-    is_train_server = False
-    if FLAGS.worker() or FLAGS.master():
-      is_train_server = True
-
-    if is_train_server:
-      running_process = AntTrainServer(ant_context,
-                                       name,
-                                       token,
-                                       FLAGS.main_file(),
-                                       FLAGS.main_param(),
-                                       main_folder,
-                                       dump_dir,
-                                       is_worker=FLAGS.worker(),
-                                       is_master=FLAGS.master(),
-                                       devices=FLAGS.devices(),
-                                       max_time=FLAGS.max_time(),
-                                       signature=FLAGS.signature(),
-                                       servers=FLAGS.servers(),
-                                       task=FLAGS.task(),
-                                       port=FLAGS.port())
-      running_process.start()
-      return
-
     with running_sandbox(sandbox_time=FLAGS.max_time(),
                          sandbox_dump_dir=main_folder,
                          sandbox_experiment=None,
@@ -484,25 +445,12 @@ def main():
   elif ant_cmd == "batch":
     running_process = AntBatch(ant_context,
                                name,
+                               token,
                                data_factory,
                                dump_dir,
                                task,
                                unlabel=FLAGS.unlabel(),
                                devices=FLAGS.devices())
-    running_process.start()
-  elif ant_cmd == "release":
-    running_process = AntRelease(ant_context,
-                                 name,
-                                 token,
-                                 task,
-                                 html_template=FLAGS.html_template,
-                                 main_file=main_file,
-                                 main_param=main_param,
-                                 main_folder=main_folder,
-                                 support_user_upload=FLAGS.support_user_upload(),
-                                 support_user_input=FLAGS.support_user_interaction(),
-                                 support_user_interaction=FLAGS.support_user_interaction(),
-                                 support_upload_formats=FLAGS.support_upload_formats())
     running_process.start()
   elif ant_cmd == "activelearning":
     running_process = AntActiveLearning(ant_context,

@@ -9,7 +9,7 @@ from antgo.task.task import *
 from antgo.measures.base import *
 import numpy as np
 
-__all__ = {'AntALIFashionLandmarkNE': ('FashionLandmarkNE', 'LANDMARK')}
+default = {'AntALIFashionLandmarkNE': ('FashionLandmarkNE', 'LANDMARK')}
 class AntALIFashionLandmarkNE(AntMeasure):
   def __init__(self, task):
     super(AntALIFashionLandmarkNE, self).__init__(task, 'FashionLandmarkNE')

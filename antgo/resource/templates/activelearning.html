@@ -1,10 +1,160 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Segmentation</title>
-  <link href="static/css/activelearning.css" rel="stylesheet" type="text/css">
-  <script data-main="static/js/main.js" src="static/js/require.js"></script>
+  <title>ACTIVELEARNING-{{TASK_TITLE}}</title>
+  <link rel="icon" href="static/antgo.ico" type="image/x-icon">
+  <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+  <link href="https://cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel = "stylesheet">
+  <script src="https://cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <style>
+        .btn-blue-to-white{
+    -webkit-box-flex: 0;
+    -webkit-flex: 0 0 auto;
+    -ms-flex: 0 0 auto;
+    flex: 0 0 auto;
+    font-family: 'Atlas Grotesk',sans-serif;
+    font-weight: bolder;
+    font-size: 15px;
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing:0px;
+    text-align: center;
+
+    color: #20BEFF;
+    border: 1px solid #20BEFF;
+    background-color: #FFF;
+}
+
+.btn-blue-to-white:hover{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:active{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:focus{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+.btn-blue-to-white:visited{
+    color: #FFF;
+    text-decoration: none;
+    border: 1px solid #20BEFF;
+    background-color: #20BEFF;
+}
+    </style>
+    <script>
+        var upload = function (file, sliceIndex) {
+            var formData = new FormData();
+            var sliceSize = 1024 * 1024 * 2;
+            var sliceNum = Math.ceil(file.size / sliceSize);
+            var nextSize = Math.min((sliceIndex+1) * sliceSize, file.size);
+            var fileData = file.slice(sliceIndex * sliceSize, nextSize);
+            formData.append("file", fileData);
+            formData.append("fileName", file.name);
+            formData.append("sliceIndex", sliceIndex);
+            formData.append("sliceNum", sliceNum);
+
+            $.ajax({
+                url: "/activelearning/upload/",
+                type: "POST",
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (responseText) {
+                    // 显示上传进度
+                    var progress_val = (sliceIndex+1)/sliceNum * 100;
+                    $("#upload_progress").attr("style", "width: "+String(progress_val)+"%;");
+                    $("#upload_progress").text(String(progress_val)+"%;");
+                    if (file.size <= nextSize) {
+                        return;
+                    }
+
+                    //
+                    upload(file, ++sliceIndex);//递归调用
+                }
+            });
+        };
+
+        $(document).ready(function() {
+            // download unlabele dataset
+            $("#download").on('click', function () {
+                window.open('/activelearning/download/');
+            });
+
+            // upload label dataset
+            $("#upload").on("click", function(){
+                var file = $("#file")[0].files[0];
+                upload(file, 0);
+            });
+        });
+
+    </script>
+
 </head>
 <body>
+<div class="container">
+  <div class="jumbotron">
+      <h1>{{TASK_TITLE}} Interactive Label</h1>
+
+      <p> TASK TYPE - {{TASK_TYPE}}</p>
+      <p><a class="btn btn-primary btn-lg" href="#" role="button">Learn More</a></p>
+  </div>
+
+  <div class="panel panel-info">
+      <div class="panel-heading" style="height: 40px">
+          {% if STATE == "UNLABEL-RESET" %}
+          <p style="float:right">Wating Label {{ROUND_SIZE}}/{{UNLABELED_SIZE}}</p>
+          {% end %}
+
+          {% if STATE == "LABEL-ERROR" %}
+          <p>LABEL ERROR</p>
+          {% end %}
+
+          {% if STATE == "LABEL-CHECK" %}
+          <p>LABEL CHECK</p>
+          {% end %}
+
+          {% if STATE == "LABEL-FINISH" or STATE == "UNLABEL-PREPARE"%}
+          <p>Wating {{WAITING_TIME}} Minutes, to Launch Next Round Label</p>
+          {% end %}
+
+      </div>
+      <div class="panel-body" id="info">
+          <p>has been finished {{FINISHED_ROUND}} round label</p>
+          <p>model performance maybe improved {{PERFORMANCE}}, after</p>
+
+          {% if STATE == "LABEL-ERROR" %}
+            <p>Has Beened Uploaded Labeled Dataset Error on Round {{ROUND}}! Please Check Again!</p>
+            <p>{{MESSAGE}}</p>
+          {% end %}
+
+          {% if STATE == "LABEL-FINISH" %}
+          <p>Label Has Been Finish on Round {{ROUND}}</p>
+          {% end %}
+      </div>
+  </div>
+  <div>
+      <div class="progress">
+          <div class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width: 0%;" id="upload_progress">0%</div>
+      </div>
+      <div>
+            <input type='file' id='file'/><br/>
+      </div>
+      <div style="float: right;">
+            <button class="btn btn-success" type="button" id="download">DOWNLOAD</button>
+            <button class="btn btn-success" type="button" id="upload">UPLOAD</button>
+      </div>
+  </div>
+</div>
 </body>
 </html>

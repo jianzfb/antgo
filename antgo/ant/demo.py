@@ -11,8 +11,8 @@ from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
 from antgo.crowdsource.demo_server import *
 from antgo.utils import logger
+from multiprocessing import Process, Queue
 import socket
-import zmq
 
 
 def _is_open(check_ip, port):
@@ -70,24 +70,25 @@ class AntDemo(AntBase):
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
   def start(self):
-    # 0.step loading demo task
+    # 1.step loading demo task
     running_ant_task = None
     if self.token is not None:
-      # 0.step load challenge task
-      challenge_task_config = self.rpc("TASK-CHALLENGE")
-      if challenge_task_config is None:
+      # 1.1.step load challenge task
+      response = self.context.dashboard.challenge.get(command=type(self).__name__)
+      if response['status'] == 'ERROR':
         # invalid token
         logger.error('couldnt load challenge task')
         self.token = None
-      elif challenge_task_config['status'] == 'SUSPEND':
+      elif response['status'] == 'SUSPEND':
         # prohibit submit challenge task frequently
         # submit only one in one week
         logger.error('prohibit submit challenge task frequently')
         exit(-1)
-      elif challenge_task_config['status'] == 'OK':
+      elif response['status'] == 'OK':
+        content = response['content']
         # maybe user token or task token
-        if 'task' in challenge_task_config:
-          challenge_task = create_task_from_json(challenge_task_config)
+        if 'task' in content:
+          challenge_task = create_task_from_json(content)
           if challenge_task is None:
             logger.error('couldnt load challenge task')
             exit(-1)
@@ -98,35 +99,40 @@ class AntDemo(AntBase):
         exit(-1)
 
     if running_ant_task is None:
-      # 0.step load custom task
+      # 1.2.step load custom task
       custom_task = create_task_from_xml(self.ant_task_config, self.context)
       if custom_task is None:
         logger.error('couldnt load custom task')
-        exit(0)
+        exit(-1)
       running_ant_task = custom_task
 
     assert (running_ant_task is not None)
 
-    # 1.step prepare datasource and infer recorder
-    now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
+    # 2.step 注册实验
+    experiment_uuid = self.context.experiment_uuid
 
-    demo_dataset = QueueDataset()
+    # 3.step 配置数据传输管道
+    dataset_queue = Queue()
+
+    demo_dataset = QueueDataset(dataset_queue)
     demo_dataset._force_inputs_dirty()
-    self.context.recorder = QueueRecorderNode(((), None), demo_dataset)
-    self.context.recorder.dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'recorder')
+
+    recorder_queue = Queue()
+    self.context.recorder = QueueRecorderNode(((), None), recorder_queue)
+    self.context.recorder.dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'recorder')
     if not os.path.exists(self.context.recorder.dump_dir):
       os.makedirs(self.context.recorder.dump_dir)
 
-    # 2.step prepare dump dir
-    infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')
+    # 3.step 配置dump路径
+    infer_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'inference')
     if not os.path.exists(infer_dump_dir):
       os.makedirs(infer_dump_dir)
     else:
       shutil.rmtree(infer_dump_dir)
       os.makedirs(infer_dump_dir)
 
-    # 3.step start http server until it has been launched
-    # 3.1.step check whether demo port has been occupied
+    # 4.step 启动web服务
+    # 4.1.step 选择合适端口
     if self.demo_port is None:
       self.demo_port = 10000
     self.demo_port = _pick_idle_port(self.demo_port)
@@ -134,7 +140,7 @@ class AntDemo(AntBase):
 
     demo_name = running_ant_task.task_name
     demo_type = running_ant_task.task_type
-    process = multiprocessing.Process(target=demo_server_start,
+    process = Process(target=demo_server_start,
                                       args=(demo_name,
                                             demo_type,
                                             self.description_config,
@@ -145,11 +151,13 @@ class AntDemo(AntBase):
                                             infer_dump_dir,
                                             self.html_template,
                                             self.demo_port,
-                                            os.getpid()))
+                                            os.getpid(),
+                                            dataset_queue,
+                                            recorder_queue))
     process.daemon = True
     process.start()
 
-    # 4.step listening queue, wait client requery data
+    # 5.step 启动推断服务，等待客户端请求
     logger.info('start model infer background process')
     ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
     for b in ablation_blocks:

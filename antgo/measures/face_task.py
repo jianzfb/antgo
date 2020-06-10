@@ -8,7 +8,7 @@ from __future__ import print_function
 from antgo.measures.base import *
 from antgo.task.task import *
 
-__all__ = {'AntFaceVROC': ('FaceVROC', 'FACE_VERIFICATION')}
+default = {'AntFaceVROC': ('FaceVROC', 'FACE_VERIFICATION')}
 
 class AntFaceVROC(AntMeasure):
   def __init__(self, task):

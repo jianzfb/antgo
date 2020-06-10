@@ -8,8 +8,10 @@ from __future__ import print_function
 from pkgutil import walk_packages
 import os
 
+
 class AntMeasuresFactory(object):
   factory_measures = {}
+
   def __init__(self, task):
     self.task = task
     self.support_measures = []
@@ -49,9 +51,10 @@ class AntMeasuresFactory(object):
 
     AntMeasuresFactory.factory_measures['CUSTOM'].append((custom_measure, None))
 
+
 def _global_import(name):
   p = __import__(name, globals(), locals(), level=1)
-  lst = p.__all__ if '__all__' in dir(p) else {}
+  lst = p.default if 'default' in dir(p) else {}
   if len(lst) > 0:
     globals().pop(name)
 
@@ -61,6 +64,7 @@ def _global_import(name):
     if task_type not in AntMeasuresFactory.factory_measures:
       AntMeasuresFactory.factory_measures[task_type] = []
     AntMeasuresFactory.factory_measures[task_type].append((p.__dict__[measure_method], measure_name))
+
 
 for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
   if not module_name.startswith('_'):

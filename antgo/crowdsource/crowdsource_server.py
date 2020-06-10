@@ -15,7 +15,6 @@ import pipes
 import json
 import uuid
 from tornado.options import define, options
-from antgo.crowdsource.slaver import *
 from antgo.utils import logger
 import multiprocessing
 import requests
@@ -25,8 +24,7 @@ import copy
 import shutil
 import socket
 import random
-import zmq
-from zmq.eventloop import future
+import sys
 from antgo.crowdsource.utils import *
 Config = config.AntConfig
 
@@ -41,6 +39,10 @@ class BaseHandler(tornado.web.RequestHandler):
     return self.settings['html_template']
 
   @property
+  def keywords_template(self):
+    return self.settings.get('keywords_template', {})
+
+  @property
   def db(self):
     return self.settings['db']
 
@@ -53,23 +55,27 @@ class BaseHandler(tornado.web.RequestHandler):
     return self.settings['token']
 
   @property
-  def zmq_client_socket(self):
-    return self.settings['zmq_client_socket']
+  def request_queue(self):
+    return self.settings['request_queue']
+
+  @property
+  def response_queue(self):
+    return self.settings['response_queue']
 
 
 class IndexHandler(BaseHandler):
-  def get(self, experiment_id, user_id):
+  def get(self):
     session_id = self.get_cookie('sessionid')
     if session_id is None:
-      session_id =str(uuid.uuid4())
+      session_id = str(uuid.uuid4())
       self.set_secure_cookie('sessionid', session_id)
 
-
     if session_id not in self.db['user']:
-      self.db['user'][session_id] = user_id
+      self.db['user'].append(session_id)
 
     # render page
-    self.render(self.html_template, task={'title': self.task_name,})
+    self.keywords_template.update({'task': self.task_name})
+    self.render(self.html_template, **self.keywords_template)
 
 
 class HeartBeatHandler(tornado.web.RequestHandler):
@@ -79,7 +85,7 @@ class HeartBeatHandler(tornado.web.RequestHandler):
 
 class ClientQuery(BaseHandler):
   @gen.coroutine
-  def post(self, experiment_id, user_id):
+  def post(self):
     if self.get_cookie('sessionid') not in self.db['user']:
       self.set_status(500)
       self.finish()
@@ -95,15 +101,8 @@ class ClientQuery(BaseHandler):
     client_query['QUERY_STATUS'] = self.get_argument('QUERY_STATUS', '')
 
     # 1.step get process result
-    self.zmq_client_socket.send_json(client_query)
-    server_response = yield self.zmq_client_socket.recv_json()
-
-    # 2.step is over flag
-    if 'PAGE_STATUS' in server_response and server_response['PAGE_STATUS'] == 'STOP':
-      if self.token is not None:
-        user_authorization = {'Authorization': "token " + self.token}
-        request_url = 'http://%s:%s/hub/api/crowdsource/%s/proxy' % (Config.server_ip, Config.server_port, experiment_id)
-        requests.delete(request_url, data={'user_name': user_id}, headers=user_authorization)
+    self.request_queue.put(client_query)
+    server_response = self.response_queue.get()
 
     # 3.step return server response
     self.write(json.dumps(server_response))
@@ -128,8 +127,11 @@ def crowdsrouce_server_start(parent_id,
                              dump_dir,
                              task_name,
                              html_template,
+                             keywords_template,
                              server_port,
-                             crowdsource_info={}):
+                             crowdsource_info={},
+                             request_queue=None,
+                             response_queue=None):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
   
@@ -139,8 +141,6 @@ def crowdsrouce_server_start(parent_id,
   # 0.step define tornado http server port
   define('port', default=server_port, help="run on the given port", type=int)
 
-  # reverse tcp tunnel (inner net pass through)
-  reverse_tcp_tunnel_process = None
   try:
     # 0.step prepare static resource to dump_dir
     if not os.path.exists(os.path.join(dump_dir, 'static')):
@@ -167,52 +167,21 @@ def crowdsrouce_server_start(parent_id,
     if os.path.exists(os.path.join(os.curdir, html_template)):
       shutil.copy(os.path.join(os.curdir, html_template), crowdsource_tempate_dir)
 
-    # 1.step request open reverse tcp tunnel port
-    if app_token is not None:
-      try:
-        request_url = 'http://%s:%s/hub/api/crowdsource/evaluation/experiment/%s'%(Config.server_ip, Config.server_port, experiment_id)
-        user_authorization = {'Authorization': "token " + app_token}
-        if app_token is None:
-          logger.error('couldnt build connection with mltalker (token is None)')
-          return
-
-        time.sleep(5)
-        # collect crowdsource basic information
-        res = requests.post(request_url, data=crowdsource_info, headers=user_authorization)
-        content = json.loads(res.content)
-        inner_port = None
-        if content['STATUS'] == 'SUCCESS':
-          inner_port = content['INNER_PORT']
-
-        if inner_port is None:
-          logger.error('fail to apply public port in mltalker')
-          return
-
-        # 2.step launch reverse tcp tunnel
-        master = '%s:%s'%(Config.server_ip, str(inner_port))
-        reverse_tcp_tunnel_process = multiprocessing.Process(target=launch_slaver_proxy,
-                                                             args=(master, '127.0.0.1:%d'%server_port))
-        reverse_tcp_tunnel_process.start()
-      except:
-        logger.error('couldnt build reverse proxy')
-
     # 3.step launch crowdsource server (http server)
     tornado.options.parse_command_line()
-    context = future.Context.instance()
-    client_socket = context.socket(zmq.REQ)
-    client_socket.bind('ipc://%s'%str(parent_id))
-
     settings={'template_path': crowdsource_tempate_dir,
               'static_path': crowdsource_static_folder,
               'task_name': task_name,
-              'html_template':html_template,
+              'html_template': html_template,
+              'keywords_template': keywords_template,
               'cookie_secret': str(uuid.uuid4()),
-              'port':server_port,
-              'db': {'user':{}},
+              'port': server_port,
+              'db': {'user': []},
               'token': app_token,
-              'zmq_client_socket': client_socket,}
-    app = tornado.web.Application(handlers=[(r"/crowdsource/([^/]+)/user/([^/]+)/", IndexHandler),
-                                            (r"/crowdsource/([^/]+)/user/([^/]+)/query", ClientQuery),
+              'request_queue': request_queue,
+              'response_queue': response_queue}
+    app = tornado.web.Application(handlers=[(r"/", IndexHandler),
+                                            (r"/query", ClientQuery),
                                             (r"/heartbeat", HeartBeatHandler),
                                             (r"/.*/static/.*", PrefixRedirectHandler)],
                                   **settings)
@@ -221,25 +190,6 @@ def crowdsrouce_server_start(parent_id,
     http_server.listen(options.port)
     tornado.ioloop.IOLoop.instance().start()
   except GracefulExitException:
-    # 1.step notify mltalker stop crowdserver
-    if app_token is not None:
-      request_url = 'http://%s:%s/hub/api/crowdsource/evaluation/experiment/%s' % (Config.server_ip, Config.server_port, experiment_id)
-      user_authorization = {'Authorization': "token " + app_token}
-      if app_token is None:
-        logger.error('couldnt build connection with mltalker (token is None)')
-        return
-
-      res = requests.delete(request_url, data=None, headers=user_authorization)
-      content = json.loads(res.content)
-
-      if content['STATUS'] == 'SUCCESS':
-        logger.info('success to delete crowdsource router in mltalker')
-      else:
-        logger.error('fail to delete crowdsource router in mltalker')
-
-      # 2.step stop inner net proxy
-      if reverse_tcp_tunnel_process is not None:
-        os.kill(reverse_tcp_tunnel_process.pid, signal.SIGKILL)
     logger.info('exit crowdsource server')
   except Exception as err:
     # exception

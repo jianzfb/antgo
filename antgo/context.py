@@ -2,9 +2,8 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import print_function
 from contextlib import contextmanager
-from antgo.job import *
 from antgo.dataflow.dataset import *
-
+from antvis.client.dashboard import *
 
 class Params(object):
   def __init__(self, params=None):
@@ -68,11 +67,8 @@ class Context(object):
     self.pid = str(os.getpid())
     
     global_context = self
-    self.job = Job(self)
-    self.job.start()
-
     self.context_ant = None
-    self.context_stage = ""
+    self._stage = ""
 
     self.trainer_callbacks = []
     self.clear_callbacks = []
@@ -94,12 +90,18 @@ class Context(object):
     self._task_factory = None
     self._data_factory = None
 
+    self._dashboard = Dashboard()
+    self._experiment_uuid = None
+
+  @property
+  def dashboard(self):
+    return self._dashboard
+
+  @dashboard.setter
+  def dashboard(self, val):
+    self._dashboard = val
+
   def wait_until_clear(self):
-    if self.job is not None:
-      self.job.stop()
-      self.job.join()
-      self.job = None
-    
     for stoppable_thread in self._stoppable_threads:
       stoppable_thread.stop()
       if stoppable_thread.stop_condition is not None:
@@ -122,24 +124,18 @@ class Context(object):
     self.running_recorder = None
     self.context_params = None
     self.context_ant = None
-    self.context_stage = ""
+    self._stage = ""
     self.trainer_callbacks = []
     self._data_source = None
 
   @property
   def name(self):
     return self._name
+
   @name.setter
   def name(self, val):
     self._name = val
 
-  @property
-  def job(self):
-    return self.context_job
-  @job.setter
-  def job(self, val):
-    self.context_job = val
-  
   @property
   def ant(self):
     return self.context_ant
@@ -150,11 +146,15 @@ class Context(object):
 
   @property
   def stage(self):
-    return self.context_stage
+    return self._stage
 
   @stage.setter
   def stage(self, val):
-    self.context_stage = val
+    # reset experiment stage
+    self._stage = val
+    # reset experiment dashboard
+    if self.dashboard is not None:
+      self.dashboard.experiment_stage = val
 
   @property
   def devices(self):
@@ -171,10 +171,6 @@ class Context(object):
   @model.setter
   def model(self, val):
     self._model = val
-
-  def send(self, data, stage):
-    if self.ant is not None:
-      self.ant.send(data, stage)
 
   @property
   def training_process(self):
@@ -193,9 +189,6 @@ class Context(object):
     self.data_source = data_source
     self.training_process(data_source, dump_dir)
 
-    # clone charts
-    self.job.clone_charts()
-    
     if self.recorder is not None:
       if self.recorder.dump_dir is not None and is_inner_set:
         self.recorder.dump_dir = None
@@ -221,9 +214,6 @@ class Context(object):
       
     self.data_source = data_source
     self.infer_process(data_source, dump_dir)
-
-    # clone charts
-    self.job.clone_charts()
 
     if self.recorder is not None:
       if self.recorder.dump_dir is not None and is_inner_set:
@@ -306,6 +296,7 @@ class Context(object):
   @property
   def quiet(self):
     return self._quiet
+
   @quiet.setter
   def quiet(self, val):
     self._quiet = val
@@ -321,6 +312,7 @@ class Context(object):
   @property
   def data_factory(self):
     return self._data_factory
+
   @data_factory.setter
   def data_factory(self, val):
     self._data_factory = val
@@ -328,6 +320,15 @@ class Context(object):
   @property
   def task_factory(self):
     return self._task_factory
+
   @task_factory.setter
   def task_factory(self, val):
     self._task_factory = val
+
+  @property
+  def experiment_uuid(self):
+    return self._experiment_uuid
+
+  @experiment_uuid.setter
+  def experiment_uuid(self, val):
+    self._experiment_uuid = val

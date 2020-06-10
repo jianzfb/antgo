@@ -19,6 +19,8 @@ import shutil
 import tarfile
 from datetime import datetime
 from antgo.measures import *
+from antgo.measures.yesno_crowdsource import *
+
 
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
@@ -38,24 +40,24 @@ class AntChallenge(AntBase):
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
   def start(self):
-    # 0.step loading challenge task
+    # 1.step 加载挑战任务
     running_ant_task = None
     if self.token is not None:
-      # 0.step load challenge task
-      challenge_task_config = self.rpc("TASK-CHALLENGE")
-      if challenge_task_config is None:
-        # invalid token
+      # 1.1.step 从平台获取挑战任务配置信息
+      response = self.context.dashboard.challenge.get(command=type(self).__name__)
+      if response['status'] == 'ERROR':
         logger.error('couldnt load challenge task')
         self.token = None
-      elif challenge_task_config['status'] == 'SUSPEND':
+      elif response['status'] == 'SUSPEND':
         # prohibit submit challenge task frequently
         # submit only one in one week
         logger.error('prohibit submit challenge task frequently')
         exit(-1)
-      elif challenge_task_config['status'] == 'OK':
-        # maybe user token or task token
-        if 'task' in challenge_task_config:
-          challenge_task = create_task_from_json(challenge_task_config)
+      elif response['status'] == 'OK':
+        content = response['content']
+
+        if 'task' in content:
+          challenge_task = create_task_from_json(content)
           if challenge_task is None:
             logger.error('couldnt load challenge task')
             exit(-1)
@@ -66,163 +68,40 @@ class AntChallenge(AntBase):
         exit(-1)
 
     if running_ant_task is None:
-      # 0.step load custom task
+      # 1.2.step 加载自定义任务配置信息
       custom_task = create_task_from_xml(self.ant_task_config, self.context)
       if custom_task is None:
         logger.error('couldnt load custom task')
-        exit(0)
+        exit(-1)
       running_ant_task = custom_task
 
     assert (running_ant_task is not None)
 
-    # running position
-    if self.running_platform == 'p2p':
-      # 1.step pack codebase
-      codebase_address, codebase_address_code = self.package_codebase()
-
-      if codebase_address is None:
-        logger.error('couldnt package whole codebase')
-        return
-
-      # 2.step apply computing pow
-      max_running_time = 0.0    # unit hour
-      computing_pow = {}
-      if FLAGS.order_id() == '':
-        # transform max time unit
-        max_running_time_and_unit = FLAGS.max_time()
-        max_running_time = float(max_running_time_and_unit[0:-1])
-        max_running_time_unit = max_running_time_and_unit[-1]
-        if max_running_time_unit == 's':
-          # second
-          max_running_time = max_running_time / (60.0 * 60.0)
-        elif max_running_time_unit == 'm':
-          max_running_time = max_running_time / 60.0
-        elif max_running_time_unit == 'd':
-          max_running_time = max_running_time * 24
-        elif max_running_time_unit == 'h':
-          pass
-        else:
-          logger.error('max running time error')
-          return
-
-        computing_pow = self.subgradient_rpc.make_computingpow_order(max_running_time,
-                                                                     self.running_config['OS_PLATFORM'],
-                                                                     self.running_config['OS_VERSION'],
-                                                                     self.running_config['SOFTWARE_FRAMEWORK'],
-                                                                     self.running_config['CPU_MODEL'],
-                                                                     self.running_config['CPU_NUM'],
-                                                                     self.running_config['CPU_MEM'],
-                                                                     self.running_config['GPU_MODEL'],
-                                                                     self.running_config['GPU_NUM'],
-                                                                     self.running_config['GPU_MEM'],
-                                                                     running_ant_task.dataset_name,
-                                                                     FLAGS.max_fee())
-        if computing_pow is None:
-          logger.error('fail to find matched computing pow')
-          return
-
-        logger.info('success to apply computing pow order %s (%s:(rpc)%s or (ssh)%s)'%(computing_pow['order_id'],
-                                                                                       computing_pow['order_ip'],
-                                                                                       str(computing_pow['order_rpc_port']),
-                                                                                       str(computing_pow['order_ssh_port'])))
-      else:
-        computing_pow = {'order_id': FLAGS.order_id(),
-                         'order_ip': FLAGS.order_ip(),
-                         'order_rpc_port': FLAGS.order_rpc_port(),
-                         'order_ssh_port': FLAGS.order_ssh_port()}
-
-        if computing_pow['order_ip'] == '' or computing_pow['order_rpc_port'] == 0:
-          logger.error('order_ip is empty or order_rpc_port is empty')
-          return
-
-      # 3.step exchange access token
-      secret, signature = self.subgradient_rpc.signature(computing_pow['order_id'])
-      result = self.subgradient_rpc.authorize(computing_pow['order_ip'],
-                                              computing_pow['order_rpc_port'],
-                                              order_id=computing_pow['order_id'],
-                                              secret=secret,
-                                              signature=signature)
-
-      if result['authorize'] != 'success':
-        logger.error('couldnt authorize order access token')
-        return
-
-      order_access_token = result['access_token']
-      order_launch_time = result['launch_time']
-      order_rental_time = result['rental_time']
-
-      logger.info('computing pow rental time is %0.2f Hour, its expire time is %s'%(order_rental_time,
-                                                                                    time.strftime('%Y-%m-%d %H:%M:%S',
-                                                                                                  time.localtime(order_launch_time + order_rental_time * 60 * 60))))
-
-      remote_cmd = ''
-      if self.app_token is not None:
-        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --token=%s --max_time=%s'%(
-          self.main_file, self.main_param, self.app_token, '%fh'%(max_running_time - 0.5))
-      else:
-        remote_cmd = 'antgo challenge --main_file=%s --main_param=%s --running_platform=local --task=%s --max_time=%s'%(
-          self.main_file, self.main_param, FLAGS.task(), '%fh'%(max_running_time - 0.5))
-
-      if FLAGS.from_experiment() is not None:
-        remote_cmd += ' --from_experiment=%s'%FLAGS.from_experiment()
-      self.subgradient_rpc.launch(computing_pow['order_ip'],
-                                  computing_pow['order_rpc_port'],
-                                  access_token=order_access_token,
-                                  cmd=remote_cmd,
-                                  code_address=codebase_address,
-                                  code_address_code=codebase_address_code)
-
-      while True:
-        time.sleep(5)
-        status_response = self.subgradient_rpc.status(computing_pow['order_ip'],
-                                                      computing_pow['order_rpc_port'],
-                                                      access_token=order_access_token)
-
-        if result['authorize'] == 'fail':
-          # try refresh access token
-          refresh_result = self.subgradient_rpc.refresh(computing_pow['order_ip'],
-                                                        computing_pow['order_rpc_port'],
-                                                        access_token=order_access_token)
-
-          if refresh_result['authorize'] == 'fail':
-            logger.error('%s on computing pow server'%refresh_result['reason'])
-            return
-
-          order_access_token = refresh_result['refresh_access_token']
-        else:
-          logger.info('computing pow order is %s'%status_response['result'])
-
-          if status_response['result'] == 'running':
-            logger.info('you can access computing pow by \"ssh -p %d %s@%s\"'%(int(computing_pow['order_ssh_port']),
-                                                                               computing_pow['order_id'],
-                                                                               computing_pow['order_ip']))
-            return
-
-    # now time stamp
-    now_time_stamp = datetime.fromtimestamp(self.time_stamp).strftime('%Y%m%d.%H%M%S.%f')
+    # 2.step 注册实验
+    experiment_uuid = self.context.experiment_uuid
 
     # # ############
     # ss = AntYesNoCrowdsource(running_ant_task)
-    # cc = RecordReader('/Users/jian/PycharmProjects/antgo/antgo/dump/20180726.151520.620675/record')
+    # cc = RecordReader('/Users/jian/Downloads/workspace/talkingml/workspace')
     # ss.dump_dir = "/Users/jian/Downloads/mm/"
     # ss.experiment_id = '20180726.151520.620675'
     # ss.app_token = self.token
     # ss.crowdsource_server(cc)
+    # value = ss.eva()
+    # print(value)
     # ############
-    #
-    # time.sleep(100000)
 
-    # 0.step warp model (main_file and main_param)
-    self.stage = 'CHALLENGE-MODEL'
+    # 3.step 打包代码，并上传至云端
+    self.stage = 'CHALLENGE'
     # - backup in dump_dir
     main_folder = self.main_folder
     main_param = FLAGS.main_param()
     main_file = FLAGS.main_file()
 
-    if not os.path.exists(os.path.join(self.ant_dump_dir, now_time_stamp)):
-      os.makedirs(os.path.join(self.ant_dump_dir, now_time_stamp))
+    if not os.path.exists(os.path.join(self.ant_dump_dir, experiment_uuid)):
+      os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
 
-    goldcoin = os.path.join(self.ant_dump_dir, now_time_stamp, '%s-goldcoin.tar.gz' % self.ant_name)
+    goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, '%s-goldcoin.tar.gz' % self.ant_name)
 
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
@@ -233,18 +112,11 @@ class AntChallenge(AntBase):
       tar.add(os.path.join(main_folder, main_param), arcname=main_param)
     tar.close()
 
-    # - backup in cloud
-    if os.path.exists(goldcoin):
-      file_size = os.path.getsize(goldcoin) / 1024.0
-      if file_size < 500:
-        if not PY3 and sys.getdefaultencoding() != 'utf8':
-          reload(sys)
-          sys.setdefaultencoding('utf8')
-        # model file shouldn't too large (500KB)
-        with open(goldcoin, 'rb') as fp:
-          self.context.job.send({'DATA': {'MODEL': fp.read()}})
+    # 上传
+    self.context.dashboard.experiment.upload(MODEL=goldcoin,
+                                             APP_STAGE=self.stage)
 
-    # 1.step loading test dataset
+    # 4.step 加载测试数据集
     logger.info('loading test dataset %s'%running_ant_task.dataset_name)
     ant_test_dataset = running_ant_task.dataset('test',
                                                 os.path.join(self.ant_data_source, running_ant_task.dataset_name),
@@ -257,14 +129,14 @@ class AntChallenge(AntBase):
 
       self.stage = "CHALLENGE"
       logger.info('start infer process')
-      infer_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'inference')
+      infer_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'inference')
       if not os.path.exists(infer_dump_dir):
         os.makedirs(infer_dump_dir)
       else:
         shutil.rmtree(infer_dump_dir)
         os.makedirs(infer_dump_dir)
 
-      intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time_stamp, 'record')
+      intermediate_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'record')
       with safe_recorder_manager(self.context.recorder):
         self.context.recorder.dump_dir = intermediate_dump_dir
         # from ablation experiment
@@ -283,13 +155,22 @@ class AntChallenge(AntBase):
 
       if not self.context.recorder.is_measure:
         # has no annotation to continue to meausre
-        # notify
-        self.context.job.send(
-          {'DATA': {'REPORT': copy.deepcopy(task_running_statictic), 'RECORD': intermediate_dump_dir}})
+        # 更新实验统计信息
+        self.context.dashboard.experiment.patch(experiment_data=
+                                                json.dumps([{'REPORT': task_running_statictic,
+                                                            'APP_STAGE': self.stage}]))
 
-        # generate report resource
-        logger.info('generate model evaluation report')
-        everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
+        # 生成实验报告
+        logger.info('save experiment report')
+        everything_to_html(task_running_statictic,
+                           os.path.join(self.ant_dump_dir, experiment_uuid))
+
+        # 上传实验报告和记录
+        logger.info('uploading experiment report')
+        self.context.dashboard.experiment.upload(
+          REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+          RECORD=intermediate_dump_dir,
+          APP_STAGE=self.stage)
         return
 
       logger.info('start evaluation process')
@@ -302,7 +183,7 @@ class AntChallenge(AntBase):
             if not os.path.exists(measure.dump_dir):
               os.makedirs(measure.dump_dir)
 
-            measure.experiment_id = now_time_stamp
+            measure.experiment_id = experiment_uuid
             measure.app_token = self.token
             logger.info('launch crowdsource evaluation server')
             crowdsrouce_evaluation_status = measure.crowdsource_server(record_reader)
@@ -317,10 +198,13 @@ class AntChallenge(AntBase):
             # evaluation
             record_generator = record_reader.iterate_read('predict', 'groundtruth')
             result = measure.eva(record_generator, None)
-            if measure.is_support_rank:
-              # compute confidence interval
-              confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 1)
+
+            # compute confidence interval
+            if measure.is_support_rank and getattr(running_ant_task, 'confidence_interval', False):
+              confidence_interval = bootstrap_confidence_interval(record_reader, time.time(), measure, 10)
               result['statistic']['value'][0]['interval'] = confidence_interval
+            elif measure.is_support_rank:
+              result['statistic']['value'][0]['interval'] = (result['statistic']['value'][0]['value'], result['statistic']['value'][0]['value'])
 
           evaluation_measure_result.append(result)
 
@@ -357,27 +241,36 @@ class AntChallenge(AntBase):
       # benchmark record
       benchmark_model_data = {}
       if self.token is not None:
-        benchmark_info = self.rpc("TASK-BENCHMARK")
-        if benchmark_info is not None:
+        response = self.context.dashboard.benchmark.get()
+        if response['status'] == 'OK':
+          benchmark_info = response['content']
           for bmd in benchmark_info:
-            benchmark_name = bmd['benchmark_name']
-            benchmark_record = bmd['benchmark_record']
-            benchmark_report = bmd['benchmark_report']
+            benchmark_name = bmd['benchmark_name']        # benchmark name (experiment_uuid)
+            benchmark_record = bmd['benchmark_record']    # url
+            benchmark_report = bmd['benchmark_report']    # 统计数据
   
             # download benchmark record from url
-            benchmark_record = self.download(benchmark_record,
-                                             target_path=os.path.join(self.ant_dump_dir, now_time_stamp, 'benchmark'),
-                                             target_name='%s.tar.gz'%benchmark_name,
-                                             archive=benchmark_name)
-  
+            logger.info('download benchmark %s'%benchmark_name)
+            self.context.dashboard.experiment.download(file_name=benchmark_record,
+                                                       file_folder=os.path.join(self.ant_dump_dir,
+                                                                           experiment_uuid,
+                                                                           'benchmark',
+                                                                           benchmark_name),
+                                                       experiment_uuid=benchmark_name)
+
+
             if 'record' not in benchmark_model_data:
               benchmark_model_data['record'] = {}
-            benchmark_model_data['record'][benchmark_name] = benchmark_record
+            benchmark_model_data['record'][benchmark_name] = os.path.join(self.ant_dump_dir,
+                                                                           experiment_uuid,
+                                                                           'benchmark',
+                                                                           benchmark_name,
+                                                                          'record')
   
             if 'report' not in benchmark_model_data:
               benchmark_model_data['report'] = {}
   
-            for benchmark_experiment_name, benchmark_experiment_report in benchmark_report['CHALLENGE']['REPORT'].items():
+            for benchmark_experiment_name, benchmark_experiment_report in benchmark_report.items():
               benchmark_model_data['report'][benchmark_name] = benchmark_experiment_report
       elif self.ant_task_benchmark is not None:
         for experiment in self.ant_task_benchmark.split(','):
@@ -390,15 +283,33 @@ class AntChallenge(AntBase):
         benchmark_model_record = benchmark_model_data['record']
 
         task_running_statictic[self.ant_name]['significant_diff'] = {}
-        for measure in running_ant_task.evaluation_measures:
+        for meature_index, measure in enumerate(running_ant_task.evaluation_measures):
           if measure.is_support_rank and not measure.crowdsource:
             significant_diff_score = []
             for benchmark_model_name, benchmark_model_address in benchmark_model_record.items():
-              with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
-                with safe_recorder_manager(RecordReader(benchmark_model_address)) as benchmark_record_reader:
-                  s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 1)
+              if getattr(running_ant_task, 'confidence_interval', False):
+                with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
+                  with safe_recorder_manager(RecordReader(benchmark_model_address)) as benchmark_record_reader:
+                    s = bootstrap_ab_significance_compare([record_reader, benchmark_record_reader], time.time(), measure, 10)
 
-                  significant_diff_score.append({'name': benchmark_model_name, 'score': s})
+                    significant_diff_score.append({'name': benchmark_model_name, 'score': s})
+              else:
+                compare_value = \
+                  task_running_statictic[self.ant_name]['measure'][meature_index]['statistic']['value'][0]['value'] - \
+                  benchmark_model_data['report'][benchmark_model_name]['measure'][meature_index]['statistic']['value'][0]['value']
+                if compare_value > 0:
+                  if getattr(measure, 'larger_is_better', 0) == 1:
+                    significant_diff_score.append({'name': benchmark_model_name, 'score': 1})
+                  else:
+                    significant_diff_score.append({'name': benchmark_model_name, 'score': -1})
+                elif compare_value < 0:
+                  if getattr(measure, 'larger_is_better', 0) == 1:
+                    significant_diff_score.append({'name': benchmark_model_name, 'score': -1})
+                  else:
+                    significant_diff_score.append({'name': benchmark_model_name, 'score': 1})
+                else:
+                  significant_diff_score.append({'name': benchmark_model_name, 'score': 0})
+
             task_running_statictic[self.ant_name]['significant_diff'][measure.name] = significant_diff_score
           elif measure.is_support_rank and measure.crowdsource:
             # TODO: support model significance compare for crowdsource evaluation
@@ -467,7 +378,7 @@ class AntChallenge(AntBase):
                     sub_benchmark_measure_data = None
                     if running_ant_task.class_label is not None and len(running_ant_task.class_label) > 1:
                       sub_benchmark_measure_data = \
-                        [md for md in benchmark_measure_data if md['category'] == running_ant_task.class_label[category_id]]
+                        [md for md in benchmark_measure_data if md['category'] == running_ant_task.class_label[category_id] or md['category'] == category_id]
                     if sub_benchmark_measure_data is None:
                       sub_benchmark_measure_data = benchmark_measure_data
 
@@ -497,7 +408,7 @@ class AntChallenge(AntBase):
                   samples_map.append(sample)
 
               # order consistent
-              for sample_id, sample in enumerate(samples_map):
+              for sample_id, sample in enumerate(method_measure_data_order):
                   method_measure_mat[method_id, sample_id] = sample['score']
   
             is_binary = False
@@ -610,9 +521,19 @@ class AntChallenge(AntBase):
   
                   task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
 
-      # notify
-      self.context.job.send({'DATA': {'REPORT': copy.deepcopy(task_running_statictic)}})
+      # 更新实验统计信息
+      self.context.dashboard.experiment.patch(experiment_data=
+                                              json.dumps([{'REPORT': task_running_statictic,
+                                                           'APP_STAGE': self.stage}]))
 
-      # generate report resource
-      logger.info('generate model evaluation report')
-      everything_to_html(task_running_statictic, os.path.join(self.ant_dump_dir, now_time_stamp))
+      # 生成实验报告
+      logger.info('save experiment report')
+      everything_to_html(task_running_statictic,
+                         os.path.join(self.ant_dump_dir, experiment_uuid))
+
+      # 上传实验报告和记录
+      logger.info('uploading experiment report')
+      self.context.dashboard.experiment.upload(
+        REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+        RECORD=intermediate_dump_dir,
+        APP_STAGE=self.stage)
