@@ -9,6 +9,7 @@ from __future__ import unicode_literals
 from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
+from antgo.ant.browser import *
 from antgo.ant.batch import *
 from antgo.ant.activelearning import *
 from antgo.ant.utils import *
@@ -37,6 +38,7 @@ _ant_support_commands = ["train",
                          "dataset",
                          "batch",
                          "demo",
+                         "browser",
                          "startproject",
                          "tools/tffrozen",
                          "tools/tfrecords",
@@ -156,7 +158,7 @@ def main():
 
   if len(sys.argv) == 1 or sys.argv[1].startswith('-'):
     # interactive control
-    shell_process = AntShell(token)
+    shell_process = AntShell(Context(), token)
     shell_process.start()
     return
 
@@ -479,6 +481,13 @@ def main():
                                   dump_dir,
                                   token,
                                   dataset)
+    running_process.start()
+  elif ant_cmd == 'browser':
+    running_process = AntBrowser(ant_context,
+                                 name,
+                                 data_factory,
+                                 dataset,
+                                 dump_dir)
     running_process.start()
 
   # 9.step clear context

@@ -24,9 +24,9 @@ import yaml
 from antgo.utils.utils import *
 from datetime import datetime
 from antgo.ant.warehouse import *
-from antvis.client.httprpc import *
 from antvis.client.dashboard import *
-from qiniu import Auth, put_file, etag, urlsafe_base64_encode
+from antgo.context import *
+
 if sys.version > '3':
   PY3 = True
 else:
@@ -54,9 +54,10 @@ class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
     self.http_port = getattr(Config, 'server_port', '8999')
+    self.user_token = getattr(Config, 'server_user_token', 'xxx.xxx.xxx.xxx')
     self.http_prefix = 'http'
     self.ant_name = ant_name
-    self.app_token = os.environ.get('APP_TOKEN', ant_token)
+    self.app_token = ant_token
 
     # three key info
     if 'main_file' in kwargs:
@@ -161,21 +162,27 @@ class AntBase(object):
       self.ant_context.ant = self
 
     # reset dashboard
-    self.context.dashboard.reset(dashboard_ip=self.server_ip,
-                                 dashboard_port=int(self.http_port),
-                                 token=self.app_token,
-                                 dashboard_experiment="%s/%s"%(self.ant_name, self.ant_name))
+    self.experiment_uuid = \
+      '%s-%s-%s' % (str(uuid.uuid4()),
+                    str(uuid.uuid4()),
+                    datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
 
-    if self.context.dashboard.experiment_uuid is None:
-      time_stamp = timestamp()
-      experiment_uuid = \
-        '%s-%s' % (str(uuid.uuid4()), datetime.fromtimestamp(time_stamp).strftime('%Y%m%d-%H%M%S-%f'))
-      self.experiment_uuid = experiment_uuid
+    if self.app_token is not None:
+      # 任务模式，在dashboard上创建实验记录
+      self.context.dashboard.create_project(dashboard_ip=self.server_ip,
+                                            dashboard_port=int(self.http_port),
+                                            token=self.app_token,
+                                            experiment_name=self.ant_name,
+                                            server=self.app_server)
+
+      if self.context.dashboard.experiment_uuid is not None:
+        self.experiment_uuid = self.context.dashboard.experiment_uuid
+        self.context.experiment_uuid = self.context.dashboard.experiment_uuid
     else:
-      self.experiment_uuid = self.context.dashboard.experiment_uuid
-
-    #
-    self.context.experiment_uuid = self.experiment_uuid
+      # 非任务模式，基于user token与dashboard进行通信
+      self.context.dashboard.configure(dashboard_ip=self.server_ip,
+                                       dashboard_port=int(self.http_port),
+                                       token=self.user_token)
 
   @property
   def pid(self):
@@ -329,9 +336,10 @@ class AntBase(object):
       
       self.context = ctx
 
-      # 3.step update dashboard
-      self.context.dashboard.reset(dashboard_ip=self.server_ip,
-                                   dashboard_port=int(self.http_port),
-                                   token=self.app_token,
-                                   dashboard_experiment="%s/%s" % (self.ant_name, self.ant_name),
-                                   experiment_uuid=self.experiment_uuid)
+      # 3.step update dashboard configure
+      self.context.dashboard.configure(dashboard_ip=self.server_ip,
+                                       dashboard_port=int(self.http_port),
+                                       token=self.app_token,
+                                       experiment_uuid=self.experiment_uuid,
+                                       experiment_name=self.ant_name,
+                                       server=self.app_server)

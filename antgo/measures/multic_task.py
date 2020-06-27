@@ -48,10 +48,18 @@ class AntAccuracyMultiC(AntMeasure):
       acutal_label.append(gt_label)
 
     accuracy = multi_accuracy_labels(acutal_label, predicated_label)
-    return {'statistic': {'name': self.name,
-                          'value': [{'name': self.name, 'value': float(accuracy), 'type': 'SCALAR'}]},
-            'info': sample_scores}
+    # return {'statistic': {'name': self.name,
+    #                       'value': [{'name': self.name, 'value': float(accuracy), 'type': 'SCALAR'}]},
+    #         'info': sample_scores}
 
+    curve_data = [[[0,0],[1,1],[2,2]]]
+    bar_data = [10,5,2]
+    return {'statistic': {'name': self.name,
+                          'value': [{'name': self.name, 'value': float(accuracy), 'type': 'SCALAR'},
+                                    {'name': 'test-curve', 'value': curve_data,
+                                     'type': 'CURVE', 'x': 'x', 'y': 'y'},
+                                    {'name': 'test-bar', 'value': bar_data,
+                                     'type': 'SCALAR', 'x': ['a', 'b', 'c'], 'y': 'y'}]}}
 
 class AntConfusionMatrixMultiC(AntMeasure):
   def __init__(self, task):
@@ -84,8 +92,8 @@ class AntConfusionMatrixMultiC(AntMeasure):
     cm = compute_confusion_matrix(acutal_label, predicated_label, class_num)
 
     # ######
-    # curve_data = [[[0,0],[1,1],[2,2]]]
-    # bar_data = [[10,5,2],[23,2,9]]
+    curve_data = [[[0,0],[1,1],[2,2]]]
+    bar_data = [10,5,2]
     # image = np.random.random((50,50,3))
     # image = image*255
     # image = image.astype(np.uint8)
@@ -97,7 +105,15 @@ class AntConfusionMatrixMultiC(AntMeasure):
     #  'type': 'IMAGE'}]
     # ######
 
+    # return {'statistic': {'name': self.name,
+    #                       'value': [{'name': self.name, 'value': cm.tolist(),
+    #                                  'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label}
+    #                                 ]}}
+
     return {'statistic': {'name': self.name,
                           'value': [{'name': self.name, 'value': cm.tolist(),
-                                     'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label}
-                                    ]}}
+                                     'type': 'MATRIX', 'x': self.task.class_label, 'y': self.task.class_label},
+                                    {'name': 'test-curve', 'value': curve_data,
+                                     'type': 'CURVE', 'x': 'x', 'y': 'y'},
+                                    {'name': 'test-bar', 'value': bar_data,
+                                     'type': 'SCALAR', 'x': ['a', 'b', 'c'], 'y': 'y'}]}}

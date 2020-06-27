@@ -36,18 +36,18 @@ Config = config.AntConfig
 
 
 class AntShell(AntBase):
-  def __init__(self, ant_token):
+  def __init__(self, ant_context, ant_token):
     flags.DEFINE_string('experiment_uuid', None, 'uuid')
     flags.DEFINE_string('dataset_name', None, 'dataset name')
     flags.DEFINE_string('apply_name', None, 'apply name')
     flags.DEFINE_string('task_name', None, 'task name')
 
-    super(AntShell, self).__init__('SHELL', ant_token=ant_token)
+    super(AntShell, self).__init__('SHELL', ant_context=ant_context, ant_token=ant_token)
 
   def process_task_command(self):
     task_name = FLAGS.task_name() # task name
     if task_name is None:
-      response = self.http_rpc.task.get()
+      response = self.context.dashboard.task.get()
 
       if response['status'] == "ERROR":
         logger.error(response['message'])
@@ -64,7 +64,7 @@ class AntShell(AntBase):
 
       print(task_table)
     else:
-      response = self.http_rpc.apply.get(apply_name=task_name)
+      response = self.context.dashboard.apply.get(apply_name=task_name)
 
       if response['status'] == "ERROR":
         logger.error(response['message'])
@@ -72,7 +72,7 @@ class AntShell(AntBase):
 
       content = response['content']
       task_table = PrettyTable(["uuid", "experiment", "time", "optimum", "report", "model"])
-      for experiment in content:
+      for experiment in content['experiments']:
         task_table.add_row([experiment['experiment_uuid'],
                             experiment['experiment_name'],
                             time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(experiment['experiment_time'])),
@@ -85,7 +85,7 @@ class AntShell(AntBase):
   def process_experiment_command(self):
     experiment_uuid = FLAGS.experiment_uuid()
     if experiment_uuid is None:
-      response = self.http_rpc.experiment.get()
+      response = self.context.dashboard.experiment.get()
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -104,7 +104,7 @@ class AntShell(AntBase):
 
       print(table)
     else:
-      response = self.http_rpc.experiment.get(experiment_uuid=experiment_uuid)
+      response = self.context.dashboard.experiment.get(experiment_uuid=experiment_uuid)
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -140,7 +140,7 @@ class AntShell(AntBase):
   def process_dataset_command(self):
     dataset_name = FLAGS.dataset_name()
     if dataset_name is None:
-      response = self.http_rpc.dataset.get()
+      response = self.context.dashboard.dataset.get()
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -158,7 +158,7 @@ class AntShell(AntBase):
 
       print(table)
     else:
-      response = self.http_rpc.dataset.get(dataset_name=dataset_name)
+      response = self.context.dashboard.dataset.get(dataset_name=dataset_name)
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -179,7 +179,7 @@ class AntShell(AntBase):
     apply_name = FLAGS.apply_name()
     if task_name is None:
       # list all applied task
-      response = self.http_rpc.apply.get()
+      response = self.context.dashboard.apply.get()
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -202,7 +202,7 @@ class AntShell(AntBase):
       if apply_name is None:
         apply_name = task_name
 
-      response = self.http_rpc.apply.post(apply_name=apply_name,
+      response = self.context.dashboard.apply.post(apply_name=apply_name,
                                task_name=task_name)
       if response['status'] == "ERROR":
         logger.error(response['message'])
@@ -225,7 +225,7 @@ class AntShell(AntBase):
     uuid = FLAGS.experiment_uuid()
 
     if apply_name is not None:
-      response = self.http_rpc.apply.delete(apply_name=apply_name)
+      response = self.context.dashboard.apply.delete(apply_name=apply_name)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return
@@ -233,7 +233,7 @@ class AntShell(AntBase):
       logger.info(response['message'])
 
     if dataset_name is not None:
-      response = self.http_rpc.dataset.delete(dataset_name=dataset_name)
+      response = self.context.dashboard.dataset.delete(dataset_name=dataset_name)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return
@@ -242,7 +242,7 @@ class AntShell(AntBase):
 
 
     if task_name is not None:
-      response = self.http_rpc.task.delete(task_name=task_name)
+      response = self.context.dashboard.task.delete(task_name=task_name)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return
@@ -250,7 +250,7 @@ class AntShell(AntBase):
       logger.info(response['message'])
 
     if uuid is not None:
-      response = self.http_rpc.experiment.delete(experiment_uuid=uuid)
+      response = self.context.dashboard.experiment.delete(experiment_uuid=uuid)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return

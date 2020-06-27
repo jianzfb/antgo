@@ -32,6 +32,15 @@ class RESPONSE_STATUS_CODE:
 
 
 class BaseHandler(tornado.web.RequestHandler):
+  """Base Handler class with access to common methods and properties."""
+
+  def set_default_headers(self):
+    self.set_header("Access-Control-Allow-Origin", "*")
+    self.set_header('Access-Control-Allow-Headers', '*')
+    self.set_header("Access-Control-Allow-Methods", "POST,GET,PUT,DELETE,PATCH,OPTIONS")
+    self.set_header("Access-Control-Expose-Headers", "Content-Disposition")
+    # self.set_header("Access-Control-Allow-Credentials", "true")
+
   @property
   def name(self):
     return self.settings.get('name', '-')
@@ -71,6 +80,10 @@ class BaseHandler(tornado.web.RequestHandler):
   @property
   def download_folder(self):
     return self.settings.get('download', None)
+
+  @property
+  def dump_folder(self):
+    return self.settings.get('dump_path', None)
 
   @property
   def request_queue(self):

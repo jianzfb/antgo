@@ -66,6 +66,7 @@ class AntPixelAccuracySeg(AntMeasure):
           sample_scores.append({'id': id, 'score': float(nii) / float(len(p[0])), 'category': l})
 
     val = np.sum(sum_nii) / (np.sum(sum_ti) + 1e-6)
+    val = float(val)
 
     # # temparary test statistic quantity
     # # 1.step curve statistic
@@ -138,6 +139,7 @@ class AntMeanAccuracySeg(AntMeasure):
           sample_scores.append({'id': id, 'score': float(nii) / float(len(p[0])), 'category': l})
 
     val = np.mean(sum_nii / (sum_ti + 1e-6))
+    val = float(val)
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]},
             'info': sample_scores}
 
@@ -186,6 +188,7 @@ class AntMeanIOUSeg(AntMeasure):
         sum_ji[l] += len(np.where(predict == l)[0])
 
     val = np.mean(sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6))
+    val = float(val)
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]}}
 
 
@@ -233,6 +236,7 @@ class AntFrequencyWeightedIOUSeg(AntMeasure):
         sum_ji[l] += len(np.where(predict == l)[0])
 
     val = np.sum(sum_ti * sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6)) / (np.sum(sum_ti) + 1e-6)
+    val = float(val)
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]}}
 
 
@@ -338,5 +342,6 @@ class AntMeanIOUBoundary(AntMeasure):
     sum_ti = sum_ti[1:]
     sum_ji = sum_ji[1:]
     val = np.mean(sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6))
+    val = float(val)
     return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]},
             'info': sample_scores}

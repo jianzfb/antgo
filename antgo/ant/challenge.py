@@ -91,7 +91,8 @@ class AntChallenge(AntBase):
     # print(value)
     # ############
 
-    # 3.step 打包代码，并上传至云端
+    # 3.step  备份实验基本信息
+    # 3.1.step 打包代码，并上传至云端
     self.stage = 'CHALLENGE'
     # - backup in dump_dir
     main_folder = self.main_folder
@@ -101,7 +102,7 @@ class AntChallenge(AntBase):
     if not os.path.exists(os.path.join(self.ant_dump_dir, experiment_uuid)):
       os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
 
-    goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, '%s-goldcoin.tar.gz' % self.ant_name)
+    goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, 'code.tar.gz')
 
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
@@ -115,6 +116,10 @@ class AntChallenge(AntBase):
     # 上传
     self.context.dashboard.experiment.upload(MODEL=goldcoin,
                                              APP_STAGE=self.stage)
+
+    # 3.2.step 更新基本配置
+    self.context.dashboard.experiment.patch(experiment_uuid=experiment_uuid,
+                                            experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
 
     # 4.step 加载测试数据集
     logger.info('loading test dataset %s'%running_ant_task.dataset_name)

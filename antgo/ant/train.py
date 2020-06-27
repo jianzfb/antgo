@@ -232,6 +232,7 @@ class AntTrain(AntBase):
                 task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
     
     # stage-2 error eye analysis (all or subset in wrong samples)
+    # bad_score, eye_size 与 measure绑定
     custom_score_threshold = float(getattr(running_ant_task, 'bad_score', 0.5))
     eye_analysis_set_size = int(getattr(running_ant_task, 'eye_size', 100))
     
@@ -385,7 +386,8 @@ class AntTrain(AntBase):
         # fixed ablation method
         ablation_experiments_devices_num = 0
 
-    # 4.step 打包代码，并上传至云端
+    # 4.step  备份实验基本信息
+    # 4.1.step 打包代码，并上传至云端
     self.stage = 'TRAIN'
     # - backup in dump_dir
     main_folder = self.main_folder
@@ -395,7 +397,7 @@ class AntTrain(AntBase):
     if not os.path.exists(os.path.join(self.ant_dump_dir, experiment_uuid)):
       os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
 
-    goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, '%s-goldcoin.tar.gz'%self.ant_name)
+    goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, 'code.tar.gz')
     
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
@@ -409,6 +411,10 @@ class AntTrain(AntBase):
     # 上传
     self.context.dashboard.experiment.upload(MODEL=goldcoin,
                                              APP_STAGE=self.stage)
+
+    # 4.2.step 更新基本配置
+    self.context.dashboard.experiment.patch(experiment_uuid=experiment_uuid,
+                                            experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
 
     # 5.step 加载训练数据集
     logger.info('loading train dataset %s'%running_ant_task.dataset_name)

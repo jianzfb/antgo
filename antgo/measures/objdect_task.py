@@ -133,7 +133,7 @@ class AntVOCDet(AntMeasure):
       result = vmap(predict, gt)
       if result is None:
         result = 0.0
-      voc_mean_map.append(result)
+      voc_mean_map.append(float(result))
 
     # 3.step make json
     voc_map = float(np.mean(voc_mean_map))
@@ -244,7 +244,7 @@ class AntROCandAUCDet(AntMeasure):
             if auc_score is None:
                 auc_score = 0
             category_roc_curves.append(roc_curve.tolist())
-            category_auc_scroes.append(auc_score)
+            category_auc_scroes.append(float(auc_score))
 
         return {'statistic': {'name': self.name,
                               'value': [{'name': 'ROC',

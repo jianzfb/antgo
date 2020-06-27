@@ -61,6 +61,7 @@ class Context(object):
 
     self.training_process_callback = None
     self.infer_process_callback = None
+    self._data_generator = None
     self.running_recorder = None
     self.context_params = None
     
@@ -222,10 +223,11 @@ class Context(object):
   @property
   def data_generator(self):
     return self._data_generator
+
   @data_generator.setter
   def data_generator(self, g):
     self._data_generator = g
-  
+
   @property
   def recorder(self):
     return self.running_recorder
