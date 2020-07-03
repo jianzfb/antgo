@@ -11,6 +11,7 @@ include antgo/resource/static/banner.png
 include antgo/resource/static/holder.min.js
 recursive-include antgo/resource/css/ *
 recursive-include antgo/resource/js/ *
+recursive-include antgo/resource/browser/ *
 include antgo/config.xml
 include requirements.txt
 include README.rst

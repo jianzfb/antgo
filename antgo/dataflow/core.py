@@ -378,9 +378,15 @@ class Node(BaseNode):
 
   def iterator_value(self):
     while True:
-      self._value = self._evaluate()
-      yield self._value
-      self._force_inputs_dirty()
+      try:
+        self._value = self._evaluate()
+        yield self._value
+        self._force_inputs_dirty()
+      except StopIteration:
+        return
+      except:
+        logger.error('data flow pipeline error')
+        return
 
   def set_value(self, new_value):
     """Set a new value for an Input

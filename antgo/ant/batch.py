@@ -86,6 +86,9 @@ class AntBatch(AntBase):
 
         # 4.step load dataset and split
         logger.info('load task dataset and split')
+
+        # 独立处理验证集和测试集
+
         dataset_name = ''
         dataset_stage = 'test'
         if len(running_ant_task.dataset_name.split('/')) == 2:
@@ -105,6 +108,8 @@ class AntBatch(AntBase):
         # 5.step prepare ablation blocks
         logger.info('prepare model ablation blocks')
         ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
+        if ablation_blocks is None:
+            ablation_blocks = []
         for b in ablation_blocks:
             self.ant_context.deactivate_block(b)
 
