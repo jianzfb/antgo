@@ -5,8 +5,9 @@ from contextlib import contextmanager
 from antgo.dataflow.dataset import *
 from antvis.client.dashboard import *
 
+
 class Params(object):
-  def __init__(self, params=None):
+  def __init__(self, params={}):
     if params is not None:
       for k, v in params.items():
         if k != 'self':
@@ -17,6 +18,12 @@ class Params(object):
   def define(self, k, v=None):
     setattr(self, k, v)
     self._params[k] = v
+
+  def __getattr__(self, item):
+    if item not in object.__dict__:
+      return None
+
+    return object.__dict__[item]
 
   @property
   def content(self):

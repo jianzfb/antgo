@@ -76,22 +76,11 @@ class BaseHandler(tornado.web.RequestHandler):
 
   @property
   def demo_constraint(self):
-    constraint = self.settings.get('support_user_constraint', '')
-    constraint_terms = constraint.split(';')
+    constraint = self.settings.get('support_user_constraint', None)
+    if constraint is None:
+      constraint = {}
 
-    user_demo_constraint = {}
-    for ct in constraint_terms:
-      if len(ct) == 0:
-        continue
-
-      k,v = ct.split(':')
-      if k == 'file_type':
-        user_demo_constraint['file_type'] = v.split(',')
-      elif k == 'file_size':
-        if len(v) > 0:
-          user_demo_constraint['file_size'] = int(v)
-
-    return user_demo_constraint
+    return constraint
 
   @property
   def dataset_queue(self):
@@ -525,14 +514,7 @@ class GracefulExitException(Exception):
 
 def demo_server_start(demo_name,
                       demo_type,
-                      demo_description,
-                      support_user_upload,
-                      support_user_input,
-                      support_user_interaction,
-                      support_user_constraint,
-                      demo_dump_dir,
-                      html_template,
-                      server_port,
+                      demo_config,
                       parent_id,
                       dataset_queue,
                       recorder_queue):
@@ -541,11 +523,11 @@ def demo_server_start(demo_name,
   
   try:
     # 0.step define http server port
-    define('port', default=server_port, help='run on port')
+    define('port', default=demo_config['port'], help='run on port')
 
     # 1.step prepare static resource
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
-    demo_static_dir = os.path.join(demo_dump_dir, 'static')
+    demo_static_dir = os.path.join(demo_config['dump_dir'], 'static')
     if not os.path.exists(demo_static_dir):
       os.makedirs(demo_static_dir)
   
@@ -556,11 +538,12 @@ def demo_server_start(demo_name,
       shutil.copy(os.path.join(static_folder, 'resource', 'static', static_file), demo_static_dir)
   
     # 2.step prepare html template
-    demo_tempate_dir = os.path.join(demo_dump_dir, 'templates')
+    demo_tempate_dir = os.path.join(demo_config['dump_dir'], 'templates')
   
     if not os.path.exists(demo_tempate_dir):
       os.makedirs(demo_tempate_dir)
-  
+
+    html_template = demo_config['html_template']
     if html_template is None:
       html_template = 'demo.html'
   
@@ -575,15 +558,15 @@ def demo_server_start(demo_name,
       'template_path': demo_tempate_dir,
       'static_path': demo_static_dir,
       'html_template': html_template,
-      'port': server_port,
-      'demo_dump': demo_dump_dir,
+      'port': demo_config['port'],
+      'demo_dump': demo_config['dump_dir'],
       'demo_name': demo_name,
       'demo_type': demo_type,
-      'demo_description': demo_description,
-      'support_user_upload': support_user_upload,
-      'support_user_input': support_user_input,
-      'support_user_interaction': support_user_interaction,
-      'support_user_constraint': support_user_constraint,
+      'demo_description': demo_config['description_config'],
+      'support_user_upload': demo_config['interaction']['support_user_upload'],
+      'support_user_input': demo_config['interaction']['support_user_input'],
+      'support_user_interaction': demo_config['interaction']['support_user_interaction'],
+      'support_user_constraint': demo_config['interaction']['support_user_constraint'],
       'dataset_queue': dataset_queue,
       'recorder_queue': recorder_queue
     }
@@ -597,7 +580,7 @@ def demo_server_start(demo_name,
     http_server = tornado.httpserver.HTTPServer(app)
     http_server.listen(options.port)
   
-    logger.info('demo is providing server on port %d'%server_port)
+    logger.info('demo is providing server on port %d'%demo_config['port'])
     tornado.ioloop.IOLoop.instance().start()
     logger.info('demo stop server')
   except GracefulExitException:

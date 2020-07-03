@@ -140,7 +140,7 @@ class AntTrain(AntBase):
         
             model_name_ri = [method_samples_list[r]['name'] for r in ri]
             task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
-              {'value': s,
+              {'value': s.tolist() if type(s) != list else s,
                'type': 'MATRIX',
                'x': ci,
                'y': model_name_ri,
@@ -166,7 +166,7 @@ class AntTrain(AntBase):
                   task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
             
                 model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
-                tag_data = {'value': g_s,
+                tag_data = {'value': g_s.tolist() if type(g_s) != list else g_s,
                             'type': 'MATRIX',
                             'x': g_ci,
                             'y': model_name_ri,
@@ -187,7 +187,7 @@ class AntTrain(AntBase):
         
             model_name_ri = [method_samples_list[r]['name'] for r in ri]
             task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
-              {'value': s,
+              {'value': s.tolist() if type(s) != list else s,
                'type': 'MATRIX',
                'x': ci,
                'y': model_name_ri,
@@ -218,7 +218,7 @@ class AntTrain(AntBase):
                   task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
             
                 model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
-                tag_data = {'value': g_s,
+                tag_data = {'value': g_s.tolist() if type(g_s) != list else g_s,
                             'type': 'MATRIX',
                             'x': g_ci,
                             'y': model_name_ri,
@@ -233,8 +233,8 @@ class AntTrain(AntBase):
     
     # stage-2 error eye analysis (all or subset in wrong samples)
     # bad_score, eye_size 与 measure绑定
-    custom_score_threshold = float(getattr(running_ant_task, 'bad_score', 0.5))
     eye_analysis_set_size = int(getattr(running_ant_task, 'eye_size', 100))
+    focus_category = int(getattr(running_ant_task, 'eye_focus_category', 1))
     
     for measure_result in task_running_statictic[self.ant_name]['measure']:
       # analyze measure result
@@ -246,30 +246,22 @@ class AntTrain(AntBase):
       
       if measure_name is None or measure_data is None:
         continue
-      
+
+      focus_measure_data = [x for x in measure_data if x['category'] == focus_category]
+      if len(focus_measure_data) == 0:
+        continue
+
       measure_obj, = running_ant_task.evaluation_measure(measure_name)
-      
       eye_analysis_error = []
       eye_analysis_all = []
-      for sample_result_info in measure_data:
+      for sample_result_info in focus_measure_data:
         sample_id = sample_result_info['id']
         sample_score = sample_result_info['score']
         sample_category = sample_result_info['category'] if 'category' in sample_result_info else '-'
-        
-        if measure_obj.larger_is_better:
-          # larger is good
-          if sample_score > custom_score_threshold:
-            continue
-        else:
-          # smaller is good
-          if sample_score < custom_score_threshold:
-            continue
-          
         eye_analysis_all.append((sample_id, sample_score, sample_category))
       
       if len(eye_analysis_all) == 0:
         continue
-      
       eye_analysis_all_sort = sorted(eye_analysis_all, key=lambda x: x[1])
 
       eye_analysis_set_size = min(eye_analysis_set_size, len(eye_analysis_all_sort))
@@ -367,9 +359,14 @@ class AntTrain(AntBase):
     # analyze ablation blocks
     # user custom devices
     apply_devices = getattr(self.context.params, 'devices', [])
+    if apply_devices is None:
+      apply_devices = []
+
     # ablation experiment
     ablation_blocks = getattr(self.context.params, 'ablation', None)
     ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
+    if ablation_method is None:
+      ablation_method = 'regular'
     assert(ablation_method in ['regular', 'inregular', 'accumulate', 'any', 'fixed'])
     ablation_experiments_devices_num = 0
     if ablation_blocks is not None:
@@ -531,7 +528,7 @@ class AntTrain(AntBase):
 
     # 7.step 模型训练实验
     with safe_recorder_manager(ant_train_dataset):
-      # 7.step 模型训练及评估
+      # 7.1.step 模型训练及评估
       # 四种主流估计方法，holdout; repeated-holdout; bootstrap; kfold
       if running_ant_task.estimation_procedure is not None and \
               running_ant_task.estimation_procedure.lower() in ["holdout", "repeated-holdout", "bootstrap", "kfold"]:
@@ -646,7 +643,7 @@ class AntTrain(AntBase):
 
         return
 
-      # 8.step 模型训练
+      # 7.2.step 模型训练 (忽略 --skip_training)
       self.stage = "TRAIN"
       train_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'train')
       if not os.path.exists(train_dump_dir):

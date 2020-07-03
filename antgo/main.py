@@ -5,7 +5,8 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-
+import sys
+sys.path.append("/Users/zhangjian52/Downloads/workspace/code/antvis/")
 from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
@@ -72,14 +73,10 @@ flags.DEFINE_string('host_ip', '127,0.0.1', 'host ip address')
 flags.DEFINE_integer('host_port', 10000, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_string('option', '', '')
-flags.DEFINE_indicator('support_user_upload', '')
-flags.DEFINE_indicator('support_user_input', '')
-flags.DEFINE_indicator('support_user_interaction', '')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
-flags.DEFINE_indicator('unlabel','')
+flags.DEFINE_indicator('unlabel', '')
 flags.DEFINE_indicator('zoo', '')
-flags.DEFINE_string('support_user_constraint', 'file_type:;file_size:', '')
 flags.DEFINE_indicator('skip_training', '')
 flags.DEFINE_string('running_platform', 'local', 'local/cloud')
 flags.DEFINE_string('order_id', '', '')
@@ -93,15 +90,6 @@ flags.DEFINE_float('max_fee', 0.0, '')
 flags.DEFINE_string('tffrozen_input_nodes', '', 'input node names in graph')
 flags.DEFINE_string('tffrozen_output_nodes', '', 'output node names in graph')
 flags.DEFINE_string('tfgraph_path', '', 'pb file path')
-#############################################
-########  tools - tfrecords           #######
-#############################################
-flags.DEFINE_string('tfrecords_data_dir', None, 'data folder')
-flags.DEFINE_string('tfrecords_label_dir', None, 'label folder')
-flags.DEFINE_string('tfrecords_record_dir', None, 'output tfrecord folder')
-flags.DEFINE_string('tfrecords_label_suffix', '', 'label suffix')
-flags.DEFINE_string('tfrecords_train_or_test', 'train', 'train or test')
-flags.DEFINE_string('tfrecords_shards', 10, 'tfrecord shards')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -381,14 +369,14 @@ def main():
                                 FLAGS.tffrozen_output_nodes())
     return
   elif ant_cmd == 'tools/tfrecords':
-    # tensorflwo tools
-    import antgo.codebook.tf.tftools as tftools
-    tftools.tftool_generate_image_records(FLAGS.tfrecords_data_dir(),
-                                          FLAGS.tfrecords_label_dir(),
-                                          FLAGS.tfrecords_record_dir(),
-                                          FLAGS.tfrecords_label_suffix(),
-                                          FLAGS.tfrecords_train_or_test(),
-                                          FLAGS.tfrecords_shards())
+    # tensorflow tools
+    import antgo.codebook.tf.tftool_records as tftool_records
+    tfrecords = \
+        tftool_records.AntTFRecords(ant_context,
+                                    data_factory,
+                                    dataset,
+                                    dump_dir)
+    tfrecords.start()
     return
 
   if ant_cmd == "train":
@@ -439,10 +427,6 @@ def main():
                               ip=FLAGS.host_ip(),
                               port=FLAGS.host_port(),
                               time_stamp=time_stamp,
-                              support_user_upload=FLAGS.support_user_upload(),
-                              support_user_input=FLAGS.support_user_input(),
-                              support_user_interaction=FLAGS.support_user_interaction(),
-                              support_user_constraint=FLAGS.support_user_constraint(),
                               devices=FLAGS.devices())
 
     running_process.start()

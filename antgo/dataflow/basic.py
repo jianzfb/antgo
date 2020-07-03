@@ -85,7 +85,6 @@ def safe_recorder_manager(recorder):
     traceback.print_exc()
     raise sys.exc_info()[0]
 
-
 class RecordReader(object):
   def __init__(self, record_path, read_only=True):
     # db

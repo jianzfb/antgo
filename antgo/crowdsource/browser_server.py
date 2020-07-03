@@ -20,6 +20,7 @@ from antgo.utils import logger
 import sys
 import uuid
 import json
+import time
 
 
 class EntryApiHandler(BaseHandler):
@@ -35,22 +36,30 @@ class EntryApiHandler(BaseHandler):
       self.db['user'][session_id] = []
 
     if len(self.db['user'][session_id]) == 0:
-      if len(self.db['data']) == 0:
-        self.db['data'].append({
-          'value': self.response_queue.get(),
-          'status': False
-        })
+      # 新用户，从队列中获取新数据并加入用户队列中
+      self.db['data'].append({
+        'value': self.response_queue.get(),
+        'status': False,
+        'time': time.time()
+      })
 
       latest_id = len(self.db['data']) - 1
       self.db['user'][session_id].append(latest_id)
 
+    # 获得当前用户待审查数据ID
     entry_id = self.db['user'][session_id][-1]
+
+    # 构建返回数据
     response_content = {
       'value': self.db['data'][entry_id]['value'],
       'step': len(self.db['user'][session_id]) - 1,
       'tags': self.settings.get('tags', []),
-      'operator': []
+      'operator': [],
+      'dataset_flag': self.db['state'],
+      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
     }
+
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
 
 
@@ -68,6 +77,10 @@ class PrevApiHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
       return
 
+    if session_id not in self.db['user']:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
+      return
+
     step = int(step)
     if step < 0 or step >= len(self.db['user'][session_id]):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
@@ -76,10 +89,16 @@ class PrevApiHandler(BaseHandler):
     # 保存当前修改到内存
     data = json.loads(data)
     entry_id = self.db['user'][session_id][step]
-    self.db['data'][entry_id] = {'value': data, 'status': True}
+    self.db['data'][entry_id] = {'value': data, 'status': True, 'time': time.time()}
 
     # 保存当前修改到文件
-    with open(os.path.join(self.dump_folder, '%d.json'%entry_id), "w") as file_obj:
+    # 使用 offset
+    state = self.db['state']
+    offset = self.db['dataset'][state]['offset']
+    if not os.path.exists(os.path.join(self.dump_folder, state)):
+      os.makedirs(os.path.join(self.dump_folder, state))
+
+    with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
       json.dump(data, file_obj)
 
     # 获得当前用户上一步数据
@@ -93,7 +112,10 @@ class PrevApiHandler(BaseHandler):
       'value': self.db['data'][pre_entry_id]['value'],
       'step': pre_step,
       'tags': self.settings.get('tags', []),
-      'operator': []
+      'operator': [],
+      'state': self.db['state'],
+      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
     }
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
 
@@ -112,6 +134,10 @@ class NextApiHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
       return
 
+    if session_id not in self.db['user']:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
+      return
+
     step = int(step)
     if step < 0 or step >= len(self.db['user'][session_id]):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
@@ -120,10 +146,16 @@ class NextApiHandler(BaseHandler):
     # 保存当前修改到内存
     data = json.loads(data)
     entry_id = self.db['user'][session_id][step]
-    self.db['data'][entry_id] = {'value': data, 'status': True}
+    self.db['data'][entry_id] = {'value': data, 'status': True, 'time': time.time()}
 
     # 保存当前修改到文件
-    with open(os.path.join(self.dump_folder, '%d.json'%entry_id), "w") as file_obj:
+    # 使用 offset
+    state = self.db['state']
+    offset = self.db['dataset'][state]['offset']
+    if not os.path.exists(os.path.join(self.dump_folder, state)):
+      os.makedirs(os.path.join(self.dump_folder, state))
+
+    with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
       json.dump(data, file_obj)
 
     # 获得用户下一步数据
@@ -134,58 +166,48 @@ class NextApiHandler(BaseHandler):
         'value': self.db['data'][next_entry_id]['value'],
         'step': next_step,
         'tags': self.settings.get('tags', []),
-        'operator': []
+        'operator': [],
+        'state': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
       }
       self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
       return
 
-    # 重新获取数据
-    if entry_id == len(self.db['data']) - 1:
-      self.db['data'].append({'value': self.response_queue.get(), 'status': False})
-
+    # 当前已经到达用户最后一张图，下一张图必须从队列中获取
+    # 新数据来源（1，之前分配给某个用户，但一直没有收到反馈；2，新产生的数据）
+    # 1. 之前分配给某个用户，但一直没有收到反馈
     next_entry_id = -1
-    for index in range(entry_id + 1, len(self.db['data'])):
-      if self.db['data'][index]['status'] == False:
-        next_entry_id = index
+    now_time = time.time()
+    for sample_i, sample in enumerate(self.db['data']):
+      if not sample['status'] and (now_time - sample['time']) > 60:
+        next_entry_id = sample_i
         break
 
+    # 2. 新产生的数据
     if next_entry_id == -1:
-      self.db['data'].append({'value': self.response_queue.get(), 'status': False})
+      self.db['data'].append({'value': self.response_queue.get(), 'status': False, 'time': time.time()})
       next_entry_id = len(self.db['data']) - 1
 
+    # 为当前用户分配下一个审查数据
     self.db['user'][session_id].append(next_entry_id)
 
+    # 更新已经筛选数目
+    self.db['dataset'][self.db['state']]['samples_num_checked'] += 1
+
+    #
     response_content = {
       'value': self.db['data'][next_entry_id]['value'],
       'step': len(self.db['user'][session_id]) - 1,
       'tags': self.settings.get('tags', []),
-      'operator': []
+      'operator': [],
+      'state': self.db['state'],
+      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
     }
-    print(self.db['data'][next_entry_id]['value'])
-    self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
 
-    # # notify backend and waiting response
-    # next_data =  [{
-    #   'data': '/static/image/banner-multi-measure.png',
-    #   'type': 'image',
-    #   'title': 'title',
-    #   'tag': ['B', 'D']
-    # },
-    #   {
-    #     'data': '/static/image/banner-multi-measure.png',
-    #     'type': 'image',
-    #     'title': 'xxx',
-    #     'tag': ['A'],
-    #   },]
-    # operator = ['del']
-    # tags=['VV','E']
     #
-    # self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
-    #   'value': next_data,
-    #   'operator': operator,
-    #   'tags': tags,
-    #   'step': 0,
-    # })
+    self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
 
 
 class FileApiHandler(BaseHandler):
@@ -267,6 +289,41 @@ class OperatorApiHandler(BaseHandler):
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
+class ConfigApiHandler(BaseHandler):
+  def post(self):
+    offset_config = self.get_argument('offset_config', None)
+    if offset_config is not None:
+      offset_config = json.loads(offset_config)
+      dataset_flag = offset_config['dataset_flag']
+      dataset_offset = offset_config['dataset_offset']
+      if 'dataset' not in self.db:
+        self.db['dataset'] = {}
+      if dataset_flag not in self.db['dataset']:
+        self.db['dataset'][dataset_flag] = {}
+
+      self.db['dataset'][dataset_flag]['offset'] = dataset_offset
+
+    profile_config = self.get_argument('profile_config', None)
+    if profile_config is not None:
+      profile_config = json.loads(profile_config)
+      dataset_flag = profile_config['dataset_flag']
+      samples_num = profile_config['samples_num']
+      samples_num_checked = profile_config['samples_num_checked']
+
+      if 'dataset' not in self.db:
+        self.db['dataset'] = {}
+      if dataset_flag not in self.db['dataset']:
+        self.db['dataset'][dataset_flag] = {}
+
+      self.db['dataset'][dataset_flag]['samples_num'] = samples_num
+      self.db['dataset'][dataset_flag]['samples_num_checked'] = samples_num_checked
+
+    state = self.get_argument('state', None)
+    if state is not None:
+      # train,val or test
+      self.db['state'] = state
+
+
 class GracefulExitException(Exception):
   @staticmethod
   def sigterm_handler(signum, frame):
@@ -307,6 +364,7 @@ def browser_server_start(data_path, browser_dump_dir, response_queue, tags, serv
                                             (r"/browser-api/entry/", EntryApiHandler),
                                             (r"/browser-api/file/", FileApiHandler),
                                             (r"/browser-api/download/", DownloadApiHandler),
+                                            (r"/browser-api/config/", ConfigApiHandler),
                                             (r'/(.*)', tornado.web.StaticFileHandler,
                                              {"path": browser_static_dir, "default_filename": "index.html"}),],
                                   **settings)

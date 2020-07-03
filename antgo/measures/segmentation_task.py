@@ -11,138 +11,12 @@ from antgo.measures.base import *
 from antgo.dataflow.common import *
 from antgo.utils._resize import *
 from scipy import signal
+from scipy import ndimage
+import cv2
 
-default = {'AntPixelAccuracySeg': ('PixelAccuracy', 'SEGMENTATION'),
-           'AntMeanAccuracySeg': ('MeanAccuracy', 'SEGMENTATION'),
-           'AntMeanIOUSeg': ('MeanIOU', 'SEGMENTATION'),
-           'AntFrequencyWeightedIOUSeg': ('FrequencyWeightedIOU', 'SEGMENTATION'),
+default = {'AntMeanIOUSeg': ('MeanIOU', 'SEGMENTATION'),
            'AntMeanIOUBoundary': ('MeanIOUBoundary', 'SEGMENTATION'),
            }
-class AntPixelAccuracySeg(AntMeasure):
-  def __init__(self, task):
-    # paper: Jonathan Long, Evan Shelhamer, etc. Fully Convolutional Networks for Semantic Segmentation
-    # formular: \sum_i{n_{ii}}/\sum_i t_i
-    super(AntPixelAccuracySeg, self).__init__(task, 'PixelAccuracy')
-    assert(task.task_type == 'SEGMENTATION')
-
-    self.is_support_rank = True
-
-  def eva(self, data, label):
-    classes_num = len(self.task.class_label)
-
-    sum_nii = np.zeros((classes_num))
-    sum_ti = np.zeros((classes_num))
-
-    if label is not None:
-        data = zip(data, label)
-
-    sample_scores = []
-    for predict, gt in data:
-      id = None
-      if type(gt) == dict:
-        if 'segmentation_map' not in gt:
-          continue
-
-        id = gt['id']
-        gt = gt['segmentation_map']
-
-      # #临时代码
-      # predict = resize(predict, (gt.shape[0], gt.shape[1]))
-      #
-      gt_labels = set(gt.flatten())
-      for l in gt_labels:
-        l = int(l)
-        # if l == 0:
-        #   continue
-
-        p = np.where(gt == l)
-        sum_ti[l] += len(p[0])
-
-        predicted_l = predict[p]
-        nii = len(np.where(predicted_l == l)[0])
-        sum_nii[l] += nii
-
-        if id is not None:
-          sample_scores.append({'id': id, 'score': float(nii) / float(len(p[0])), 'category': l})
-
-    val = np.sum(sum_nii) / (np.sum(sum_ti) + 1e-6)
-    val = float(val)
-
-    # # temparary test statistic quantity
-    # # 1.step curve statistic
-    # curve_measure = {'name': 'MAP', 'value': [23.0, 11.0, 12.0], 'type': 'SCALAR', 'x': 'class',
-    #                                         'y': 'Mean Average Precision'}
-    #
-    # # 2.step histogram statistic
-    # histogram_measure = {'name': 'ROC', 'value': [[[0, 0], [1, 1], [2, 3]],
-    #                                                                      [[0, 3], [2, 5], [3, 0]]],
-    #                                             'type': 'CURVE', 'x': 'FP', 'y': 'TP',
-    #                                             'legend': ['class-0', 'class-1']}
-    #
-    # # 3.step matrix statistic
-    # matrix_measure = {'name': 'ccmm', 'value': (np.ones((3, 4)) * 3).tolist(), 'type': 'MATRIX',
-    #                                         'x': ['a', 'b', 'c', 'd'], 'y': ['x', 'y', 'z']}
-    #
-    # # 4.step image statistic
-    # random_img = np.random.random((100, 100))
-    # random_img = random_img * 255
-    # random_img = random_img.astype(np.uint8)
-    # image_measure = {'name': 'image', 'value': random_img, 'type': 'IMAGE'}
-
-    return {'statistic': {'name': self.name,
-                          'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]},
-            'info': sample_scores}
-
-
-class AntMeanAccuracySeg(AntMeasure):
-  def __init__(self, task):
-    # paper: Jonathan Long, Evan Shelhamer, etc. Fully Convolutional Networks for Semantic Segmentation
-    # formular: (1/n_{cl}) / \sum_i n_{ii}/t_i
-    super(AntMeanAccuracySeg, self).__init__(task, 'MeanAccuracy')
-    assert(task.task_type == 'SEGMENTATION')
-
-    self.is_support_rank = True
-
-  def eva(self, data, label):
-    classes_num = len(self.task.class_label)
-
-    sum_nii = np.zeros((classes_num))
-    sum_ti = np.zeros((classes_num))
-
-    if label is not None:
-      data = zip(data, label)
-
-    sample_scores = []
-    for predict, gt in data:
-      id = None
-      if type(gt) == dict:
-        if 'segmentation_map' not in gt:
-          continue
-
-        id = gt['id']
-        gt = gt['segmentation_map']
-
-      gt_labels = set(gt.flatten())
-      for l in gt_labels:
-        l = int(l)
-        # if l == 0:
-        #   continue
-
-        p = np.where(gt == l)
-        sum_ti[l] += len(p[0])
-
-        predicted_l = predict[p]
-        nii = len(np.where(predicted_l == l)[0])
-        sum_nii[l] += nii
-
-        if id is not None:
-          sample_scores.append({'id': id, 'score': float(nii) / float(len(p[0])), 'category': l})
-
-    val = np.mean(sum_nii / (sum_ti + 1e-6))
-    val = float(val)
-    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]},
-            'info': sample_scores}
-
 
 class AntMeanIOUSeg(AntMeasure):
   def __init__(self, task):
@@ -157,13 +31,13 @@ class AntMeanIOUSeg(AntMeasure):
   def eva(self, data, label):
     classes_num = len(self.task.class_label)
 
-    sum_nii = np.zeros((classes_num))
-    sum_ti = np.zeros((classes_num))
-    sum_ji = np.zeros((classes_num))
-
     if label is not None:
       data = zip(data, label)
 
+    sample_scores = []
+
+    total_score = 0.0
+    total_num = 0
     for predict, gt in data:
       id = None
       if type(gt) == dict:
@@ -174,70 +48,40 @@ class AntMeanIOUSeg(AntMeasure):
         gt = gt['segmentation_map']
 
       gt_labels = set(gt.flatten())
+
+      statistic_score = 0.0
+      statistic_class_num = 0
       for l in gt_labels:
         l = int(l)
-        # if l == 0:
-        #   continue
-        p = np.where(gt == l)
-        sum_ti[l] += len(p[0])
 
-        predicted_l = predict[p]
-        nii = len(np.where(predicted_l == l)[0])
-        sum_nii[l] += nii
+        _gt = np.zeros(gt.shape)
+        _predict = np.zeros(predict.shape)
 
-        sum_ji[l] += len(np.where(predict == l)[0])
+        _gt[np.where(gt == l)] = 1.0
+        _predict[np.where(predict == l)] = 1.0
 
-    val = np.mean(sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6))
-    val = float(val)
-    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]}}
-
-
-class AntFrequencyWeightedIOUSeg(AntMeasure):
-  def __init__(self, task):
-    # paper: Jonathan Long, Evan Shelhamer, etc. Fully Convolutional Networks for Semantic Segmentation
-    # formular: (\sum_kt_k)^{-1} / \sum_i t_in_{ii}/(t_i+\sum_j n_{ji}-n_{ii})
-
-    super(AntFrequencyWeightedIOUSeg, self).__init__(task, 'FrequencyWeightedIOU')
-    assert(task.task_type == 'SEGMENTATION')
-
-    self.is_support_rank = True
-
-  def eva(self, data, label):
-    classes_num = len(self.task.class_label)
-
-    sum_nii = np.zeros((classes_num))
-    sum_ti = np.zeros((classes_num))
-    sum_ji = np.zeros((classes_num))
-
-    if label is not None:
-        data = zip(data, label)
-
-    for predict, gt in data:
-      id = None
-      if type(gt) == dict:
-        if 'segmentation_map' not in gt:
+        if np.sum(_gt) < 1.0:
           continue
 
-        id = gt['id']
-        gt = gt['segmentation_map']
+        intersection = np.sum(_gt * _predict)
+        union = np.sum(_gt) + np.sum(_predict) - intersection + 0.0000000001
 
-      gt_labels = set(gt.flatten())
-      for l in gt_labels:
-        l = int(l)
-        # if l == 0:
-        #     continue
-        p = np.where(gt == l)
-        sum_ti[l] += len(p[0])
+        l_score = intersection / union
+        statistic_score += l_score
+        statistic_class_num += 1
 
-        predicted_l = predict[p]
-        nii = len(np.where(predicted_l == l)[0])
-        sum_nii[l] += nii
+        if id is not None:
+          sample_scores.append({'id': id, 'score': l_score, 'category': l})
 
-        sum_ji[l] += len(np.where(predict == l)[0])
+      statistic_score /= statistic_class_num
+      total_score += statistic_score
+      total_num += 1
 
-    val = np.sum(sum_ti * sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6)) / (np.sum(sum_ti) + 1e-6)
-    val = float(val)
-    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type': 'SCALAR'}]}}
+    avg_score = total_score / total_num
+
+    avg_score = float(avg_score)
+    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': avg_score, 'type':'SCALAR'}]},
+            'info': sample_scores}
 
 
 class AntMeanIOUBoundary(AntMeasure):
@@ -251,20 +95,14 @@ class AntMeanIOUBoundary(AntMeasure):
   
   def eva(self, data, label):
     classes_num = len(self.task.class_label)
-
-    sum_nii = np.zeros((classes_num))
-    sum_ti = np.zeros((classes_num))
-    sum_ji = np.zeros((classes_num))
-
     trimap_width = int(getattr(self.task, 'MeanIOUBoundary_trimap_width', 3))
-    offset_x, offset_y = np.meshgrid(np.arange(-trimap_width, trimap_width + 1),
-                                     np.arange(-trimap_width, trimap_width + 1))
-    offset = np.column_stack((offset_x.flatten(), offset_y.flatten()))
 
     if label is not None:
         data = zip(data, label)
 
     sample_scores = []
+    total_score = 0.0
+    total_num = 0
     for predict, gt in data:
       id = None
       if type(gt) == dict:
@@ -275,73 +113,62 @@ class AntMeanIOUBoundary(AntMeasure):
         gt = gt['segmentation_map']
       
       gt_labels = set(gt.flatten())
-      rows, cols = gt.shape[:2]
-
+      statistic_score = 0.0
+      statistic_class_num = 0
       for l in gt_labels:
         l = int(l)
         if l == 0:
+          # class 0 consider as ignore class
           continue
 
-        # # generate trimap for objects (predict)
-        # predict_obj_map = np.zeros((rows, cols), dtype=np.int32)
-        # predict_obj_map[np.where(predict == l)] = 1
-        #
-        # predict_boundary = np.where((predict_obj_map[0:-1, 0:-1] - predict_obj_map[1:, 1:]) != 0)
-        # predict_boundary = np.column_stack(predict_boundary)
-        # predict_band_boundary = np.expand_dims(predict_boundary, 1) + offset
-        # predict_band_boundary = predict_band_boundary.reshape(-1, 2)
-        # index = np.where((predict_band_boundary[:, 0] > 0) &
-        #                  (predict_band_boundary[:, 1] > 0) &
-        #                  (predict_band_boundary[:, 0] < rows) &
-        #                  (predict_band_boundary[:, 1] < cols))
-        # predict_trimap = np.zeros((rows, cols), dtype=np.int32)
-        # predict_trimap[predict_band_boundary[index, 0], predict_band_boundary[index, 1]] = \
-        #   predict[predict_band_boundary[index, 0], predict_band_boundary[index, 1]]
+        _gt = np.zeros(gt.shape)
+        _predict = np.zeros(predict.shape)
 
-        # generate trimap for object (gt)
-        obj_map = np.zeros((rows, cols), dtype=np.int32)
-        obj_map[np.where(gt == l)] = 1
+        _gt[np.where(gt == l)] = 1.0
+        _predict[np.where(predict == l)] = 1.0
 
-        gt_boundary = np.where((obj_map[0:-1, 0:-1] - obj_map[1:, 1:]) != 0)
-        gt_boundary = np.column_stack(gt_boundary)
-        gt_band_boundary = np.expand_dims(gt_boundary, 1) + offset
-        gt_band_boundary = gt_band_boundary.reshape(-1, 2)
-        gt_band_index = np.where((gt_band_boundary[:, 0] > 0) &
-                                 (gt_band_boundary[:, 1] > 0) &
-                                 (gt_band_boundary[:, 0] < rows) &
-                                 (gt_band_boundary[:, 1] < cols))
-        gt_trimap = np.zeros((rows, cols), dtype=np.int32)
-        gt_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
-          obj_map[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
+        if np.sum(_gt) < 1.0:
+          continue
 
-        predict_trimap = np.zeros((rows, cols), dtype=np.int32)
-        predict_trimap[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]] = \
-          predict[gt_band_boundary[gt_band_index, 0], gt_band_boundary[gt_band_index, 1]]
+        # generate gt object (class l) edge
+        _gt_blur = ndimage.gaussian_filter(_gt, sigma=7)
+        _gt_blur[np.where(_gt_blur > 0.99)] = 0.0
+        _gt_blur[np.where(_gt_blur < 0.01)] = 0.0
+        _gt_blur[np.where(_gt_blur > 0.0)] = 1.0
+        if np.sum(_gt_blur) < 1.0:
+          continue
 
-        # cv2.imshow("DD", (gt_trimap * 255).astype(np.uint8))
-        # cv2.imshow("ZZ", (gt * 255).astype(np.uint8))
-        # cv2.waitKey(0)
-        # sum_ti[l] += len(obj_map[gt_band_index[0]])
-        ti = len(np.where(gt_trimap == 1)[0])
-        sum_ti[l] += ti
+        _gt_edge_mask = _gt_blur
 
-        temp = np.zeros((rows, cols), dtype=np.int32)
-        temp[np.where(gt_trimap == 1)] = predict_trimap[np.where(gt_trimap == 1)]
+        # generate predict object (class l) edge
+        _predict_blur = ndimage.gaussian_filter(_predict, sigma=7)
+        _predict_blur[np.where(_predict_blur > 0.99)] = 0.0
+        _predict_blur[np.where(_predict_blur < 0.01)] = 0.0
+        _predict_blur[np.where(_predict_blur > 0.0)] = 1.0
 
-        nii = len(np.where(temp == l)[0])
-        sum_nii[l] += nii
+        _predict_edge_mask = _predict_blur
 
-        n_ji = len(np.where(predict_trimap == l)[0])
-        sum_ji[l] += n_ji
+        _gt_edge = _gt * _gt_edge_mask
+        _predict_edge = _predict * _predict_edge_mask
+
+        intersection = np.sum(_gt_edge * _predict_edge)
+        union = np.sum(_gt_edge) + np.sum(_predict_edge) - intersection + 0.0000000001
+
+        l_score = intersection / union
+        statistic_score += l_score
+        statistic_class_num += 1
 
         if id is not None:
-          sample_scores.append(
-            {'id': id, 'score': float(nii) / float(ti + n_ji - nii), 'category': l})
+          sample_scores.append({'id': id, 'score': l_score, 'category': l})
 
-    sum_nii = sum_nii[1:]
-    sum_ti = sum_ti[1:]
-    sum_ji = sum_ji[1:]
-    val = np.mean(sum_nii / (sum_ti + sum_ji - sum_nii + 1e-6))
-    val = float(val)
-    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': val, 'type':'SCALAR'}]},
+      if statistic_class_num == 0:
+        continue
+
+      statistic_score /= statistic_class_num
+      total_score += statistic_score
+      total_num += 1
+
+    avg_score = total_score / total_num
+    avg_score = float(avg_score)
+    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': avg_score, 'type':'SCALAR'}]},
             'info': sample_scores}

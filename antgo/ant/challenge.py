@@ -21,7 +21,6 @@ from datetime import datetime
 from antgo.measures import *
 from antgo.measures.yesno_crowdsource import *
 
-
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
                ant_name,
@@ -146,6 +145,8 @@ class AntChallenge(AntBase):
         self.context.recorder.dump_dir = intermediate_dump_dir
         # from ablation experiment
         ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
+        if ablation_blocks is None:
+          ablation_blocks = []
         for b in ablation_blocks:
           self.ant_context.deactivate_block(b)
           
@@ -263,7 +264,6 @@ class AntChallenge(AntBase):
                                                                            benchmark_name),
                                                        experiment_uuid=benchmark_name)
 
-
             if 'record' not in benchmark_model_data:
               benchmark_model_data['record'] = {}
             benchmark_model_data['record'][benchmark_name] = os.path.join(self.ant_dump_dir,
@@ -362,7 +362,7 @@ class AntChallenge(AntBase):
           for category_id, category_measure_data in enumerate(measure_data_list):
             if len(category_measure_data) == 0:
               continue
-              
+
             if 'analysis' not in task_running_statictic[self.ant_name]:
               task_running_statictic[self.ant_name]['analysis'] = {}
             
@@ -435,7 +435,7 @@ class AntChallenge(AntBase):
               
               model_name_ri = [method_samples_list[r]['name'] for r in ri]
               task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
-                            {'value': s,
+                            {'value': s.tolist() if type(s) != list else s,
                              'type': 'MATRIX',
                              'x': ci,
                              'y': model_name_ri,
@@ -461,7 +461,7 @@ class AntChallenge(AntBase):
                     task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
 
                   model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
-                  tag_data = {'value': g_s,
+                  tag_data = {'value': g_s.tolist() if type(g_s) != list else g_s,
                               'type': 'MATRIX',
                               'x': g_ci,
                               'y': model_name_ri,
@@ -482,7 +482,7 @@ class AntChallenge(AntBase):
 
               model_name_ri = [method_samples_list[r]['name'] for r in ri]
               task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = \
-                              {'value': s,
+                              {'value': s.tolist() if type(s) != list else s,
                                'type': 'MATRIX',
                                'x': ci,
                                'y': model_name_ri,
@@ -513,7 +513,7 @@ class AntChallenge(AntBase):
                     task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag] = []
 
                   model_name_ri = [method_samples_list[r]['name'] for r in g_ri]
-                  tag_data = {'value': g_s,
+                  tag_data = {'value': g_s.tolist() if type(g_s) != list else g_s,
                               'type': 'MATRIX',
                               'x': g_ci,
                               'y': model_name_ri,

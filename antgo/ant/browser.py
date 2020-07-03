@@ -11,6 +11,7 @@ from antgo.crowdsource.browser_server import *
 from multiprocessing import Process, Queue
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
+import requests
 from jinja2 import Environment, FileSystemLoader
 
 
@@ -160,16 +161,77 @@ class AntBrowser(AntBase):
     process.daemon = True
     process.start()
 
+    logger.info('wating 60s to launch browser server')
+    time.sleep(60)
+
+    train_offset, val_offset, test_offset = 0, 0, 0
+    offset_config = {
+      'dataset_flag': 'TRAIN',
+      'dataset_offset': train_offset
+    }
+    if self.context.params.browser is not None and 'offset' in self.context.params.browser:
+      if 'TRAIN' in self.context.params.browser['offset']:
+        train_offset = self.context.params.browser['offset']['TRAIN']
+        offset_config = {
+          'dataset_flag': 'TRAIN',
+          'dataset_offset': train_offset
+        }
+    requests.post('http://127.0.0.1:8999/browser-api/config/', {'offset_config':json.dumps(offset_config)})
+
+    offset_config = {
+      'dataset_flag': 'VAL',
+      'dataset_offset': val_offset
+    }
+    if self.context.params.browser is not None and 'offset' in self.context.params.browser:
+      if 'VAL' in self.context.params.browser['offset']:
+        val_offset = self.context.params.browser['offset']['VAL']
+        offset_config = {
+          'dataset_flag': 'VAL',
+          'dataset_offset': val_offset
+        }
+    requests.post('http://127.0.0.1:8999/browser-api/config/', {'offset_config':json.dumps(offset_config)})
+
+    offset_config = {
+      'dataset_flag': 'TEST',
+      'dataset_offset': test_offset
+    }
+    if self.context.params.browser is not None and 'offset' in self.context.params.browser:
+      if 'TEST' in self.context.params.browser['offset']:
+        test_offset = self.context.params.browser['offset']['TEST']
+        offset_config = {
+          'dataset_flag': 'TEST',
+          'dataset_offset': test_offset
+        }
+    requests.post('http://127.0.0.1:8999/browser-api/config/', {'offset_config':json.dumps(offset_config)})
+
     # 4.step 启动数据生成
     # 4.1.step 训练集
     train_dataset = dataset_cls('train', os.path.join(self.ant_data_source, self.dataset_name))
     self.context.recorder.dataset_flag = 'TRAIN'
     self.context.recorder.dataset_size = train_dataset.size
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
+
     if train_dataset.size > 0:
       logger.info('train dataset browser')
       try:
+        # 设置数据基本信息
+        profile_config={
+          'dataset_flag': 'TRAIN',
+          'samples_num': train_dataset.size,
+          'samples_num_checked': train_offset
+        }
+        requests.post('http://127.0.0.1:8999/browser-api/config/', {'profile_config':json.dumps(profile_config)})
+
+        # 设置当前状态
+        requests.post('http://127.0.0.1:8999/browser-api/config/', {'state': 'TRAIN'})
+
+        count = 0
         for data in self.context.data_generator(train_dataset):
+          if count < train_offset:
+            count += 1
+            continue
+
+          logger.info('push train data to wait check')
           self.context.recorder.record(data)
       except:
         pass
@@ -185,7 +247,24 @@ class AntBrowser(AntBase):
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
     if val_dataset.size > 0:
       logger.info('val dataset browser')
+      # 设置数据基本信息
+      profile_config = {
+        'dataset_flag': 'VAL',
+        'samples_num': val_dataset.size,
+        'samples_num_checked': val_offset
+      }
+      requests.post('http://127.0.0.1:8999/browser-api/config/', {'profile_config': json.dumps(profile_config)})
+
+      # 设置当前状态
+      requests.post('http://127.0.0.1:8999/browser-api/config/', {'state': 'VAL'})
+
+      count = 0
       for data in self.context.data_generator(val_dataset):
+        if count < val_offset:
+          count += 1
+          continue
+
+        logger.info('push val data to wait check')
         self.context.recorder.record(data)
 
     while not self.context.recorder.queue.empty():
@@ -198,9 +277,25 @@ class AntBrowser(AntBase):
     self.context.recorder.dataset_size = test_dataset.size
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
     if test_dataset.size > 0:
-      logger.info('waiting browser train dastaset')
       logger.info('test dataset browser')
+
+      # 设置数据基本信息
+      profile_config = {
+        'dataset_flag': 'TEST',
+        'samples_num': test_dataset.size,
+        'samples_num_checked': test_offset
+      }
+      requests.post('http://127.0.0.1:8999/browser-api/config/', {'profile_config': json.dumps(profile_config)})
+
+      # 设置当前状态
+      requests.post('http://127.0.0.1:8999/browser-api/config/', {'state': 'TEST'})
+      count = 0
       for data in self.context.data_generator(test_dataset):
+        if count < test_offset:
+          count += 1
+          continue
+
+        logger.info('push test data to wait check')
         self.context.recorder.record(data)
 
     while not self.context.recorder.queue.empty():

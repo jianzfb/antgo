@@ -198,6 +198,7 @@ class AntBase(object):
       '%s-%s-%s' % (str(uuid.uuid4()),
                     str(uuid.uuid4()),
                     datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
+    self.context.experiment_uuid = self.experiment_uuid
 
     if self.app_token is not None:
       # 任务模式，在dashboard上创建实验记录

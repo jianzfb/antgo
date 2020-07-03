@@ -31,11 +31,10 @@ class AntDemo(AntBase):
     self.html_template = kwargs.get('html_template', None)
     self.demo_port = kwargs.get('port', None)
     self.demo_port = int(self.demo_port) if self.demo_port is not None else None
-    self.support_user_upload = kwargs.get('support_user_upload', False)
-    self.support_user_input = kwargs.get('support_user_input', False)
-    self.support_user_interaction = kwargs.get('support_user_interaction', False)
-    self.support_user_constraint = kwargs.get('support_user_constraint', None)
-
+    # self.support_user_upload = kwargs.get('support_user_upload', False)
+    # self.support_user_input = kwargs.get('support_user_input', False)
+    # self.support_user_interaction = kwargs.get('support_user_interaction', False)
+    # self.support_user_constraint = kwargs.get('support_user_constraint', None)
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
   def start(self):
@@ -79,7 +78,6 @@ class AntDemo(AntBase):
 
     # 2.step 注册实验
     experiment_uuid = self.context.experiment_uuid
-
     # 3.step 配置数据传输管道
     dataset_queue = Queue()
 
@@ -88,6 +86,7 @@ class AntDemo(AntBase):
 
     recorder_queue = Queue()
     self.context.recorder = QueueRecorderNode(((), None), recorder_queue)
+
     self.context.recorder.dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'recorder')
     if not os.path.exists(self.context.recorder.dump_dir):
       os.makedirs(self.context.recorder.dump_dir)
@@ -109,17 +108,36 @@ class AntDemo(AntBase):
 
     demo_name = running_ant_task.task_name
     demo_type = running_ant_task.task_type
+    demo_config = {
+      'interaction':{
+        'support_user_upload': False,
+        'support_user_input': False,
+        'support_user_interaction': False,
+        'support_user_constraint': {}
+      },
+      'description_config': self.description_config,
+      'port': self.demo_port,
+      'html_template': self.html_template,
+      'dump_dir': infer_dump_dir
+    }
+
+    if self.context.params.demo is not None:
+      if 'support_user_upload' in self.context.params.demo:
+        demo_config['interaction']['support_user_upload'] = self.context.params.demo['support_user_upload']
+
+      if 'support_user_input' in self.context.params.demo:
+        demo_config['interaction']['support_user_input'] = self.context.params.demo['support_user_input']
+
+      if 'support_user_interaction' in self.context.params.demo:
+        demo_config['interaction']['support_user_interaction'] = self.context.params.demo['support_user_interaction']
+
+      if 'support_user_constraint' in self.context.params.demo:
+        demo_config['interaction']['support_user_constraint'] = self.context.params.demo['support_user_constraint']
+
     process = Process(target=demo_server_start,
                                       args=(demo_name,
                                             demo_type,
-                                            self.description_config,
-                                            self.support_user_upload,
-                                            self.support_user_input,
-                                            self.support_user_interaction,
-                                            self.support_user_constraint,
-                                            infer_dump_dir,
-                                            self.html_template,
-                                            self.demo_port,
+                                            demo_config,
                                             os.getpid(),
                                             dataset_queue,
                                             recorder_queue))
@@ -129,6 +147,8 @@ class AntDemo(AntBase):
     # 5.step 启动推断服务，等待客户端请求
     logger.info('start model infer background process')
     ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
+    if ablation_blocks is None:
+      ablation_blocks = []
     for b in ablation_blocks:
       self.ant_context.deactivate_block(b)
 

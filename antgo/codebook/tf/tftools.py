@@ -146,6 +146,10 @@ def tftool_generate_image_records(data_dir,
                                   train_or_test='train',
                                   num_shards=20,
                                   dataset_flag='antgo'):
+  
+
+
+
   # 1.step search all files in data_dir
   data_files = os.listdir(data_dir)
   is_jpg = False
