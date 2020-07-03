@@ -7,43 +7,12 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 from antgo.ant.base import *
+from antgo.ant.base import _pick_idle_port
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
 from antgo.crowdsource.demo_server import *
 from antgo.utils import logger
 from multiprocessing import Process, Queue
-import socket
-
-
-def _is_open(check_ip, port):
-  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  try:
-    s.connect((check_ip, int(port)))
-    s.shutdown(2)
-    return True
-  except:
-    return False
-
-
-def _pick_idle_port(from_port=40000, check_count=100):
-  check_port = from_port
-  while check_count:
-    if not _is_open('127.0.0.1', check_port):
-      break
-
-    logger.warn('port %d is occupied, try to use %d port'%(int(check_port), int(check_port + 1)))
-
-    check_port += 1
-    check_count -= 1
-
-    if check_count == 0:
-      check_port = None
-
-  if check_port is None:
-    logger.warn('couldnt find valid free port')
-    exit(-1)
-
-  return check_port
 
 
 class AntDemo(AntBase):

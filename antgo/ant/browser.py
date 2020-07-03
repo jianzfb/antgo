@@ -6,10 +6,12 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.ant.base import *
+from antgo.ant.base import _pick_idle_port
 from antgo.crowdsource.browser_server import *
 from multiprocessing import Process, Queue
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
+from jinja2 import Environment, FileSystemLoader
 
 
 class BrowserDataRecorder(object):
@@ -73,6 +75,8 @@ class BrowserDataRecorder(object):
     for name, body in data.items():
       if 'type' in body:
         if body['type'] == 'IMAGE':
+          body['width'] = body['data'].shape[1]
+          body['height'] = body['data'].shape[0]
           body['data'] = '/static/data/%s'%self._transfer_image(body['data'])
 
       if 'type' not in body:
@@ -93,6 +97,8 @@ class AntBrowser(AntBase):
   def __init__(self,
                ant_context,
                ant_name,
+               ant_host_ip,
+               ant_host_port,
                ant_data_folder,
                ant_dataset,
                ant_dump_dir):
@@ -100,6 +106,8 @@ class AntBrowser(AntBase):
     self.ant_data_source = ant_data_folder
     self.dataset_name = ant_dataset
     self.dump_dir = ant_dump_dir
+    self.host_ip = ant_host_ip
+    self.host_port = ant_host_port
 
   def start(self):
     # 1.step 获得数据集解析
@@ -127,12 +135,27 @@ class AntBrowser(AntBase):
 
     shutil.copytree(os.path.join(static_folder, 'resource', 'browser'), browser_static_dir)
 
-    # 3.2.step 启动
+    # 3.2.step 准备有效端口
+    self.host_port = _pick_idle_port(self.host_port)
+    # base_url = '{}:{}'.format(self.host_ip, self.host_port)
+    #
+    # # 3.3.step 准备web配置文件
+    # template_file_folder = os.path.join(static_folder, 'resource', 'browser', 'static')
+    # file_loader = FileSystemLoader(template_file_folder)
+    # env = Environment(loader=file_loader)
+    # template = env.get_template('config.json')
+    # output = template.render(BASE_URL=base_url)
+    #
+    # with open(os.path.join(browser_static_dir, 'static', 'config.json'), 'w') as fp:
+    #   fp.write(output)
+
+    # 3.4.step 启动
     process = multiprocessing.Process(target=browser_server_start,
                                       args=(os.path.join(self.ant_data_source, self.dataset_name),
                                             self.dump_dir,
                                             self.context.recorder.queue,
-                                            tags))
+                                            tags,
+                                            self.host_port))
 
     process.daemon = True
     process.start()
@@ -145,10 +168,14 @@ class AntBrowser(AntBase):
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
     if train_dataset.size > 0:
       logger.info('train dataset browser')
-      for data in self.context.data_generator(train_dataset):
-        self.context.recorder.record(data)
+      try:
+        for data in self.context.data_generator(train_dataset):
+          self.context.recorder.record(data)
+      except:
+        pass
 
     while not self.context.recorder.queue.empty():
+      logger.info('waiting browser train dastaset')
       time.sleep(30)
 
     # 4.2.step 验证集
@@ -162,6 +189,7 @@ class AntBrowser(AntBase):
         self.context.recorder.record(data)
 
     while not self.context.recorder.queue.empty():
+      logger.info('waiting browser val dastaset')
       time.sleep(30)
 
     # 4.3.step 测试集
@@ -170,6 +198,7 @@ class AntBrowser(AntBase):
     self.context.recorder.dataset_size = test_dataset.size
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
     if test_dataset.size > 0:
+      logger.info('waiting browser train dastaset')
       logger.info('test dataset browser')
       for data in self.context.data_generator(test_dataset):
         self.context.recorder.record(data)

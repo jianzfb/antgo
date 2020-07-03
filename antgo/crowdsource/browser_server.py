@@ -161,6 +161,7 @@ class NextApiHandler(BaseHandler):
       'tags': self.settings.get('tags', []),
       'operator': []
     }
+    print(self.db['data'][next_entry_id]['value'])
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
 
     # # notify backend and waiting response
@@ -203,11 +204,8 @@ class FileApiHandler(BaseHandler):
     while len(queue) != 0:
       folder = queue.pop(-1)
       folder_path = os.path.join(root_path, folder['path'])
-
       for f in os.listdir(folder_path):
         if os.path.isdir(os.path.join(folder_path, f)):
-          queue.append(os.path.join(folder_path, f))
-
           folder['folder'].append({
             'name': f,
             'type': "folder",
@@ -215,6 +213,8 @@ class FileApiHandler(BaseHandler):
             'folder': [],
             'path': '%s/%s' % (folder['path'], f) if folder['path'] != '' else f,
           })
+
+          queue.append(folder['folder'][-1])
         else:
           fsize = os.path.getsize(os.path.join(folder_path, f))
           fsize = fsize / 1024.0  # KB
@@ -273,11 +273,9 @@ class GracefulExitException(Exception):
     raise GracefulExitException()
 
 
-def browser_server_start(data_path, browser_dump_dir, response_queue, tags):
+def browser_server_start(data_path, browser_dump_dir, response_queue, tags, server_port):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
-
-  server_port = 8999
 
   # 0.step define http server port
   define('port', default=server_port, help='run on port')

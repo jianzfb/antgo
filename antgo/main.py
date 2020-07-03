@@ -68,7 +68,8 @@ flags.DEFINE_string('from_experiment', None, 'load model from experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
-flags.DEFINE_string('port', 10000, 'port')
+flags.DEFINE_string('host_ip', '127,0.0.1', 'host ip address')
+flags.DEFINE_integer('host_port', 10000, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_string('option', '', '')
 flags.DEFINE_indicator('support_user_upload', '')
@@ -435,7 +436,8 @@ def main():
                               token,
                               task,
                               html_template=FLAGS.html_template(),
-                              port=FLAGS.port(),
+                              ip=FLAGS.host_ip(),
+                              port=FLAGS.host_port(),
                               time_stamp=time_stamp,
                               support_user_upload=FLAGS.support_user_upload(),
                               support_user_input=FLAGS.support_user_input(),
@@ -467,7 +469,8 @@ def main():
                                         time_stamp=time_stamp,
                                         running_platform=FLAGS.running_platform(),
                                         max_time=FLAGS.max_time(),
-                                        port=FLAGS.port(),
+                                        ip=FLAGS.host_ip(),
+                                        port=FLAGS.host_port(),
                                         task=FLAGS.task(),
                                         skip_training=FLAGS.skip_training(),
                                         option=FLAGS.option(),
@@ -485,6 +488,8 @@ def main():
   elif ant_cmd == 'browser':
     running_process = AntBrowser(ant_context,
                                  name,
+                                 FLAGS.host_ip(),
+                                 FLAGS.host_port(),
                                  data_factory,
                                  dataset,
                                  dump_dir)
