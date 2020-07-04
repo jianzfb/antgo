@@ -401,6 +401,148 @@ class EmptyRecorderNode(Node):
     pass
 
 
+class LocalRecorderNodeV2(Node):
+  def __init__(self, inputs):
+    super(LocalRecorderNodeV2, self).__init__(name=None, action=self.action, inputs=inputs, auto_trigger=True)
+    self._annotation_cache = queue.Queue()
+
+    self._dump_dir = None
+    self._is_none = False
+
+    self._count = 0
+    self._content = []
+    setattr(self, 'model_fn', None)
+
+  @property
+  def content(self):
+    return self._content
+
+  def clear(self):
+    self._content = []
+
+  def save(self, data, data_type, name, count, index):
+    # only support 'FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
+    assert(data_type in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
+
+    if data_type == 'FILE':
+      if not os.path.exists(data):
+        return None
+
+      norm_path = os.path.normpath(data)
+      file_name = '%d_%d_%s_%s'%(count, index,name,norm_path.split('/')[-1])
+      shutil.copy(data, os.path.join(self.dump_dir, file_name))
+      return file_name
+    elif data_type == 'JSON':
+      file_name = '%d_%d_%s.json'%(count, index,name)
+      with open(os.path.join(self.dump_dir, file_name),'w') as fp:
+        fp.write(json.dumps(data))
+      return file_name
+    elif data_type == 'STRING' or data_type == 'SCALAR':
+      file_name = '%d_%d_%s.txt'%(count, index,name)
+      with open(os.path.join(self.dump_dir, file_name), 'w') as fp:
+        fp.write(str(data))
+      return file_name
+    elif data_type == 'IMAGE':
+      transfer_result = data
+      if len(data.shape) == 2:
+        if data.dtype == np.uint8:
+          transfer_result = data
+        else:
+          data_min = np.min(data)
+          data_max = np.max(data)
+          transfer_result = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+      else:
+        assert (data.shape[2] == 3)
+        transfer_result = data.astype(np.uint8)
+
+      file_name = '%d_%d_%s.png'%(count, index, name)
+      scipy.misc.imsave(os.path.join(self.dump_dir, file_name), transfer_result)
+      return file_name
+    elif data_type == 'VIDEO':
+      file_name = '%d_%d_%s.mp4' % (count, index, name)
+      video_path = os.path.join(self.dump_dir, file_name)
+      writer = imageio.get_writer(video_path, fps=30)
+      for im in data:
+        writer.append_data(im.astype(np.uint8))
+      writer.close()
+      return file_name
+    elif data_type == 'AUDIO':
+      logger.error('now, dont support save audio')
+
+    return None
+
+  def action(self, *args, **kwargs):
+    value = copy.deepcopy(args[0])
+    if type(value) != list:
+      value = [value]
+
+    for entry in value:
+      self._annotation_cache.put(copy.deepcopy(entry))
+
+  def record(self, val, **kwargs):
+    results = val
+    if type(val) != list and type(val) != tuple:
+      results = [val]
+
+    group = []
+    for index, result in enumerate(results):
+      gt = None
+      if self._annotation_cache.qsize() > 0:
+        gt = self._annotation_cache.get()
+
+      if gt is None and not self._is_none:
+        self._is_none = True
+
+      # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
+      #                           {'TYPE': 'JSON', 'CONTENT': ''},
+      #                           {'TYPE': 'STRING', 'CONTENT': ''},
+      #                           {'TYPE': 'IMAGE', 'PATH': ''},
+      #                           {'TYPE': 'VIDEO', 'PATH': ''},
+      #                           {'TYPE': 'AUDIO', 'PATH': ''}]
+
+      # 重新组织数据格式
+      data = {}
+      for key, value in result.items():
+        xxyy = key.split('_')
+        data_name = xxyy[0]
+
+        if data_name not in data:
+          data[data_name] = {}
+          data[data_name]['attribute'] = {}
+
+        if(len(xxyy) == 1):
+          data[data_name]['data'] = value
+          data[data_name]['title'] = key
+        elif xxyy[1] == 'TYPE':
+          data[data_name]['type'] = value
+        else:
+          if type(value) == np.ndarray:
+            value = value.tolist()
+          data[data_name]['attribute'][key] = str(value)
+
+      # 转换数据到适合web
+      for data_name, data_content in data.items():
+        data_content['data'] = self.save(data_content['data'],
+                             data_content['type'],
+                             data_content['title'],
+                             self._count,
+                             index)
+
+        group.append(data_content)
+
+    # 记录
+    self._content.append(group)
+    self._count += 1
+
+  @property
+  def dump_dir(self):
+    return self._dump_dir
+
+  @dump_dir.setter
+  def dump_dir(self, val):
+    self._dump_dir = val
+
+
 class ActiveLearningRecorderNode(Node):
   def __init__(self, inputs):
     super(ActiveLearningRecorderNode, self).__init__(name=None,

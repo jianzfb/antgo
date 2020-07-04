@@ -36,6 +36,11 @@ class EntryApiHandler(BaseHandler):
       self.db['user'][session_id] = []
 
     if len(self.db['user'][session_id]) == 0:
+      if self.response_queue.empty():
+        # 无新数据，直接返回
+        self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
+        return
+
       # 新用户，从队列中获取新数据并加入用户队列中
       self.db['data'].append({
         'value': self.response_queue.get(),
@@ -146,6 +151,9 @@ class NextApiHandler(BaseHandler):
     # 保存当前修改到内存
     data = json.loads(data)
     entry_id = self.db['user'][session_id][step]
+    if not self.db['data'][entry_id]['status']:
+      self.db['dataset'][self.db['state']]['samples_num_checked'] += 1
+
     self.db['data'][entry_id] = {'value': data, 'status': True, 'time': time.time()}
 
     # 保存当前修改到文件
@@ -185,15 +193,25 @@ class NextApiHandler(BaseHandler):
         break
 
     # 2. 新产生的数据
+    if self.response_queue.empty():
+      # 无新数据，直接返回
+      self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+        'value': self.db['data'][self.db['user'][session_id][-1]]['value'],
+        'step': len(self.db['user'][session_id]) - 1,
+        'tags': self.settings.get('tags', []),
+        'operator': [],
+        'state': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+      })
+      return
+
     if next_entry_id == -1:
       self.db['data'].append({'value': self.response_queue.get(), 'status': False, 'time': time.time()})
       next_entry_id = len(self.db['data']) - 1
 
     # 为当前用户分配下一个审查数据
     self.db['user'][session_id].append(next_entry_id)
-
-    # 更新已经筛选数目
-    self.db['dataset'][self.db['state']]['samples_num_checked'] += 1
 
     #
     response_content = {

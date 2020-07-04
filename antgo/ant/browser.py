@@ -102,13 +102,16 @@ class AntBrowser(AntBase):
                ant_host_port,
                ant_data_folder,
                ant_dataset,
-               ant_dump_dir):
+               ant_dump_dir,
+               **kwargs):
     super(AntBrowser, self).__init__(ant_name, ant_context)
     self.ant_data_source = ant_data_folder
     self.dataset_name = ant_dataset
     self.dump_dir = ant_dump_dir
     self.host_ip = ant_host_ip
     self.host_port = ant_host_port
+    self.from_experiment = kwargs.get('from_experiment', None)
+    self.rpc = None
 
   def start(self):
     # 1.step 获得数据集解析
@@ -138,6 +141,8 @@ class AntBrowser(AntBase):
 
     # 3.2.step 准备有效端口
     self.host_port = _pick_idle_port(self.host_port)
+    self.rpc = HttpRpc("v1", "browser-api", "127.0.0.1", self.host_port)
+
     # base_url = '{}:{}'.format(self.host_ip, self.host_port)
     #
     # # 3.3.step 准备web配置文件
@@ -176,7 +181,7 @@ class AntBrowser(AntBase):
           'dataset_flag': 'TRAIN',
           'dataset_offset': train_offset
         }
-    requests.post('http://127.0.0.1:8999/browser-api/config/', {'offset_config':json.dumps(offset_config)})
+    self.rpc.config.post(offset_config=json.dumps(offset_config))
 
     offset_config = {
       'dataset_flag': 'VAL',
@@ -189,7 +194,7 @@ class AntBrowser(AntBase):
           'dataset_flag': 'VAL',
           'dataset_offset': val_offset
         }
-    requests.post('http://127.0.0.1:8999/browser-api/config/', {'offset_config':json.dumps(offset_config)})
+    self.rpc.config.post(offset_config=json.dumps(offset_config))
 
     offset_config = {
       'dataset_flag': 'TEST',
@@ -202,7 +207,7 @@ class AntBrowser(AntBase):
           'dataset_flag': 'TEST',
           'dataset_offset': test_offset
         }
-    requests.post('http://127.0.0.1:8999/browser-api/config/', {'offset_config':json.dumps(offset_config)})
+    self.rpc.config.post(offset_config=json.dumps(offset_config))
 
     # 4.step 启动数据生成
     # 4.1.step 训练集
@@ -220,10 +225,10 @@ class AntBrowser(AntBase):
           'samples_num': train_dataset.size,
           'samples_num_checked': train_offset
         }
-        requests.post('http://127.0.0.1:8999/browser-api/config/', {'profile_config':json.dumps(profile_config)})
+        self.rpc.config.post(profile_config=json.dumps(profile_config))
 
         # 设置当前状态
-        requests.post('http://127.0.0.1:8999/browser-api/config/', {'state': 'TRAIN'})
+        self.rpc.config.post(state='TRAIN')
 
         count = 0
         for data in self.context.data_generator(train_dataset):
@@ -253,10 +258,10 @@ class AntBrowser(AntBase):
         'samples_num': val_dataset.size,
         'samples_num_checked': val_offset
       }
-      requests.post('http://127.0.0.1:8999/browser-api/config/', {'profile_config': json.dumps(profile_config)})
+      self.rpc.config.post(profile_config=json.dumps(profile_config))
 
       # 设置当前状态
-      requests.post('http://127.0.0.1:8999/browser-api/config/', {'state': 'VAL'})
+      self.rpc.config.post(state='VAL')
 
       count = 0
       for data in self.context.data_generator(val_dataset):
@@ -285,10 +290,11 @@ class AntBrowser(AntBase):
         'samples_num': test_dataset.size,
         'samples_num_checked': test_offset
       }
-      requests.post('http://127.0.0.1:8999/browser-api/config/', {'profile_config': json.dumps(profile_config)})
+      self.rpc.config.post(profile_config=json.dumps(profile_config))
 
       # 设置当前状态
-      requests.post('http://127.0.0.1:8999/browser-api/config/', {'state': 'TEST'})
+      self.rpc.config.post(state='TEST')
+
       count = 0
       for data in self.context.data_generator(test_dataset):
         if count < test_offset:

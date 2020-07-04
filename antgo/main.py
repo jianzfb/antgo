@@ -433,12 +433,15 @@ def main():
   elif ant_cmd == "batch":
     running_process = AntBatch(ant_context,
                                name,
+                               FLAGS.host_ip(),
+                               FLAGS.host_port(),
                                token,
                                data_factory,
                                dump_dir,
                                task,
                                unlabel=FLAGS.unlabel(),
-                               devices=FLAGS.devices())
+                               devices=FLAGS.devices(),
+                               from_experiment=FLAGS.from_experiment())
     running_process.start()
   elif ant_cmd == "activelearning":
     running_process = AntActiveLearning(ant_context,
@@ -476,7 +479,8 @@ def main():
                                  FLAGS.host_port(),
                                  data_factory,
                                  dataset,
-                                 dump_dir)
+                                 dump_dir,
+                                 from_experiment=FLAGS.from_experiment())
     running_process.start()
 
   # 9.step clear context
