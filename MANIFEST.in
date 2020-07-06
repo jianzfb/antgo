@@ -12,6 +12,7 @@ include antgo/resource/static/holder.min.js
 recursive-include antgo/resource/css/ *
 recursive-include antgo/resource/js/ *
 recursive-include antgo/resource/browser/ *
+recursive-include antgo/resource/batch/ *
 include antgo/config.xml
 include requirements.txt
 include README.rst
