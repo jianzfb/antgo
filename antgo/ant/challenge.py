@@ -95,9 +95,6 @@ class AntChallenge(AntBase):
     self.stage = 'CHALLENGE'
     # - backup in dump_dir
     main_folder = self.main_folder
-    main_param = FLAGS.main_param()
-    main_file = FLAGS.main_file()
-
     if not os.path.exists(os.path.join(self.ant_dump_dir, experiment_uuid)):
       os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
 
@@ -106,11 +103,21 @@ class AntChallenge(AntBase):
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
 
+    logger.info('prepare package model files')
     tar = tarfile.open(goldcoin, 'w:gz')
-    tar.add(os.path.join(main_folder, main_file), arcname=main_file)
-    if main_param is not None:
-      tar.add(os.path.join(main_folder, main_param), arcname=main_param)
+
+    # 排除dump目录，将当前文件夹下所有数据上传
+    for root, dirs, files in os.walk(main_folder):
+      if os.path.commonprefix([root, self.ant_dump_dir]) == self.ant_dump_dir:
+        continue
+
+      rel_root = os.path.relpath(root, main_folder)
+      for f in files:
+        tar.add(os.path.join(root, f), arcname=os.path.join(rel_root, f))
+
     tar.close()
+
+    logger.info('finish package process')
 
     # 上传
     self.context.dashboard.experiment.upload(MODEL=goldcoin,

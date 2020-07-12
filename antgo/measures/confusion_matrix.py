@@ -54,13 +54,10 @@ def compute_confusion_matrix(actual, predict_label, class_num):
   cm = np.zeros((class_num, class_num))
   for c_i in range(class_num):
     c_i_pos = np.where(actual == c_i)
-    c_i_pos_num = len(c_i_pos[0])
     c_i_predict = predict_label[c_i_pos]
     for to_i in range(class_num):
       to_i_num = len(np.where(c_i_predict == to_i)[0])
       cm[c_i, to_i] = to_i_num
-
-    cm[c_i, :] = cm[c_i, :] / float(c_i_pos_num)
 
   return cm
 
