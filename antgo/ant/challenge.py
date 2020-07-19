@@ -170,8 +170,8 @@ class AntChallenge(AntBase):
         # has no annotation to continue to meausre
         # 更新实验统计信息
         self.context.dashboard.experiment.patch(experiment_data=
-                                                json.dumps([{'REPORT': task_running_statictic,
-                                                            'APP_STAGE': self.stage}]))
+                                                json.dumps({'REPORT': task_running_statictic,
+                                                            'APP_STAGE': self.stage}))
 
         # 生成实验报告
         logger.info('save experiment report')
@@ -535,8 +535,8 @@ class AntChallenge(AntBase):
 
       # 更新实验统计信息
       self.context.dashboard.experiment.patch(experiment_data=
-                                              json.dumps([{'REPORT': task_running_statictic,
-                                                           'APP_STAGE': self.stage}]))
+                                              json.dumps({'REPORT': task_running_statictic,
+                                                           'APP_STAGE': self.stage}))
 
       # 生成实验报告
       logger.info('save experiment report')

@@ -1,0 +1,1 @@
+nohup antgo $1 --main_file=LeNet_main.py --main_param=LeNet_param.yaml --task=LeNet_task.xml > run.log 2>&1 &

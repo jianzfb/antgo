@@ -510,8 +510,8 @@ class AntTrain(AntBase):
 
             # 更新实验统计信息
             self.context.dashboard.experiment.patch(experiment_data=
-                                                    json.dumps([{'REPORT': task_running_statictic,
-                                                                 'APP_STAGE': self.stage}]))
+                                                    json.dumps({'REPORT': task_running_statictic,
+                                                                 'APP_STAGE': self.stage}))
             # 生成实验报告
             everything_to_html(task_running_statictic,
                                os.path.join(self.ant_dump_dir, experiment_uuid))
@@ -555,8 +555,8 @@ class AntTrain(AntBase):
 
             # 更新实验统计信息
             self.context.dashboard.experiment.patch(experiment_data=
-                                                    json.dumps([{'REPORT': evaluation_statistic,
-                                                                 'APP_STAGE': self.stage}]))
+                                                    json.dumps({'REPORT': evaluation_statistic,
+                                                                 'APP_STAGE': self.stage}))
             # 生成实验报告
             everything_to_html(evaluation_statistic,
                                os.path.join(self.ant_dump_dir, experiment_uuid))
@@ -588,8 +588,8 @@ class AntTrain(AntBase):
 
           # 更新实验统计信息
           self.context.dashboard.experiment.patch(experiment_data=
-                                                  json.dumps([{'REPORT': evaluation_statistic,
-                                                               'APP_STAGE': self.stage}]))
+                                                  json.dumps({'REPORT': evaluation_statistic,
+                                                               'APP_STAGE': self.stage}))
           # 生成实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
@@ -612,8 +612,8 @@ class AntTrain(AntBase):
 
           # 更新实验统计信息
           self.context.dashboard.experiment.patch(experiment_data=
-                                                  json.dumps([{'REPORT': evaluation_statistic,
-                                                               'APP_STAGE': self.stage}]))
+                                                  json.dumps({'REPORT': evaluation_statistic,
+                                                               'APP_STAGE': self.stage}))
           # 生成实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
@@ -637,8 +637,8 @@ class AntTrain(AntBase):
 
           # 更新实验统计信息
           self.context.dashboard.experiment.patch(experiment_data=
-                                                  json.dumps([{'REPORT': evaluation_statistic,
-                                                               'APP_STAGE': self.stage}]))
+                                                  json.dumps({'REPORT': evaluation_statistic,
+                                                               'APP_STAGE': self.stage}))
           # 生成实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
@@ -1052,8 +1052,8 @@ class AntTrain(AntBase):
         # 更新实验统计信息
         logger.info('update experiment report')
         handle.context.dashboard.experiment.patch(experiment_data=
-                                                  json.dumps([{'REPORT': ablation_running_statictic,
-                                                               'APP_STAGE': handle.stage}]))
+                                                  json.dumps({'REPORT': ablation_running_statictic,
+                                                               'APP_STAGE': handle.stage}))
 
         # 生成消除实验报告
         everything_to_html(ablation_running_statictic, ablation_dump_dir)

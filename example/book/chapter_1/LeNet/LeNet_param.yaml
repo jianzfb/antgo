@@ -1,0 +1,30 @@
+# @Time    : 2019-06-04
+# @File    : LeNet_param.yaml
+# @Author  : xxx
+
+batch_size: 512
+# set how many model clone (every clone run on one device)
+num_clones: 1
+# set max run epoches
+max_epochs: 200
+# set model input size
+input_size: 28
+# set model output size
+output_size: 28
+# learning rate decay type
+learning_rate_decay_type: 'exponential'
+# learning rate decay factor
+learning_rate_decay_factor: 0.9
+# runing how many epochs every decay
+num_epochs_per_decay: 50
+# optimization algorithm
+optimizer: 'rmsprop'
+# initial learning rate
+learning_rate: 0.001
+# model path
+checkpoint_path: ''
+# exclude some scopes from model
+checkpoint_exclude_scopes: ''
+# set allowed hardware devices list
+devices:
+- 0

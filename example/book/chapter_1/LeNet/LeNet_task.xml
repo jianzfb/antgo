@@ -1,0 +1,29 @@
+<task>
+    <task_name>LeNet</task_name>
+    <task_type>CLASSIFICATION</task_type>
+    <input>
+        <source_data>
+            <data_set_name>Mnist</data_set_name>
+        </source_data>
+        <evaluation_measures>
+            <evaluation_measure>ACCURACY</evaluation_measure>
+            <evaluation_measure>CONFUSION-MATRIX</evaluation_measure>
+	    </evaluation_measures>
+        <info>
+            <class_label>
+                <c>0</c>
+                <c>1</c>
+                <c>2</c>
+                <c>3</c>
+                <c>4</c>
+                <c>5</c>
+                <c>6</c>
+                <c>7</c>
+                <c>8</c>
+                <c>9</c>
+            </class_label>
+        </info>
+        <ext>
+        </ext>
+    </input>
+</task>
