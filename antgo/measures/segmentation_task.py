@@ -5,6 +5,9 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+
+import os
+import sys
 import numpy as np
 from antgo.task.task import *
 from antgo.measures.base import *
@@ -12,11 +15,33 @@ from antgo.dataflow.common import *
 from antgo.utils._resize import *
 from scipy import signal
 from scipy import ndimage
-import cv2
+from scipy.sparse import csr_matrix
+
 
 default = {'AntMeanIOUSeg': ('MeanIOU', 'SEGMENTATION'),
            'AntMeanIOUBoundary': ('MeanIOUBoundary', 'SEGMENTATION'),
            }
+
+def get_confusion_matrix(gt_label, pred_label, num_classes):
+    """
+    Calcute the confusion matrix by given label and pred
+    :param gt_label: the ground truth label
+    :param pred_label: the pred label
+    :param num_classes: the nunber of class
+    :return: the confusion matrix
+    """
+    index = (gt_label * num_classes + pred_label).astype('int32')
+    label_count = np.bincount(index)
+    confusion_matrix = np.zeros((num_classes, num_classes))
+
+    for i_label in range(num_classes):
+        for i_pred_label in range(num_classes):
+            cur_index = i_label * num_classes + i_pred_label
+            if cur_index < len(label_count):
+                confusion_matrix[i_label, i_pred_label] = label_count[cur_index]
+
+    return confusion_matrix
+
 
 class AntMeanIOUSeg(AntMeasure):
   def __init__(self, task):
@@ -25,19 +50,25 @@ class AntMeanIOUSeg(AntMeasure):
 
     super(AntMeanIOUSeg, self).__init__(task, 'MeanIOU')
     assert(task.task_type == 'SEGMENTATION')
-
+    self.classes_num = len(self.task.class_label)
     self.is_support_rank = True
 
-  def eva(self, data, label):
-    classes_num = len(self.task.class_label)
+  def _fast_hist(self, label_pred, label_true):
+    # 找出标签中需要计算的类别,去掉了背景
+    mask = (label_true >= 0) & (label_true < self.classes_num)
 
+    # # np.bincount计算了从0到n**2-1这n**2个数中每个数出现的次数，返回值形状(n, n)
+    hist = np.bincount(
+      self.classes_num * label_true[mask].astype(np.int) +
+      label_pred[mask].astype(np.int), minlength=self.classes_num ** 2).reshape(self.classes_num, self.classes_num)
+    return hist
+
+  def eva(self, data, label):
     if label is not None:
       data = zip(data, label)
 
     sample_scores = []
-
-    total_score = 0.0
-    total_num = 0
+    confusion = np.zeros((self.classes_num, self.classes_num))
     for predict, gt in data:
       id = None
       if type(gt) == dict:
@@ -47,40 +78,19 @@ class AntMeanIOUSeg(AntMeasure):
         id = gt['id']
         gt = gt['segmentation_map']
 
-      gt_labels = set(gt.flatten())
+      sample_confusion = self._fast_hist(np.array(predict).flatten(), np.array(gt).flatten())
+      confusion += sample_confusion
 
-      statistic_score = 0.0
-      statistic_class_num = 0
-      for l in gt_labels:
-        l = int(l)
+      if id is not None:
+        sample_iou = np.diag(sample_confusion) / np.maximum(1.0, sample_confusion.sum(axis=1) + sample_confusion.sum(axis=0) - np.diag(sample_confusion))
+        sample_miou_val = np.nanmean(sample_iou)
+        sample_scores.append({'id': id, 'score': sample_miou_val, 'category': 0})
 
-        _gt = np.zeros(gt.shape)
-        _predict = np.zeros(predict.shape)
+    iou = np.diag(confusion) / np.maximum(1.0,confusion.sum(axis=1) + confusion.sum(axis=0) - np.diag(confusion))
+    miou_val = float(np.nanmean(iou))
 
-        _gt[np.where(gt == l)] = 1.0
-        _predict[np.where(predict == l)] = 1.0
-
-        if np.sum(_gt) < 1.0:
-          continue
-
-        intersection = np.sum(_gt * _predict)
-        union = np.sum(_gt) + np.sum(_predict) - intersection + 0.0000000001
-
-        l_score = intersection / union
-        statistic_score += l_score
-        statistic_class_num += 1
-
-        if id is not None:
-          sample_scores.append({'id': id, 'score': l_score, 'category': l})
-
-      statistic_score /= statistic_class_num
-      total_score += statistic_score
-      total_num += 1
-
-    avg_score = total_score / total_num
-
-    avg_score = float(avg_score)
-    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': avg_score, 'type':'SCALAR'}]},
+    return {'statistic': {'name': self.name,
+                          'value': [{'name': self.name, 'value': miou_val, 'type':'SCALAR'}]},
             'info': sample_scores}
 
 
@@ -92,17 +102,25 @@ class AntMeanIOUBoundary(AntMeasure):
     super(AntMeanIOUBoundary, self).__init__(task, 'MeanIOUBoundary')
     assert(task.task_type == 'SEGMENTATION')
     self.is_support_rank = True
-  
-  def eva(self, data, label):
-    classes_num = len(self.task.class_label)
-    trimap_width = int(getattr(self.task, 'MeanIOUBoundary_trimap_width', 3))
+    self.classes_num = len(self.task.class_label)
 
+  def _fast_hist(self, label_pred, label_true):
+    # 找出标签中需要计算的类别,去掉了背景
+    mask = (label_true >= 0) & (label_true < self.classes_num)
+
+    # # np.bincount计算了从0到n**2-1这n**2个数中每个数出现的次数，返回值形状(n, n)
+    hist = np.bincount(
+      self.classes_num * label_true[mask].astype(int) +
+      label_pred[mask].astype(int), minlength=self.classes_num ** 2).reshape(self.classes_num, self.classes_num)
+    return hist
+
+  def eva(self, data, label):
+    trimap_width = int(getattr(self.task, 'MeanIOUBoundary_trimap_width', 3))
     if label is not None:
         data = zip(data, label)
 
     sample_scores = []
-    total_score = 0.0
-    total_num = 0
+    confusion = np.zeros((self.classes_num, self.classes_num))
     for predict, gt in data:
       id = None
       if type(gt) == dict:
@@ -111,64 +129,34 @@ class AntMeanIOUBoundary(AntMeasure):
 
         id = gt['id']
         gt = gt['segmentation_map']
-      
-      gt_labels = set(gt.flatten())
-      statistic_score = 0.0
-      statistic_class_num = 0
-      for l in gt_labels:
-        l = int(l)
-        if l == 0:
-          # class 0 consider as ignore class
-          continue
 
+      # finding object edge, ignore class 0
+      ignore_gt = np.array(gt).astype(np.int)
+
+      # ignore non edge region
+      for l in range(1, self.classes_num):
+        # finding edge region
         _gt = np.zeros(gt.shape)
-        _predict = np.zeros(predict.shape)
+        _gt[np.where(ignore_gt == l)] = 1.0
 
-        _gt[np.where(gt == l)] = 1.0
-        _predict[np.where(predict == l)] = 1.0
-
-        if np.sum(_gt) < 1.0:
-          continue
-
-        # generate gt object (class l) edge
         _gt_blur = ndimage.gaussian_filter(_gt, sigma=7)
         _gt_blur[np.where(_gt_blur > 0.99)] = 0.0
         _gt_blur[np.where(_gt_blur < 0.01)] = 0.0
         _gt_blur[np.where(_gt_blur > 0.0)] = 1.0
-        if np.sum(_gt_blur) < 1.0:
-          continue
 
-        _gt_edge_mask = _gt_blur
+        # ignore non edge region
+        ignore_gt[np.where(_gt_blur < 1.0)] = 255
 
-        # generate predict object (class l) edge
-        _predict_blur = ndimage.gaussian_filter(_predict, sigma=7)
-        _predict_blur[np.where(_predict_blur > 0.99)] = 0.0
-        _predict_blur[np.where(_predict_blur < 0.01)] = 0.0
-        _predict_blur[np.where(_predict_blur > 0.0)] = 1.0
+      sample_confusion = self._fast_hist(np.array(predict).flatten(), ignore_gt.flatten())
+      confusion += sample_confusion
 
-        _predict_edge_mask = _predict_blur
+      if id is not None:
+        sample_iou = np.diag(sample_confusion) / np.maximum(1.0, sample_confusion.sum(axis=1) + sample_confusion.sum(axis=0) - np.diag(sample_confusion))
+        sample_miou_val = float(np.nanmean(sample_iou))
+        sample_scores.append({'id': id, 'score': sample_miou_val, 'category': 0})
 
-        _gt_edge = _gt * _gt_edge_mask
-        _predict_edge = _predict * _predict_edge_mask
-
-        intersection = np.sum(_gt_edge * _predict_edge)
-        union = np.sum(_gt_edge) + np.sum(_predict_edge) - intersection + 0.0000000001
-
-        l_score = intersection / union
-        statistic_score += l_score
-        statistic_class_num += 1
-
-        if id is not None:
-          sample_scores.append({'id': id, 'score': l_score, 'category': l})
-
-      if statistic_class_num == 0:
-        continue
-
-      statistic_score /= statistic_class_num
-      total_score += statistic_score
-      total_num += 1
-
-    avg_score = total_score / total_num
-    avg_score = float(avg_score)
-    return {'statistic': {'name': self.name, 'value': [{'name': self.name, 'value': avg_score, 'type':'SCALAR'}]},
+    iou = np.diag(confusion) / np.maximum(1.0, confusion.sum(axis=1) + confusion.sum(axis=0) - np.diag(confusion))
+    miou_val = float(np.nanmean(iou))
+    return {'statistic': {'name': self.name,
+                          'value': [{'name': self.name, 'value': miou_val, 'type':'SCALAR'}]},
             'info': sample_scores}

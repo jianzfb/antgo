@@ -22,6 +22,8 @@ import subprocess
 from antgo.utils.dht import *
 from antgo.utils.serialize import *
 import copy
+import cv2
+import imageio
 try:
     import queue
 except:
@@ -32,16 +34,17 @@ Config = config.AntConfig
 
 
 def imread(file):
-  img = scipy.misc.imread(file,mode='RGB')
+  img = imageio.imread(file)
   return img
 
 
 def imwrite(file, img):
-  scipy.misc.imsave(file, img)
+  imageio.imwrite(file, img)
 
 
-def imresize(image,size):
-  return scipy.misc.imresize(image,size)
+def imresize(image, size):
+  # return scipy.misc.imresize(image, size)
+  return cv2.resize(image, (size[1],size[0]))
 
 
 class DataIOThread(threading.Thread):

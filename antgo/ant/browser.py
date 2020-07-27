@@ -19,7 +19,7 @@ from jinja2 import Environment, FileSystemLoader
 
 class BrowserDataRecorder(object):
   def __init__(self, maxsize=30):
-    self.queue = Queue(maxsize=maxsize)
+    self.queue = Queue()  # 不设置队列最大缓冲
     self.dump_dir = ''
     self.dataset_flag = 'TRAIN'
     self.dataset_size = 0
