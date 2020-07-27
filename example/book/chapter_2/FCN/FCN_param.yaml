@@ -1,0 +1,31 @@
+# @Time    : 2019-06-06
+# @File    : FCN_param.yaml
+# @Author  : j
+
+# batch size
+batch_size: 1
+# set how many model clone (every clone run on one device)
+num_clones: 1
+# set max run epoches
+max_epochs: 200
+# set model input size
+input_size: 512
+# class number
+class_num: 21
+# learning rate decay type
+learning_rate_decay_type: 'exponential'
+# learning rate decay factor
+learning_rate_decay_factor: 0.9
+# runing how many epochs every decay
+num_epochs_per_decay: 20
+# optimization algorithm
+optimizer: 'rmsprop'
+# initial learning rate
+learning_rate: 0.0001
+# load pretrained-model path
+#checkpoint_path: './model/vgg_16.ckpt'
+# exclude some variables
+#checkpoint_exclude_scopes: 'FCN'
+# set allowed hardware devices list
+devices:
+- 0
