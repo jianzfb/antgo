@@ -156,14 +156,19 @@ class AntBrowser(AntBase):
     #   fp.write(output)
 
     # 3.4.step 启动
+    browser_mode = 'browser'
+    if self.context.params.browser is not None and 'mode' in self.context.params.browser:
+      browser_mode = self.context.params.browser['mode']
+
     process = multiprocessing.Process(target=browser_server_start,
                                       args=(os.path.join(self.ant_data_source, self.dataset_name),
                                             self.dump_dir,
                                             self.context.recorder.queue,
                                             tags,
-                                            self.host_port))
+                                            self.host_port,
+                                            browser_mode))
 
-    process.daemon = True
+    # process.daemon = True
     process.start()
 
     logger.info('wating 60s to launch browser server')
@@ -211,24 +216,29 @@ class AntBrowser(AntBase):
 
     # 4.step 启动数据生成
     # 4.1.step 训练集
-    train_dataset = dataset_cls('train', os.path.join(self.ant_data_source, self.dataset_name))
-    self.context.recorder.dataset_flag = 'TRAIN'
+    dataset_flag = 'train'
+    if self.context.params.browser is not None and 'dataset_flag' in self.context.params.browser:
+      if self.context.params.browser['dataset_flag'] in ['train', 'val', 'test']:
+        dataset_flag = self.context.params.browser['dataset_flag']
+
+    train_dataset = dataset_cls(dataset_flag, os.path.join(self.ant_data_source, self.dataset_name))
+    self.context.recorder.dataset_flag = dataset_flag.upper()
     self.context.recorder.dataset_size = train_dataset.size
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
 
     if train_dataset.size > 0:
-      logger.info('train dataset browser')
+      logger.info('browser %s dataset'%dataset_flag)
       try:
         # 设置数据基本信息
         profile_config={
-          'dataset_flag': 'TRAIN',
+          'dataset_flag': dataset_flag.upper(),
           'samples_num': train_dataset.size,
           'samples_num_checked': train_offset
         }
         self.rpc.config.post(profile_config=json.dumps(profile_config))
 
         # 设置当前状态
-        self.rpc.config.post(state='TRAIN')
+        self.rpc.config.post(state=dataset_flag.upper())
 
         count = 0
         for data in self.context.data_generator(train_dataset):
@@ -236,75 +246,12 @@ class AntBrowser(AntBase):
             count += 1
             continue
 
-          logger.info('push train data to wait check')
+          logger.info('record data %d for browser'%count)
           self.context.recorder.record(data)
-      except:
+          count += 1
+      except StopIteration:
+        logger.info('finish all records in browser %s dataset'%dataset_flag)
         pass
 
-    while not self.context.recorder.queue.empty():
-      logger.info('waiting browser train dastaset')
-      time.sleep(30)
-
-    # 4.2.step 验证集
-    val_dataset = dataset_cls('val', os.path.join(self.ant_data_source, self.dataset_name))
-    self.context.recorder.dataset_flag = "VAL"
-    self.context.recorder.dataset_size = val_dataset.size
-    self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
-    if val_dataset.size > 0:
-      logger.info('val dataset browser')
-      # 设置数据基本信息
-      profile_config = {
-        'dataset_flag': 'VAL',
-        'samples_num': val_dataset.size,
-        'samples_num_checked': val_offset
-      }
-      self.rpc.config.post(profile_config=json.dumps(profile_config))
-
-      # 设置当前状态
-      self.rpc.config.post(state='VAL')
-
-      count = 0
-      for data in self.context.data_generator(val_dataset):
-        if count < val_offset:
-          count += 1
-          continue
-
-        logger.info('push val data to wait check')
-        self.context.recorder.record(data)
-
-    while not self.context.recorder.queue.empty():
-      logger.info('waiting browser val dastaset')
-      time.sleep(30)
-
-    # 4.3.step 测试集
-    test_dataset = dataset_cls('test', os.path.join(self.ant_data_source, self.dataset_name))
-    self.context.recorder.dataset_flag = "TEST"
-    self.context.recorder.dataset_size = test_dataset.size
-    self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
-    if test_dataset.size > 0:
-      logger.info('test dataset browser')
-
-      # 设置数据基本信息
-      profile_config = {
-        'dataset_flag': 'TEST',
-        'samples_num': test_dataset.size,
-        'samples_num_checked': test_offset
-      }
-      self.rpc.config.post(profile_config=json.dumps(profile_config))
-
-      # 设置当前状态
-      self.rpc.config.post(state='TEST')
-
-      count = 0
-      for data in self.context.data_generator(test_dataset):
-        if count < test_offset:
-          count += 1
-          continue
-
-        logger.info('push test data to wait check')
-        self.context.recorder.record(data)
-
-    while not self.context.recorder.queue.empty():
-      time.sleep(30)
-
-    logger.info('finish data generate process')
+    # waiting join
+    process.join()

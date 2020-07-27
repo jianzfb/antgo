@@ -35,6 +35,43 @@ class EntryApiHandler(BaseHandler):
     if session_id not in self.db['user']:
       self.db['user'][session_id] = []
 
+    # browser/screening
+    if self.settings['browser_mode'] == 'browser':
+      # 浏览模式
+      if len(self.db['user'][session_id]) == 0:
+        if len(self.db['data']) == 0:
+          if self.response_queue.empty():
+            # 无新数据，直接返回
+            self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
+            return
+
+          # 从队列取出，加入数据库
+          self.db['data'].append({
+            'value': self.response_queue.get(),
+            'status': False,
+            'time': time.time()
+          })
+
+        self.db['user'][session_id].append(0)
+
+      # 获得当前用户浏览位置
+      entry_id = self.db['user'][session_id][-1]
+
+      # 构建返回数据
+      response_content = {
+        'value': self.db['data'][entry_id]['value'],
+        'step': len(self.db['user'][session_id]) - 1,
+        'tags': self.settings.get('tags', []),
+        'operator': [],
+        'dataset_flag': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+      }
+
+      self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
+      return
+
+    # 审查模式
     if len(self.db['user'][session_id]) == 0:
       if self.response_queue.empty():
         # 无新数据，直接返回
@@ -182,6 +219,44 @@ class NextApiHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
       return
 
+    if self.settings['browser_mode'] == 'browser':
+      # 浏览模式
+      if len(self.db['data']) == len(self.db['user'][session_id]):
+        if self.response_queue.empty():
+          # 无新数据，直接返回
+          self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+            'value': self.db['data'][self.db['user'][session_id][-1]]['value'],
+            'step': len(self.db['user'][session_id]) - 1,
+            'tags': self.settings.get('tags', []),
+            'operator': [],
+            'state': self.db['state'],
+            'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+            'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+          })
+          return
+
+        # 加入新数据
+        self.db['data'].append({'value': self.response_queue.get(),
+                                'status': False,
+                                'time': time.time()})
+
+      # 为当前用户分配下一个浏览数据
+      next_entry_id = len(self.db['user'][session_id])
+      self.db['user'][session_id].append(next_entry_id)
+
+      self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+        'value': self.db['data'][next_entry_id]['value'],
+        'step': len(self.db['user'][session_id]) - 1,
+        'tags': self.settings.get('tags', []),
+        'operator': [],
+        'state': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+      })
+
+      return
+
+    # 审查模式
     # 当前已经到达用户最后一张图，下一张图必须从队列中获取
     # 新数据来源（1，之前分配给某个用户，但一直没有收到反馈；2，新产生的数据）
     # 1. 之前分配给某个用户，但一直没有收到反馈
@@ -348,7 +423,7 @@ class GracefulExitException(Exception):
     raise GracefulExitException()
 
 
-def browser_server_start(data_path, browser_dump_dir, response_queue, tags, server_port):
+def browser_server_start(data_path, browser_dump_dir, response_queue, tags, server_port, browser_mode='screening'):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
 
@@ -373,7 +448,8 @@ def browser_server_start(data_path, browser_dump_dir, response_queue, tags, serv
       'tags': tags,
       'data_folder': data_path,
       'cookie_secret': str(uuid.uuid4()),
-      'db': db
+      'db': db,
+      'browser_mode': browser_mode
     }
 
     app = tornado.web.Application(handlers=[(r"/browser-api/prev/", PrevApiHandler),
