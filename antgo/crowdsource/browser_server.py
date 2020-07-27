@@ -17,6 +17,7 @@ import shutil
 import signal
 from antgo.crowdsource.base_server import *
 from antgo.utils import logger
+import traceback
 import sys
 import uuid
 import json
@@ -140,8 +141,14 @@ class PrevApiHandler(BaseHandler):
     if not os.path.exists(os.path.join(self.dump_folder, state)):
       os.makedirs(os.path.join(self.dump_folder, state))
 
-    with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
-      json.dump(data, file_obj)
+    try:
+      with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
+        json.dump(data, file_obj)
+    except Exception as e:
+      print('str(Exception):\t', str(Exception))
+      print('str(e):\t\t', str(e))
+      print('repr(e):\t', repr(e))
+      print('e.message:\t', e.message)
 
     # 获得当前用户上一步数据
     if step == 0:
@@ -200,8 +207,14 @@ class NextApiHandler(BaseHandler):
     if not os.path.exists(os.path.join(self.dump_folder, state)):
       os.makedirs(os.path.join(self.dump_folder, state))
 
-    with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
-      json.dump(data, file_obj)
+    try:
+      with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
+        json.dump(data, file_obj)
+    except Exception as e:
+      print('str(Exception):\t', str(Exception))
+      print('str(e):\t\t', str(e))
+      print('repr(e):\t', repr(e))
+      print('e.message:\t', e.message)
 
     # 获得用户下一步数据
     if step < len(self.db['user'][session_id]) - 1:

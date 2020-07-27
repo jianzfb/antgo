@@ -11,16 +11,20 @@ from antgo.crowdsource.browser_server import *
 from multiprocessing import Process, Queue
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
+from antvis.client.httprpc import *
 import requests
+import json
 from jinja2 import Environment, FileSystemLoader
 
 
 class BrowserDataRecorder(object):
-  def __init__(self, maxsize=10):
+  def __init__(self, maxsize=30):
     self.queue = Queue(maxsize=maxsize)
     self.dump_dir = ''
     self.dataset_flag = 'TRAIN'
     self.dataset_size = 0
+    self.sample_index = 0
+    self.tag_dir = ''
 
   def _transfer_image(self, data):
     try:
@@ -41,7 +45,7 @@ class BrowserDataRecorder(object):
 
       file_name = '%s.png' % str(uuid.uuid4())
       image_path = os.path.join(self.dump_dir, file_name)
-      scipy.misc.imsave(image_path, transfer_result)
+      imwrite(image_path, transfer_result)
       return file_name
     except:
       logger.error('couldnt transfer image data')
@@ -90,8 +94,41 @@ class BrowserDataRecorder(object):
       body['dataset_size'] = self.dataset_size
       web_data.append(body)
 
+    # 如果从指定实验加载，则找寻是否存在以筛选标记
+    if os.path.exists(os.path.join(self.tag_dir, self.dataset_flag, '%d.json' % self.sample_index)):
+      # 加载json文件
+      logger.info('load record json from %s/%s'%(self.dataset_flag, '%d.json' % self.sample_index))
+      with open(os.path.join(self.tag_dir, self.dataset_flag, '%d.json' % self.sample_index), 'r') as fp:
+        annotation = json.load(fp)
+        # 确保标注数量和数据数量是一致的
+        assert (len(web_data) == len(annotation))
+
+        for a in web_data:
+          is_update = False
+          for b in annotation:
+            # 检测数据和标注是否对应
+            is_consistent = b['title'] == a['title']
+            if 'id' in b:
+              is_consistent = is_consistent and (a['id'] == b['id'])
+
+              if not (a['id'] == b['id']):
+                logger.warn('please whether data and record are consistent')
+
+            if is_consistent:
+              a['tag'] = b['tag']
+              is_update = True
+              break
+
+          if not is_update:
+            if 'id' in a:
+              logger.info('annotation and data not consistence for %s'%a['id'])
+            else:
+              logger.info('annotation and data not consistence for %s' % a['data'])
+
     # 加入队列，如果队列满，将阻塞
     self.queue.put(web_data)
+    # 增加样本索引编号
+    self.sample_index += 1
 
 
 class AntBrowser(AntBase):
@@ -225,6 +262,13 @@ class AntBrowser(AntBase):
     self.context.recorder.dataset_flag = dataset_flag.upper()
     self.context.recorder.dataset_size = train_dataset.size
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
+    self.context.recorder.tag_dir = os.path.join(self.dump_dir, 'record')
+
+    sample_offset = train_offset
+    if dataset_flag == 'test':
+      sample_offset = test_offset
+    elif dataset_flag == 'val':
+      sample_offset = val_offset
 
     if train_dataset.size > 0:
       logger.info('browser %s dataset'%dataset_flag)
@@ -233,16 +277,19 @@ class AntBrowser(AntBase):
         profile_config={
           'dataset_flag': dataset_flag.upper(),
           'samples_num': train_dataset.size,
-          'samples_num_checked': train_offset
+          'samples_num_checked': sample_offset
         }
         self.rpc.config.post(profile_config=json.dumps(profile_config))
 
         # 设置当前状态
         self.rpc.config.post(state=dataset_flag.upper())
 
+        # 设置记录器偏移
+        self.context.recorder.sample_index = sample_offset
+
         count = 0
         for data in self.context.data_generator(train_dataset):
-          if count < train_offset:
+          if count < sample_offset:
             count += 1
             continue
 
