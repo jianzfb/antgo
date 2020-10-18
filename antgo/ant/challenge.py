@@ -21,6 +21,7 @@ from datetime import datetime
 from antgo.measures import *
 from antgo.measures.yesno_crowdsource import *
 
+
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
                ant_name,
@@ -43,7 +44,7 @@ class AntChallenge(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step 从平台获取挑战任务配置信息
-      response = self.context.dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         logger.error('couldnt load challenge task')
         self.token = None
@@ -79,17 +80,6 @@ class AntChallenge(AntBase):
     # 2.step 注册实验
     experiment_uuid = self.context.experiment_uuid
 
-    # # ############
-    # ss = AntYesNoCrowdsource(running_ant_task)
-    # cc = RecordReader('/Users/jian/Downloads/workspace/talkingml/workspace')
-    # ss.dump_dir = "/Users/jian/Downloads/mm/"
-    # ss.experiment_id = '20180726.151520.620675'
-    # ss.app_token = self.token
-    # ss.crowdsource_server(cc)
-    # value = ss.eva()
-    # print(value)
-    # ############
-
     # 3.step  备份实验基本信息
     # 3.1.step 打包代码，并上传至云端
     self.stage = 'CHALLENGE'
@@ -116,16 +106,15 @@ class AntChallenge(AntBase):
         tar.add(os.path.join(root, f), arcname=os.path.join(rel_root, f))
 
     tar.close()
-
     logger.info('finish package process')
 
-    # 上传
-    self.context.dashboard.experiment.upload(MODEL=goldcoin,
-                                             APP_STAGE=self.stage)
+    # 上传模型代码
+    mlogger.getEnv().dashboard.experiment.upload(MODEL=goldcoin,
+                                                 APP_STAGE=self.stage)
 
     # 3.2.step 更新基本配置
-    self.context.dashboard.experiment.patch(experiment_uuid=experiment_uuid,
-                                            experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
+    mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,
+                                                experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
 
     # 4.step 加载测试数据集
     logger.info('loading test dataset %s'%running_ant_task.dataset_name)
@@ -133,7 +122,7 @@ class AntChallenge(AntBase):
                                                 os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                 running_ant_task.dataset_params)
 
-    with safe_recorder_manager(ant_test_dataset):
+    with safe_manager(ant_test_dataset):
       # split data and label
       data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
@@ -160,31 +149,31 @@ class AntChallenge(AntBase):
         with performance_statistic_region(self.ant_name):
           self.context.call_infer_process(data_annotation_branch.output(0), infer_dump_dir)
 
-      task_running_statictic = get_performance_statistic(self.ant_name)
-      task_running_statictic = {self.ant_name: task_running_statictic}
-      task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
-      task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
-          task_running_elapsed_time / float(ant_test_dataset.size)
+        task_running_statictic = get_performance_statistic(self.ant_name)
+        task_running_statictic = {self.ant_name: task_running_statictic}
+        task_running_elapsed_time = task_running_statictic[self.ant_name]['time']['elapsed_time']
+        task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
+            task_running_elapsed_time / float(ant_test_dataset.size)
 
-      if not self.context.recorder.is_measure:
-        # has no annotation to continue to meausre
-        # 更新实验统计信息
-        self.context.dashboard.experiment.patch(experiment_data=
-                                                json.dumps({'REPORT': task_running_statictic,
-                                                            'APP_STAGE': self.stage}))
+        if not self.context.recorder.is_measure:
+          # has no annotation to continue to meausre
+          # 更新实验统计信息
+          mlogger.getEnv().dashboard.experiment.patch(experiment_data=
+                                                      json.dumps({'REPORT': task_running_statictic,
+                                                                  'APP_STAGE': self.stage}))
 
-        # 生成实验报告
-        logger.info('save experiment report')
-        everything_to_html(task_running_statictic,
-                           os.path.join(self.ant_dump_dir, experiment_uuid))
+          # 生成实验报告
+          logger.info('save experiment report')
+          everything_to_html(task_running_statictic,
+                             os.path.join(self.ant_dump_dir, experiment_uuid))
 
-        # 上传实验报告和记录
-        logger.info('uploading experiment report')
-        self.context.dashboard.experiment.upload(
-          REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-          RECORD=intermediate_dump_dir,
-          APP_STAGE=self.stage)
-        return
+          # 上传实验报告和记录
+          logger.info('uploading experiment report')
+          mlogger.getEnv().dashboard.experiment.upload(
+            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+            RECORD=intermediate_dump_dir,
+            APP_STAGE=self.stage)
+          return
 
       logger.info('start evaluation process')
       evaluation_measure_result = []
@@ -254,7 +243,7 @@ class AntChallenge(AntBase):
       # benchmark record
       benchmark_model_data = {}
       if self.token is not None:
-        response = self.context.dashboard.benchmark.get()
+        response = mlogger.getEnv().dashboard.benchmark.get()
         if response['status'] == 'OK':
           benchmark_info = response['content']
           for bmd in benchmark_info:
@@ -264,7 +253,7 @@ class AntChallenge(AntBase):
   
             # download benchmark record from url
             logger.info('download benchmark %s'%benchmark_name)
-            self.context.dashboard.experiment.download(file_name=benchmark_record,
+            mlogger.getEnv().dashboard.experiment.download(file_name=benchmark_record,
                                                        file_folder=os.path.join(self.ant_dump_dir,
                                                                            experiment_uuid,
                                                                            'benchmark',
@@ -534,7 +523,7 @@ class AntChallenge(AntBase):
                   task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
 
       # 更新实验统计信息
-      self.context.dashboard.experiment.patch(experiment_data=
+      mlogger.getEnv().dashboard.experiment.patch(experiment_data=
                                               json.dumps({'REPORT': task_running_statictic,
                                                            'APP_STAGE': self.stage}))
 
@@ -545,7 +534,7 @@ class AntChallenge(AntBase):
 
       # 上传实验报告和记录
       logger.info('uploading experiment report')
-      self.context.dashboard.experiment.upload(
+      mlogger.getEnv().dashboard.experiment.upload(
         REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
         RECORD=intermediate_dump_dir,
         APP_STAGE=self.stage)

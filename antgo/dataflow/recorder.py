@@ -417,6 +417,9 @@ class LocalRecorderNodeV2(Node):
   def content(self):
     return self._content
 
+  def close(self):
+    pass
+
   def clear(self):
     self._content = []
 

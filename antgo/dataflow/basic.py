@@ -11,21 +11,18 @@ import os
 import traceback
 import sys
 import yaml
-try:
-  import rocksdb
-except:
-  rocksdb = None
 from antgo import config
+import antgo.utils.pickledb as pickledb
 from contextlib import contextmanager
 from antgo.utils import logger
-import multiprocessing
+
 
 class Sample(object):
   def __init__(self, **kwargs):
     self.data = kwargs
 
   def serialize(self):
-    return dumps(self.data)
+    return self.data
 
   @staticmethod
   def unserialize(bytes_data):
@@ -34,43 +31,40 @@ class Sample(object):
 
 class RecordWriter(object):
   def __init__(self, record_path):
-    self._record_path = record_path
+    self._record_path = os.path.join(record_path, 'data.db')
     
     try:
-      opts = rocksdb.Options()
-      opts.create_if_missing = True
-      self._db = rocksdb.DB(record_path, opts)
-    
-      count = self._db.get(str('attrib-count').encode('utf-8'))
+      self._db = pickledb.load(self._record_path, False)
+      count = self._db.get(str('attrib-count'))
       if count is None:
-        self._db.put(str('attrib-count').encode('utf-8'), b'0')
+        self._db.set(str('attrib-count'), str(0))
     except:
-      logger.error('couldnt open rocksdb')
+      logger.error('couldnt open db')
     
   def close(self):
-    pass
+    self._db.dump()
 
   def write(self, sample, sample_index=-1):
-    count = self._db.get(str('attrib-count').encode('utf-8'))
+    count = self._db.get(str('attrib-count'))
     assert(count is not None)
     count = int(count)
 
-    sample_key = str(count).encode('utf-8')
+    sample_key = str(count)
     if sample_index > 0:
-      sample_key = str(sample_index).encode('utf-8')
-    self._db.put(sample_key, sample.serialize())
+      sample_key = str(sample_index)
+    self._db.set(sample_key, sample.serialize())
 
     count += 1
-    self._db.put('attrib-count'.encode('utf-8'), str(count).encode('utf-8'))
+    self._db.set('attrib-count', str(count))
     
   def bind_attrs(self, **kwargs):
     # bind extra db attributes
     for k,v in kwargs.items():
-      self._db.put(str('attrib-%s'%k).encode('utf-8'), str('attrib-%s'%v).encode('utf-8'))
+      self._db.set(str('attrib-%s'%k), str('attrib-%s'%v))
   
   @property
   def size(self):
-    count = self._db.get(str('attrib-count').encode('utf-8'))
+    count = self._db.get(str('attrib-count'))
     if count is None:
       return 0
     
@@ -81,38 +75,44 @@ class RecordWriter(object):
 def safe_recorder_manager(recorder):
   try:
     yield recorder
+    recorder.close()
   except:
     traceback.print_exc()
     raise sys.exc_info()[0]
+
+@contextmanager
+def safe_manager(handler):
+  try:
+    yield handler
+  except:
+    traceback.print_exc()
+    raise sys.exc_info()[0]
+
 
 class RecordReader(object):
   def __init__(self, record_path, read_only=True):
     # db
     if os.path.exists(os.path.join(record_path, 'record')):
       record_path = os.path.join(record_path, 'record')
-    
+
+    self._record_path = os.path.join(record_path, 'data.db')
+
     try:
-      opts = rocksdb.Options(create_if_missing=False if read_only else True)
-      self._db = rocksdb.DB(record_path, opts, read_only=read_only)
-  
-      # db path
-      self._record_path = record_path
-  
+      self._db = pickledb.load(self._record_path, False)
       # db attributes
       self._db_attrs = {}
-      
+      self.count = self._db.get('attrib-count')
+
       # attrib
-      it = self._db.iteritems()
-      it.seek('attrib-'.encode('utf-8'))
-      for attrib_item in it:
-        key, value = attrib_item
-        key = key.decode('utf-8')
-        value = value.decode('utf-8')
-        if key.startswith('attrib-'):
-          key = key.replace('attrib-', '')
-          value = value.replace('attrib-', '')
-          self._db_attrs[key] = value
-          setattr(self, key, value)
+      # it = self._db.iteritems()
+      # it.seek('attrib-')
+      # for attrib_item in it:
+      #   key, value = attrib_item
+      #   if key.startswith('attrib-'):
+      #     key = key.replace('attrib-', '')
+      #     value = value.replace('attrib-', '')
+      #     self._db_attrs[key] = value
+      #     setattr(self, key, value)
     except:
       logger.error('couldnt open rocksdb')
 
@@ -125,33 +125,33 @@ class RecordReader(object):
   def bind_attrs(self, **kwargs):
     # bind extra db attributes
     for k, v in kwargs.items():
-      self._db.put(str('attrib-%s' % k).encode('utf-8'), str('attrib-%s' % v).encode('utf-8'))
+      self._db.set(str('attrib-%s' % k), str('attrib-%s' % v))
 
   def put(self, key, data):
-    self._db.put(str(key).encode('utf-8'), str(data).encode('utf-8'))
+    self._db.set(str(key), str(data))
 
   def get(self, key):
-    return self._db.get(str(key).encode('utf-8'))
+    return self._db.get(str(key))
 
   def write(self, sample, sample_index=-1):
-    count = self._db.get(str('attrib-count').encode('utf-8'))
+    count = self._db.get(str('attrib-count'))
     if count is None:
-      self._db.put(str('attrib-count').encode('utf-8'), b'0')
+      self._db.set(str('attrib-count'), '0')
       count = 0
 
     count = int(count)
-    sample_key = str(count).encode('utf-8')
-    if sample_index >=0 :
-      sample_key = str(sample_index).encode('utf-8')
-    self._db.put(sample_key, sample.serialize())
+    sample_key = str(count)
+    if sample_index >= 0 :
+      sample_key = str(sample_index)
+    self._db.set(sample_key, sample.serialize())
 
     count += 1
-    self._db.put('attrib-count'.encode('utf-8'), str(count).encode('utf-8'))
+    self._db.set('attrib-count', str(count))
 
   def read(self, index, *args):
     try:
-      ss = self._db.get(str(index).encode('utf-8'))
-      data = Sample.unserialize(ss)
+      data = self._db.get(str(index))
+      # data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for k, v in data.items():
@@ -169,8 +169,8 @@ class RecordReader(object):
 
   def iterate_read(self, *args):
     for k in range(int(self.count)):
-      ss = self._db.get(str(k).encode('utf-8'))
-      data = Sample.unserialize(ss)
+      data = self._db.get(str(k))
+      # data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for data_key, data_val in data.items():
@@ -186,8 +186,8 @@ class RecordReader(object):
 
   def iterate_sampling_read(self, index, *args):
     for i in index:
-      ss = self._db.get(str(i).encode('utf-8'))
-      data = Sample.unserialize(ss)
+      data = self._db.get(str(i))
+      # data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for data_key, data_val in data.items():
@@ -203,7 +203,7 @@ class RecordReader(object):
 
   @property
   def size(self):
-    count = self._db.get(str('attrib-count').encode('utf-8'))
+    count = self._db.get(str('attrib-count'))
     if count is None:
       return 0
 

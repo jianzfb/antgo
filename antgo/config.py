@@ -34,7 +34,7 @@ class _Config(object):
       val = child.text.strip() if child.text is not None else None
       setattr(self, child.tag, val)
 
-      if child.tag == 'factory':
+      if child.tag == 'factory' and val is not None and val != '':
         setattr(self, 'data_factory', os.path.join(val, 'dataset'))
         setattr(self, 'task_factory', os.path.join(val, 'task'))
 

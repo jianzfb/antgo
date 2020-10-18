@@ -1,7 +1,7 @@
 cython>=0.20
 numpy
 Pillow
-scipy==1.2.1
+scipy
 six
 termcolor
 tqdm
@@ -16,7 +16,6 @@ beautifulsoup4
 imageio
 pycryptodome
 sklearn
-matplotlib==2.2.3
+matplotlib
 prettytable
-qiniu
 opencv-python

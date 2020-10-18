@@ -41,6 +41,7 @@ _ant_support_commands = ["train",
                          "demo",
                          "browser",
                          "startproject",
+                         "config",
                          "tools/tffrozen",
                          "tools/tfrecords",
                          "tools/tfgraph"]
@@ -66,6 +67,7 @@ flags.DEFINE_string('framework', None, 'tensorflow')
 flags.DEFINE_string('net', None, 'GENERAL')
 flags.DEFINE_string('max_time', '100d', 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
+flags.DEFINE_string('restore_experiment', None, 'restore experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
@@ -125,19 +127,22 @@ def main():
     try:
       # shutil.copy(FLAGS.config(), os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'))
       # copy to ~/.config/
-      if not os.path.exists(os.path.join(os.environ['HOME'],'.config','antgo')):
-        os.makedirs(os.path.join(os.environ['HOME'],'.config','antgo'))
+      if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+        os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
-      shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'],'.config','antgo','config.xml'))
+      shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
     except:
       logger.warn('perhaps you want to set default config.xml, please in root authority')
       pass
+
+    if sys.argv[1] == 'config':
+      return
   else:
     # parse config file
-    if not os.path.exists(os.path.join(os.environ['HOME'],'.config','antgo','config.xml')):
+    if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
       # use default config
-      if not os.path.exists(os.path.join(os.environ['HOME'],'.config','antgo')):
-        os.makedirs(os.path.join(os.environ['HOME'],'.config','antgo'))
+      if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+        os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
       shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'),
                   os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
@@ -160,18 +165,17 @@ def main():
 
   # 4.1.step check factory
   factory = getattr(Config, 'factory', None)
-  if factory is None or factory == '':
-    # give tip
-    logger.warn('please antgo -config=... in root authority')
+  if factory is None or \
+      factory == '' or not os.path.exists(Config.factory):
 
-    # plan B
-    home_folder = os.environ['HOME']
-    Config.data_factory = os.path.join(home_folder, 'antgo', 'dataset')
-    Config.task_factory = os.path.join(home_folder, 'antgo', 'task')
-    
+    # 生成默认配置文件
+    shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'),"./config.xml")
+    # 提示信息
+    logger.info('missing config info, please antgo config --config=config.xml with root authority')
+    return
+
   if not os.path.exists(Config.data_factory):
     os.makedirs(Config.data_factory)
-
   if not os.path.exists(Config.task_factory):
     os.makedirs(Config.task_factory)
 
@@ -353,11 +357,13 @@ def main():
       logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
       exit(-1)
 
-    if os.path.exists(os.path.join(dump_dir, FLAGS.from_experiment(), 'train')):
-      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'train')
+    if os.path.exists(os.path.join(experiment_path, 'train')):
+      ant_context.from_experiment = os.path.join(experiment_path, 'train')
+    elif os.path.exists(os.path.join(experiment_path, 'inference')):
+      ant_context.from_experiment = os.path.join(experiment_path, 'inference')
     else:
-      ant_context.from_experiment = os.path.join(dump_dir, FLAGS.from_experiment(), 'inference')
-  
+      ant_context.from_experiment = experiment_path
+
   # tools
   if ant_cmd == 'tools/tffrozen':
     # tensorflow tools
@@ -403,6 +409,11 @@ def main():
                                  devices=FLAGS.devices())
       running_process.start()
   elif ant_cmd == 'challenge':
+    with running_sandbox(sandbox_dump_dir=main_folder,
+                         sandbox_experiment=None,
+                         sandbox_user_token=token,
+                         sandbox_user_proxy=FLAGS.proxy(),
+                         sandbox_user_signature=FLAGS.signature()):
       running_process = AntChallenge(ant_context,
                                      name,
                                      data_factory,
@@ -441,7 +452,7 @@ def main():
                                task,
                                unlabel=FLAGS.unlabel(),
                                devices=FLAGS.devices(),
-                               from_experiment=FLAGS.from_experiment())
+                               restore_experiment=FLAGS.restore_experiment())
     running_process.start()
   elif ant_cmd == "activelearning":
     running_process = AntActiveLearning(ant_context,
@@ -475,12 +486,12 @@ def main():
   elif ant_cmd == 'browser':
     running_process = AntBrowser(ant_context,
                                  name,
+                                 token,
                                  FLAGS.host_ip(),
                                  FLAGS.host_port(),
                                  data_factory,
                                  dataset,
-                                 dump_dir,
-                                 from_experiment=FLAGS.from_experiment())
+                                 dump_dir)
     running_process.start()
 
   # 9.step clear context

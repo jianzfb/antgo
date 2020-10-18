@@ -34,7 +34,7 @@ class Standard(Dataset):
     # data queue (provide data from another independent process)
     self.data_queue = None
     dataset_url = getattr(self, 'dataset_url', None)
-    if dataset_url is not None:
+    if dataset_url is not None and dataset_url != 'http://xxx.xxx.xxx.com':
       if '%s_%s'%(dataset_name, train_or_test) not in Standard.is_complete:
         logger.info('download %s (%s dataset) from dht asynchronously'%(dataset_name, train_or_test))
         # set complete flag

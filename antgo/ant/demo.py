@@ -12,7 +12,10 @@ from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
 from antgo.crowdsource.demo_server import *
 from antgo.utils import logger
-from multiprocessing import Process, Queue
+try:
+    import queue
+except:
+    import Queue as queue
 
 
 class AntDemo(AntBase):
@@ -42,7 +45,7 @@ class AntDemo(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step load challenge task
-      response = self.context.dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         # invalid token
         logger.error('couldnt load challenge task')
@@ -79,12 +82,12 @@ class AntDemo(AntBase):
     # 2.step 注册实验
     experiment_uuid = self.context.experiment_uuid
     # 3.step 配置数据传输管道
-    dataset_queue = Queue()
+    dataset_queue = queue.Queue()
 
     demo_dataset = QueueDataset(dataset_queue)
     demo_dataset._force_inputs_dirty()
 
-    recorder_queue = Queue()
+    recorder_queue = queue.Queue()
     self.context.recorder = QueueRecorderNode(((), None), recorder_queue)
 
     self.context.recorder.dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'recorder')
@@ -134,26 +137,24 @@ class AntDemo(AntBase):
       if 'support_user_constraint' in self.context.params.demo:
         demo_config['interaction']['support_user_constraint'] = self.context.params.demo['support_user_constraint']
 
-    process = Process(target=demo_server_start,
-                                      args=(demo_name,
-                                            demo_type,
-                                            demo_config,
-                                            os.getpid(),
-                                            dataset_queue,
-                                            recorder_queue))
+    # 5.step 启动后台线程运行预测过程
+    def _run_infer_process():
+      logger.info('start model infer background process')
+      ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
+      if ablation_blocks is None:
+        ablation_blocks = []
+      for b in ablation_blocks:
+        self.ant_context.deactivate_block(b)
+
+      try:
+        self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
+      except:
+        traceback.print_exc()
+        raise sys.exc_info()[0]
+
+    process = threading.Thread(target=_run_infer_process)
     process.daemon = True
     process.start()
 
-    # 5.step 启动推断服务，等待客户端请求
-    logger.info('start model infer background process')
-    ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
-    if ablation_blocks is None:
-      ablation_blocks = []
-    for b in ablation_blocks:
-      self.ant_context.deactivate_block(b)
-
-    try:
-      self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
-    except:
-      traceback.print_exc()
-      raise sys.exc_info()[0]
+    # 6.step 启动web服务
+    demo_server_start(demo_name,demo_type,demo_config,os.getpid(),dataset_queue,recorder_queue)

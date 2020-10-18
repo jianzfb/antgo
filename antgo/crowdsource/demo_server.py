@@ -589,4 +589,3 @@ def demo_server_start(demo_name,
   except KeyboardInterrupt:
     os.kill(parent_id, signal.SIGKILL)
     
-# demo_server_start('world','IMAGE_SEGMENTATION','/Users/jian/Downloads/ww',None,6990)

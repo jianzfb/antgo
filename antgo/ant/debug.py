@@ -20,7 +20,7 @@ from antgo.dataflow.recorder import *
 from antgo.dataflow.common import *
 
 
-def debug_training_process(dataset_func, param_config=None):
+def debug_training_process(dataset_func, param_config=None, dump_dir=None):
   # 0.step get global context
   ctx = get_global_context()
   ctx.debug = True
@@ -32,9 +32,11 @@ def debug_training_process(dataset_func, param_config=None):
     ctx.params = params
 
   # 2.step call traing process
-  train_time_stamp = datetime.fromtimestamp(timestamp()).strftime('%Y%m%d.%H%M%S.%f')
-  logger.info('build dump folder %s'%train_time_stamp)
-  dump_dir = os.path.join(os.curdir, 'dump', train_time_stamp)
+  if dump_dir is None:
+    train_time_stamp = datetime.fromtimestamp(timestamp()).strftime('%Y%m%d.%H%M%S.%f')
+    logger.info('build dump folder %s'%train_time_stamp)
+    dump_dir = os.path.join(os.curdir, 'dump', train_time_stamp)
+
   if not os.path.exists(dump_dir):
     os.makedirs(dump_dir)
   logger.info('start debug training process')
@@ -49,11 +51,10 @@ def debug_training_process(dataset_func, param_config=None):
     Config.parse_xml(config_xml)
     dataset_obj = dataset_func('train', os.path.join(Config.data_factory, dataset_func.__name__))
 
-  ctx.recorder = EvaluationRecorderNode(None, None, '123')
   ctx.call_training_process(dataset_obj, dump_dir=dump_dir)
 
 
-def debug_infer_process(dataset_func, param_config=None):
+def debug_infer_process(dataset_func, param_config=None, dump_dir=None):
   # 0.step get global context
   ctx = get_global_context()
   ctx.debug = True
@@ -65,9 +66,10 @@ def debug_infer_process(dataset_func, param_config=None):
     ctx.params = params
 
   # 2.step call traing process
-  train_time_stamp = datetime.fromtimestamp(timestamp()).strftime('%Y%m%d.%H%M%S.%f')
-  logger.info('build dump folder %s'%train_time_stamp)
-  dump_dir = os.path.join(os.curdir, 'dump', train_time_stamp)
+  if dump_dir is None:
+    train_time_stamp = datetime.fromtimestamp(timestamp()).strftime('%Y%m%d.%H%M%S.%f')
+    logger.info('build dump folder %s'%train_time_stamp)
+    dump_dir = os.path.join(os.curdir, 'dump', train_time_stamp)
   if not os.path.exists(dump_dir):
     os.makedirs(dump_dir)
   logger.info('start debug infer process')

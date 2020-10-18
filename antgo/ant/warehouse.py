@@ -5,8 +5,8 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-import qiniu
-from qiniu import Auth, put_file, etag, urlsafe_base64_encode
+# import qiniu
+# from qiniu import Auth, put_file, etag, urlsafe_base64_encode
 from antgo.utils import logger
 import os
 from six.moves import urllib

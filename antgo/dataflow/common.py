@@ -11,7 +11,6 @@ import sys
 from antgo.dataflow.core import *
 from antgo.utils import get_rng
 from antgo.utils.concurrency import *
-from antgo.context import *
 try:
     import queue
 except:

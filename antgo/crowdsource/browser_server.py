@@ -436,7 +436,14 @@ class GracefulExitException(Exception):
     raise GracefulExitException()
 
 
-def browser_server_start(data_path, browser_dump_dir, response_queue, tags, server_port, browser_mode='screening'):
+def browser_server_start(data_path,
+                         browser_dump_dir,
+                         response_queue,
+                         tags,
+                         server_port,
+                         offset_configs,
+                         profile_config,
+                         browser_mode='screening'):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
 
@@ -452,7 +459,14 @@ def browser_server_start(data_path, browser_dump_dir, response_queue, tags, serv
       os.makedirs(browser_dump_dir)
 
     # 2.step launch web server
-    db = {'data': [], 'user': {}}
+    db = {'data': [], 'user': {}, 'dataset': {}}
+    for offset_config in offset_configs:
+      db['dataset'][offset_config['dataset_flag']] = {'offset':offset_config['dataset_offset']}
+
+    db['dataset'][profile_config['dataset_flag']]['samples_num'] = profile_config['samples_num']
+    db['dataset'][profile_config['dataset_flag']]['samples_num_checked'] = profile_config['samples_num_checked']
+    db['state'] = profile_config['dataset_flag']
+
     settings = {
       'static_path': os.path.join(browser_static_dir, 'static'),
       'dump_path': browser_dump_dir,

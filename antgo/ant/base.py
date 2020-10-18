@@ -24,7 +24,7 @@ import yaml
 from antgo.utils.utils import *
 from datetime import datetime
 from antgo.ant.warehouse import *
-from antvis.client.dashboard import *
+import antvis.client.mlogger as mlogger
 from antgo.context import *
 import socket
 
@@ -36,6 +36,7 @@ else:
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
+
 
 def _is_open(check_ip, port):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -193,7 +194,6 @@ class AntBase(object):
       self.ant_context = ant_context
       self.ant_context.ant = self
 
-    # reset dashboard
     self.experiment_uuid = \
       '%s-%s-%s' % (str(uuid.uuid4()),
                     str(uuid.uuid4()),
@@ -202,20 +202,26 @@ class AntBase(object):
 
     if self.app_token is not None:
       # 任务模式，在dashboard上创建实验记录
-      self.context.dashboard.create_project(dashboard_ip=self.server_ip,
-                                            dashboard_port=int(self.http_port),
-                                            token=self.app_token,
-                                            experiment_name=self.ant_name,
-                                            server=self.app_server)
+      mlogger.config(ip=self.server_ip,
+                     port=(int)(self.http_port),
+                     project=self.ant_name,
+                     experiment=self.ant_name,
+                     token=self.app_token,
+                     server=self.app_server)
 
-      if self.context.dashboard.experiment_uuid is not None:
-        self.experiment_uuid = self.context.dashboard.experiment_uuid
-        self.context.experiment_uuid = self.context.dashboard.experiment_uuid
+      if mlogger.getEnv().dashboard.experiment_uuid is not None:
+        self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+        self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
     else:
       # 非任务模式，基于user token与dashboard进行通信
-      self.context.dashboard.configure(dashboard_ip=self.server_ip,
-                                       dashboard_port=int(self.http_port),
-                                       token=self.user_token)
+      mlogger.config(ip=self.server_ip,
+                     port=(int)(self.http_port),
+                     project=self.ant_name,
+                     experiment='exp',
+                     token=self.user_token)
+      if mlogger.getEnv().dashboard.experiment_uuid is not None:
+        self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+        self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
 
   @property
   def pid(self):
@@ -246,44 +252,44 @@ class AntBase(object):
     tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (self.name, signature)
     subprocess.call(tar_shell, shell=True, cwd=self.main_folder)
 
-    logger.info('finish package')
-    if prefix == 'qiniu':
-      logger.info('upload codebase package')
-      qiniu_address = qiniu_upload(os.path.join(self.main_folder, '%s.tar.gz'%self.name),
-                                   bucket='experiment',
-                                   max_size=100)
-      # clear
-      os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
-      return qiniu_address
-    elif prefix == 'ipfs':
-      pass
-    elif prefix == 'baidu':
-      pass
-    elif prefix.startswith('ssh') or prefix.startswith('scp'):
-      nodes = prefix.replace('scp:', '')
-      node_ip_list = nodes.split(',')
-      for ip in node_ip_list:
-        if ip=='127.0.0.1' or ip=='localhost':
-          continue
-
-        logger.info('deploy code at %s'%ip)
-        try:
-          cmd_str = 'ssh %s %s' % (ip, 'mkdir -p %s'%target_path)
-          logger.info('execute %s' % cmd_str)
-          subprocess.call(cmd_str, shell=True)
-        except:
-          pass
-
-        try:
-          cmd_str = 'scp %s %s:%s' % (os.path.join(self.main_folder, '%s.tar.gz' % self.name), ip, target_path)
-          logger.info('execute %s' % cmd_str)
-          subprocess.call(cmd_str, shell=True)
-        except:
-          logger.error('couldnt distribute code base to %s' % ip)
-          exit(-1)
-
-      # clear
-      os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
+    # logger.info('finish package')
+    # if prefix == 'qiniu':
+    #   logger.info('upload codebase package')
+    #   qiniu_address = qiniu_upload(os.path.join(self.main_folder, '%s.tar.gz'%self.name),
+    #                                bucket='experiment',
+    #                                max_size=100)
+    #   # clear
+    #   os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
+    #   return qiniu_address
+    # elif prefix == 'ipfs':
+    #   pass
+    # elif prefix == 'baidu':
+    #   pass
+    # elif prefix.startswith('ssh') or prefix.startswith('scp'):
+    #   nodes = prefix.replace('scp:', '')
+    #   node_ip_list = nodes.split(',')
+    #   for ip in node_ip_list:
+    #     if ip=='127.0.0.1' or ip=='localhost':
+    #       continue
+    #
+    #     logger.info('deploy code at %s'%ip)
+    #     try:
+    #       cmd_str = 'ssh %s %s' % (ip, 'mkdir -p %s'%target_path)
+    #       logger.info('execute %s' % cmd_str)
+    #       subprocess.call(cmd_str, shell=True)
+    #     except:
+    #       pass
+    #
+    #     try:
+    #       cmd_str = 'scp %s %s:%s' % (os.path.join(self.main_folder, '%s.tar.gz' % self.name), ip, target_path)
+    #       logger.info('execute %s' % cmd_str)
+    #       subprocess.call(cmd_str, shell=True)
+    #     except:
+    #       logger.error('couldnt distribute code base to %s' % ip)
+    #       exit(-1)
+    #
+    #   # clear
+    #   os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
 
     return '%s.tar.gz' % self.name
 
@@ -370,9 +376,14 @@ class AntBase(object):
       self.context = ctx
 
       # 3.step update dashboard configure
-      self.context.dashboard.configure(dashboard_ip=self.server_ip,
-                                       dashboard_port=int(self.http_port),
-                                       token=self.app_token,
-                                       experiment_uuid=self.experiment_uuid,
-                                       experiment_name=self.ant_name,
-                                       server=self.app_server)
+      # self.context.dashboard.configure(dashboard_ip=self.server_ip,
+      #                                  dashboard_port=int(self.http_port),
+      #                                  token=self.app_token,
+      #                                  experiment_uuid=self.experiment_uuid,
+      #                                  experiment_name=self.ant_name,
+      #                                  server=self.app_server)
+      # mlogger.config(ip=self.server_ip,
+      #                port=int(self.http_port),
+      #                token=self.app_token,
+      #                )
+      # mlogger.activate(project='', experiment='')

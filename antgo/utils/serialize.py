@@ -15,11 +15,11 @@ __all__ = ['loads', 'dumps', 'Encoder', 'Decoder']
 
 
 def dumps(obj):
-  return msgpack.dumps(obj,use_bin_type=True)
+  return msgpack.dumps(obj)
 
 
 def loads(buf):
-  return msgpack.loads(buf,encoding='utf-8')
+  return msgpack.loads(buf)
 
 
 class Decoder(json.JSONDecoder):

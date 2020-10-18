@@ -8,7 +8,6 @@ from __future__ import print_function
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
 from antgo.crowdsource.browser_server import *
-from multiprocessing import Process, Queue
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
 from antvis.client.httprpc import *
@@ -135,23 +134,53 @@ class AntBrowser(AntBase):
   def __init__(self,
                ant_context,
                ant_name,
+               ant_token,
                ant_host_ip,
                ant_host_port,
                ant_data_folder,
                ant_dataset,
                ant_dump_dir,
                **kwargs):
-    super(AntBrowser, self).__init__(ant_name, ant_context)
+    super(AntBrowser, self).__init__(ant_name, ant_context, ant_token, **kwargs)
     self.ant_data_source = ant_data_folder
     self.dataset_name = ant_dataset
     self.dump_dir = ant_dump_dir
     self.host_ip = ant_host_ip
     self.host_port = ant_host_port
-    self.from_experiment = kwargs.get('from_experiment', None)
     self.rpc = None
 
   def start(self):
     # 1.step 获得数据集解析
+    running_ant_task = None
+    if self.token is not None:
+      # 1.1.step load challenge task
+      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+      if response['status'] == 'ERROR':
+        # invalid token
+        logger.error('couldnt load challenge task')
+        self.token = None
+      elif response['status'] == 'SUSPEND':
+        # prohibit submit challenge task frequently
+        # submit only one in one week
+        logger.error('prohibit submit challenge task frequently')
+        exit(-1)
+      elif response['status'] == 'OK':
+        content = response['content']
+        # maybe user token or task token
+        if 'task' in content:
+          challenge_task = create_task_from_json(content)
+          if challenge_task is None:
+            logger.error('couldnt load challenge task')
+            exit(-1)
+          running_ant_task = challenge_task
+      else:
+        # unknow error
+        logger.error('unknow error')
+        exit(-1)
+
+    if running_ant_task is not None:
+      self.dataset_name = running_ant_task.dataset_name
+
     parse_flag = ''
     dataset_cls = AntDatasetFactory.dataset(self.dataset_name, parse_flag)
 
@@ -192,30 +221,19 @@ class AntBrowser(AntBase):
     # with open(os.path.join(browser_static_dir, 'static', 'config.json'), 'w') as fp:
     #   fp.write(output)
 
-    # 3.4.step 启动
-    browser_mode = 'browser'
-    if self.context.params.browser is not None and 'mode' in self.context.params.browser:
-      browser_mode = self.context.params.browser['mode']
-
-    process = multiprocessing.Process(target=browser_server_start,
-                                      args=(os.path.join(self.ant_data_source, self.dataset_name),
-                                            self.dump_dir,
-                                            self.context.recorder.queue,
-                                            tags,
-                                            self.host_port,
-                                            browser_mode))
-
-    # process.daemon = True
-    process.start()
-
-    logger.info('wating 60s to launch browser server')
-    time.sleep(60)
-
+    # 3.3.step 状态
     train_offset, val_offset, test_offset = 0, 0, 0
-    offset_config = {
+    offset_configs = [{
       'dataset_flag': 'TRAIN',
       'dataset_offset': train_offset
-    }
+    },{
+      'dataset_flag': 'VAL',
+      'dataset_offset': val_offset
+    },{
+      'dataset_flag': 'TEST',
+      'dataset_offset': test_offset
+    }]
+
     if self.context.params.browser is not None and 'offset' in self.context.params.browser:
       if 'TRAIN' in self.context.params.browser['offset']:
         train_offset = self.context.params.browser['offset']['TRAIN']
@@ -223,12 +241,8 @@ class AntBrowser(AntBase):
           'dataset_flag': 'TRAIN',
           'dataset_offset': train_offset
         }
-    self.rpc.config.post(offset_config=json.dumps(offset_config))
+        offset_configs[0] = offset_config
 
-    offset_config = {
-      'dataset_flag': 'VAL',
-      'dataset_offset': val_offset
-    }
     if self.context.params.browser is not None and 'offset' in self.context.params.browser:
       if 'VAL' in self.context.params.browser['offset']:
         val_offset = self.context.params.browser['offset']['VAL']
@@ -236,12 +250,8 @@ class AntBrowser(AntBase):
           'dataset_flag': 'VAL',
           'dataset_offset': val_offset
         }
-    self.rpc.config.post(offset_config=json.dumps(offset_config))
+        offset_configs[1] = offset_config
 
-    offset_config = {
-      'dataset_flag': 'TEST',
-      'dataset_offset': test_offset
-    }
     if self.context.params.browser is not None and 'offset' in self.context.params.browser:
       if 'TEST' in self.context.params.browser['offset']:
         test_offset = self.context.params.browser['offset']['TEST']
@@ -249,10 +259,8 @@ class AntBrowser(AntBase):
           'dataset_flag': 'TEST',
           'dataset_offset': test_offset
         }
-    self.rpc.config.post(offset_config=json.dumps(offset_config))
+        offset_configs[2] = offset_config
 
-    # 4.step 启动数据生成
-    # 4.1.step 训练集
     dataset_flag = 'train'
     if self.context.params.browser is not None and 'dataset_flag' in self.context.params.browser:
       if self.context.params.browser['dataset_flag'] in ['train', 'val', 'test']:
@@ -270,35 +278,52 @@ class AntBrowser(AntBase):
     elif dataset_flag == 'val':
       sample_offset = val_offset
 
-    if train_dataset.size > 0:
-      logger.info('browser %s dataset'%dataset_flag)
+    if train_dataset.size == 0:
+      logger.warn("dont have waiting browser dataset(%s)"%dataset_flag)
+      return
+
+    logger.info('browser %s dataset' % dataset_flag)
+
+    # 设置数据基本信息
+    profile_config = {
+      'dataset_flag': dataset_flag.upper(),
+      'samples_num': train_dataset.size,
+      'samples_num_checked': sample_offset
+    }
+
+    # 设置记录器偏移
+    self.context.recorder.sample_index = sample_offset
+
+    # 3.3.step 在线程中启动数据处理
+    def _run_datagenerator_process():
       try:
-        # 设置数据基本信息
-        profile_config={
-          'dataset_flag': dataset_flag.upper(),
-          'samples_num': train_dataset.size,
-          'samples_num_checked': sample_offset
-        }
-        self.rpc.config.post(profile_config=json.dumps(profile_config))
-
-        # 设置当前状态
-        self.rpc.config.post(state=dataset_flag.upper())
-
-        # 设置记录器偏移
-        self.context.recorder.sample_index = sample_offset
-
         count = 0
         for data in self.context.data_generator(train_dataset):
           if count < sample_offset:
             count += 1
             continue
 
-          logger.info('record data %d for browser'%count)
+          logger.info('record data %d for browser' % count)
           self.context.recorder.record(data)
           count += 1
       except StopIteration:
-        logger.info('finish all records in browser %s dataset'%dataset_flag)
+        logger.info('finish all records in browser %s dataset' % dataset_flag)
         pass
 
-    # waiting join
-    process.join()
+    process = threading.Thread(target=_run_datagenerator_process)
+    process.daemon = True
+    process.start()
+
+    # 3.4.step 启动web服务
+    browser_mode = 'browser'
+    if self.context.params.browser is not None and 'mode' in self.context.params.browser:
+      browser_mode = self.context.params.browser['mode']
+
+    browser_server_start(os.path.join(self.ant_data_source, self.dataset_name),
+                         self.dump_dir,
+                         self.context.recorder.queue,
+                         tags,
+                         self.host_port,
+                         offset_configs,
+                         profile_config,
+                         browser_mode)

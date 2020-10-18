@@ -153,6 +153,12 @@ class ConfigApiHandler(BaseHandler):
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
+class PingApiHandler(BaseHandler):
+  @gen.coroutine
+  def get(self, *args, **kwargs):
+    self.response(RESPONSE_STATUS_CODE.SUCCESS)
+
+
 class GracefulExitException(Exception):
   @staticmethod
   def sigterm_handler(signum, frame):
@@ -183,6 +189,7 @@ def batch_server_start(batch_dump_dir, server_port):
                                             (r"/batch-api/dataset/", EntryApiHandler),
                                             (r"/batch-api/page/", PageApiHandler),
                                             (r"/batch-api/config/", ConfigApiHandler),
+                                            (r"/batch-api/ping/", PingApiHandler),
                                             (r'/(.*)', tornado.web.StaticFileHandler,
                                              {"path": batch_static_dir, "default_filename": "index.html"}),],
                                   **settings)

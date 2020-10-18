@@ -47,7 +47,7 @@ class AntShell(AntBase):
   def process_task_command(self):
     task_name = FLAGS.task_name() # task name
     if task_name is None:
-      response = self.context.dashboard.task.get()
+      response = mlogger.getEnv().dashboard.task.get()
 
       if response['status'] == "ERROR":
         logger.error(response['message'])
@@ -64,7 +64,7 @@ class AntShell(AntBase):
 
       print(task_table)
     else:
-      response = self.context.dashboard.apply.get(apply_name=task_name)
+      response = mlogger.getEnv().dashboard.apply.get(apply_name=task_name)
 
       if response['status'] == "ERROR":
         logger.error(response['message'])
@@ -85,7 +85,7 @@ class AntShell(AntBase):
   def process_experiment_command(self):
     experiment_uuid = FLAGS.experiment_uuid()
     if experiment_uuid is None:
-      response = self.context.dashboard.experiment.get()
+      response = mlogger.getEnv().dashboard.experiment.get()
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -104,7 +104,7 @@ class AntShell(AntBase):
 
       print(table)
     else:
-      response = self.context.dashboard.experiment.get(experiment_uuid=experiment_uuid)
+      response = mlogger.getEnv().dashboard.experiment.get(experiment_uuid=experiment_uuid)
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -140,7 +140,7 @@ class AntShell(AntBase):
   def process_dataset_command(self):
     dataset_name = FLAGS.dataset_name()
     if dataset_name is None:
-      response = self.context.dashboard.dataset.get()
+      response = mlogger.getEnv().dashboard.dataset.get()
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -158,7 +158,7 @@ class AntShell(AntBase):
 
       print(table)
     else:
-      response = self.context.dashboard.dataset.get(dataset_name=dataset_name)
+      response = mlogger.getEnv().dashboard.dataset.get(dataset_name=dataset_name)
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -179,7 +179,7 @@ class AntShell(AntBase):
     apply_name = FLAGS.apply_name()
     if task_name is None:
       # list all applied task
-      response = self.context.dashboard.apply.get()
+      response = mlogger.getEnv().dashboard.apply.get()
       if response['status'] == "ERROR":
         logger.error(response['message'])
         return
@@ -202,7 +202,7 @@ class AntShell(AntBase):
       if apply_name is None:
         apply_name = task_name
 
-      response = self.context.dashboard.apply.post(apply_name=apply_name,
+      response = mlogger.getEnv().dashboard.apply.post(apply_name=apply_name,
                                task_name=task_name)
       if response['status'] == "ERROR":
         logger.error(response['message'])
@@ -225,7 +225,7 @@ class AntShell(AntBase):
     uuid = FLAGS.experiment_uuid()
 
     if apply_name is not None:
-      response = self.context.dashboard.apply.delete(apply_name=apply_name)
+      response = mlogger.getEnv().dashboard.apply.delete(apply_name=apply_name)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return
@@ -233,7 +233,7 @@ class AntShell(AntBase):
       logger.info(response['message'])
 
     if dataset_name is not None:
-      response = self.context.dashboard.dataset.delete(dataset_name=dataset_name)
+      response = mlogger.getEnv().dashboard.dataset.delete(dataset_name=dataset_name)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return
@@ -242,7 +242,7 @@ class AntShell(AntBase):
 
 
     if task_name is not None:
-      response = self.context.dashboard.task.delete(task_name=task_name)
+      response = mlogger.getEnv().dashboard.task.delete(task_name=task_name)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return
@@ -250,7 +250,7 @@ class AntShell(AntBase):
       logger.info(response['message'])
 
     if uuid is not None:
-      response = self.context.dashboard.experiment.delete(experiment_uuid=uuid)
+      response = mlogger.getEnv().dashboard.experiment.delete(experiment_uuid=uuid)
       if response['status'] == 'ERROR':
         logger.error(response['message'])
         return

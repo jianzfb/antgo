@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <antgo>
-    <factory>/Users/zhangjian52/Downloads/workspace/factory</factory>
+    <factory></factory>
     <server_ip>127.0.0.1</server_ip>
     <server_port>8999</server_port>
+    <server_user_token></server_user_token>
 </antgo>
