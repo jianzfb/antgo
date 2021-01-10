@@ -7,23 +7,23 @@ Antgo
 
 Target
 ----------------------
-antgo is a machine learning experiment manage platform, which has been integrated deeply with MLTalker.
-antgo provides some easy cli commands to help ML researchers to manage, analyze, and challenge all kinds
+Antgo is a machine learning experiment manage platform, which has been integrated deeply with MLTalker.
+Antgo provides some easy cli commands to help ML researchers to manage, analyze, and challenge all kinds
 of ML tasks.
 
-Based on amounts of statistical evaluation methods, antgo could give a fruitful evaluation report, which
+Based on amounts of statistical evaluation methods, Antgo could give a fruitful evaluation report, which
 help researchers analyze and trade-off their model.
 
 Antgo tutorial is at `MLTalker Blog <http://www.mltalker.com/blog/>`__.
 
 Installation
 ----------------------
-install antgo::
+install Antgo::
 
     pip install antgo
 
 
-install antgo from source::
+or install Antgo from source::
 
     1. git clone https://github.com/jianzfb/antgo.git
     2. cd antgo
@@ -59,17 +59,72 @@ Create Your project
 
 antgo startproject --name=MNIST --author=xxx --token=Task API-TOKEN
 
-after, you will get in current folder
+after that, you will get in current folder
 
 .. image:: https://raw.githubusercontent.com/jianzfb/antgo/master/antgo/resource/static/filetree.png
     :alt: file tree
 
 
-3.step finish train callback function and infer callback function
+3.step write your train and predict code
 
-...
+in MNIST_main.py, you should finish training_callback and infer_callback functions.
 
-you can go `MLTalker Blog <http://www.mltalker.com/blog/>`__, to see how to use antgo.
+training_callback function::
+
+    def training_callback(data_source, dump_dir):
+        # warning: data_source include data and label
+        try:
+            # data_source.iterator_value() get generator
+            for index, (data, label) in enumerate(data_source.iterator_value()):
+                # data, label is data and its label
+                pass
+        except:
+            pass
+
+        # build logger to record important data
+        mc = mlogger.Container()
+        mc.loss = mlogger.metric.Simple('model loss')
+
+        epochs = 100
+        for epoch in range(epochs):
+            for _ in range(500):
+                # train model
+                ...
+                # loss value
+                loss_val = ...
+                mc.loss.update(loss_val)
+
+            # save best model
+            ...
+
+infer_callback function::
+
+    def infer_callback(data_source, dump_dir):
+        # warning: dont include label data
+        # get dataset size
+        data_size = data_source.size
+        # parse data
+        try:
+            # data_source.iterator_value() get generator
+            for index, data in enumerate(data_source.iterator_value()):
+                pass
+        except:
+            pass
+
+        # load from model from ctx.from_experiment
+        # ctx.from_experiment is experiment_uuid (shell script)
+
+        # run predict
+        ...
+
+        # record every sample predict result
+        for index in range(data_size):
+            ctx.recorder.record({
+              'RESULT': (int)(score[index])
+            })
+
+
+you can go `MLTalker Blog <http://www.mltalker.com/blog/>`__, to see more cases.
 
 
 4.step Run Train Task
@@ -79,4 +134,4 @@ antgo train exp
 
 5.step Run Challenge Task
 
-antgo challenge exp
+antgo challenge exp experiment_uuid
