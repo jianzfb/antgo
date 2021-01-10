@@ -13,6 +13,8 @@ from antgo.measures import *
 from antgo.measures.base import *
 from antgo.trainer.trainer import *
 from antgo.ant.debug import *
+import antvis.client.mlogger as mlogger
+
 {% if tensorflow %}
 from antgo.trainer.tftrainer import *
 from antgo.trainer.tfgantrainer import *
@@ -59,15 +61,6 @@ Antgo Machine Learning Running Framework Mechanism
 ######## 1.step global interaction handle ########
 ##################################################
 ctx = Context()
-
-
-##################################################
-###### 1.1.step build visualization chart  #######
-##################################################
-# every channel bind value type (NUMERIC, HISTOGRAM, IMAGE)
-loss_channel = ctx.dashboard.create_channel("loss", "NUMERIC")
-# bind channel to chart,every chart could include some channels
-ctx.dashboard.create_chart([loss_channel], "Loss Curve", "step", "value")
 
 
 ##################################################
@@ -314,6 +307,9 @@ class {{ModelName}}Model(ModelDesc):
 ######## 3.step define training process  #########
 ##################################################
 def training_callback(data_source, dump_dir):
+  mc = mlogger.Container()
+  mc.loss = mlogger.metric.Simple('model loss')
+
   {% if tensorflow %}
   # 0.step bind data source and tensorflow data pipeline
   # method 2

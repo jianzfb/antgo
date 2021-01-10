@@ -1,32 +1,36 @@
 #!/usr/bin/env bash
 if [ $# -eq 0 ]
 then
-    printf "Please Set Run Command train/challenge\n"
-    printf "For Example: run.sh train\n"
+    printf "Please Set Run Command train/challenge experiment_name\n"
+    printf "For Example: run.sh train test\n"
 elif [ $# -eq 1 ]
 then
     if [ $1 = "help" ]
     then
         printf "parameter 1: train/challenge\n"
-        printf "parameter 2: experiemnt_id (allow model to recover from experiment record)\n"
-    elif [[ $1 = "train" || $1 = "challenge" ]]
-    then
-        {% if task %}
-        nohup antgo $1 --main_file={{main_file}} --main_param={{main_param}} --task={{task}}> run.log 2>&1 &
-        {% else %}
-        nohup antgo $1 --main_file={{main_file}} --main_param={{main_param}} --token={{token}}> run.log 2>&1 &
-        {% endif %}
-    else
-        printf "only support train/challenge command\n"
+        printf "parameter 2: experiment name (you need to set a name)"
+        printf "parameter 3: experiemnt_id (allow model to recover from experiment record)\n"
     fi
 elif [ $# -eq 2 ]
 then
     if [[ $1 = "train" || $1 = "challenge" ]]
     then
         {% if task %}
-        nohup antgo $1 --main_file={{main_file}} --main_param={{main_param}} --task={{task}} --from_experiment=$2> run.log 2>&1 &
+        antgo $1 --main_file={{main_file}} --main_param={{main_param}} --task={{task}} --name=$2 > run.log 2>&1
         {% else %}
-        nohup antgo $1 --main_file={{main_file}} --main_param={{main_param}} --token={{token}} --from_experiment=$2> run.log 2>&1 &
+        antgo $1 --main_file={{main_file}} --main_param={{main_param}} --token={{token}} --name=$2 > run.log 2>&1
+        {% endif %}
+    else
+        printf "only support train/challenge command\n"
+    fi
+elif [ $# -eq 3 ]
+then
+    if [[ $1 = "train" || $1 = "challenge" ]]
+    then
+        {% if task %}
+        antgo $1 --main_file={{main_file}} --main_param={{main_param}} --task={{task}} --name=$2 --from_experiment=$3> run.log 2>&1
+        {% else %}
+        antgo $1 --main_file={{main_file}} --main_param={{main_param}} --token={{token}} --name=$2 --from_experiment=$3> run.log 2>&1
         {% endif %}
     else
         printf "only support train/challenge command\n"

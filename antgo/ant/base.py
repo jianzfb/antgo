@@ -206,8 +206,7 @@ class AntBase(object):
                      port=(int)(self.http_port),
                      project=self.ant_name,
                      experiment=self.ant_name,
-                     token=self.app_token,
-                     server=self.app_server)
+                     token=self.app_token)
 
       if mlogger.getEnv().dashboard.experiment_uuid is not None:
         self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid

@@ -40,7 +40,6 @@ class AntBatch(AntBase):
         self.host_ip = ant_host_ip
         self.host_port = ant_host_port
         self.rpc = None
-        self.web_server_process = None
 
     def update_web(self, content):
         self.rpc.config.post(config_data=json.dumps(content))

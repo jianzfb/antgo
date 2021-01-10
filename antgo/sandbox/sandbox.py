@@ -10,9 +10,10 @@ import os, sys
 from contextlib import contextmanager
 from antgo.utils.concurrency import *
 from antgo.utils import logger
+import antvis.client.mlogger as mlogger
 import multiprocessing
 import time
-import antvis.client.mlogger as mlogger
+
 
 @contextmanager
 def running_sandbox(*wargs, **kwargs):
@@ -34,6 +35,7 @@ def running_sandbox(*wargs, **kwargs):
           pass
 
         # exit globally
+        mlogger.exit()
         os._exit(0)
 
   try:
@@ -70,9 +72,6 @@ def running_sandbox(*wargs, **kwargs):
 
     yield
 
-    # 日志退出
-    mlogger.update()
-    mlogger.exit()
     # 线程退出
     if timer_thread is not None:
       # stop thread
@@ -81,4 +80,4 @@ def running_sandbox(*wargs, **kwargs):
 
     logger.info('exit antgo running environment')
   except:
-    mlogger.error()
+    logger.error('error occured in antgo running environment')

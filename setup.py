@@ -33,8 +33,9 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
+
 setup(name='antgo',
-      version='0.0.1',
+      version='0.0.3',
       description='machine learning experiment platform',
       __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',
@@ -78,11 +79,3 @@ setup(name='antgo',
       long_description=readme(),
       include_package_data=True,
       zip_safe=False,)
-
-# config file
-if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
-  os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
-
-if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
-  shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]),'antgo', 'config.xml'),
-              os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))

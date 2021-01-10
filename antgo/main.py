@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
-sys.path.append("/Users/zhangjian52/Downloads/workspace/code/antvis/")
 from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
@@ -32,6 +31,7 @@ else:
 def _check_environment():
   is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
   return is_in_mltalker
+
 
 _ant_support_commands = ["train",
                          "challenge",
@@ -78,14 +78,8 @@ flags.DEFINE_string('option', '', '')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
 flags.DEFINE_indicator('unlabel', '')
-flags.DEFINE_indicator('zoo', '')
 flags.DEFINE_indicator('skip_training', '')
 flags.DEFINE_string('running_platform', 'local', 'local/cloud')
-flags.DEFINE_string('order_id', '', '')
-flags.DEFINE_string('order_ip', '', '')
-flags.DEFINE_integer('order_rpc_port', 0, '')
-flags.DEFINE_integer('order_ssh_port', 0, '')
-flags.DEFINE_float('max_fee', 0.0, '')
 #############################################
 ########  tools - tffrozen            #######
 #############################################
@@ -119,36 +113,28 @@ def main():
   if not PY3 and token is not None:
     token = unicode(token)
 
-  # load antgo global config
-  if FLAGS.config() is not None:
-    # 1.step parse config.xml
-    Config.parse_xml(FLAGS.config())
-    # 2.step try copy to system
-    try:
-      # shutil.copy(FLAGS.config(), os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'))
-      # copy to ~/.config/
+  if sys.argv[1] == 'config':
+    if FLAGS.config() is not None:
+      # 使用指定配置文件更新
       if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
         os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
       shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
-    except:
-      logger.warn('perhaps you want to set default config.xml, please in root authority')
-      pass
+      logger.info('success update config file')
+    else:
+      # 在当前目录生成默认配置文件
+      shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'), "./config.xml")
+      logger.info('build default config file')
+    return
 
-    if sys.argv[1] == 'config':
-      return
-  else:
-    # parse config file
-    if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
-      # use default config
-      if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
-        os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
+  # 检查配置文件是否存在
+  if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
+    logger.error('missing config file, please run antgo config')
+    return
 
-      shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'),
-                  os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
-
-    config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-    Config.parse_xml(config_xml)
+  # 解析配置文件
+  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+  Config.parse_xml(config_xml)
 
   if len(sys.argv) == 1 or sys.argv[1].startswith('-'):
     # interactive control
@@ -156,22 +142,19 @@ def main():
     shell_process.start()
     return
 
+  # 检查最低版本与当前版本的兼容性
   if FLAGS.running_platform == 'local' and FLAGS.version() is not None:
-    a,b,c = FLAGS.version().split('.')
+    a, b, c = FLAGS.version().split('.')
     sys_a, sys_b, sys_c = version.split('.')
     if int(sys_a) < int(a) or int(sys_b) < int(b) or int(sys_c) < int(c):
       logger.error('antgo version dont satisfy task minimum request (%s)'%FLAGS.version())
       sys.exit(-1)
 
-  # 4.1.step check factory
+  # 4.step check factory
   factory = getattr(Config, 'factory', None)
   if factory is None or \
       factory == '' or not os.path.exists(Config.factory):
-
-    # 生成默认配置文件
-    shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'),"./config.xml")
-    # 提示信息
-    logger.info('missing config info, please antgo config --config=config.xml with root authority')
+    logger.error('factory folder is missing, please run antgo config')
     return
 
   if not os.path.exists(Config.data_factory):
@@ -182,8 +165,8 @@ def main():
   task_factory = Config.task_factory
   data_factory = Config.data_factory
 
-  # 6.step parse antgo execute command
-  # 6.2.step other command (train, challenge, compose, deploy, server)
+  # 5.step parse antgo execute command
+  # 5.1.step other command (train, challenge, compose, deploy, server)
   ant_cmd = sys.argv[1]
   if ant_cmd not in _ant_support_commands:
     logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
@@ -253,8 +236,7 @@ def main():
     return
 
   # 7.step check related params
-  # 7.1 step check name, if None, set it as current time automatically
-  time_stamp = timestamp()
+  # 7.1 must set name
   name = FLAGS.name()
   if name is None:
     logger.error('must set name')
@@ -270,21 +252,6 @@ def main():
     subprocess.call(untar_shell, shell=True, cwd=main_folder)
     os.remove(os.path.join(main_folder, '%s.tar.gz' % name))
 
-    main_folder = os.path.join(main_folder, name)
-    os.chdir(main_folder)
-
-  if FLAGS.zoo():
-    is_ok = experiment_download_dht(main_folder,
-                                    name,
-                                    token,
-                                    proxy=FLAGS.proxy(),
-                                    signature=FLAGS.signature(),
-                                    address='http://experiment.mltalker.com/%s.tar.gz'%name)
-    if not is_ok:
-      logger.error('couldnt load experiment from experiment zoo')
-      return
-
-    # swith to experiment in main_folder
     main_folder = os.path.join(main_folder, name)
     os.chdir(main_folder)
 
@@ -347,12 +314,6 @@ def main():
           FLAGS.running_platform() == 'local' and \
           ant_cmd not in ['release']:
     experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
-    # if not os.path.exists(experiment_path):
-    #   process = multiprocessing.Process(target=experiment_download_dht,
-    #                                     args=(dump_dir, FLAGS.from_experiment(), token, token))
-    #   process.start()
-    #   process.join()
-
     if not os.path.exists(experiment_path):
       logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
       exit(-1)
@@ -364,6 +325,8 @@ def main():
     else:
       ant_context.from_experiment = experiment_path
 
+  # time stamp
+  time_stamp = timestamp()
   # tools
   if ant_cmd == 'tools/tffrozen':
     # tensorflow tools

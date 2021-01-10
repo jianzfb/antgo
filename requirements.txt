@@ -19,3 +19,4 @@ sklearn
 matplotlib
 prettytable
 opencv-python
+antvis

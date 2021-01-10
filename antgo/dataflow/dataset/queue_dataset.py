@@ -7,7 +7,6 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 from antgo.dataflow.dataset.dataset import Dataset
-from multiprocessing import Process,Queue
 import os
 import sys
 from antgo.utils.serialize import *
