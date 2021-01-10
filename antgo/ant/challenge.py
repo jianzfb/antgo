@@ -108,9 +108,10 @@ class AntChallenge(AntBase):
     tar.close()
     logger.info('finish package process')
 
-    # 上传模型代码
-    mlogger.getEnv().dashboard.experiment.upload(MODEL=goldcoin,
-                                                 APP_STAGE=self.stage)
+    # TODO: 在下一个版本支持模型文件上传
+    # # 上传模型代码
+    # mlogger.getEnv().dashboard.experiment.upload(MODEL=goldcoin,
+    #                                              APP_STAGE=self.stage)
 
     # 3.2.step 更新基本配置
     mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,

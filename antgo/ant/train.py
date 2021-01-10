@@ -410,9 +410,10 @@ class AntTrain(AntBase):
     tar.close()
     logger.info('finish package process')
 
-    # 上传模型代码
-    mlogger.getEnv().dashboard.experiment.upload(MODEL=goldcoin, APP_STAGE=self.stage)
-    logger.info('finish upload model files')
+    # TODO: 在下一个版本支持模型文件上传
+    # # 上传模型代码
+    # mlogger.getEnv().dashboard.experiment.upload(MODEL=goldcoin, APP_STAGE=self.stage)
+    # logger.info('finish upload model files')
 
     # 4.2.step 更新实验配置
     mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,

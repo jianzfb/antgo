@@ -18,7 +18,7 @@ Antgo tutorial is at `MLTalker Blog <http://www.mltalker.com/blog/>`__.
 
 Installation
 ----------------------
-install Antgo::
+1.step install Antgo::
 
     pip install antgo
 
@@ -29,6 +29,40 @@ or install Antgo from source::
     2. cd antgo
     3. pip install -r requirements.txt
     4. python setup.py build_ext install
+
+
+2.step generate config file and modify::
+
+    antgo config
+
+in current folder, you will get::
+
+    config.xml
+
+content in config.xml is like this::
+
+    <?xml version='1.0' encoding='utf-8'?>
+    <antgo>
+        <factory></factory>
+        <server_ip>www.mltalker.com</server_ip>
+        <server_port>8999</server_port>
+        <server_user_token></server_user_token>
+    </antgo>
+
+In <factory> tag, fill your local folder. In this folder, you should build
+two subfolders
+
+    * dataset
+        all data should put here
+    * task
+        all task file should put here
+
+In <server_user_token> tag, fill your user api-token. How to get your api-token, see next section.
+
+3.step update config file::
+
+    antgo config --config=./config.xml
+
 
 Register
 -----------------------
