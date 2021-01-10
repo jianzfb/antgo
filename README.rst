@@ -1,5 +1,5 @@
 ======================
-antgo
+Antgo
 ======================
 
 .. image:: https://raw.githubusercontent.com/jianzfb/antgo/master/antgo/resource/static/card.png
@@ -41,13 +41,17 @@ All user experiment records would be managed by MLTalker in user's personal page
 
 Quick Example
 -----------------------
-1.step Build and Apply Task::
+1.step Build and Apply Task
+
+Build and Apply Task in
 
 .. image:: https://raw.githubusercontent.com/jianzfb/antgo/master/antgo/resource/static/apply.png
     :alt: Build Task in MLTalker
 
 
-2.step Create Your Project::
+2.step Create Your Project
+
+Create Your project
 
 .. image:: https://raw.githubusercontent.com/jianzfb/antgo/master/antgo/resource/static/start-experiment.png
     :alt: Get Task ApiToken in MLTalker
@@ -61,18 +65,18 @@ after, you will get in current folder
     :alt: file tree
 
 
-3.step finish train callback function and infer callback function::
+3.step finish train callback function and infer callback function
 
 ...
 
 you can go `MLTalker Blog <http://www.mltalker.com/blog/>`__, to see how to use antgo.
 
 
-4.step Run Train Task ::
+4.step Run Train Task
 
 antgo train exp
 
 
-5.step Run Challenge Task::
+5.step Run Challenge Task
 
 antgo challenge exp
