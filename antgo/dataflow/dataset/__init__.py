@@ -9,13 +9,6 @@ from .simplecsvs import *
 from .simpleimages import *
 from .simplevideos import *
 from .standard import *
-# is_support_tf = True
-# try:
-#   from .tfrecordsreader import *
-#   is_support_tf = True
-# except:
-#   is_support_tf = False
-is_support_tf = False
 
 class AntDatasetFactory(object):
   factory_dataset = {}
@@ -31,12 +24,8 @@ class AntDatasetFactory(object):
 
     if parse_flag == 'csv':
       return CSV
-    elif (parse_flag == 'tfrecord' or parse_flag == 'tfrecords') and is_support_tf:
-      return TFRecordsReader
-
-    if name.lower().startswith('tf') and is_support_tf:
-      return TFRecordsReader
-    elif name.lower().startswith('image'):
+      
+    if name.lower().startswith('image'):
       return SimpleImages
     elif name.lower().startswith('video'):
       return SimpleVideos

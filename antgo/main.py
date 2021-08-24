@@ -6,6 +6,8 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
+sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
+sys.path.append('/workspace/workspace/portrait_code/tool/antgo/')
 from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
@@ -41,20 +43,17 @@ _ant_support_commands = ["train",
                          "demo",
                          "browser",
                          "startproject",
-                         "config",
-                         "tools/tffrozen",
-                         "tools/tfrecords",
-                         "tools/tfgraph"]
+                         "config"]
 
 #############################################
 #######   antgo parameters            #######
 #############################################
-flags.DEFINE_string('main_file', None, 'main file')
-flags.DEFINE_string('main_param', None, 'model parameters')
+flags.DEFINE_string('main_file', "c.py", 'main file')
+flags.DEFINE_string('main_param', "c.yaml", 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('version', None, 'minist antgo version')
 flags.DEFINE_string('task', None, 'task file')
-flags.DEFINE_string('dataset', None, 'dataset')
+flags.DEFINE_string('dataset', 'images_full', 'dataset')
 flags.DEFINE_string('signature', '123', 'signature')
 flags.DEFINE_string('devices', '', 'devices')
 flags.DEFINE_string('servers', '', '')
@@ -71,8 +70,8 @@ flags.DEFINE_string('restore_experiment', None, 'restore experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
-flags.DEFINE_string('host_ip', '127,0.0.1', 'host ip address')
-flags.DEFINE_integer('host_port', 10000, 'port')
+flags.DEFINE_string('host_ip', '10.12.200.74', 'host ip address')
+flags.DEFINE_integer('host_port', 8999, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_string('option', '', '')
 flags.DEFINE_indicator('worker', '')
@@ -80,12 +79,6 @@ flags.DEFINE_indicator('master', '')
 flags.DEFINE_indicator('unlabel', '')
 flags.DEFINE_indicator('skip_training', '')
 flags.DEFINE_string('running_platform', 'local', 'local/cloud')
-#############################################
-########  tools - tffrozen            #######
-#############################################
-flags.DEFINE_string('tffrozen_input_nodes', '', 'input node names in graph')
-flags.DEFINE_string('tffrozen_output_nodes', '', 'output node names in graph')
-flags.DEFINE_string('tfgraph_path', '', 'pb file path')
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -230,16 +223,11 @@ def main():
 
     return
 
-  if ant_cmd == 'tools/tfgraph':
-    import antgo.codebook.tf.tftools as tftools
-    tftools.tftool_visualize_pb(FLAGS.tfgraph_path())
-    return
-
   # 7.step check related params
   # 7.1 must set name
   name = FLAGS.name()
   if name is None:
-    logger.error('must set name')
+    logger.error('Must set experiemnt name.')
     return
 
   # 7.2 check main folder (all related model code, includes main_file and main_param)
@@ -327,27 +315,6 @@ def main():
 
   # time stamp
   time_stamp = timestamp()
-  # tools
-  if ant_cmd == 'tools/tffrozen':
-    # tensorflow tools
-    import antgo.codebook.tf.tftools as tftools
-    tftools.tftool_frozen_graph(ant_context,
-                                dump_dir,
-                                time_stamp,
-                                FLAGS.tffrozen_input_nodes(),
-                                FLAGS.tffrozen_output_nodes())
-    return
-  elif ant_cmd == 'tools/tfrecords':
-    # tensorflow tools
-    import antgo.codebook.tf.tftool_records as tftool_records
-    tfrecords = \
-        tftool_records.AntTFRecords(ant_context,
-                                    data_factory,
-                                    dataset,
-                                    dump_dir)
-    tfrecords.start()
-    return
-
   if ant_cmd == "train":
     with running_sandbox(sandbox_time=FLAGS.max_time(),
                          sandbox_dump_dir=main_folder,

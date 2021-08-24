@@ -10,24 +10,28 @@ from antgo.ant.base import _pick_idle_port
 from antgo.crowdsource.browser_server import *
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
+from antgo.dataflow.dataset.parallel_read import MultiprocessReader
 from antvis.client.httprpc import *
+from antgo.dataflow.dataset.parallel_read import *
 import requests
 import json
 from jinja2 import Environment, FileSystemLoader
-try:
-    import queue
-except:
-    import Queue as queue
 
 
 class BrowserDataRecorder(object):
   def __init__(self, maxsize=30):
     self.queue = queue.Queue()  # 不设置队列最大缓冲
+    self.prepare_queue = queue.Queue(maxsize=maxsize)
     self.dump_dir = ''
     self.dataset_flag = 'TRAIN'
     self.dataset_size = 0
-    self.sample_index = 0
     self.tag_dir = ''
+
+    # 5个线程，等待处理
+    for _ in range(5):
+      t = threading.Thread(target=self.asyn_record)
+      t.daemon = True
+      t.start()
 
   def _transfer_image(self, data):
     try:
@@ -51,88 +55,115 @@ class BrowserDataRecorder(object):
       imwrite(image_path, transfer_result)
       return file_name
     except:
-      logger.error('couldnt transfer image data')
+      logger.error('Couldnt transfer image data.')
       return None
 
-  def record(self, val):
-    # 加入到队列中
-    assert(type(val) == dict)
+  def asyn_record(self):
+    while True:
+      val = self.prepare_queue.get()
+      if val is None:
+        break
 
-    # 重新组织数据格式
-    data = {}
-    for key, value in val.items():
-      xxyy = key.split('_')
-      data_name = xxyy[0]
-      if data_name not in data:
-        data[data_name] = {}
+      # 加入到队列中
+      assert(type(val) == dict)
 
-      # TYPE, TAG
-      if(len(xxyy) == 1):
-        data[data_name]['data'] = value
+      # 重新组织数据格式
+      data = {}
+      id = None
+      for key, value in val.items():
+        data_name = key
+        if data_name not in data:
+          data[data_name] = {}
+
+        if 'data' in value or 'DATA' in value:
+          if 'data' in value:
+            data[data_name]['data'] = value['data']
+            if data_name == 'id' or data_name == 'ID':
+              id = value['data']
+          else:
+            data[data_name]['data'] = value['DATA']
+            if data_name == 'id' or data_name == 'ID':
+              id = value['data']
+
+        if 'type' in value or 'TYPE' in value:
+          if 'type' in value:
+            data[data_name]['type'] = value['type']
+          else:
+            data[data_name]['type'] = value['TYPE']
+
+        # if 'tag' in value or 'TAG' in value:
+        #   if 'tag' in value:
+        #     data[data_name]['tag'] = value['tag']
+        #   else:
+        #     data[data_name]['tag'] = value['TAG']
+
+        # if 'id' in value or 'ID' in value:
+        #   if 'id' in value:
+        #     data[data_name]['id'] = value['id']
+        #   else:
+        #     data[data_name]['id'] = value['ID']
+
         data[data_name]['title'] = data_name
-      else:
-        if xxyy[-1] == "TYPE":
-          data[data_name]['type'] = value
-        elif xxyy[-1] == "TAG":
-          data[data_name]['tag'] = value
-        elif xxyy[-1] == 'ID':
-          data[data_name]['id'] = value
 
-    # 转换数据到适合web
-    web_data = []
-    for name, body in data.items():
-      if 'type' in body:
-        if body['type'] == 'IMAGE':
-          body['width'] = body['data'].shape[1]
-          body['height'] = body['data'].shape[0]
-          body['data'] = '/static/data/%s'%self._transfer_image(body['data'])
+      # 转换数据到适合web
+      web_data = []
+      for name, body in data.items():
+        if 'type' in body:
+          if body['type'].upper() == 'IMAGE':
+            body['width'] = body['data'].shape[1]
+            body['height'] = body['data'].shape[0]
+            body['data'] = '/static/data/%s'%self._transfer_image(body['data'])
 
-      if 'type' not in body:
-        body['type'] = 'STRING'
+        if 'type' not in body:
+          body['type'] = 'STRING'
 
-      if 'tag' not in body:
-        body['tag'] = []
+        if 'tag' not in body:
+          body['tag'] = []
 
-      body['dataset_flag'] = self.dataset_flag
-      body['dataset_size'] = self.dataset_size
-      web_data.append(body)
+        body['dataset_flag'] = self.dataset_flag
+        body['dataset_size'] = self.dataset_size
+        web_data.append(body)
 
-    # 如果从指定实验加载，则找寻是否存在以筛选标记
-    if os.path.exists(os.path.join(self.tag_dir, self.dataset_flag, '%d.json' % self.sample_index)):
-      # 加载json文件
-      logger.info('load record json from %s/%s'%(self.dataset_flag, '%d.json' % self.sample_index))
-      with open(os.path.join(self.tag_dir, self.dataset_flag, '%d.json' % self.sample_index), 'r') as fp:
-        annotation = json.load(fp)
-        # 确保标注数量和数据数量是一致的
-        assert (len(web_data) == len(annotation))
+      # 如果从指定实验加载，则找寻是否存在以筛选标记
+      if id is None:
+        continue
 
-        for a in web_data:
-          is_update = False
-          for b in annotation:
-            # 检测数据和标注是否对应
-            is_consistent = b['title'] == a['title']
-            if 'id' in b:
-              is_consistent = is_consistent and (a['id'] == b['id'])
+      if os.path.exists(os.path.join(self.tag_dir, self.dataset_flag, '%s.json' % str(id))):
+        # 加载json文件
+        logger.info('Load record json from %s/%s'%(self.dataset_flag, '%s.json.' % str(id)))
+        with open(os.path.join(self.tag_dir, self.dataset_flag, '%s.json' % str(id)), 'r') as fp:
+          annotation = json.load(fp)
+          # 确保标注数量和数据数量是一致的
+          assert (len(web_data) == len(annotation))
 
-              if not (a['id'] == b['id']):
-                logger.warn('please whether data and record are consistent')
+          for a in web_data:
+            is_update = False
+            for b in annotation:
+              # 检测数据和标注是否对应
+              is_consistent = b['title'] == a['title']
+              if 'id' in b:
+                is_consistent = is_consistent and (a['id'] == b['id'])
 
-            if is_consistent:
-              a['tag'] = b['tag']
-              is_update = True
-              break
+                if not (a['id'] == b['id']):
+                  logger.warn('Please whether data and record are consistent.')
 
-          if not is_update:
-            if 'id' in a:
-              logger.info('annotation and data not consistence for %s'%a['id'])
-            else:
-              logger.info('annotation and data not consistence for %s' % a['data'])
+              if is_consistent:
+                a['tag'] = b['tag']
+                is_update = True
+                break
 
-    # 加入队列，如果队列满，将阻塞
-    self.queue.put(web_data)
-    # 增加样本索引编号
-    self.sample_index += 1
+            if not is_update:
+              if 'id' in a:
+                logger.info('Annotation and data not consistence for %s.'%a['id'])
+              else:
+                logger.info('Annotation and data not consistence for %s.' % a['data'])
 
+      # 加入队列，如果队列满，将阻塞
+      self.queue.put(web_data)
+
+  def record(self, val):
+    self.prepare_queue.put(val)
+    
 
 class AntBrowser(AntBase):
   def __init__(self,
@@ -189,7 +220,7 @@ class AntBrowser(AntBase):
     dataset_cls = AntDatasetFactory.dataset(self.dataset_name, parse_flag)
 
     if dataset_cls is None:
-      logger.error('couldnt find dataset parse class')
+      logger.error('Couldnt find dataset parse class.')
       return
 
     # 2.step 配置记录器
@@ -199,7 +230,7 @@ class AntBrowser(AntBase):
     browser_params = getattr(self.context.params, 'browser', None)
     tags = []
     if browser_params is not None:
-      tags = browser_params.get('tags', []) \
+      tags = browser_params.get('tags', [])
 
     # 3.1.step 准备web服务资源
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
@@ -267,8 +298,8 @@ class AntBrowser(AntBase):
 
     dataset_flag = 'train'
     if self.context.params.browser is not None and 'dataset_flag' in self.context.params.browser:
-      if self.context.params.browser['dataset_flag'] in ['train', 'val', 'test']:
-        dataset_flag = self.context.params.browser['dataset_flag']
+      if self.context.params.browser['dataset_flag'].lower() in ['train', 'val', 'test']:
+        dataset_flag = self.context.params.browser['dataset_flag'].lower()
 
     train_dataset = dataset_cls(dataset_flag, os.path.join(self.ant_data_source, self.dataset_name))
     self.context.recorder.dataset_flag = dataset_flag.upper()
@@ -283,10 +314,10 @@ class AntBrowser(AntBase):
       sample_offset = val_offset
 
     if train_dataset.size == 0:
-      logger.warn("dont have waiting browser dataset(%s)"%dataset_flag)
+      logger.warn("Dont have waiting browser dataset(%s)."%dataset_flag)
       return
 
-    logger.info('browser %s dataset' % dataset_flag)
+    logger.info('Browser %s dataset.' % dataset_flag)
 
     # 设置数据基本信息
     profile_config = {
@@ -299,20 +330,17 @@ class AntBrowser(AntBase):
     self.context.recorder.sample_index = sample_offset
 
     # 3.3.step 在线程中启动数据处理
+    parallel_train_dataset = MultiprocessReader(train_dataset, daemon=True)
+
     def _run_datagenerator_process():
       try:
         count = 0
-        for data in self.context.data_generator(train_dataset):
-          if count < sample_offset:
-            count += 1
-            continue
-
-          logger.info('record data %d for browser' % count)
+        for data in self.context.data_generator(parallel_train_dataset):
+          logger.info('Record data %d for browser.' % count)
           self.context.recorder.record(data)
           count += 1
       except StopIteration:
-        logger.info('finish all records in browser %s dataset' % dataset_flag)
-        pass
+        logger.info('Finish all records in browser %s dataset.' % dataset_flag)
 
     process = threading.Thread(target=_run_datagenerator_process)
     process.daemon = True
@@ -320,7 +348,8 @@ class AntBrowser(AntBase):
 
     # 3.4.step 启动web服务
     browser_mode = 'browser'
-    if self.context.params.browser is not None and 'mode' in self.context.params.browser:
+    if self.context.params.browser is not None and \
+        'mode' in self.context.params.browser:
       browser_mode = self.context.params.browser['mode']
 
     browser_server_start(os.path.join(self.ant_data_source, self.dataset_name),

@@ -20,3 +20,4 @@ matplotlib
 prettytable
 opencv-python
 antvis
+gitpython

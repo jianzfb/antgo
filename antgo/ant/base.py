@@ -200,27 +200,28 @@ class AntBase(object):
                     datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
     self.context.experiment_uuid = self.experiment_uuid
 
-    if self.app_token is not None:
-      # 任务模式，在dashboard上创建实验记录
-      mlogger.config(ip=self.server_ip,
-                     port=(int)(self.http_port),
-                     project=self.ant_name,
-                     experiment=self.ant_name,
-                     token=self.app_token)
+    if self.app_server in ["AntChallenge","AntTrain","AntBatch","AntDemo"]:
+      if self.app_token is not None:
+        # 任务模式，在dashboard上创建实验记录
+        mlogger.config(ip=self.server_ip,
+                      port=(int)(self.http_port),
+                      project=self.ant_name,
+                      experiment=self.ant_name,
+                      token=self.app_token)
 
-      if mlogger.getEnv().dashboard.experiment_uuid is not None:
-        self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
-        self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
-    else:
-      # 非任务模式，基于user token与dashboard进行通信
-      mlogger.config(ip=self.server_ip,
-                     port=(int)(self.http_port),
-                     project=self.ant_name,
-                     experiment='exp',
-                     token=self.user_token)
-      if mlogger.getEnv().dashboard.experiment_uuid is not None:
-        self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
-        self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+        if mlogger.getEnv().dashboard.experiment_uuid is not None:
+          self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+          self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+      else:
+        # 非任务模式，基于user token与dashboard进行通信
+        mlogger.config(ip=self.server_ip,
+                      port=(int)(self.http_port),
+                      project=self.ant_name,
+                      experiment='exp',
+                      token=self.user_token)
+        if mlogger.getEnv().dashboard.experiment_uuid is not None:
+          self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+          self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
 
   @property
   def pid(self):
