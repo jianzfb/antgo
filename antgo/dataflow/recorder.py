@@ -17,7 +17,6 @@ except:
 import multiprocessing
 from antgo.task.task import *
 from antgo.dataflow.basic import *
-import scipy.misc
 import imageio
 import requests
 from antgo.context import *
@@ -159,7 +158,8 @@ class QueueRecorderNode(Node):
           os.makedirs(self.dump_dir)
 
         image_path = os.path.join(self.dump_dir, '%s.png'%str(uuid.uuid4()))
-        scipy.misc.imsave(image_path, transfer_result)
+        # scipy.misc.imsave(image_path, transfer_result)
+        imageio.imwrite(image_path, transfer_result)
         transfer_result = image_path
         transfer_result_type = 'IMAGE'
       elif result['%s_TYPE'%key] == 'VIDEO':
@@ -327,7 +327,8 @@ class LocalRecorderNode(Node):
         assert (data.shape[2] == 3)
         transfer_result = data.astype(np.uint8)
 
-      scipy.misc.imsave(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
+      # scipy.misc.imsave(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
+      imageio.imwrite(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
     elif data_type == 'VIDEO':
       video_path = os.path.join(self.dump_dir, '%d_%d_%s.mp4' % (count, index, name))
       writer = imageio.get_writer(video_path, fps=30)
@@ -401,27 +402,16 @@ class EmptyRecorderNode(Node):
     pass
 
 
-class LocalRecorderNodeV2(Node):
-  def __init__(self, inputs):
-    super(LocalRecorderNodeV2, self).__init__(name=None, action=self.action, inputs=inputs, auto_trigger=True)
-    self._annotation_cache = queue.Queue()
-
+class LocalRecorderNodeV2(object):
+  def __init__(self, callback=None):
+    super(LocalRecorderNodeV2, self).__init__()
     self._dump_dir = None
-    self._is_none = False
-
     self._count = 0
-    self._content = []
+    self._callback = callback
     setattr(self, 'model_fn', None)
-
-  @property
-  def content(self):
-    return self._content
 
   def close(self):
     pass
-
-  def clear(self):
-    self._content = []
 
   def save(self, data, data_type, name, count, index):
     # only support 'FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
@@ -459,7 +449,9 @@ class LocalRecorderNodeV2(Node):
         transfer_result = data.astype(np.uint8)
 
       file_name = '%d_%d_%s.png'%(count, index, name)
-      scipy.misc.imsave(os.path.join(self.dump_dir, file_name), transfer_result)
+      # scipy.misc.imsave(os.path.join(self.dump_dir, file_name), transfer_result)
+      imageio.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
+
       return file_name
     elif data_type == 'VIDEO':
       file_name = '%d_%d_%s.mp4' % (count, index, name)
@@ -487,15 +479,8 @@ class LocalRecorderNodeV2(Node):
     if type(val) != list and type(val) != tuple:
       results = [val]
 
-    group = []
     for index, result in enumerate(results):
-      gt = None
-      if self._annotation_cache.qsize() > 0:
-        gt = self._annotation_cache.get()
-
-      if gt is None and not self._is_none:
-        self._is_none = True
-
+      group = []
       # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
       #                           {'TYPE': 'JSON', 'CONTENT': ''},
       #                           {'TYPE': 'STRING', 'CONTENT': ''},
@@ -506,22 +491,33 @@ class LocalRecorderNodeV2(Node):
       # 重新组织数据格式
       data = {}
       for key, value in result.items():
-        xxyy = key.split('_')
-        data_name = xxyy[0]
-
+        data_name = key
         if data_name not in data:
           data[data_name] = {}
           data[data_name]['attribute'] = {}
+        
+        data[data_name]['title'] = data_name
+        if 'data' in value or 'DATA' in value:
+          if 'data' in value:
+            data[data_name]['data'] = value['data']
+          else:
+            data[data_name]['data'] = value['DATA']
 
-        if(len(xxyy) == 1):
-          data[data_name]['data'] = value
-          data[data_name]['title'] = key
-        elif xxyy[1] == 'TYPE':
-          data[data_name]['type'] = value
-        else:
-          if type(value) == np.ndarray:
-            value = value.tolist()
-          data[data_name]['attribute'][key] = str(value)
+        if 'type' in value or 'TYPE' in value:
+          if 'type' in value:
+            data[data_name]['type'] = value['type']
+          else:
+            data[data_name]['type'] = value['TYPE']
+
+        # if(len(xxyy) == 1):
+        #   data[data_name]['data'] = value
+        #   data[data_name]['title'] = key
+        # elif xxyy[1] == 'TYPE':
+        #   data[data_name]['type'] = value
+        # else:
+        #   if type(value) == np.ndarray:
+        #     value = value.tolist()
+        #   data[data_name]['attribute'][key] = str(value)
 
       # 转换数据到适合web
       for data_name, data_content in data.items():
@@ -533,8 +529,10 @@ class LocalRecorderNodeV2(Node):
 
         group.append(data_content)
 
-    # 记录
-    self._content.append(group)
+      # 记录
+      if self._callback is not None:
+        self._callback([group])
+
     self._count += 1
 
   @property

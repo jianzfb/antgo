@@ -68,21 +68,6 @@ def _pick_idle_port(from_port=40000, check_count=100):
 
   return check_port
 
-
-class UnlabeledDataset(Dataset):
-  def __init__(self, dataset):
-    super(UnlabeledDataset, self).__init__()
-    self.dataset_proxy = dataset
-
-  def data_pool(self):
-    for a, b in self.dataset_proxy.unlabeled():
-      yield a, b
-
-  @property
-  def size(self):
-    return self.dataset_proxy.unlabeled_size()
-
-
 class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
@@ -200,7 +185,7 @@ class AntBase(object):
                     datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
     self.context.experiment_uuid = self.experiment_uuid
 
-    if self.app_server in ["AntChallenge","AntTrain","AntBatch","AntDemo"]:
+    if self.app_server in ["AntChallenge","AntTrain"]:
       if self.app_token is not None:
         # 任务模式，在dashboard上创建实验记录
         mlogger.config(ip=self.server_ip,

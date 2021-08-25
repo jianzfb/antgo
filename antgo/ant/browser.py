@@ -330,12 +330,10 @@ class AntBrowser(AntBase):
     self.context.recorder.sample_index = sample_offset
 
     # 3.3.step 在线程中启动数据处理
-    parallel_train_dataset = MultiprocessReader(train_dataset, daemon=True)
-
     def _run_datagenerator_process():
       try:
         count = 0
-        for data in self.context.data_generator(parallel_train_dataset):
+        for data in self.context.data_generator(train_dataset):
           logger.info('Record data %d for browser.' % count)
           self.context.recorder.record(data)
           count += 1

@@ -43,25 +43,26 @@ class EntryApiHandler(BaseHandler):
     query_dataset_name = self.get_argument('dataset_name', None)
     if query_dataset_name is not None:
       dataset_name = query_dataset_name
-
     result_num = len(dataset_and_results[dataset_name])
-
     current_dataset_name = dataset_name
 
     if dataset_name not in self.db:
       self.db[dataset_name] = {}
 
+    max_num_in_page = 50
+    max_page_num = 100
     if 'num_in_page' not in self.db[dataset_name] or 'page_num' not in self.db[dataset_name]:
       max_num_in_page = self.db['max_num_in_page']
       max_page_num = self.db['max_page_num']
 
-      page_num = int(math.ceil(result_num/max_num_in_page))
-      if page_num > max_page_num:
-        page_num = max_page_num
+    # result_num 动态改变
+    page_num = int(math.ceil(result_num/max_num_in_page))
+    if page_num > max_page_num:
+      page_num = max_page_num
 
-      num_in_page = int(math.ceil(result_num / page_num))
-      self.db[dataset_name]['num_in_page'] = num_in_page
-      self.db[dataset_name]['page_num'] = page_num
+    num_in_page = int(math.ceil(result_num / page_num))
+    self.db[dataset_name]['num_in_page'] = num_in_page
+    self.db[dataset_name]['page_num'] = page_num
 
     num_in_page = self.db[dataset_name]['num_in_page']
     page_num = self.db[dataset_name]['page_num']
@@ -147,9 +148,14 @@ class ConfigApiHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
       return
 
+    # config_data: 
+    # {'experiment_uuid': experiment_uuid, 'dataset': {'train': [[{},{},...],[]]}}
     config_data = json.loads(config_data)
-
-    self.db['content'] = config_data
+    if len(self.db['content']) == 0:
+      self.db['content'] = config_data
+    else:
+      for key in config_data['dataset'].keys():
+        self.db['content']['dataset'][key].extend(config_data['dataset'][key])
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 

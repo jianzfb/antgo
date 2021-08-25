@@ -6,15 +6,14 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import numpy as np
-import scipy.misc
+import cv2
 from antgo.utils import get_rng
 from antgo.dataflow.core import *
-import copy
 from scipy.ndimage.interpolation import affine_transform
-
+import copy
 
 class Flip(Node):
-  def __init__(self, inputs, horiz=False, vert=False, prob=0.5):
+  def __init__(self, inputs=None, horiz=True, vert=False, prob=0.5):
     super(Flip, self).__init__(name=None, action=self.action, inputs=inputs)
 
     """
@@ -41,7 +40,6 @@ class Flip(Node):
     is_single = True
     if type(args[0]) == tuple or type(args[0]) == list:
       is_single = False
-
     image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
     
     annotation = copy.deepcopy(annotation)
@@ -91,7 +89,7 @@ class Flip(Node):
 
 
 class Resize(Node):
-  def __init__(self, inputs, shape):
+  def __init__(self, inputs=None, shape=None):
     super(Resize, self).__init__(name=None, action=self.action, inputs=inputs)
     self.shape = shape
 
@@ -103,7 +101,8 @@ class Resize(Node):
       
     image, annotation = args[0] if type(args[0]) == tuple or type(args[0]) == list else (args[0], {})
     # for image
-    image = scipy.misc.imresize(image, self.shape)
+    # image = scipy.misc.imresize(image, self.shape)
+    image = cv2.resize(image, self.shape)
     annotation = copy.deepcopy(annotation)
     # for annotation
     if type(annotation) == dict and 'bbox' in annotation:
@@ -119,7 +118,8 @@ class Resize(Node):
     if type(annotation) == dict and 'segmentation' in annotation:
       resized_obj_seg = []
       for obj_seg in annotation['segmentation']:
-        temp = scipy.misc.imresize(obj_seg[:, :, 0], self.shape[::-1], 'nearest')
+        # temp = scipy.misc.imresize(obj_seg[:, :, 0], self.shape[::-1], 'nearest')
+        temp = cv2.resize(obj_seg[:, :, 0], self.shape[::-1], cv2.INTER_NEAREST)
         resized_obj_seg.append(temp.reshape(temp.shape[0],temp.shape[1],1))
       annotation['segmentation'] = resized_obj_seg
 
@@ -127,7 +127,7 @@ class Resize(Node):
 
 
 class Subtract(Node):
-  def __init__(self, inputs, mean_val=(128, 128, 128)):
+  def __init__(self, inputs=None, mean_val=(128, 128, 128)):
     super(Subtract, self).__init__(name=None, action=self.action, inputs=inputs)
     self._mean_value = mean_val
 
@@ -146,7 +146,7 @@ class Subtract(Node):
 
 
 class DisturbChannels(Node):
-  def __init__(self, inputs):
+  def __init__(self, inputs=None):
     super(DisturbChannels, self).__init__(name=None, action=self.action, inputs=inputs)
 
   def action(self, *args, **kwargs):
@@ -169,7 +169,7 @@ class DisturbChannels(Node):
 
 
 class DisturbRotation(Node):
-  def __init__(self, inputs, max_deg=10):
+  def __init__(self, inputs=None, max_deg=10):
     super(DisturbRotation, self).__init__(name=None, action=self.action, inputs=inputs)
     self._max_deg = max_deg
     self.rng = get_rng(self)
@@ -259,7 +259,7 @@ class DisturbRotation(Node):
 
 
 class DisturbLighting(Node):
-  def __init__(self, inputs, max_lighting=10):
+  def __init__(self, inputs=None, max_lighting=10):
     super(DisturbLighting, self).__init__(name=None, action=self.action, inputs=inputs)
     self._max_lighting = max_lighting
     self.rng = get_rng(self)
@@ -279,7 +279,7 @@ class DisturbLighting(Node):
 
 
 class DisturbNoise(Node):
-  def __init__(self, inputs, sigma=10):
+  def __init__(self, inputs=None, sigma=10):
     super(DisturbNoise, self).__init__(name=None, action=self.action, inputs=inputs)
     self._sigma = sigma
     self.rng = get_rng(self)

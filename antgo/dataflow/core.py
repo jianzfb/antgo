@@ -266,7 +266,8 @@ class Node(BaseNode):
     super(Node, self).__init__(name, value=DIRTY, auto_trigger=auto_trigger)
     self._positional_inputs = ()
     self._keyword_inputs = {}
-    self.set_inputs(*inputs[0], **inputs[1] or {})
+    if inputs is not None:
+      self.set_inputs(*inputs[0], **inputs[1] or {})
     self._set_dependents_dirty()
     self._iteration_reset_state = False
 

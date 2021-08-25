@@ -171,7 +171,7 @@ class Dataset(BaseNode):
   def unlabeled(self, tag=''):
     unlabeled_folder = os.path.join(self.dir, self.unlabeled_tag)
     if not os.path.exists(unlabeled_folder):
-      raise StopIteration
+      return None
 
     if not os.path.exists(os.path.join(self.dir, 'unlabeled_list.txt')):
       with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'w') as fp:
@@ -202,14 +202,13 @@ class Dataset(BaseNode):
 
         line_content = fp.readline()
 
-    count = 0
+    data = []
     for file in unlabeled_list:
       if file not in has_labeled_list:
-        yield os.path.join(self.dir, self.unlabeled_tag, file), {'id': count, 'file_id': file}
+        data.append((os.path.join(self.dir, self.unlabeled_tag, file), {'id': len(data), 'file_id': file}))
 
-      count += 1
+    return data
 
-    raise StopIteration
 
   def make_candidate(self, unlabeled_file, label_file, status=''):
     # status: 'SKIP/OK'
@@ -825,3 +824,40 @@ class Dataset(BaseNode):
             logger.error('perhaps %s must be prepared manully and '
                          'put it at %s'%(f, target_path))
             os._exit(-1)
+
+
+class UnlabeledDataset(Dataset):
+  def __init__(self, dataset):
+    super(UnlabeledDataset, self).__init__()
+    self.data = dataset.unlabeled()
+
+  def data_pool(self):
+    for a, b in self.data:
+      yield a, b
+
+  def at(self, id):
+    return self.data[id]
+
+  @property
+  def size(self):
+    return len(self.data)
+
+class DataAnnotationSplitDataset(object):
+  def __init__(self, dataset):
+      super().__init__()
+      self.dataset = dataset
+    
+  def data_pool(self):
+    pass
+
+  def at(self, id):
+    self.dataset.at(id)
+    pass
+
+  def annotation_at(self, id):
+    
+    return
+
+  @property
+  def size(self):
+    return len(self.dataset)

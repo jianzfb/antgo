@@ -23,17 +23,28 @@ class SimpleImages(Dataset):
         os.path.exists(os.path.join(self.dir, self.train_or_test, 'label')):
       # data , label (only support images)
       for data_file in os.listdir(os.path.join(self.dir, self.train_or_test, 'data')):
-        if data_file.lower().split('.')[-1] in ['png', 'jpg', 'bmp', 'jpeg']:
-          label_file = data_file if label_flag is None else '%s%s.%s'%(data_file.split('.')[0],label_flag,data_file.split('.')[-1])
-          if os.path.exists(os.path.join(self.dir, self.train_or_test, 'label', label_file)):
+        if data_file.lower().split('.')[-1] in ['png', 'jpg', 'jpeg']:
+          label_file = data_file if label_flag is None else '%s%s.%s'%(data_file.split('.')[0], label_flag, data_file.split('.')[-1])
+
+          if os.path.exists(os.path.join(self.dir, self.train_or_test, 'label', label_file.split('.')[0]+'.png')):
             data_file_path = os.path.join(self.dir, self.train_or_test, 'data', data_file)
-            label_file_path = os.path.join(self.dir, self.train_or_test, 'label', label_file)
+            label_file_path = os.path.join(self.dir, self.train_or_test, 'label', label_file.split('.')[0]+'.png')
+            self.data_files.append(data_file_path)
+            self.label_files.append(label_file_path)
+          elif os.path.exists(os.path.join(self.dir, self.train_or_test, 'label', label_file.split('.')[0]+'.jpg')):
+            data_file_path = os.path.join(self.dir, self.train_or_test, 'data', data_file)
+            label_file_path = os.path.join(self.dir, self.train_or_test, 'label', label_file.split('.')[0]+'.jpg')
+            self.data_files.append(data_file_path)
+            self.label_files.append(label_file_path)
+          elif os.path.exists(os.path.join(self.dir, self.train_or_test, 'label', label_file.split('.')[0]+'.jpeg')):
+            data_file_path = os.path.join(self.dir, self.train_or_test, 'data', data_file)
+            label_file_path = os.path.join(self.dir, self.train_or_test, 'label', label_file.split('.')[0]+'.jpeg')
             self.data_files.append(data_file_path)
             self.label_files.append(label_file_path)
     else:
       # data
       for data_file in os.listdir(os.path.join(self.dir, self.train_or_test)):
-        if data_file.lower().split('.')[-1] in ['png', 'jpg', 'bmp', 'jpeg']:
+        if data_file.lower().split('.')[-1] in ['png', 'jpg', 'jpeg']:
           file_path = os.path.join(self.dir, self.train_or_test, data_file)
           self.data_files.append(file_path)
     

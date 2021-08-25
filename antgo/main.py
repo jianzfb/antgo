@@ -1,13 +1,11 @@
 # encoding=utf-8
 # @Time    : 17-3-3
-# @File    : common.py
+# @File    : main.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
-sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
-sys.path.append('/workspace/workspace/portrait_code/tool/antgo/')
 from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
@@ -39,7 +37,7 @@ _ant_support_commands = ["train",
                          "challenge",
                          "activelearning",
                          "dataset",
-                         "batch",
+                         "predict",
                          "demo",
                          "browser",
                          "startproject",
@@ -48,8 +46,8 @@ _ant_support_commands = ["train",
 #############################################
 #######   antgo parameters            #######
 #############################################
-flags.DEFINE_string('main_file', "c.py", 'main file')
-flags.DEFINE_string('main_param', "c.yaml", 'model parameters')
+flags.DEFINE_string('main_file', None, 'main file')
+flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('version', None, 'minist antgo version')
 flags.DEFINE_string('task', None, 'task file')
@@ -70,8 +68,8 @@ flags.DEFINE_string('restore_experiment', None, 'restore experiment')
 flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
-flags.DEFINE_string('host_ip', '10.12.200.74', 'host ip address')
-flags.DEFINE_integer('host_port', 8999, 'port')
+flags.DEFINE_string('host_ip', '127.0.0.1', 'host ip address')
+flags.DEFINE_integer('host_port', 8907, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_string('option', '', '')
 flags.DEFINE_indicator('worker', '')
@@ -371,7 +369,7 @@ def main():
                               devices=FLAGS.devices())
 
     running_process.start()
-  elif ant_cmd == "batch":
+  elif ant_cmd == "predict":
     running_process = AntBatch(ant_context,
                                name,
                                FLAGS.host_ip(),
