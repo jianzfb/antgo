@@ -79,6 +79,9 @@ class SpiderDataset(Dataset):
                       # 加入等待处理队列
                       waiting_process_queue.put(file_path)
 
+        # 添加结束标记
+        waiting_process_queue.put(None)
+    
     # 搜索和下载
     t = threading.Thread(target=__baidu_find_and_download, args=(self.waiting_process_queue, url, A, self.dir))
     t.start()
@@ -132,9 +135,11 @@ class SpiderDataset(Dataset):
 
                       # 加入等待处理队列
                       waiting_process_queue.put(file_path)
+        
+        # 结束标记
+        waiting_process_queue.put(None)
 
-        # 搜索和下载
-
+    # 搜索和下载
     t = threading.Thread(target=__bing_find_and_download, args=(self.waiting_process_queue, url, A, self.dir))
     t.start()
 
@@ -182,12 +187,17 @@ class SpiderDataset(Dataset):
               logger.error("Fail to parse %s"%image_file)
               # get next image file
               image_file = self.waiting_process_queue.get()
-              continue
+              if image_file is None:
+                break
 
+              continue
           except:
             logger.error("Fail to parse %s"%image_file)
             # get next image file
             image_file = self.waiting_process_queue.get()
+            if image_file is None:
+              break
+
             continue
           
           # increment 1
