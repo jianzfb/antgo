@@ -337,7 +337,7 @@ class AntBrowser(AntBase):
           logger.info('Record data %d for browser.' % count)
           self.context.recorder.record(data)
           count += 1
-      except StopIteration:
+      except:
         logger.info('Finish all records in browser %s dataset.' % dataset_flag)
 
     process = threading.Thread(target=_run_datagenerator_process)

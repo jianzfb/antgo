@@ -6,6 +6,8 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
+sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
+sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
 from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *

@@ -269,6 +269,12 @@ class Dataset(BaseNode):
 
     return count
 
+  def waiting_process_num(self):
+    return 0
+
+  def finish_process_num(self):
+    return 0
+
   @property
   def ids(self):
     return self._ids
@@ -861,3 +867,9 @@ class DataAnnotationSplitDataset(object):
   @property
   def size(self):
     return len(self.dataset)
+
+  def waiting_process_num(self):
+    return self.dataset.waiting_process_num()
+
+  def finish_process_num(self):
+    return self.dataset.finish_process_num()

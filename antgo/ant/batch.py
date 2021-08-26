@@ -5,8 +5,7 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-
-
+from antgo.dataflow.dataset.spider_dataset import SpiderDataset
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
 from antgo.task.task import *
@@ -111,6 +110,12 @@ class AntBatch(AntBase):
         if not os.path.exists(batch_static_dir):
             shutil.copytree(os.path.join(static_folder, 'resource', 'batch'), batch_static_dir)
 
+        # 命令队列
+        command_queue = queue.Queue()
+
+        # # 临时测试假数据
+        # command_queue.put(('baidu', {'datasource_address':'baidu', 'datasource_keywards': '人像'}))
+
         # 5.step 配置运行
         def _run_batch_process():
             # 等待web服务启动
@@ -153,10 +158,17 @@ class AntBatch(AntBase):
             for dataset_stage in selected_dataset_stages:
                 logger.info('Process dataset: %s.' % dataset_stage)
                 # 获得数据集对象
-                ant_test_dataset = \
-                    running_ant_task.dataset(dataset_stage,
-                                                os.path.join(self.ant_data_source, dataset_name),
-                                                running_ant_task.dataset_params)
+                ant_test_dataset = None
+                if dataset_name.startswith('spider'):
+                    # 使用SpiderDataset
+                    ant_test_dataset = \
+                        SpiderDataset(command_queue,
+                                        os.path.join(self.ant_data_source, dataset_name), None)
+                else:
+                    ant_test_dataset = \
+                        running_ant_task.dataset(dataset_stage,
+                                                    os.path.join(self.ant_data_source, dataset_name),
+                                                    running_ant_task.dataset_params)
                 # using unlabel
                 if self.unlabel:
                     ant_test_dataset = UnlabeledDataset(ant_test_dataset)
@@ -176,7 +188,10 @@ class AntBatch(AntBase):
                     for data_group in record_content['dataset'][dataset_stage]:
                         for item in data_group:
                             item['data'] = 'static/data/%s/record/%s' % (dataset_stage, item['data'])
-                    
+
+                    # 添加当前进度
+                    record_content['waiting'] = ant_test_dataset.waiting_process_num()
+                    record_content['finished'] = ant_test_dataset.finish_process_num()
                     self.rpc.config.post(config_data=json.dumps(record_content))
                     
                     # 保存执行信息
