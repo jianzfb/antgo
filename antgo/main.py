@@ -6,8 +6,8 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
-sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
-sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
+# sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
+# sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
 from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
@@ -128,7 +128,6 @@ def main():
   # 解析配置文件
   config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
   Config.parse_xml(config_xml)
-
   if len(sys.argv) == 1 or sys.argv[1].startswith('-'):
     # interactive control
     shell_process = AntShell(Context(), token)
@@ -290,8 +289,12 @@ def main():
   main_param = FLAGS.main_param()
   if main_param is not None:
     main_config_path = os.path.join(main_folder, main_param)
-    params = yaml.load(open(main_config_path, 'r'))
-    ant_context.params = params
+    try:
+      with open(main_config_path, 'r') as fp:
+        params = yaml.load(fp, Loader=yaml.FullLoader)
+        ant_context.params = params
+    except:
+      print('Fail to load main_param %s.'%main_param)
 
   ant_context.name = name
   ant_context.data_factory = data_factory
