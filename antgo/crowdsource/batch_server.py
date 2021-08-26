@@ -36,6 +36,7 @@ class EntryApiHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
       return
 
+    tags = content['tags']
     dataset_and_results = content['dataset']
     dataset_names = list(dataset_and_results.keys())
     dataset_name = dataset_names[0]
@@ -49,27 +50,16 @@ class EntryApiHandler(BaseHandler):
     if dataset_name not in self.db:
       self.db[dataset_name] = {}
 
-    max_num_in_page = 50
-    max_page_num = 100
-    if 'num_in_page' not in self.db[dataset_name] or 'page_num' not in self.db[dataset_name]:
-      max_num_in_page = self.db['max_num_in_page']
-      max_page_num = self.db['max_page_num']
-
-    # result_num 动态改变
-    page_num = int(math.ceil(result_num/max_num_in_page))
-    if page_num > max_page_num:
-      page_num = max_page_num
-
-    num_in_page = int(math.ceil(result_num / page_num))
+    # 每页只能显示100条记录(固定)
+    num_in_page = 100
+    # 获得需要展示的页数
+    page_num = int(math.ceil(result_num / num_in_page))
     self.db[dataset_name]['num_in_page'] = num_in_page
     self.db[dataset_name]['page_num'] = page_num
-
-    num_in_page = self.db[dataset_name]['num_in_page']
-    page_num = self.db[dataset_name]['page_num']
     page_index = 0
     start_index = 0 * num_in_page
     start_index = start_index if start_index < result_num else result_num-1
-    end_index = 1*num_in_page
+    end_index = 1 * num_in_page
     end_inidex = end_index if end_index < result_num else result_num
 
     sample_num_in_dataset = {}
@@ -84,9 +74,58 @@ class EntryApiHandler(BaseHandler):
       'sample_num_in_dataset': sample_num_in_dataset,
       'current_dataset_name': current_dataset_name,
       'result_num': result_num,
-      'result_list': dataset_and_results[dataset_name][start_index: end_index]
+      'result_list': dataset_and_results[dataset_name][start_index: end_index],
+      'tags': tags,
+      'waiting': self.db['waiting'],
+      'finished': self.db['finished'],
+      'spider': self.db['spider'] if 'spider' in self.db else 'BAIDU'
     }
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
+
+class TagChangeApiHandler(BaseHandler):
+  @gen.coroutine
+  def post(self, *args, **kwargs):
+    page_index = self.get_argument('page_index', None)
+    data_index = self.get_argument('data_index', None)
+    data_tag = self.get_argument('data_tag', None)
+    if page_index is None or data_index is None or data_tag is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+    
+    page_index = (int)(page_index)
+    data_index = (int)(data_index)
+    data_tag = json.loads(data_tag)
+
+    # 修改数据的tag
+    dataset_and_results = self.db['content']['dataset']
+    dataset_names = list(dataset_and_results.keys())
+    dataset_name = dataset_names[0]
+    num_in_page = self.db[dataset_name]['num_in_page']
+
+    data_index = page_index * num_in_page + data_index
+    self.db['content']['dataset'][dataset_name][data_index]['tag'] = data_tag
+    self.response(RESPONSE_STATUS_CODE.SUCCESS)
+
+
+class SearchApiHandler(BaseHandler):
+  @gen.coroutine
+  def post(self, *args, **kwargs):
+    web_url = self.get_argument('url', None)
+    keyword = self.get_argument('keyword', None)
+    if web_url.lower().startswith('baidu'):
+      web_url = 'baidu'
+    elif web_url.lower().startswith('bing'):
+      web_url = 'bing'
+    elif web_url.lower().startswith('google'):
+      web_url = 'google'
+
+    # 记录当前spider
+    self.db['spider'] = web_url.upper()
+
+    # 通知爬虫
+    self.db['command_queue'].put((
+      'baidu', {'datasource_address': web_url, 'datasource_keywards': keyword}
+    ))
+    self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
 class PageApiHandler(BaseHandler):
@@ -117,9 +156,9 @@ class PageApiHandler(BaseHandler):
       return
 
     result_num = len(self.db['content']['dataset'][dataet_name])
-    start_index = page_index*self.db[dataet_name]['num_in_page']
+    start_index = page_index * self.db[dataet_name]['num_in_page']
     start_index = start_index if start_index < result_num else result_num - 1
-    end_index = (page_index+1) * self.db[dataet_name]['num_in_page']
+    end_index = (page_index + 1) * self.db[dataet_name]['num_in_page']
     end_inidex = end_index if end_index < result_num else result_num
 
     dataset_names = list(content['dataset'].keys())
@@ -135,7 +174,9 @@ class PageApiHandler(BaseHandler):
       'current_dataset_name': dataet_name,
       'sample_num_in_dataset': sample_num_in_dataset,
       'result_num': result_num,
-      'result_list': content['dataset'][dataet_name][start_index: end_index]
+      'result_list': content['dataset'][dataet_name][start_index: end_index],
+      'waiting': self.db['waiting'],
+      'finished': self.db['finished']
     }
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
 
@@ -149,13 +190,16 @@ class ConfigApiHandler(BaseHandler):
       return
 
     # config_data: 
-    # {'experiment_uuid': experiment_uuid, 'dataset': {'train': [[{},{},...],[]]}}
+    # {'experiment_uuid': experiment_uuid, 'dataset': {'train': [[{},{},...],[]]}, 'tags':[]}
     config_data = json.loads(config_data)
     if len(self.db['content']) == 0:
       self.db['content'] = config_data
     else:
       for key in config_data['dataset'].keys():
         self.db['content']['dataset'][key].extend(config_data['dataset'][key])
+
+    self.db['waiting'] = config_data['waiting']
+    self.db['finished'] = config_data['finished']
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
@@ -171,7 +215,7 @@ class GracefulExitException(Exception):
     raise GracefulExitException()
 
 
-def batch_server_start(batch_dump_dir, server_port):
+def batch_server_start(batch_dump_dir, server_port, command_queue):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
 
@@ -183,12 +227,12 @@ def batch_server_start(batch_dump_dir, server_port):
     batch_static_dir = os.path.join(batch_dump_dir, 'batch')
 
     # 2.step launch web server
-    db = {'content': {}, 'max_page_num': 30, 'max_num_in_page': 50}
+    db = {'content': {}, 'command_queue': command_queue}
     settings = {
       'static_path': os.path.join(batch_static_dir, 'static'),
       'port': server_port,
       'cookie_secret': str(uuid.uuid4()),
-      'db': db
+      'db': db,
     }
 
     app = tornado.web.Application(handlers=[(r"/batch-api/entry/", EntryApiHandler),
@@ -196,6 +240,8 @@ def batch_server_start(batch_dump_dir, server_port):
                                             (r"/batch-api/page/", PageApiHandler),
                                             (r"/batch-api/config/", ConfigApiHandler),
                                             (r"/batch-api/ping/", PingApiHandler),
+                                            (r"/batch-api/tag/", TagChangeApiHandler),
+                                            (r"/batch-api/search/", SearchApiHandler),
                                             (r'/(.*)', tornado.web.StaticFileHandler,
                                              {"path": batch_static_dir, "default_filename": "index.html"}),],
                                   **settings)

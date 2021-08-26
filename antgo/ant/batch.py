@@ -115,6 +115,12 @@ class AntBatch(AntBase):
 
         # # 临时测试假数据
         # command_queue.put(('baidu', {'datasource_address':'baidu', 'datasource_keywards': '人像'}))
+        
+        # 数据标签
+        batch_params = getattr(self.context.params, 'predict', None)
+        tags = []
+        if batch_params is not None:
+            tags = batch_params.get('tags', [])
 
         # 5.step 配置运行
         def _run_batch_process():
@@ -182,12 +188,14 @@ class AntBatch(AntBase):
                     record_content = {
                         'experiment_uuid': experiment_uuid, 
                         'dataset': {
-                            dataset_stage: data
-                        }
+                            dataset_stage: [{'data':single_d, 'tag':[]} for single_d in data]
+                        },
+                        'tags': tags
                     }
                     for data_group in record_content['dataset'][dataset_stage]:
-                        for item in data_group:
-                            item['data'] = 'static/data/%s/record/%s' % (dataset_stage, item['data'])
+                        for item in data_group['data']:
+                            if item['type'] == 'IMAGE':
+                                item['data'] = 'static/data/%s/record/%s' % (dataset_stage, item['data'])
 
                     # 添加当前进度
                     record_content['waiting'] = ant_test_dataset.waiting_process_num()
@@ -219,4 +227,4 @@ class AntBatch(AntBase):
         process.start()
 
         # 5.step 启动bach server
-        batch_server_start(experiment_dump_dir, self.host_port)
+        batch_server_start(experiment_dump_dir, self.host_port, command_queue)

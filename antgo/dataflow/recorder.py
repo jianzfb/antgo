@@ -431,10 +431,10 @@ class LocalRecorderNodeV2(object):
         fp.write(json.dumps(data))
       return file_name
     elif data_type == 'STRING' or data_type == 'SCALAR':
-      file_name = '%d_%d_%s.txt'%(count, index,name)
-      with open(os.path.join(self.dump_dir, file_name), 'w') as fp:
-        fp.write(str(data))
-      return file_name
+      # file_name = '%d_%d_%s.txt'%(count, index,name)
+      # with open(os.path.join(self.dump_dir, file_name), 'w') as fp:
+      #   fp.write(str(data))
+      return str(data)
     elif data_type == 'IMAGE':
       transfer_result = data
       if len(data.shape) == 2:
@@ -515,7 +515,7 @@ class LocalRecorderNodeV2(object):
         # elif xxyy[1] == 'TYPE':
         #   data[data_name]['type'] = value
         # else:
-        #   if type(value) == np.ndarray:
+        #   if type(vaßlue) == np.ndarray:
         #     value = value.tolist()
         #   data[data_name]['attribute'][key] = str(value)
 

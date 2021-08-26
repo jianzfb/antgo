@@ -545,7 +545,6 @@ class COCO2017(Dataset):
 
     return ann_file
 
-  @dataset_thread(16)
   def data_pool(self):
     if self.train_or_test == 'sample':
       sample_idxs = copy.copy(self.ids)

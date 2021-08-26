@@ -142,7 +142,15 @@ class PrevApiHandler(BaseHandler):
       os.makedirs(os.path.join(self.dump_folder, state))
 
     try:
-      with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
+      # 发现数据id
+      data_id = None
+      for item in data:
+        if item['title'] == 'ID':
+          data_id = str(item['data'])
+      if data_id is None:
+        data_id = str(entry_id+offset)
+
+      with open(os.path.join(self.dump_folder, state, '%s.json'%data_id), "w") as file_obj:
         json.dump(data, file_obj)
     except Exception as e:
       print('str(Exception):\t', str(Exception))
@@ -208,7 +216,15 @@ class NextApiHandler(BaseHandler):
       os.makedirs(os.path.join(self.dump_folder, state))
 
     try:
-      with open(os.path.join(self.dump_folder, state, '%d.json'%(entry_id+offset)), "w") as file_obj:
+      # 发现数据id
+      data_id = None
+      for item in data:
+        if item['title'] == 'ID':
+          data_id = str(item['data'])
+      if data_id is None:
+        data_id = str(entry_id+offset)
+
+      with open(os.path.join(self.dump_folder, state, '%s.json'%data_id), "w") as file_obj:
         json.dump(data, file_obj)
     except Exception as e:
       print('str(Exception):\t', str(Exception))

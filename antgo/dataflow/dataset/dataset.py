@@ -47,37 +47,6 @@ def imresize(image, size):
   return cv2.resize(image, (size[1],size[0]))
 
 
-class DataIOThread(threading.Thread):
-  def __init__(self, func, data_queue):
-    super(DataIOThread, self).__init__()
-    self.func = func
-    self.data_queue = data_queue
-
-  def run(self):
-    for a, b in self.func():
-      self.data_queue.put((a, b))
-
-    self.data_queue.put((None,None))
-
-
-def dataset_thread(capacity_size=16):
-  def dataio_warp(func):
-    def warp_func(*args, **kwargs):
-      data_queue = queue.Queue(maxsize=capacity_size)
-      data_thread = DataIOThread(functools.partial(func, *args, **kwargs), data_queue)
-      data_thread.start()
-
-      while True:
-        a, b = data_queue.get()
-        if a is None and b is None:
-          raise StopIteration
-
-        yield a, b
-
-    return warp_func
-  return dataio_warp
-
-
 class Dataset(BaseNode):
   _BASE_DATASET = True
 
