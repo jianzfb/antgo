@@ -181,6 +181,10 @@ class Context(object):
   def call_training_process(self, data_source, dump_dir):
     is_inner_set = False
     if self.recorder is not None and self.recorder.dump_dir == None:
+      if dump_dir != '':
+        if not os.path.exists(os.path.join(dump_dir, 'record')):
+          os.makedirs(os.path.join(dump_dir, 'record'))
+
       self.recorder.dump_dir = os.path.join(dump_dir, 'record')
       is_inner_set = True
     

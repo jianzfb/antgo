@@ -194,7 +194,7 @@ class AntBatch(AntBase):
                     }
                     for data_group in record_content['dataset'][dataset_stage]:
                         for item in data_group['data']:
-                            if item['type'] == 'IMAGE':
+                            if item['type'] in ['IMAGE','VIDEO','FILE']:
                                 item['data'] = 'static/data/%s/record/%s' % (dataset_stage, item['data'])
 
                     # 添加当前进度

@@ -426,10 +426,13 @@ class LocalRecorderNodeV2(object):
       shutil.copy(data, os.path.join(self.dump_dir, file_name))
       return file_name
     elif data_type == 'JSON':
-      file_name = '%d_%d_%s.json'%(count, index,name)
-      with open(os.path.join(self.dump_dir, file_name),'w') as fp:
-        fp.write(json.dumps(data))
-      return file_name
+      # file_name = '%d_%d_%s.json'%(count, index,name)
+      # with open(os.path.join(self.dump_dir, file_name),'w') as fp:
+      #   fp.write(json.dumps(data))
+      # return file_name
+      if type(data) != str:
+        data = json.dumps(data)
+      return data
     elif data_type == 'STRING' or data_type == 'SCALAR':
       # file_name = '%d_%d_%s.txt'%(count, index,name)
       # with open(os.path.join(self.dump_dir, file_name), 'w') as fp:
@@ -445,7 +448,7 @@ class LocalRecorderNodeV2(object):
           data_max = np.max(data)
           transfer_result = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
       else:
-        assert (data.shape[2] == 3)
+        assert (data.shape[2] == 3 or data.shape[2] == 4)
         transfer_result = data.astype(np.uint8)
 
       file_name = '%d_%d_%s.png'%(count, index, name)
@@ -475,65 +478,68 @@ class LocalRecorderNodeV2(object):
       self._annotation_cache.put(copy.deepcopy(entry))
 
   def record(self, val, **kwargs):
-    results = val
-    if type(val) != list and type(val) != tuple:
-      results = [val]
+    try:
+      results = val
+      if type(val) != list and type(val) != tuple:
+        results = [val]
 
-    for index, result in enumerate(results):
-      group = []
-      # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
-      #                           {'TYPE': 'JSON', 'CONTENT': ''},
-      #                           {'TYPE': 'STRING', 'CONTENT': ''},
-      #                           {'TYPE': 'IMAGE', 'PATH': ''},
-      #                           {'TYPE': 'VIDEO', 'PATH': ''},
-      #                           {'TYPE': 'AUDIO', 'PATH': ''}]
+      for index, result in enumerate(results):
+        group = []
+        # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
+        #                           {'TYPE': 'JSON', 'CONTENT': ''},
+        #                           {'TYPE': 'STRING', 'CONTENT': ''},
+        #                           {'TYPE': 'IMAGE', 'PATH': ''},
+        #                           {'TYPE': 'VIDEO', 'PATH': ''},
+        #                           {'TYPE': 'AUDIO', 'PATH': ''}]
 
-      # 重新组织数据格式
-      data = {}
-      for key, value in result.items():
-        data_name = key
-        if data_name not in data:
-          data[data_name] = {}
-          data[data_name]['attribute'] = {}
-        
-        data[data_name]['title'] = data_name
-        if 'data' in value or 'DATA' in value:
-          if 'data' in value:
-            data[data_name]['data'] = value['data']
-          else:
-            data[data_name]['data'] = value['DATA']
+        # 重新组织数据格式
+        data = {}
+        for key, value in result.items():
+          data_name = key
+          if data_name not in data:
+            data[data_name] = {}
+            data[data_name]['attribute'] = {}
+          
+          data[data_name]['title'] = data_name
+          if 'data' in value or 'DATA' in value:
+            if 'data' in value:
+              data[data_name]['data'] = value['data']
+            else:
+              data[data_name]['data'] = value['DATA']
 
-        if 'type' in value or 'TYPE' in value:
-          if 'type' in value:
-            data[data_name]['type'] = value['type']
-          else:
-            data[data_name]['type'] = value['TYPE']
+          if 'type' in value or 'TYPE' in value:
+            if 'type' in value:
+              data[data_name]['type'] = value['type']
+            else:
+              data[data_name]['type'] = value['TYPE']
 
-        # if(len(xxyy) == 1):
-        #   data[data_name]['data'] = value
-        #   data[data_name]['title'] = key
-        # elif xxyy[1] == 'TYPE':
-        #   data[data_name]['type'] = value
-        # else:
-        #   if type(vaßlue) == np.ndarray:
-        #     value = value.tolist()
-        #   data[data_name]['attribute'][key] = str(value)
+          # if(len(xxyy) == 1):
+          #   data[data_name]['data'] = value
+          #   data[data_name]['title'] = key
+          # elif xxyy[1] == 'TYPE':
+          #   data[data_name]['type'] = value
+          # else:
+          #   if type(value) == np.ndarray:
+          #     value = value.tolist()
+          #   data[data_name]['attribute'][key] = str(value)
 
-      # 转换数据到适合web
-      for data_name, data_content in data.items():
-        data_content['data'] = self.save(data_content['data'],
-                             data_content['type'],
-                             data_content['title'],
-                             self._count,
-                             index)
+        # 转换数据到适合web
+        for data_name, data_content in data.items():
+          data_content['data'] = self.save(data_content['data'],
+                              data_content['type'],
+                              data_content['title'],
+                              self._count,
+                              index)
 
-        group.append(data_content)
+          group.append(data_content)
 
-      # 记录
-      if self._callback is not None:
-        self._callback([group])
+        # 记录
+        if self._callback is not None:
+          self._callback([group])
 
-    self._count += 1
+      self._count += 1
+    except:
+      logger.error('Record error.')
 
   @property
   def dump_dir(self):

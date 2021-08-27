@@ -11,7 +11,6 @@ import tornado.ioloop
 import tornado.options
 from tornado.options import define, options
 from tornado import web, gen
-from tornado import httpclient
 import tornado.web
 from antgo.utils import logger
 import os
@@ -26,10 +25,21 @@ import uuid
 import signal
 from ..utils.serialize import loads,dumps
 from antgo.crowdsource.utils import *
+from tornado.concurrent import run_on_executor
+import requests
+from concurrent.futures import ThreadPoolExecutor
 import functools
+import base64
+try:
+    import queue
+except:
+    import Queue as queue
 
 
 class BaseHandler(tornado.web.RequestHandler):
+  waiting_queue = {}
+  executor = ThreadPoolExecutor(10)
+
   @property
   def demo_name(self):
     return self.settings.get('demo_name', '-')
@@ -86,10 +96,6 @@ class BaseHandler(tornado.web.RequestHandler):
   def dataset_queue(self):
     return self.settings['dataset_queue']
 
-  @property
-  def recorder_queue(self):
-    return self.settings['recorder_queue']
-
   def _transfer(self, data_key, data_value, data_type, demo_response):
     if data_type == 'IMAGE':
       if os.path.exists(data_value):
@@ -117,59 +123,165 @@ class BaseHandler(tornado.web.RequestHandler):
 
     return demo_response
 
-  def preprocess_model_server(self, data, data_type):
-    if data_type == 'URL' or data_type == 'PATH':
-      data_path = os.path.normpath(data)
-      data_name = data_path.split('/')[-1]
-      ext_name = data_path.split('/')[-1].split('.')[-1].lower()
+  @run_on_executor
+  def waitingResponse(self, data_id):
+    if data_id in BaseHandler.waiting_queue:
+      # 阻塞等待响应
+      try:
+        response_data = BaseHandler.waiting_queue[data_id].get(timeout=30)
+      except:
+        # 空队列，直接返回空
+        BaseHandler.waiting_queue.pop(data_id)
+        return {}
 
-      if ext_name in ['jpg', 'jpeg', 'png', 'bmp', 'gif']:
-        return data_path, data_name, 'IMAGE'
-      elif ext_name in ['mp4', 'avi']:
-        return data_path, data_name, 'VIDEO'
-      elif ext_name in ['txt']:
-        return data_path, data_name, 'FILE'
-      else:
-        # TODO: support video and sound
-        logger.warn('dont support file type %s' % ext_name)
-        return None, None, None
-    else:
-      return data, str(uuid.uuid4()), 'STRING'
+      # 清空等待队列s
+      BaseHandler.waiting_queue.pop(data_id)
 
-  def postprocess_model_server(self, uuid_flag, demo_result):
-    demo_predict = None
-    demo_predict_additional = []
-    if type(demo_result) == list or type(demo_result) == tuple:
-      demo_predict, demo_predict_additional = demo_result[0:2]
-    else:
-      demo_predict = demo_result
+      if response_data is None:
+        return {}
 
-    # build output folder (static/output)
-    if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
-      os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
+      processed_data = response_data['data']
+      if len(processed_data) == 0:
+        return {}
 
-    demo_response = {'DATA': {}}
-    if demo_predict['DATA'] is not None and demo_predict['TYPE'] is not None:
-      demo_response = self._transfer('RESULT', demo_predict['DATA'], demo_predict['TYPE'], demo_response)
-    else:
+      # build output folder (static/output)
+      if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
+        os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
+
+      demo_response = {'DATA': {}}
       demo_response = {'DATA': {'RESULT': {'DATA':'', 'TYPE': 'STRING'}}}
+      for data in processed_data[0]:
+        item_type = data['type']
+        item_data = data['data']
+        item_title = data['title']
+        
+        demo_response = self._transfer(item_title, item_data, item_type, demo_response)
+      return demo_response
 
-    for data in demo_predict_additional:
-      data_type = data['TYPE']
-      data_value = None
-      data_key = None
-      for k,v in data.items():
-        if k != 'TYPE':
-          data_key = k
-          data_value = v
-          break
+    return {}
 
-      if data_key is not None and data_value is not None:
-        demo_response = self._transfer(data_key, data_value, data_type, demo_response)
+  @run_on_executor
+  def asynProcess(self, preprocess_type, data):
+    if preprocess_type == 'DOWNLOAD':
+      try:
+        # 1.step 下载(如果有必要)
+        pic = requests.get(data['url'], timeout=7)
+        download_path = os.path.join(self.demo_dump, 'static', 'input', data['file_name'])
+        with open(download_path, 'wb') as fp:
+          fp.write(pic.content)
 
-    return demo_response
+        # 2.step 检查
+        # 2.1.step 检查文件大小
+        if 'file_size' in self.demo_constraint:
+          max_file_size = self.demo_constraint['file_size']
+          fsize = os.path.getsize(download_path) / float(1024 * 1024)
+          if round(fsize,2) > max_file_size:
+            return {'status': 400,
+                      'code': 'InvalidImageSize', 
+                      'message': 'The input file size is too large (>%f MB)'%float(max_file_size)}
 
-    
+        # 2.2.step 检查文件格式
+        # 图片格式检测（图片文件后缀可能不对）
+        download_path = os.path.normpath(download_path)
+        file_type = imghdr.what(download_path)
+        if file_type in ['jpeg', 'png', 'gif', 'bmp']:
+          # 图像文件
+          file_name = '%s.%s'%(data['file_name'], file_type)
+          os.rename(download_path, os.path.join('/'.join(download_path.split('/')[0:-1]), file_name))
+          download_path = os.path.join('/'.join(download_path.split('/')[0:-1]), file_name)
+
+        if 'file_type' in self.demo_constraint:
+          if file_type not in self.demo_constraint['file_type']:
+            return {'status': 400,
+                      'code': 'InvalidImageFormat', 
+                      'message': 'The input file is not in a valid image format that the service can support'}
+
+        return {
+          'status': 200,
+          'path': download_path
+        }
+      except:
+        print('Fail to download %s'%data['url'])
+        return {
+          'status': 500,
+          'code': 'UnkownError'
+        }   
+    elif preprocess_type == 'RECEIVE':
+      try:
+        # 1.step 保存文件
+        file_path = data['file_path']
+        file_data = data['file_data']
+        with open(file_path, 'wb') as fp:
+          fp.write(file_data)
+        
+        # 2.step 检查
+        # 2.1.step 检查文件大小
+        if 'file_size' in self.demo_constraint:
+          max_file_size = self.demo_constraint['file_size']
+          fsize = os.path.getsize(file_path) / float(1024 * 1024)
+          if round(fsize,2) > max_file_size:
+            return {'status': 400,
+                      'code': 'InvalidImageSize', 
+                      'message': 'The input file size is too large (>%f MB)'%float(max_file_size)}
+
+        # 2.2.step 检查文件格式
+        # 图片格式检测（图片文件后缀可能不对）
+        file_path = os.path.normpath(file_path)
+        file_type = imghdr.what(file_path)
+        if file_type in ['jpeg', 'png', 'gif', 'bmp']:
+          # 图像文件
+          file_name = '%s.%s'%(file_path.split('/')[-1].split('.')[0], file_type)
+          os.rename(file_path, os.path.join('/'.join(file_path.split('/')[0:-1]), file_name))
+          file_path = os.path.join('/'.join(file_path.split('/')[0:-1]), file_name)
+
+        if 'file_type' in self.demo_constraint:
+          if file_type not in self.demo_constraint['file_type']:
+            return {'status': 400,
+                      'code': 'InvalidImageFormat', 
+                      'message': 'The input file is not in a valid image format that the service can support'}
+        return {
+          'status': 200,
+          'path': file_path
+        }
+      except:
+        return {
+          'status': 500,
+          'code': 'UnkownError'
+        }   
+    elif preprocess_type == 'PACKAGE':
+        data_path = os.path.normpath(data['path'])
+        data_name = data_path.split('/')[-1]
+        ext_name = data_path.split('/')[-1].split('.')[-1].lower()
+
+        # 根据后缀判断上传的数据类型
+        if ext_name in ['jpg', 'jpeg', 'png', 'bmp', 'gif']:
+          return {'data': (data_path, data_name, 'IMAGE'), 'status': 200}
+        elif ext_name in ['mp4', 'avi']:
+          return {'data': (data_path, data_name, 'VIDEO'), 'status': 200}
+        elif ext_name in ['txt']:
+          return {'data': (data_path, data_name, 'FILE'), 'status': 200}
+        else:
+          # TODO: support video and sound
+          logger.warn('dont support file type %s' % ext_name)
+          return {'status': 400, 'code': 'InvalidPackage', 'message': 'Fail package'}
+    elif preprocess_type == 'API_QUERY':
+      # 1.step base64解码
+      # format {'image': '', 'video': None, 'params': [{'data': ,'type': , 'name': ,},{}]}
+      image_str = None
+      if 'image' in data:
+        image_str = data['image']
+
+      if image_str is None:
+        return {'status': 400,
+          'code': 'InvalidData', 
+          'message': 'Missing query data'}
+
+      image_b = base64.b64decode(image_str)
+      return {
+        'status': 200,
+        'data': {'image': image_b, 'params': data['params']}
+      }
+ 
 class IndexHandler(BaseHandler):
   def get(self):
     image_history_data = []
@@ -208,11 +320,6 @@ class IndexHandler(BaseHandler):
 
 
 class ClientQueryHandler(BaseHandler):
-  def _file_download(self,file_name, response):
-    download_path = os.path.join(self.demo_dump, 'static', 'input', file_name)
-    with open(download_path, "wb") as f:
-        f.write(response.body)
-
   @gen.coroutine
   def post(self):
     # 0.step check support status
@@ -236,48 +343,35 @@ class ClientQueryHandler(BaseHandler):
     data_type = self.get_argument('DATA_TYPE', None)
     if data is not None and data_type is not None:
       if data_type == 'URL':
-        # download data from url
-        http_client = httpclient.AsyncHTTPClient()
-        file_name = os.path.normpath(data).split('/')[-1]
-        if file_name == '':
-          file_name = '%s'%str(uuid.uuid4())
-        file_download_func = functools.partial(self._file_download, file_name)
-        yield http_client.fetch(data, callback=file_download_func)
-
-        file_path = os.path.join(self.demo_dump, 'static', 'input', file_name)
-        if 'file_size' in self.demo_constraint:
-          max_file_size = self.demo_constraint['file_size']
-          fsize = os.path.getsize(file_path) / float(1024 * 1024)
-          if round(fsize,2) > max_file_size:
-            self.set_status(400)
-            self.write(json.dumps({'code': 'InvalidImageSize', 'message': 'The input file size is too large (>%f MB)'%float(max_file_size)}))
-            self.finish()
-            return
-
-        # 2.step check file format
-        if 'file_type' in self.demo_constraint:
-          is_ok, file_path = check_file_types(file_path, self.demo_constraint['file_type'])
-          if not is_ok:
-            self.set_status(400)
-            self.write(json.dumps({'code': 'InvalidImageFormat', 'message': 'The input file is not in a valid image format that the service can support'}))
-            self.finish()
-            return
-
-        # DATA_TYPE, DATA, TASK_NAME, TASK_TYPE
-        model_data, model_data_name, model_data_type = self.preprocess_model_server(file_path, data_type)
-        if model_data is None:
-          self.set_status(500)
-          self.write(json.dumps({'code': 'InvalidIO', 'message': 'couldnt parse data'}))
-          self.finish()
+        # 下载
+        file_name = str(uuid.uuid4())
+        result = yield self.asynProcess('DOWNLOAD', {'url': data, 'file_name': file_name})
+        if result['status'] != 200:
+          self.set_status(result['status'])
+          self.write(json.dumps(result))
           return
 
+        # 获得下载后的路径
+        file_path = result['path']
+
+        # 打包
+        result = yield self.asynProcess('PACKAGE', {'path': file_path})
+        if result['status'] != 200:
+          self.set_status(result['status'])
+          self.write(json.dumps(result))
+          return
+        
+        model_data, model_data_name, model_data_type = result['data']
+
+        # 保存
         model_datas.append(model_data)
         model_data_names.append(model_data_name)
         model_data_types.append(model_data_type)
     else:
       if len(self.request.files) == 0:
         self.set_status(400)
-        self.write(json.dumps({'code': 'InvalidUploadFile', 'message': 'The input file is not uploaded correctly'}))
+        self.write(json.dumps({'code': 'InvalidUploadFile', 
+                                'message': 'The input file is not uploaded correctly'}))
         self.finish()
         return
 
@@ -286,96 +380,135 @@ class ClientQueryHandler(BaseHandler):
       for _, meta in self.request.files.items():
         _file_name = '%s_%s' % (str(uuid.uuid4()), meta[0]['filename'])
         _file_path = os.path.join(upload_path, _file_name)
+        
+        # 接受文件
+        result = yield self.asynProcess('RECEIVE', {'file_path': _file_path, 'file_data': meta[0]['body']})
+        if result['status'] != 200:
+          self.set_status(result['status'])
+          result['code'] = 'InvalidUpload'
+          result['message'] = 'Couldnt upload request file'
+          self.write(json.dumps(result))
+          return
 
-        with open(_file_path, 'wb') as fp:
-          fp.write(meta[0]['body'])
+        _file_path = result['path']
+        _file_name = _file_path.split('/')
 
         file_paths.append(_file_path)
         file_names.append(_file_name)
 
-      if len(file_paths) == 0 or len(file_names) == 0:
-        self.set_status(400)
-        self.write(json.dumps({'code': 'InvalidUploadFile', 'message': 'The input file is not uploaded correctly'}))
-        self.finish()
+        # 仅支持一个文件处理
+        break
+
+      # 打包
+      result = yield self.asynProcess('PACKAGE', {'path': file_paths[0]})
+      if result['status'] != 200:
+        self.set_status(result['status'])
+        self.write(json.dumps(result))
         return
-
-      # 2.step parse query data
-      for file_path in file_paths:
-        # check file basic infomation
-        # 1.step check file size
-        if 'file_size' in self.demo_constraint:
-          max_file_size = self.demo_constraint['file_size']
-          fsize = os.path.getsize(file_path) / float(1024 * 1024)
-          if round(fsize, 2) > max_file_size:
-            self.set_status(400)
-            self.write(json.dumps({'code': 'InvalidImageSize',
-                                   'message': 'The input file size is too large (>%f MB)' % float(max_file_size)}))
-            self.finish()
-            return
-
-        # 2.step check file format
-        if 'file_type' in self.demo_constraint:
-          is_ok, file_path = check_file_types(file_path, self.demo_constraint['file_type'])
-          if not is_ok:
-            self.set_status(400)
-            self.write(json.dumps({'code': 'InvalidImageFormat',
-                                   'message': 'The input file is not in a valid image format that the service can support'}))
-            self.finish()
-            return
-
-        try:
-          model_data, model_data_name, model_data_type = self.preprocess_model_server(file_path, 'PATH')
-        except:
-          self.set_status(400)
-          self.write(json.dumps({'code': 'InvalidDetails', 'message': 'The input file parse error'}))
-          self.finish()
-          return
-
-        if model_data is None:
-          self.set_status(400)
-          self.write(json.dumps({'code': 'InvalidDetails', 'message': 'The input file parse error'}))
-          self.finish()
-          return
-
-        model_datas.append(model_data)
-        model_data_names.append(model_data_name)
-        model_data_types.append(model_data_type)
+      
+      model_data, model_data_name, model_data_type = result['data']
+      model_datas.append(model_data)
+      model_data_names.append(model_data_name)
+      model_data_types.append(model_data_type)
 
       request_param = self.get_argument('params', None)
       if request_param is not None:
         request_param = json.loads(request_param)
 
+    if request_param is None:
+      request_param = {}
+      
+    request_param.update({
+      'id': model_data_names[0]
+    })
+    
     # push to backend
-    model_input = (model_datas, model_data_types, request_param) if len(model_datas) > 1 else (model_datas[0], model_data_types[0], request_param)
+    model_input = (model_datas[0], model_data_types[0], request_param)
+
+    # 设置等待队列
+    BaseHandler.waiting_queue[model_data_names[0]] = queue.Queue()
+
+    # 发送到处理队列
     self.dataset_queue.put(model_input)
+    
+    # 异步等待响应(设置等待队列，并在异步线程中等待)
+    data_response = yield self.waitingResponse(model_data_names[0])
 
-    # wating to get result from backend
-    result = self.recorder_queue.get()
-    _, demo_result = result
+    # 绑定输入数据,返回
+    data_response['INPUT_TYPE'] = model_data_types[0]
+    if model_data_types[0] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
+      data_response['INPUT'] = '/static/input/%s' % model_data_names[0]
+    else:
+      data_response['INPUT'] = model_datas[0]
 
+    # 返回成功
+    self.write(json.dumps(data_response))
+    self.finish()
+
+
+class ClientCliQueryHandler(BaseHandler):
+  @gen.coroutine
+  def post(self):
+    request_data = self.get_argument('data', None)
+    if request_data is None:
+      self.set_status(400)
+      self.write(json.dumps({'code': 'InvalidQuery', 'message': 'Invalid query data'}))
+      return
+
+    # 解析请求字符串
+    request_data = json.loads(request_data)
+
+    '''
+    format: {'data': {'image': '', 'params': [{'data': ,'type': , 'name': ,},{}]}, 'time': ,}
+    '''
+    # query_time = request_data['time']
+    query_data = request_data['data']
+
+    result = yield self.asynProcess('API_QUERY', query_data)
+    if result['status'] != 200:
+        self.set_status(result['status'])
+        self.write(json.dumps(result))
+        return
+
+    data_id = str(uuid.uuid4())
+    request_param = {'id': data_id}
+    image = result['data']['image']
+    request_param.update(result['data']['params'])
+
+    # push to backend
+    model_input = (image, 'IMAGE_MEMORY', request_param)
+
+    # 设置等待队列
+    BaseHandler.waiting_queue[data_id] = queue.Queue()
+
+    # 发送到处理队列
+    self.dataset_queue.put(model_input)
+    
+    # 异步等待响应(设置等待队列，并在异步线程中等待)
+    data_response = yield self.waitingResponse(data_id)
+
+    # 返回成功
+    self.write(json.dumps(data_response))
+    self.finish()
+
+
+class ClientResponseHandler(BaseHandler):
+  @gen.coroutine
+  def post(self):
+    # 返回数据
     # data type: 'FILE', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
     # data:       PATH,  '',        PATH,    PATH,    PATH
-    # 5.step post process and render
-    demo_response = self.postprocess_model_server(model_data_names[0], demo_result)
-
-    if len(model_data_names) == 1:
-      demo_response['INPUT_TYPE'] = model_data_types[0]
-      if model_data_types[0] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
-        demo_response['INPUT'] = '/static/input/%s' % model_data_names[0]
-      else:
-        demo_response['INPUT'] = model_datas[0]
-    else:
-      demo_response['INPUT_TYPE'] = []
-      demo_response['INPUT'] = []
-      for index in range(len(model_data_names)):
-        demo_response['INPUT_TYPE'].append(model_data_types[index])
-        if model_data_types[index] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
-          demo_response['INPUT'].append('/static/input/%s' % model_data_names[index])
-        else:
-          demo_response['INPUT'].append(model_datas[index])
-
-    self.write(json.dumps(demo_response))
-    self.finish()
+    response_data = self.get_argument('response', None)
+    if response_data is None:
+      return
+    
+    response_data = json.loads(response_data)
+    id = response_data['id']
+    if id not in BaseHandler.waiting_queue:
+      return
+    
+    # 
+    BaseHandler.waiting_queue[id].put(response_data)
 
 
 class ClientFileUploadAndProcessHandler(BaseHandler):
@@ -384,7 +517,8 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
     # 0.step check support status
     if not self.demo_support_user_upload:
       self.set_status(500)
-      self.write(json.dumps({'code': 'InvalidSupport', 'message': 'demo dont support upload'}))
+      self.write(json.dumps({'code': 'InvalidSupport', 
+                            'message': 'demo dont support upload'}))
       self.finish()
       return
 
@@ -396,7 +530,8 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
     file_metas = self.request.files.get('file', None)
     if not file_metas:
       self.set_status(400)
-      self.write(json.dumps({'code': 'InvalidUploadFile', 'message': 'The input file is not uploaded correctly'}))
+      self.write(json.dumps({'code': 'InvalidUploadFile', 
+                              'message': 'The input file is not uploaded correctly'}))
       self.finish()
       return
 
@@ -406,90 +541,62 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
       _file_name = '%s_%s'%(str(uuid.uuid4()), meta['filename'])
       _file_path = os.path.join(upload_path, _file_name)
 
-      with open(_file_path, 'wb') as fp:
-        fp.write(meta['body'])
+      # 接受文件
+      result = yield self.asynProcess('RECEIVE', {
+                  'file_path': _file_path,
+                  'file_data': meta['body']
+                })
+      if result['status'] != 200:
+        self.set_status(result['status'])
+        result['code'] = 'InvalidUpload'
+        result['message'] = 'Couldnt upload request file'
+        self.write(json.dumps(result))
+        return
 
+      _file_path = result['path']
+      _file_name = _file_path.split('/')
       file_paths.append(_file_path)
       file_names.append(_file_name)
 
-    if len(file_paths) == 0 or len(file_names) == 0:
-      self.set_status(400)
-      self.write(json.dumps({'code': 'InvalidUploadFile', 'message': 'The input file is not uploaded correctly'}))
-      self.finish()
-      return
+      # 仅支持单文件上传，处理
+      break
 
-    # 2.step parse query data
     model_datas = []
     model_data_names = []
     model_data_types = []
-    request_param = None
+    # 打包
+    result = yield self.asynProcess('PACKAGE', {'path': file_paths[0]})
+    if result['status'] != 200:
+      self.set_status(result['status'])
+      self.write(json.dumps(result))
+      return
+    
+    model_data, model_data_name, model_data_type = result['data']
+    model_datas.append(model_data)
+    model_data_names.append(model_data_name)
+    model_data_types.append(model_data_type)
 
-    for file_path in file_paths:
-      # check file basic infomation
-      # 1.step check file size
-      if 'file_size' in self.demo_constraint:
-        max_file_size = self.demo_constraint['file_size']
-        fsize = os.path.getsize(file_path) / float(1024 * 1024)
-        if round(fsize,2) > max_file_size:
-          self.set_status(400)
-          self.write(json.dumps({'code': 'InvalidImageSize', 'message': 'The input file size is too large (>%f MB)'%float(max_file_size)}))
-          self.finish()
-          return
+    request_param = {'id': model_data_names[0]}
+    model_input = (model_datas[0], model_data_types[0], request_param)
 
-      # 2.step check file format
-      if 'file_type' in self.demo_constraint:
-        is_ok, file_path = check_file_types(file_path, self.demo_constraint['file_type'])
-        if not is_ok:
-          self.set_status(400)
-          self.write(json.dumps({'code': 'InvalidImageFormat', 'message': 'The input file is not in a valid image format that the service can support'}))
-          self.finish()
-          return
-      try:
-        model_data, model_data_name, model_data_type = self.preprocess_model_server(file_path, 'PATH')
-      except:
-        self.set_status(400)
-        self.write(json.dumps({'code': 'InvalidDetails', 'message': 'The input file parse error'}))
-        self.finish()
-        return
-      if model_data is None:
-        self.set_status(400)
-        self.write(json.dumps({'code': 'InvalidDetails', 'message': 'The input file parse error'}))
-        self.finish()
-        return
+    # 设置等待队列
+    BaseHandler.waiting_queue[model_data_names[0]] = queue.Queue()
 
-      model_datas.append(model_data)
-      model_data_names.append(model_data_name)
-      model_data_types.append(model_data_type)
-
-    # 3.step preprocess data, then submit to model
-    model_input = (model_datas,model_data_types,request_param) if len(model_datas) > 1 else (model_datas[0], model_data_types[0], request_param)
-
+    # 发送到处理队列
     self.dataset_queue.put(model_input)
-    result = self.recorder_queue.get()
-    _, demo_result = result
+    
+    # 异步等待响应(设置等待队列，并在异步线程中等待)
+    data_response = yield self.waitingResponse(model_data_names[0])
 
-    # data type: 'FILE', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
-    # data:       PATH,  '',        PATH,    PATH,    PATH
-    # 5.step post process and render
-    demo_response = self.postprocess_model_server(model_data_names[0], demo_result)
-
-    if len(model_data_names) == 1:
-      demo_response['INPUT_TYPE'] = model_data_types[0]
-      if model_data_types[0] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
-        demo_response['INPUT'] = '/static/input/%s' % model_data_names[0]
-      else:
-        demo_response['INPUT'] = model_datas[0]
+    # 绑定输入数据,返回
+    data_response['INPUT_TYPE'] = model_data_types[0]
+    if model_data_types[0] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
+      data_response['INPUT'] = '/static/input/%s' % model_data_names[0]
     else:
-      demo_response['INPUT_TYPE'] = []
-      demo_response['INPUT'] = []
-      for index in range(len(model_data_names)):
-        demo_response['INPUT_TYPE'].append(model_data_types[index])
-        if model_data_types[index] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
-          demo_response['INPUT'].append('/static/input/%s' % model_data_names[index])
-        else:
-          demo_response['INPUT'].append(model_datas[index])
+      data_response['INPUT'] = model_datas[0]
 
-    self.write(json.dumps(demo_response))
+    # 返回成功
+    self.write(json.dumps(data_response))
     self.finish()
 
 
@@ -516,8 +623,7 @@ def demo_server_start(demo_name,
                       demo_type,
                       demo_config,
                       parent_id,
-                      dataset_queue,
-                      recorder_queue):
+                      dataset_queue):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
   
@@ -568,12 +674,13 @@ def demo_server_start(demo_name,
       'support_user_interaction': demo_config['interaction']['support_user_interaction'],
       'support_user_constraint': demo_config['interaction']['support_user_constraint'],
       'dataset_queue': dataset_queue,
-      'recorder_queue': recorder_queue
     }
     app = tornado.web.Application(handlers=[(r"/", IndexHandler),
                                             (r"/demo", IndexHandler),
                                             (r"/api/query/", ClientQueryHandler),
                                             (r"/api/comment/", ClientCommentHandler),
+                                            (r"/api/response/", ClientResponseHandler),
+                                            (r"/api/cli-query/", ClientCliQueryHandler),
                                             (r"/submit/", ClientFileUploadAndProcessHandler),
                                             (r"/.*/static/.*", PrefixRedirectHandler)],
       **settings)

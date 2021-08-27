@@ -13,12 +13,13 @@ from antgo.utils.serialize import *
 from PIL import Image
 import imageio
 import numpy as np
-
+from io import BytesIO
 
 class QueueDataset(Dataset):
   def __init__(self, queue=None):
     super(QueueDataset, self).__init__('test', '', None)
     self.queue = queue
+    self.annotation = {}
 
   @property
   def size(self):
@@ -27,29 +28,32 @@ class QueueDataset(Dataset):
   def at(self, id):
     raise NotImplementedError
 
-  def _video_iterator(self, video_path, request_param):
-    reader = imageio.get_reader(video_path)
-    for im in reader:
-      img_data = np.fromstring(im.tobytes(), dtype=np.uint8)
-      img_data = img_data.reshape((im.shape[0], im.shape[1], im.shape[2]))
-      yield img_data if request_param is None else (img_data, request_param)
+  def now(self):
+    return self.annotation
 
   def _parse_data(self, data, data_type, request_param):
-    if data_type == 'VIDEO':
-      return self._video_iterator(data, request_param)
-    elif data_type == 'IMAGE':
-      image_data = Image.open(data)
-      img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
-      img_data = img_data.reshape((image_data.size[1], image_data.size[0], len(image_data.getbands())))
-      return img_data if request_param is None else (img_data, request_param)
-    elif data_type == 'FILE':
-      with open(data, 'r') as fp:
-        return fp.read() if request_param is None else (fp.read(), request_param)
-    elif data_type == 'STRING':
-      return data if request_param is None else (data, request_param)
-    elif data_type == 'JSON':
-      return data if request_param is None else (data, request_param)
-    else:
+    assert(data_type not in ['VIDEO'])
+    try:
+      if data_type == 'IMAGE':
+        image_data = Image.open(data)
+        img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
+        img_data = img_data.reshape((image_data.size[1], image_data.size[0], len(image_data.getbands())))
+        return (img_data,{}) if request_param is None else (img_data, request_param)
+      if data_type == 'IMAGE_MEMORY':
+        image_data = Image.open(BytesIO(data))
+        img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
+        img_data = img_data.reshape((image_data.size[1], image_data.size[0], len(image_data.getbands())))
+        return (img_data,{}) if request_param is None else (img_data, request_param)
+      elif data_type == 'FILE':
+        with open(data, 'r') as fp:
+          return (fp.read(),{}) if request_param is None else (fp.read(), request_param)
+      elif data_type == 'STRING':
+        return (data,{}) if request_param is None else (data, request_param)
+      elif data_type == 'JSON':
+        return (data,{}) if request_param is None else (data, request_param)
+      else:
+        return (None,{})
+    except:
       return None
 
   def data_pool(self):
@@ -58,13 +62,39 @@ class QueueDataset(Dataset):
       if type(data_pack) == list and \
               (type(data_pack[0]) == list or type(data_pack[0]) == tuple):
         # multi-data
-        storage = []
-        for dd in data_pack:
-          data, data_type, request_param = dd
-          response_data = self._parse_data(data,data_type,request_param)
-          storage.append(response_data)
-        yield storage
+        for single_pack in data_pack:
+          data, data_type, request_param = single_pack
+          response_data = self._parse_data(data, data_type, request_param)
+          if response_data is None:
+            # 解析数据有误，不进行处理
+            continue
+
+          # annotation
+          self.annotation = response_data[1]
+          yield response_data
       else:
         # single-data
         data, data_type, request_param = data_pack
-        yield self._parse_data(data, data_type, request_param)
+        if data_type == 'VIDEO':
+          # 解析视频文件
+          try:
+            reader = imageio.get_reader(data)
+            for im in reader:
+              # 读取一帧
+              img_data = np.fromstring(im.tobytes(), dtype=np.uint8)
+              img_data = img_data.reshape((im.shape[0], im.shape[1], im.shape[2]))
+              # 当前annotation
+              self.annotation = request_param
+              yield (img_data, {}) if request_param is None else (img_data, request_param)
+          except:
+            # 解析视频有误，不进行处理
+            continue
+        else:
+          response_data = self._parse_data(data, data_type, request_param)
+          if response_data is None:
+            # 解析数据有误，不进行处理
+            continue
+
+          # annotation
+          self.annotation = response_data[1]
+          yield response_data

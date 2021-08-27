@@ -12,6 +12,7 @@ from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
 from antgo.crowdsource.demo_server import *
 from antgo.utils import logger
+from antvis.client.httprpc import *
 try:
     import queue
 except:
@@ -39,6 +40,7 @@ class AntDemo(AntBase):
     # self.support_user_interaction = kwargs.get('support_user_interaction', False)
     # self.support_user_constraint = kwargs.get('support_user_constraint', None)
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
+
 
   def start(self):
     # 1.step loading demo task
@@ -87,13 +89,6 @@ class AntDemo(AntBase):
     demo_dataset = QueueDataset(dataset_queue)
     demo_dataset._force_inputs_dirty()
 
-    recorder_queue = queue.Queue()
-    self.context.recorder = QueueRecorderNode(((), None), recorder_queue)
-
-    self.context.recorder.dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'recorder')
-    if not os.path.exists(self.context.recorder.dump_dir):
-      os.makedirs(self.context.recorder.dump_dir)
-
     # 3.step 配置dump路径
     infer_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'inference')
     if not os.path.exists(infer_dump_dir):
@@ -107,14 +102,17 @@ class AntDemo(AntBase):
     if self.demo_port is None:
       self.demo_port = 10000
     self.demo_port = _pick_idle_port(self.demo_port)
-    logger.info('demo prepare using port %d'%self.demo_port)
+    logger.info('Demo prepare using port %d.'%self.demo_port)
+
+    # 后台api调用
+    self.rpc = HttpRpc("v1", "api", "127.0.0.1", self.demo_port)
 
     demo_name = running_ant_task.task_name
     demo_type = running_ant_task.task_type
     demo_config = {
       'interaction':{
-        'support_user_upload': False,
-        'support_user_input': False,
+        'support_user_upload': True,
+        'support_user_input': True,
         'support_user_interaction': False,
         'support_user_constraint': {}
       },
@@ -139,14 +137,32 @@ class AntDemo(AntBase):
 
     # 5.step 启动后台线程运行预测过程
     def _run_infer_process():
-      logger.info('start model infer background process')
+      # prepare ablation blocks
+      logger.info('Prepare model ablation blocks.')
       ablation_blocks = getattr(self.ant_context.params, 'ablation', [])
       if ablation_blocks is None:
         ablation_blocks = []
       for b in ablation_blocks:
         self.ant_context.deactivate_block(b)
 
+      # infer
+      logger.info('Running inference process.')
       try:
+        def _callback_func(data):
+            id = demo_dataset.now()['id'] if 'id' in demo_dataset.now() else ''
+            record_content = {
+                        'experiment_uuid': experiment_uuid, 
+                        'data': data,
+                        'id': id
+                    }
+            for data_group in record_content['data']:
+              for item in data_group:
+                  if item['type'] in ['IMAGE', 'VIDEO', 'FILE']:
+                      item['data'] = '%s/record/%s'%(infer_dump_dir, item['data'])
+                
+            self.rpc.response.post(response=json.dumps(record_content))
+                    
+        self.context.recorder =  LocalRecorderNodeV2(_callback_func)
         self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
       except:
         traceback.print_exc()
@@ -157,4 +173,4 @@ class AntDemo(AntBase):
     process.start()
 
     # 6.step 启动web服务
-    demo_server_start(demo_name,demo_type,demo_config,os.getpid(),dataset_queue,recorder_queue)
+    demo_server_start(demo_name,demo_type,demo_config,os.getpid(),dataset_queue)
