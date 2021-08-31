@@ -41,7 +41,6 @@ class AntDemo(AntBase):
     # self.support_user_constraint = kwargs.get('support_user_constraint', None)
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
-
   def start(self):
     # 1.step loading demo task
     running_ant_task = None
@@ -122,6 +121,7 @@ class AntDemo(AntBase):
       'dump_dir': infer_dump_dir
     }
 
+    request_waiting_time = 30
     if self.context.params.demo is not None:
       if 'support_user_upload' in self.context.params.demo:
         demo_config['interaction']['support_user_upload'] = self.context.params.demo['support_user_upload']
@@ -134,6 +134,9 @@ class AntDemo(AntBase):
 
       if 'support_user_constraint' in self.context.params.demo:
         demo_config['interaction']['support_user_constraint'] = self.context.params.demo['support_user_constraint']
+
+      if 'request_waiting_time' in self.context.params.demo:
+        request_waiting_time = self.context.params.demo['request_waiting_time']
 
     # 5.step 启动后台线程运行预测过程
     def _run_infer_process():
@@ -173,4 +176,4 @@ class AntDemo(AntBase):
     process.start()
 
     # 6.step 启动web服务
-    demo_server_start(demo_name,demo_type,demo_config,os.getpid(),dataset_queue)
+    demo_server_start(demo_name,demo_type,demo_config,os.getpid(),dataset_queue, request_waiting_time)

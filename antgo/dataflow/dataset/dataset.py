@@ -23,7 +23,6 @@ from antgo.utils.dht import *
 from antgo.utils.serialize import *
 import copy
 import cv2
-import imageio
 try:
     import queue
 except:
@@ -34,12 +33,11 @@ Config = config.AntConfig
 
 
 def imread(file):
-  img = imageio.imread(file)
-  return img
+  return cv2.imread(file)
 
 
 def imwrite(file, img):
-  imageio.imwrite(file, img)
+  cv2.imwrite(file, img)
 
 
 def imresize(image, size):

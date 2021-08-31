@@ -10,10 +10,9 @@ from antgo.dataflow.dataset.dataset import Dataset
 import os
 import sys
 from antgo.utils.serialize import *
-from PIL import Image
-import imageio
-import numpy as np
 from io import BytesIO
+import numpy as np
+import cv2
 
 class QueueDataset(Dataset):
   def __init__(self, queue=None):
@@ -35,14 +34,10 @@ class QueueDataset(Dataset):
     assert(data_type not in ['VIDEO'])
     try:
       if data_type == 'IMAGE':
-        image_data = Image.open(data)
-        img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
-        img_data = img_data.reshape((image_data.size[1], image_data.size[0], len(image_data.getbands())))
+        img_data = cv2.imread(data)
         return (img_data,{}) if request_param is None else (img_data, request_param)
       if data_type == 'IMAGE_MEMORY':
-        image_data = Image.open(BytesIO(data))
-        img_data = np.fromstring(image_data.tobytes(), dtype=np.uint8)
-        img_data = img_data.reshape((image_data.size[1], image_data.size[0], len(image_data.getbands())))
+        img_data = cv2.imread(BytesIO(data))
         return (img_data,{}) if request_param is None else (img_data, request_param)
       elif data_type == 'FILE':
         with open(data, 'r') as fp:
@@ -78,14 +73,31 @@ class QueueDataset(Dataset):
         if data_type == 'VIDEO':
           # 解析视频文件
           try:
-            reader = imageio.get_reader(data)
-            for im in reader:
-              # 读取一帧
-              img_data = np.fromstring(im.tobytes(), dtype=np.uint8)
-              img_data = img_data.reshape((im.shape[0], im.shape[1], im.shape[2]))
-              # 当前annotation
+            cap = cv2.VideoCapture(data)
+
+            if request_param is None:
+              request_param = {}
+
+            # 视频fps
+            fps = cap.get(5)
+            request_param.update({'fps': fps})
+
+            # 视频帧数
+            frame_num=cap.get(7)
+            request_param.update({'frame_num': (int)(frame_num)})
+
+            frame_index = 0       
+            while True:
+              ret, frame = cap.read()
+              if not ret:
+                break
+              
+              request_param.update({'frame_index': frame_index})
               self.annotation = request_param
-              yield (img_data, {}) if request_param is None else (img_data, request_param)
+              yield (frame, {}) if request_param is None else (frame, request_param)
+              frame_index += 1              
+              if frame_index == (int)(frame_num):
+                break
           except:
             # 解析视频有误，不进行处理
             continue

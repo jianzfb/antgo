@@ -17,7 +17,6 @@ except:
 import multiprocessing
 from antgo.task.task import *
 from antgo.dataflow.basic import *
-import imageio
 import requests
 from antgo.context import *
 from antgo.utils import *
@@ -159,7 +158,8 @@ class QueueRecorderNode(Node):
 
         image_path = os.path.join(self.dump_dir, '%s.png'%str(uuid.uuid4()))
         # scipy.misc.imsave(image_path, transfer_result)
-        imageio.imwrite(image_path, transfer_result)
+        # imageio.imwrite(image_path, transfer_result)
+        cv2.imwrite(image_path, transfer_result)
         transfer_result = image_path
         transfer_result_type = 'IMAGE'
       elif result['%s_TYPE'%key] == 'VIDEO':
@@ -168,10 +168,10 @@ class QueueRecorderNode(Node):
 
         # save path
         video_path = os.path.join(self.dump_dir, '%s.mp4'%str(uuid.uuid4()))
-        writer = imageio.get_writer(video_path, fps=30)
-        for im in data:
-          writer.append_data(im.astype(np.uint8))
-        writer.close()
+        # writer = imageio.get_writer(video_path, fps=30)
+        # for im in data:
+        #   writer.append_data(im.astype(np.uint8))
+        # writer.close()
 
         transfer_result = video_path
         transfer_result_type = 'VIDEO'
@@ -328,13 +328,14 @@ class LocalRecorderNode(Node):
         transfer_result = data.astype(np.uint8)
 
       # scipy.misc.imsave(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
-      imageio.imwrite(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
+      # imageio.imwrite(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
+      cv2.imwrite(os.path.join(self.dump_dir, '%d_%d_%s.png'%(count, index, name)), transfer_result)
     elif data_type == 'VIDEO':
       video_path = os.path.join(self.dump_dir, '%d_%d_%s.mp4' % (count, index, name))
-      writer = imageio.get_writer(video_path, fps=30)
-      for im in data:
-        writer.append_data(im.astype(np.uint8))
-      writer.close()
+      # writer = imageio.get_writer(video_path, fps=30)
+      # for im in data:
+      #   writer.append_data(im.astype(np.uint8))
+      # writer.close()
     elif data_type == 'AUDIO':
       logger.error('now, dont support save audio')
 
@@ -413,7 +414,7 @@ class LocalRecorderNodeV2(object):
   def close(self):
     pass
 
-  def save(self, data, data_type, name, count, index):
+  def save(self, data, data_type, name, count, index, params={}):
     # only support 'FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
     assert(data_type in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'])
 
@@ -426,13 +427,10 @@ class LocalRecorderNodeV2(object):
       shutil.copy(data, os.path.join(self.dump_dir, file_name))
       return file_name
     elif data_type == 'JSON':
-      # file_name = '%d_%d_%s.json'%(count, index,name)
-      # with open(os.path.join(self.dump_dir, file_name),'w') as fp:
-      #   fp.write(json.dumps(data))
-      # return file_name
-      if type(data) != str:
-        data = json.dumps(data)
-      return data
+      file_name = '%d_%d_%s.json'%(count, index,name)
+      with open(os.path.join(self.dump_dir, file_name),'w') as fp:
+        fp.write(json.dumps(data))
+      return file_name
     elif data_type == 'STRING' or data_type == 'SCALAR':
       # file_name = '%d_%d_%s.txt'%(count, index,name)
       # with open(os.path.join(self.dump_dir, file_name), 'w') as fp:
@@ -448,21 +446,28 @@ class LocalRecorderNodeV2(object):
           data_max = np.max(data)
           transfer_result = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
       else:
-        assert (data.shape[2] == 3 or data.shape[2] == 4)
+        assert (data.shape[2] == 3)
         transfer_result = data.astype(np.uint8)
 
       file_name = '%d_%d_%s.png'%(count, index, name)
       # scipy.misc.imsave(os.path.join(self.dump_dir, file_name), transfer_result)
-      imageio.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
-
+      # imageio.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
+      cv2.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
       return file_name
     elif data_type == 'VIDEO':
       file_name = '%d_%d_%s.mp4' % (count, index, name)
       video_path = os.path.join(self.dump_dir, file_name)
-      writer = imageio.get_writer(video_path, fps=30)
-      for im in data:
-        writer.append_data(im.astype(np.uint8))
-      writer.close()
+
+      fps = 30
+      if 'fps' in params:
+        fps = params['fps']
+      fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+      # fourcc = cv2.VideoWriter_fourcc(*'XVID')
+      vout_1 = cv2.VideoWriter(video_path, fourcc, fps, (data[0].shape[1], data[0].shape[0]))
+      for frame in data:
+        vout_1.write(frame)
+      vout_1.release()
+
       return file_name
     elif data_type == 'AUDIO':
       logger.error('now, dont support save audio')
@@ -478,68 +483,73 @@ class LocalRecorderNodeV2(object):
       self._annotation_cache.put(copy.deepcopy(entry))
 
   def record(self, val, **kwargs):
-    try:
-      results = val
-      if type(val) != list and type(val) != tuple:
-        results = [val]
+    results = val
+    if type(val) != list and type(val) != tuple:
+      results = [val]
 
-      for index, result in enumerate(results):
-        group = []
-        # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
-        #                           {'TYPE': 'JSON', 'CONTENT': ''},
-        #                           {'TYPE': 'STRING', 'CONTENT': ''},
-        #                           {'TYPE': 'IMAGE', 'PATH': ''},
-        #                           {'TYPE': 'VIDEO', 'PATH': ''},
-        #                           {'TYPE': 'AUDIO', 'PATH': ''}]
+    for index, result in enumerate(results):
+      group = []
+      # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
+      #                           {'TYPE': 'JSON', 'CONTENT': ''},
+      #                           {'TYPE': 'STRING', 'CONTENT': ''},
+      #                           {'TYPE': 'IMAGE', 'PATH': ''},
+      #                           {'TYPE': 'VIDEO', 'PATH': ''},
+      #                           {'TYPE': 'AUDIO', 'PATH': ''}]
 
-        # 重新组织数据格式
-        data = {}
-        for key, value in result.items():
-          data_name = key
-          if data_name not in data:
-            data[data_name] = {}
-            data[data_name]['attribute'] = {}
-          
-          data[data_name]['title'] = data_name
-          if 'data' in value or 'DATA' in value:
-            if 'data' in value:
-              data[data_name]['data'] = value['data']
-            else:
-              data[data_name]['data'] = value['DATA']
+      # 重新组织数据格式
+      data = {}
+      for key, value in result.items():
+        data_name = key
+        if data_name not in data:
+          data[data_name] = {}
+          data[data_name]['attribute'] = {}
+        
+        data[data_name]['title'] = data_name
+        if 'data' in value or 'DATA' in value:
+          if 'data' in value:
+            data[data_name]['data'] = value['data']
+            value.pop('data')
+          else:
+            data[data_name]['data'] = value['DATA']
+            value.pop('DATA')
 
-          if 'type' in value or 'TYPE' in value:
-            if 'type' in value:
-              data[data_name]['type'] = value['type']
-            else:
-              data[data_name]['type'] = value['TYPE']
+        if 'type' in value or 'TYPE' in value:
+          if 'type' in value:
+            data[data_name]['type'] = value['type']
+            value.pop('type')
+          else:
+            data[data_name]['type'] = value['TYPE']
+            value.pop('TYPE')
 
-          # if(len(xxyy) == 1):
-          #   data[data_name]['data'] = value
-          #   data[data_name]['title'] = key
-          # elif xxyy[1] == 'TYPE':
-          #   data[data_name]['type'] = value
-          # else:
-          #   if type(value) == np.ndarray:
-          #     value = value.tolist()
-          #   data[data_name]['attribute'][key] = str(value)
+        # 将value中的其它作为params
+        data[data_name]['params'] = value
 
-        # 转换数据到适合web
-        for data_name, data_content in data.items():
-          data_content['data'] = self.save(data_content['data'],
-                              data_content['type'],
-                              data_content['title'],
-                              self._count,
-                              index)
+        # if(len(xxyy) == 1):
+        #   data[data_name]['data'] = value
+        #   data[data_name]['title'] = key
+        # elif xxyy[1] == 'TYPE':
+        #   data[data_name]['type'] = value
+        # else:
+        #   if type(vaßlue) == np.ndarray:
+        #     value = value.tolist()
+        #   data[data_name]['attribute'][key] = str(value)
 
-          group.append(data_content)
+      # 转换数据到适合web
+      for data_name, data_content in data.items():
+        data_content['data'] = self.save(data_content['data'],
+                             data_content['type'],
+                             data_content['title'],
+                             self._count,
+                             index, 
+                             data_content['params'])
 
-        # 记录
-        if self._callback is not None:
-          self._callback([group])
+        group.append(data_content)
 
-      self._count += 1
-    except:
-      logger.error('Record error.')
+      # 记录
+      if self._callback is not None:
+        self._callback([group])
+
+    self._count += 1
 
   @property
   def dump_dir(self):

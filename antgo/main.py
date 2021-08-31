@@ -62,7 +62,6 @@ flags.DEFINE_string('token', None, 'token')
 flags.DEFINE_string('proxy', None, 'proxy')
 flags.DEFINE_string('name', None, 'name')
 flags.DEFINE_string('author', None, 'author')
-flags.DEFINE_string('framework', None, 'tensorflow')
 flags.DEFINE_string('net', None, 'GENERAL')
 flags.DEFINE_string('max_time', '100d', 'max running time')
 flags.DEFINE_string('from_experiment', None, 'load model from experiment')
@@ -188,8 +187,8 @@ def main():
     output = template.render(ModelTime=datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d'),
                              ModelName=FLAGS.name(),
                              ModelAuthor=FLAGS.author() if FLAGS.author() is not None else 'xxx',
-                             tensorflow=True if FLAGS.framework() == 'tensorflow' else False,
-                             GAN=True if FLAGS.net() == 'GAN' else False)
+                             tensorflow=False,
+                             GAN=False)
 
     with open(os.path.join(os.curdir, project_name, '%s_main.py' % FLAGS.name()),'w') as fp:
       fp.write(output)

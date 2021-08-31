@@ -20,7 +20,6 @@ import numpy as np
 from antgo.utils.fs import *
 from antgo.utils.encode import *
 from PIL import Image
-import imageio
 import uuid
 import signal
 from ..utils.serialize import loads,dumps
@@ -96,6 +95,10 @@ class BaseHandler(tornado.web.RequestHandler):
   def dataset_queue(self):
     return self.settings['dataset_queue']
 
+  @property
+  def request_waiting_time(self):
+    return self.settings['request_waiting_time']
+
   def _transfer(self, data_key, data_value, data_type, demo_response):
     if data_type == 'IMAGE':
       if os.path.exists(data_value):
@@ -128,7 +131,7 @@ class BaseHandler(tornado.web.RequestHandler):
     if data_id in BaseHandler.waiting_queue:
       # 阻塞等待响应
       try:
-        response_data = BaseHandler.waiting_queue[data_id].get(timeout=30)
+        response_data = BaseHandler.waiting_queue[data_id].get(timeout=self.request_waiting_time)
       except:
         # 空队列，直接返回空
         BaseHandler.waiting_queue.pop(data_id)
@@ -189,6 +192,9 @@ class BaseHandler(tornado.web.RequestHandler):
           file_name = '%s.%s'%(data['file_name'], file_type)
           os.rename(download_path, os.path.join('/'.join(download_path.split('/')[0:-1]), file_name))
           download_path = os.path.join('/'.join(download_path.split('/')[0:-1]), file_name)
+        else:
+          # 非图像文件
+          file_type = download_path.split('.')[-1]
 
         if 'file_type' in self.demo_constraint:
           if file_type not in self.demo_constraint['file_type']:
@@ -233,6 +239,9 @@ class BaseHandler(tornado.web.RequestHandler):
           file_name = '%s.%s'%(file_path.split('/')[-1].split('.')[0], file_type)
           os.rename(file_path, os.path.join('/'.join(file_path.split('/')[0:-1]), file_name))
           file_path = os.path.join('/'.join(file_path.split('/')[0:-1]), file_name)
+        else:
+          # 非图像文件，通过获取扩展名作为文件类型
+          file_type = file_path.split('.')[-1]
 
         if 'file_type' in self.demo_constraint:
           if file_type not in self.demo_constraint['file_type']:
@@ -256,7 +265,7 @@ class BaseHandler(tornado.web.RequestHandler):
         # 根据后缀判断上传的数据类型
         if ext_name in ['jpg', 'jpeg', 'png', 'bmp', 'gif']:
           return {'data': (data_path, data_name, 'IMAGE'), 'status': 200}
-        elif ext_name in ['mp4', 'avi']:
+        elif ext_name in ['mp4', 'avi', 'mov']:
           return {'data': (data_path, data_name, 'VIDEO'), 'status': 200}
         elif ext_name in ['txt']:
           return {'data': (data_path, data_name, 'FILE'), 'status': 200}
@@ -281,7 +290,7 @@ class BaseHandler(tornado.web.RequestHandler):
         'status': 200,
         'data': {'image': image_b, 'params': data['params']}
       }
- 
+
 class IndexHandler(BaseHandler):
   def get(self):
     image_history_data = []
@@ -298,7 +307,7 @@ class IndexHandler(BaseHandler):
       for support_format in self.demo_constraint['file_type']:
         if support_format.lower() in ['jpg', 'jpeg', 'png', 'gif']:
           input_filter += 'image/%s,'%support_format.lower()
-        elif support_format.lower() in ['mp4']:
+        elif support_format.lower() in ['mp4','mov','avi']:
           input_filter += 'video/%s,'%support_format.lower()
         elif support_format.lower() in ['mp3', 'wav']:
           input_filter += 'audio/%s,'%support_format.lower()
@@ -623,7 +632,8 @@ def demo_server_start(demo_name,
                       demo_type,
                       demo_config,
                       parent_id,
-                      dataset_queue):
+                      dataset_queue,
+                      request_waiting_time=30):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
   
@@ -674,6 +684,7 @@ def demo_server_start(demo_name,
       'support_user_interaction': demo_config['interaction']['support_user_interaction'],
       'support_user_constraint': demo_config['interaction']['support_user_constraint'],
       'dataset_queue': dataset_queue,
+      'request_waiting_time': request_waiting_time
     }
     app = tornado.web.Application(handlers=[(r"/", IndexHandler),
                                             (r"/demo", IndexHandler),

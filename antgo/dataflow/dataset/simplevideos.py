@@ -9,7 +9,7 @@ from antgo.dataflow.dataset.dataset import *
 import os
 import copy
 from PIL import Image
-import imageio
+import cv2
 
 __all__ = ['SimpleVideos']
 
@@ -27,13 +27,6 @@ class SimpleVideos(Dataset):
     assert (len(self.data_files) > 0)
     self.ids = [i for i in range(len(self.data_files))]
 
-  def _video_iterator(self, video_path):
-    reader = imageio.get_reader(video_path)
-    for im in reader:
-      img_data = np.fromstring(im.tobytes(), dtype=np.uint8)
-      img_data = img_data.reshape((im.shape[0], im.shape[1], im.shape[2]))
-      yield img_data, None
-
   def data_pool(self):
     epoch = 0
     while True:
@@ -48,7 +41,28 @@ class SimpleVideos(Dataset):
 
       for id in ids:
         video_path = self.data_files[id]
-        yield self._video_iterator(video_path), None
+
+        # read
+        cap = cv2.VideoCapture(video_path)
+        params = {}
+        # 加入fps
+        fps = cap.get(5)
+        params.update({'fps': fps})
+        # 加入帧数
+        frame_num = (int)(cap.get(7))
+        params.update({'frame_num': frame_num})
+
+        frame_index = 0       
+        while True:
+          ret, frame = cap.read()
+          if not ret:
+            break
+          
+          params.update({'frame_index': frame_index})
+          yield frame, params
+          frame_index += 1              
+          if frame_index == (int)(frame_num):
+            break
 
   def at(self, id):
     raise NotImplementedError

@@ -8,6 +8,7 @@ from __future__ import print_function
 from antgo.dataflow.dataset.dataset import *
 import os
 import copy
+import cv2
 
 __all__ = ['SimpleImages']
 
@@ -65,9 +66,11 @@ class SimpleImages(Dataset):
         self.rng.shuffle(ids)
       
       for id in ids:
-        img = imread(self.data_files[id])
+        # img = imread(self.data_files[id])
+        img = cv2.imread(self.data_files[id])
         if len(self.label_files) > 0:
-          label = imread(self.label_files[id])
+          # label = imread(self.label_files[id])
+          label = cv2.imread(self.label_files[id])
           seg_map = label
           if len(label.shape) == 3:
             seg_map = label[:,:,0]
@@ -78,9 +81,11 @@ class SimpleImages(Dataset):
           yield [img, annotation]
         
   def at(self, id):
-    img = imread(self.data_files[id])
+    # img = imread(self.data_files[id])
+    img = cv2.imread(self.data_files[id])
     if len(self.label_files) > 0:
-      label = imread(self.label_files[id])
+      # label = imread(self.label_files[id])
+      label = cv2.imread(self.label_files[id])
       seg_map = label
       if len(label.shape) == 3:
         seg_map = label[:, :, 0]

@@ -182,7 +182,6 @@ class SpiderDataset(Dataset):
           try:
             # read image
             image = cv2.imread(image_file)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             if image is None:
               logger.error("Fail to parse %s"%image_file)
               # get next image file
