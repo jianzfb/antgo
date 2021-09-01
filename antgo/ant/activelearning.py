@@ -5,8 +5,6 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-
-
 from antgo.resource.html import *
 from antgo.ant.base import *
 from antgo.activelearning.samplingmethods.kcenter_greedy import *
@@ -22,7 +20,7 @@ import os
 import socket
 import requests
 import json
-
+import zipfile
 
 def _is_open(check_ip, port):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -40,7 +38,7 @@ def _pick_idle_port(from_port=40000, check_count=100):
     if not _is_open('127.0.0.1', check_port):
       break
 
-    logger.warn('port %d is occupied, try to use %d port'%(int(check_port), int(check_port + 1)))
+    logger.warn('Port %d is occupied, try to use %d port.'%(int(check_port), int(check_port + 1)))
 
     check_port += 1
     check_count -= 1
@@ -49,7 +47,7 @@ def _pick_idle_port(from_port=40000, check_count=100):
       check_port = None
 
   if check_port is None:
-    logger.warn('couldnt find valid free port')
+    logger.warn('Couldnt find valid free port.')
     exit(-1)
 
   return check_port
@@ -66,23 +64,20 @@ class AntActiveLearning(AntBase):
                **kwargs):
     super(AntActiveLearning, self).__init__(ant_name, ant_context, ant_token, **kwargs)
 
-    self.skip_first_training = kwargs.get('skip_training', False)
-    self.max_time = kwargs.get('max_time', '1d')
+    self.skip_first_training = self.context.params.system['skip_training']
     self.max_iterators = getattr(self.context.params, 'max_iterators', 100)
-    self.min_label_ratio = getattr(self.context.params, 'min_label_ratio', 0.1)
-    self.dump_dir = ant_dump_dir
+    if self.max_iterators is None:
+      self.max_iterators = 100
 
-    self.web_server_port = kwargs.get('port', None)
+    self.dump_dir = ant_dump_dir
+    self.web_server_port = self.context.params.system['port']
     self.web_server_port = int(self.web_server_port) if self.web_server_port is not None else None
     self.html_template = kwargs.get('html_template', None)
     self.keywords_template = {}
 
     self.ant_task_config = ant_task_config
-    self.task = kwargs.get('task', '')
     self.ant_data_source = ant_data_folder
-    self.option = kwargs.get('option', '')
-    self.root_expeirment = kwargs.get('from_experiment', None)
-    self.devices = kwargs.get('devices', '')
+    self.devices = self.context.params.system['devices']
     self.rpc = None
 
   def _core_set_algorithm(self, unlabeled_pool, num):
@@ -105,13 +100,22 @@ class AntActiveLearning(AntBase):
     next_selected = [unlabeled_pool[s[1]] for s in ordered_unlabeled[0:num]]
     return next_selected
 
-  def _smart_select(self, unlabeled_pool, num):
-    if self.option.lower() == 'coreset':
+  def _unform_sampling_algorithm(self, unlabeled_pool, num):
+    if num > len(unlabeled_pool):
+      return unlabeled_pool
+    
+    return np.random.choice(unlabeled_pool, num, False)
+
+  def _waiting_label_sample_select(self, unlabeled_pool, num):
+    sampling_strategy = getattr(self.context.params, 'sampling_strategy', 'entropy')
+    if sampling_strategy == 'coreset':
       return self._core_set_algorithm(unlabeled_pool, num)
-    elif self.option.lower() == 'entropy':
+    elif sampling_strategy == 'entropy':
       return self._entroy_algorithm(unlabeled_pool, num)
+    elif sampling_strategy == 'random':
+      return self._unform_sampling_algorithm(unlabeled_pool, num)
     else:
-      return self._entroy_algorithm(unlabeled_pool, num)
+      return self._unform_sampling_algorithm(unlabeled_pool, num)
 
   def start(self):
     # 0.step loading challenge task
@@ -121,12 +125,12 @@ class AntActiveLearning(AntBase):
       response = self.context.dashboard.challenge.get(command=type(self).__name__)
       if response['status'] is None:
         # invalid token
-        logger.error('couldnt load challenge task')
+        logger.error('Couldnt load challenge task.')
         self.token = None
       elif response['status'] == 'SUSPEND':
         # prohibit submit challenge task frequently
         # submit only one in one week
-        logger.error('prohibit submit challenge task frequently')
+        logger.error('Prohibit submit challenge task frequently.')
         exit(-1)
       elif response['status'] == 'OK':
         # maybe user token or task token
@@ -134,19 +138,19 @@ class AntActiveLearning(AntBase):
         if 'task' in content:
           challenge_task = create_task_from_json(content)
           if challenge_task is None:
-            logger.error('couldnt load challenge task')
+            logger.error('Couldnt load challenge task.')
             exit(-1)
           running_ant_task = challenge_task
       else:
         # unknow error
-        logger.error('unknow error')
+        logger.error('Unknow error.')
         exit(-1)
 
     if running_ant_task is None:
       # 0.step load custom task
       custom_task = create_task_from_xml(self.ant_task_config, self.context)
       if custom_task is None:
-        logger.error('couldnt load custom task')
+        logger.error('Couldnt load custom task.')
         exit(0)
       running_ant_task = custom_task
 
@@ -191,7 +195,7 @@ class AntActiveLearning(AntBase):
       self.web_server_port = 10000
     self.web_server_port = _pick_idle_port(self.web_server_port)
 
-    logger.info('launch active learning web server on port %d'%self.web_server_port)
+    logger.info('Launch active learning web server on port %d.'%self.web_server_port)
     process = multiprocessing.Process(target=activelearning_web_server,
                                       args=('activelearning',
                                             self.main_folder,
@@ -205,7 +209,7 @@ class AntActiveLearning(AntBase):
                                             request_queue))
     process.daemon = True
     process.start()
-    logger.info('waiting 5 seconds for launching web server')
+    logger.info('Waiting 5 seconds for launching web server.')
     time.sleep(5)
 
     self.rpc = HttpRpc('v1','activelearning','127.0.0.1',self.web_server_port)
@@ -213,123 +217,142 @@ class AntActiveLearning(AntBase):
 
     # prepare waiting unlabeled data
     try_iter = 0
+    experiment_id = None
     while try_iter < self.max_iterators:
       unlabeled_dataset_size = dataset.unlabeled_size()
       labeled_dataset_size = dataset.candidates_size()
-      if unlabeled_dataset_size == 0:
-        logger.info('active learning is over')
+
+      min_sampling_num = getattr(self.context.params, 'min_sampling_num', None)
+      if min_sampling_num is not None:
+        min_sampling_num = (int)(min_sampling_num)
+        if unlabeled_dataset_size < min_sampling_num:
+          logger.info('Active learning is over. (unlabeled sample size < %d).'%min_sampling_num)
+          return
+
+      if unlabeled_dataset_size < 10:
+        logger.info('Active learning is over. (unlabeled sample size < 10).')
         return
 
+      logger.info("Round %d, unlabeled dataset size %d, labeled dataset size %d."%(try_iter, unlabeled_dataset_size, labeled_dataset_size))
       if not os.path.exists(self.dump_dir):
         os.makedirs(self.dump_dir)
 
-      # 1.step training using labeled data
-      for f in os.listdir(self.dump_dir):
-        if f[0] == '.':
-          continue
-
-        if f == self.root_expeirment:
-          continue
-
-        shutil.rmtree(os.path.join(self.dump_dir, f))
+      # 当前阶段
+      self.stage = "ACTIVELEARNING-TRAIN-ROUND-%d"%try_iter
 
       # 通知处理状态(开始未标注数据集挖掘)
-      self.rpc.state.patch(round=try_iter,
-                           process_state="UNLABEL-PREPARE")
+      self.rpc.state.patch(round=try_iter, process_state="UNLABEL-PREPARE")
       # 开始分析时间
       analyze_start_time = time.time()
-      experiment_id = self.root_expeirment
-      if not self.skip_first_training or try_iter > 0:
+      if try_iter == 0:
+        experiment_id = self.context.from_experiment
+
+      if (not self.skip_first_training or try_iter > 0) and labeled_dataset_size > 0:
         # shell call
-        logger.info('start training using all labeled data (%d iter)'%try_iter)
+        logger.info('Start training using all labeled data (%d iter).'%try_iter)
+        if os.path.exists(os.path.join(self.dump_dir, 'try_round_train_%d'%try_iter)):
+          shutil.rmtree(os.path.join(self.dump_dir, 'try_round_train_%d'%try_iter))
+        os.makedirs(os.path.join(self.dump_dir, 'try_round_train_%d'%try_iter))
+
         cmd_shell = 'antgo train --main_file=%s --main_param=%s' % (self.main_file, self.main_param)
-        cmd_shell += ' --max_time=%s' % self.max_time
-        cmd_shell += ' --dump=%s' % self.dump_dir
+        cmd_shell += ' --dump=%s/%s' % (self.dump_dir, 'try_round_train_%d'%try_iter)
         cmd_shell += ' --main_folder=%s' % self.main_folder
-        cmd_shell += ' --task=%s' % self.task
-        if self.root_expeirment is not None:
-          cmd_shell += ' --from_experiment=%s' % self.root_expeirment
+        cmd_shell += ' --task=%s' % self.ant_task_config.split('/')[-1]
+        if experiment_id is not None:
+          cmd_shell += ' --from_experiment=%s' % experiment_id
         cmd_shell += ' --devices=%s' % self.devices
+        cmd_shell += ' --dataset=%s' % running_ant_task.dataset_name
         cmd_shell += ' --name=%s' % self.ant_name
-        if self.token is not None:
-          cmd_shell += ' --token=%s' % self.token
-        training_p = subprocess.Popen('%s > %s.log' % (cmd_shell, self.name), shell=True, cwd=self.main_folder)
+        training_p = \
+            subprocess.Popen('%s > %s.log' % (cmd_shell, '%s_try_rounnd_train_%d'%(self.name, try_iter)), 
+                              shell=True, 
+                              cwd=self.main_folder)
 
         # waiting untile finish training
         training_p.wait()
 
         # 根据返回结果，判断是否正常结束
         if training_p.returncode != 0:
-          logger.error('training process exit anomaly')
+          logger.error('Training process exit anomaly.')
           exit(-1)
 
-        # 获取训练完成后的实验目录
+        # 获取训练完成后的实验目录ß
+        experiment_prefix = 'try_round_train_%d'%try_iter
         experiment_id = None
-        for f in os.listdir(self.dump_dir):
-          if f[0] == '.':
+        for k in os.listdir(os.path.join(self.dump_dir, experiment_prefix)):
+          if k[0] == '.':
             continue
 
-          if f == self.root_expeirment:
-            continue
-
-          if os.path.isdir(os.path.join(self.dump_dir, f)):
-            experiment_id = f
-
-        if experiment_id is None:
-          logger.error('couldnt finding training experiment, maybe training and candidate dataset error')
-          exit(-1)
-
+          if os.path.isdir(os.path.join(self.dump_dir, experiment_prefix, k)):
+            experiment_id = os.path.join(self.dump_dir, experiment_prefix, k)
+            break
+      
       # 2.step inference using unlabeled data
-      logger.info('start analyze all unlabeled data distribution (%d iter)'%try_iter)
-      cmd_shell = 'antgo batch --main_file=%s --main_param=%s'%(self.main_file, self.main_param)
+      # 当前阶段
+      self.stage = "ACTIVELEARNING-ANALYZE-ROUND-%d"%try_iter
+      if os.path.exists(os.path.join(self.dump_dir, 'try_round_analyze_%d'%try_iter)):
+        shutil.rmtree(os.path.join(self.dump_dir, 'try_round_analyze_%d'%try_iter))
+      os.makedirs(os.path.join(self.dump_dir, 'try_round_analyze_%d'%try_iter))        
+
+      logger.info('Start analyze all unlabeled data distribution (%d iter).'%try_iter)
+      cmd_shell = 'antgo predict --main_file=%s --main_param=%s'%(self.main_file, self.main_param)
       cmd_shell += ' --main_folder=%s' % self.main_folder
-      cmd_shell += ' --dump=%s' % self.dump_dir
+      cmd_shell += ' --dump=%s/%s' % (self.dump_dir, 'try_round_analyze_%d'%try_iter)
       if experiment_id is not None:
         cmd_shell += ' --from_experiment=%s' % experiment_id
-      cmd_shell += ' --task=%s' % self.task
+      cmd_shell += ' --task=%s' % self.ant_task_config.split('/')[-1]
       cmd_shell += ' --unlabel'
       cmd_shell += ' --devices=%s' % self.devices
+      cmd_shell += ' --dataset=%s' % running_ant_task.dataset_name
       cmd_shell += ' --name=%s' % self.ant_name
-      if self.token is not None:
-        cmd_shell += ' --token=%s' % self.token
-      inference_p = subprocess.Popen('%s > %s.log' %(cmd_shell, self.name), shell=True, cwd=self.main_folder)
-      # all processed data are saved in dump/self.name/record/
+      inference_p = subprocess.Popen('%s > %s.log' %(cmd_shell, '%s_try_rounnd_analyze_%d'%(self.name, try_iter)), 
+                                      shell=True, 
+                                      cwd=self.main_folder)
 
       # waiting untile finish inference
       inference_p.wait()
 
       # 根据返回结果，判断是否正常结束
       if inference_p.returncode != 0:
-        logger.error('inference process exit anomaly')
+        logger.error('Inference process exit anomaly.')
         exit(-1)
 
       # 获取推断完成后的实验目录
-      inference_experiment_id = None
-      for f in os.listdir(self.dump_dir):
-        if f[0] == '.':
+      inference_experiment_prefix = 'try_round_analyze_%d'%try_iter
+      inference_experiment_id = ''
+      for k in os.listdir(os.path.join(self.dump_dir, inference_experiment_prefix)):
+        if k[0] == '.':
           continue
 
-        if os.path.isdir(os.path.join(self.dump_dir, f)):
-          if f != experiment_id and f != self.root_expeirment:
-            inference_experiment_id = f
-
-      if inference_experiment_id is None:
-        logger.error('couldnt finding inference result on unlabeled dataset, maybe unlabeled dataset error')
-        exit(-1)
-
-      record_reader = RecordReader(os.path.join(self.dump_dir, inference_experiment_id, 'record'))
+        if os.path.isdir(os.path.join(self.dump_dir, inference_experiment_prefix, k)):
+          inference_experiment_id = k
+          break
+      
+      record_reader = RecordReader(os.path.join(self.dump_dir, inference_experiment_prefix, inference_experiment_id, 'record'))
       unlabeled_pool = []
       for ss in record_reader.iterate_read('groundtruth', 'predict'):
         gt, feature = ss
-        data_file_id = gt['file_id']
-        unlabeled_pool.append({'file_id': data_file_id, 'feature': feature})
+        unlabeled_pool.append({'file_id': gt['file_id'], 'feature': feature, 'id': gt['id']})
 
-      select_size = int(len(unlabeled_pool) * self.min_label_ratio)
+      select_size = getattr(self.context.params, 'min_sampling_num', None)
+      if select_size is None:
+        min_sampling_ratio = getattr(self.context.params, 'min_sampling_ratio', None)
+        if min_sampling_ratio is None:
+          min_sampling_ratio = 0.1
+        select_size = int(len(unlabeled_pool) * min_sampling_ratio)
+        if select_size == 0:
+          select_size = len(unlabeled_pool)
+
       if select_size == 0:
-        select_size = len(unlabeled_pool)
+        logger.info('Active learning is over. (selecting size == 0.')
+        return
 
-      next_selected = self._smart_select(unlabeled_pool, select_size)
-      round_size = len(next_selected)
+      next_selected = self._waiting_label_sample_select(unlabeled_pool, select_size)
+      if len(next_selected) == 0:
+        logger.info("Active learning is over. (selecting size == 0).")
+        return
+
+      logger.info("Round %d, selecting size %d by %s method."%(try_iter, select_size, getattr(self.context.params, 'sampling_strategy', 'entropy')))
 
       # 结束分析时间
       analyze_end_time = time.time()
@@ -339,19 +362,45 @@ class AntActiveLearning(AntBase):
 
       next_unlabeled_sample_ids = []
       for f in next_selected:
-        next_unlabeled_sample_ids.append(f['file_id'])
+        next_unlabeled_sample_ids.append((f['file_id'], f['id']))
 
-      # tar target folder
+      # 打包等待下一步进行标注的样本
       tar_file = "round_%d.tar.gz"%try_iter
       tar_path = os.path.join(download_folder, tar_file)
       if os.path.exists(tar_path):
         os.remove(tar_path)
 
       tar = tarfile.open(tar_path, "w:gz")
-      for next_unlabeled_sample_id in next_unlabeled_sample_ids:
+      for next_unlabeled_sample_id, _ in next_unlabeled_sample_ids:
         tar.add(os.path.join(dataset.unlabeled_folder, next_unlabeled_sample_id),
                 arcname="round_%d/%s"%(try_iter,next_unlabeled_sample_id))
       tar.close()
+
+      # 研究模式，在研究模式下，标注结果自动获取
+      if self.context.params.system['research']:
+        # 获取标注数据，并打包保存
+        logger.info("Research: auto get label data.")
+        if not os.path.exists(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter)):
+          os.makedirs(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter))
+
+        for file_id, id in next_unlabeled_sample_ids:
+          _, label = dataset.at(id)
+
+          # label 写成文件
+          with open(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter, file_id), 'w') as fp:
+            json.dump(label, fp)
+
+        # 使用tar,打包
+        logger.info("Research: warp label data.")
+        tar = tarfile.open(os.path.join(self.dump_dir, 'try_round_auto_label_%d.tar.gz'%try_iter), "w:gz")
+        for file_id, _ in next_unlabeled_sample_ids:
+          tar.add(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter, file_id),
+                  arcname="try_round_auto_label_%d/%s"%(try_iter, file_id))
+        tar.close()
+
+        logger.info("Research: copy to %s."%upload_folder)
+        shutil.copy(os.path.join(self.dump_dir, 'try_round_auto_label_%d.tar.gz'%try_iter), upload_folder)
+        request_queue.put({'FILE': 'try_round_auto_label_%d.tar.gz'%try_iter, 'ROUND': try_iter})
 
       # 通知处理状态(已经准备好未标注数据集)
       self.rpc.state.patch(round=try_iter,
@@ -359,20 +408,19 @@ class AntActiveLearning(AntBase):
                            unlabel_dataset=tar_file,
                            unlabeled_size=unlabeled_dataset_size,
                            labeled_size=labeled_dataset_size,
-                           round_size=round_size)
+                           round_size=len(next_selected))
 
       while True:
-        logger.info('waiting label (human in loop) in round %d'%try_iter)
+        logger.info('Waiting label (human in loop) in round %d.'%try_iter)
         request_content = request_queue.get()
 
         # 1.step 解压数据集文件
-        logger.info("untar label dataset")
+        logger.info("Untar label dataset.")
         request_label_dataset = request_content['FILE']
         request_round = request_content['ROUND']
         if request_round != try_iter:
-          logger.error('request label round not consistent')
-          self.rpc.state.patch(round=try_iter,
-                               process_state="LABEL-ERROR")
+          logger.error('Request label round not consistent.')
+          self.rpc.state.patch(round=try_iter, process_state="LABEL-ERROR")
           continue
 
         # 2.step 建立文件夹
@@ -380,18 +428,45 @@ class AntActiveLearning(AntBase):
           shutil.rmtree(os.path.join(upload_folder, "round_%d"%request_round))
 
         # uncompress
-        tar = tarfile.open(os.path.join(upload_folder, request_label_dataset))
-        tar.extractall(upload_folder)
-        tar.close()
+        if request_label_dataset.endswith('tar') or request_label_dataset.endswith('tar.gz'): 
+          tar = tarfile.open(os.path.join(upload_folder, request_label_dataset))
+          tar_list = tar.getnames()
+          tar.extractall(upload_folder)
+          tar.close()
 
+          if len(tar_list) == 0:
+            logger.error('Untar file error.')
+            continue
+
+          if not os.path.exists(os.path.join(upload_folder, "round_%d"%request_round)):
+            # 将解压后的文件夹，修改为 "round_%d"%request_round
+            file_name = os.path.normpath(tar_list[0]).split('/')[0]
+            shutil.move(os.path.join(upload_folder, file_name), os.path.join(upload_folder, "round_%d"%request_round))
+        elif request_label_dataset.endswith('zip'):
+          zip_file = zipfile.ZipFile(os.path.join(upload_folder, request_label_dataset))
+          zip_list = zip_file.namelist()
+          for f in zip_list:
+              zip_file.extract(f, upload_folder)
+          zip_file.close()
+
+          if len(zip_list) == 0:
+            logger.error('Unzip file error.')
+            continue
+
+          if not os.path.exists(os.path.join(upload_folder, "round_%d"%request_round)):
+            # 将解压后的文件夹，修改为 "round_%d"%request_round
+            file_name = os.path.normpath(zip_list[0]).split('/')[0]
+            shutil.move(os.path.join(upload_folder, file_name), os.path.join(upload_folder, "round_%d"%request_round))
+        else:
+          logger.error('Dont support upload type.')
+          continue
+        
         # 3.step 检查数据集标准是否符合标准
-        logger.info("check labeled dataset format")
+        logger.info("Check labeled dataset format.")
         is_ok = dataset.check_candidate(next_unlabeled_sample_ids, os.path.join(upload_folder, "round_%d"%request_round))
         if not is_ok:
-          logger.error("dataset format maybe error, need to update label")
-
-          self.rpc.state.patch(round=try_iter,
-                               process_state="LABEL-ERROR")
+          logger.error("Dataset format maybe error, need to update label.")
+          self.rpc.state.patch(round=try_iter, process_state="LABEL-ERROR")
           continue
 
         break
@@ -400,12 +475,13 @@ class AntActiveLearning(AntBase):
                            process_state='LABEL-FINISH',
                            next_round_waiting=avg_analyze_time)
 
-      logger.info('finish round %d label, start next round'%try_iter)
-      for sample_file in next_unlabeled_sample_ids:
+      logger.info('Finish round %d label, start next round.'%try_iter)
+      for sample_file, sample_id in next_unlabeled_sample_ids:
         if os.path.exists(os.path.join(upload_folder, 'round_%d'%try_iter, sample_file)):
-          dataset.make_candidate(sample_file,
-                                 os.path.join(upload_folder, 'round_%d'%try_iter, sample_file),
-                                 'OK')
+          dataset.make_candidate(sample_id,
+                                  sample_file,
+                                  os.path.join(upload_folder, 'round_%d'%try_iter, sample_file),
+                                  'OK')
 
       # increment round
       try_iter += 1

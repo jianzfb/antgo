@@ -46,12 +46,12 @@ class AntChallenge(AntBase):
       # 1.1.step 从平台获取挑战任务配置信息
       response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
-        logger.error('couldnt load challenge task')
+        logger.error('Couldnt load challenge task.')
         self.token = None
       elif response['status'] == 'SUSPEND':
         # prohibit submit challenge task frequently
         # submit only one in one week
-        logger.error('prohibit submit challenge task frequently')
+        logger.error('Prohibit submit challenge task frequently.')
         exit(-1)
       elif response['status'] == 'OK':
         content = response['content']
@@ -59,19 +59,19 @@ class AntChallenge(AntBase):
         if 'task' in content:
           challenge_task = create_task_from_json(content)
           if challenge_task is None:
-            logger.error('couldnt load challenge task')
+            logger.error('Couldnt load challenge task.')
             exit(-1)
           running_ant_task = challenge_task
       else:
         # unknow error
-        logger.error('unknow error')
+        logger.error('Unknow error.')
         exit(-1)
 
     if running_ant_task is None:
       # 1.2.step 加载自定义任务配置信息
       custom_task = create_task_from_xml(self.ant_task_config, self.context)
       if custom_task is None:
-        logger.error('couldnt load custom task')
+        logger.error('Couldnt load custom task.')
         exit(-1)
       running_ant_task = custom_task
 
@@ -93,7 +93,7 @@ class AntChallenge(AntBase):
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
 
-    logger.info('prepare package model files')
+    logger.info('Prepare package model files.')
     tar = tarfile.open(goldcoin, 'w:gz')
 
     # 排除dump目录，将当前文件夹下所有数据上传
@@ -106,7 +106,7 @@ class AntChallenge(AntBase):
         tar.add(os.path.join(root, f), arcname=os.path.join(rel_root, f))
 
     tar.close()
-    logger.info('finish package process')
+    logger.info('Finish package process.')
 
     # TODO: 在下一个版本支持模型文件上传
     # # 上传模型代码
@@ -114,22 +114,23 @@ class AntChallenge(AntBase):
     #                                              APP_STAGE=self.stage)
 
     # 3.2.step 更新基本配置
-    mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,
-                                                experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
+    if mlogger.getEnv() is not None:
+      mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,
+                                                  experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
 
     # 4.step 加载测试数据集
-    logger.info('loading test dataset %s'%running_ant_task.dataset_name)
+    logger.info('Loading test dataset %s.'%running_ant_task.dataset_name)
     ant_test_dataset = running_ant_task.dataset('test',
                                                 os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                 running_ant_task.dataset_params)
 
     with safe_manager(ant_test_dataset):
       # split data and label
-      data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
-      self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+      # data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
+      self.context.recorder = RecorderNode2()
 
       self.stage = "CHALLENGE"
-      logger.info('start infer process')
+      logger.info('Start infer process.')
       infer_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid, 'inference')
       if not os.path.exists(infer_dump_dir):
         os.makedirs(infer_dump_dir)
@@ -148,7 +149,11 @@ class AntChallenge(AntBase):
           self.ant_context.deactivate_block(b)
           
         with performance_statistic_region(self.ant_name):
-          self.context.call_infer_process(data_annotation_branch.output(0), infer_dump_dir)
+          try:
+            self.context.call_infer_process(ant_test_dataset, infer_dump_dir)
+          except Exception as e:
+            if type(e.__cause__) != StopIteration:
+              print(e)
 
         task_running_statictic = get_performance_statistic(self.ant_name)
         task_running_statictic = {self.ant_name: task_running_statictic}
@@ -159,24 +164,26 @@ class AntChallenge(AntBase):
         if not self.context.recorder.is_measure:
           # has no annotation to continue to meausre
           # 更新实验统计信息
-          mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                      json.dumps({'REPORT': task_running_statictic,
-                                                                  'APP_STAGE': self.stage}))
+          if mlogger.getEnv() is not None:
+            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
+                                                        json.dumps({'REPORT': task_running_statictic,
+                                                                    'APP_STAGE': self.stage}))
 
           # 生成实验报告
-          logger.info('save experiment report')
+          logger.info('Save experiment report.')
           everything_to_html(task_running_statictic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
 
           # 上传实验报告和记录
-          logger.info('uploading experiment report')
-          mlogger.getEnv().dashboard.experiment.upload(
-            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-            RECORD=intermediate_dump_dir,
-            APP_STAGE=self.stage)
+          if mlogger.getEnv() is not None:
+            logger.info('Uploading experiment report.')
+            mlogger.getEnv().dashboard.experiment.upload(
+              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+              RECORD=intermediate_dump_dir,
+              APP_STAGE=self.stage)
           return
 
-      logger.info('start evaluation process')
+      logger.info('Start evaluation process.')
       evaluation_measure_result = []
       with safe_recorder_manager(RecordReader(intermediate_dump_dir)) as record_reader:
         for measure in running_ant_task.evaluation_measures:
@@ -188,10 +195,10 @@ class AntChallenge(AntBase):
 
             measure.experiment_id = experiment_uuid
             measure.app_token = self.token
-            logger.info('launch crowdsource evaluation server')
+            logger.info('Launch crowdsource evaluation server.')
             crowdsrouce_evaluation_status = measure.crowdsource_server(record_reader)
             if not crowdsrouce_evaluation_status:
-              logger.error('couldnt finish crowdsource evaluation server')
+              logger.error('Couldnt finish crowdsource evaluation server.')
               continue
 
             # using crowdsource evaluation
@@ -240,7 +247,7 @@ class AntChallenge(AntBase):
       #   return
 
       # significance statistic
-      logger.info('significance difference compare and rank')
+      logger.info('Significance difference compare and rank.')
       # benchmark record
       benchmark_model_data = {}
       if self.token is not None:
@@ -253,7 +260,7 @@ class AntChallenge(AntBase):
             benchmark_report = bmd['benchmark_report']    # 统计数据
   
             # download benchmark record from url
-            logger.info('download benchmark %s'%benchmark_name)
+            logger.info('Download benchmark %s.'%benchmark_name)
             mlogger.getEnv().dashboard.experiment.download(file_name=benchmark_record,
                                                        file_folder=os.path.join(self.ant_dump_dir,
                                                                            experiment_uuid,
@@ -318,7 +325,7 @@ class AntChallenge(AntBase):
             pass
 
       # error analysis
-      logger.info('error analysis')
+      logger.info('Error analysis.')
       # benchmark report
       benchmark_model_statistic = None
       if benchmark_model_data is not None and 'report' in benchmark_model_data:
@@ -524,18 +531,20 @@ class AntChallenge(AntBase):
                   task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
 
       # 更新实验统计信息
-      mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                              json.dumps({'REPORT': task_running_statictic,
-                                                           'APP_STAGE': self.stage}))
+      if mlogger.getEnv() is not None:
+        mlogger.getEnv().dashboard.experiment.patch(experiment_data=
+                                                json.dumps({'REPORT': task_running_statictic,
+                                                            'APP_STAGE': self.stage}))
 
       # 生成实验报告
-      logger.info('save experiment report')
+      logger.info('Save experiment report.')
       everything_to_html(task_running_statictic,
                          os.path.join(self.ant_dump_dir, experiment_uuid))
 
       # 上传实验报告和记录
-      logger.info('uploading experiment report')
-      mlogger.getEnv().dashboard.experiment.upload(
-        REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-        RECORD=intermediate_dump_dir,
-        APP_STAGE=self.stage)
+      if mlogger.getEnv() is not None:
+        logger.info('Uploading experiment report.')
+        mlogger.getEnv().dashboard.experiment.upload(
+          REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+          RECORD=intermediate_dump_dir,
+          APP_STAGE=self.stage)

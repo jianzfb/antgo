@@ -8,12 +8,14 @@ from __future__ import unicode_literals
 import sys
 # sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
 # sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
-from antgo.ant.shell import *
 from antgo.ant.generate import *
 from antgo.ant.demo import *
+from antgo.ant.train import *
+from antgo.ant.challenge import *
 from antgo.ant.browser import *
 from antgo.ant.batch import *
 from antgo.ant.activelearning import *
+from antgo.ant import activelearning_api
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
@@ -53,7 +55,13 @@ flags.DEFINE_string('main_param', None, 'model parameters')
 flags.DEFINE_string('main_folder', None, 'resource folder')
 flags.DEFINE_string('version', None, 'minist antgo version')
 flags.DEFINE_string('task', None, 'task file')
-flags.DEFINE_string('dataset', 'images_full', 'dataset')
+flags.DEFINE_string('task_t', '', 'task type')
+flags.DEFINE_string('task_ep', '', 'holdout/repeated-holdout/bootstrap/kfold')
+flags.DEFINE_string('task_em', '', 'define based on task type')
+flags.DEFINE_integer('task_badcase_num', 100, 'badcase analysis (num)')
+flags.DEFINE_integer('task_badcase_category', 1, 'badcase analysis (category)')
+flags.DEFINE_string('dataset', None, 'dataset name')
+flags.DEFINE_string('file', '', '')
 flags.DEFINE_string('signature', '123', 'signature')
 flags.DEFINE_string('devices', '', 'devices')
 flags.DEFINE_string('servers', '', '')
@@ -70,14 +78,16 @@ flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
 flags.DEFINE_string('host_ip', '127.0.0.1', 'host ip address')
-flags.DEFINE_integer('host_port', 8909, 'port')
+flags.DEFINE_integer('host_port', -1, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
-flags.DEFINE_string('option', '', '')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
 flags.DEFINE_indicator('unlabel', '')
 flags.DEFINE_indicator('skip_training', '')
+flags.DEFINE_indicator('research', 'research mode or not')
 flags.DEFINE_string('running_platform', 'local', 'local/cloud')
+flags.DEFINE_string('param', '', '')  # k:v;k:v
+
 
 FLAGS = flags.AntFLAGS
 Config = config.AntConfig
@@ -86,12 +96,6 @@ Config = config.AntConfig
 def main():
   # 1.step antgo logo
   main_logo()
-
-  # 2.step check antgo support command
-  if len(sys.argv) >= 2 and \
-          ((not sys.argv[1].startswith('-')) and sys.argv[1] not in _ant_support_commands):
-    logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
-    sys.exit(-1)
 
   # 3.step parse antgo running params
   if len(sys.argv) >= 2:
@@ -112,40 +116,35 @@ def main():
         os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
       shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
-      logger.info('success update config file')
+      logger.info('Success update config file.')
     else:
       # 在当前目录生成默认配置文件
       shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'), "./config.xml")
-      logger.info('build default config file')
+      logger.info('Build default config file.')
     return
 
   # 检查配置文件是否存在
   if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
-    logger.error('missing config file, please run antgo config')
+    logger.error('Missing config file, please run antgo config.')
     return
 
   # 解析配置文件
   config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
   Config.parse_xml(config_xml)
-  if len(sys.argv) == 1 or sys.argv[1].startswith('-'):
-    # interactive control
-    shell_process = AntShell(Context(), token)
-    shell_process.start()
-    return
 
   # 检查最低版本与当前版本的兼容性
   if FLAGS.running_platform == 'local' and FLAGS.version() is not None:
     a, b, c = FLAGS.version().split('.')
     sys_a, sys_b, sys_c = version.split('.')
     if int(sys_a) < int(a) or int(sys_b) < int(b) or int(sys_c) < int(c):
-      logger.error('antgo version dont satisfy task minimum request (%s)'%FLAGS.version())
+      logger.error('Antgo version dont satisfy task minimum request (%s).'%FLAGS.version())
       sys.exit(-1)
 
   # 4.step check factory
   factory = getattr(Config, 'factory', None)
   if factory is None or \
       factory == '' or not os.path.exists(Config.factory):
-    logger.error('factory folder is missing, please run antgo config')
+    logger.error('Factory folder is missing, please run antgo config.')
     return
 
   if not os.path.exists(Config.data_factory):
@@ -159,8 +158,21 @@ def main():
   # 5.step parse antgo execute command
   # 5.1.step other command (train, challenge, compose, deploy, server)
   ant_cmd = sys.argv[1]
+  ant_cmd = ant_cmd.split('/')[0]
+  ant_cmd_api = '' if sys.argv[1] == ant_cmd else sys.argv[1].split('/')[-1]
   if ant_cmd not in _ant_support_commands:
-    logger.error('antgo cli support( %s )command'%",".join(_ant_support_commands))
+    logger.error('Antgo cli support( %s )command.'%",".join(_ant_support_commands))
+    return
+  
+  if ant_cmd_api != '':
+    # api 
+    if ant_cmd == 'activelearning':
+      func = getattr(activelearning_api, 'activelearning_api_'+ant_cmd_api, None)
+      if func is None:
+        logger.error('%s/%s dont support.'%(ant_cmd, ant_cmd_api))
+        return
+      
+      func()
     return
 
   if ant_cmd == 'startproject':
@@ -252,7 +264,7 @@ def main():
   main_file = FLAGS.main_file()
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
     if not (FLAGS.worker() or FLAGS.master()):
-      logger.error('main executing file dont exist')
+      logger.error('Main executing file dont exist.')
       sys.exit(-1)
 
   # 8 step ant running
@@ -268,19 +280,25 @@ def main():
   if task is None and dataset is not None:
     # build default task
     with open(os.path.join(task_factory, '%s.xml'%name), 'w') as fp:
-      task_content = '<task><task_name>%s</task_name>' \
+      task_content = '<task><task_name>%s</task_name><task_type>%s</task_type><task_badcase><badcase_num>%d</badcase_num><badcase_category>%d</badcase_category></task_badcase>' \
                      '<input>' \
                      '<source_data><data_set_name>%s</data_set_name>' \
                      '</source_data>' \
+                     '<estimation_procedure><type>%s</type></estimation_procedure>' \
+                     '<evaluation_measures><evaluation_measure>%s</evaluation_measure></evaluation_measures>' \
                      '</input>' \
-                     '</task>'%('default-task', dataset)
+                     '</task>'%('default-task', FLAGS.task_t(), FLAGS.task_badcase_num(), FLAGS.task_badcase_category(),dataset, FLAGS.task_ep(), FLAGS.task_em())
       fp.write(task_content)
     task = os.path.join(task_factory, '%s.xml'%name)
 
   # 8.2 step load ant context
   ant_context = None
   if main_file is not None and main_file != '':
-    ant_context = main_context(main_file, main_folder)
+    try:
+      ant_context = main_context(main_file, main_folder)
+    except Exception as e:
+      print(e)
+      print('Fail to load main_file %s.'%main_file)
   else:
     ant_context = Context()
   
@@ -290,9 +308,21 @@ def main():
     main_config_path = os.path.join(main_folder, main_param)
     try:
       with open(main_config_path, 'r') as fp:
+        # 用户配置参数
         params = yaml.load(fp, Loader=yaml.FullLoader)
+
+        # 系统全局参数
+        params.update({
+          'system': {'research': FLAGS.research(), 
+                    'skip_training': FLAGS.skip_training(),
+                    'ip': FLAGS.host_ip(),
+                    'port': FLAGS.host_port(),
+                    'devices': FLAGS.devices(),
+                    'running_platform': FLAGS.running_platform()},
+        })
         ant_context.params = params
-    except:
+    except Exception as e:
+      print(e)
       print('Fail to load main_param %s.'%main_param)
 
   ant_context.name = name
@@ -303,17 +333,19 @@ def main():
   if FLAGS.from_experiment() is not None and \
           FLAGS.running_platform() == 'local' and \
           ant_cmd not in ['release']:
-    experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
+    experiment_path = ''
+    if os.path.isdir(FLAGS.from_experiment()):
+      # 绝对路径指定的实验
+      experiment_path = FLAGS.from_experiment()
+    else:
+      experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
+
     if not os.path.exists(experiment_path):
-      logger.error('couldnt find experiment %s'%FLAGS.from_experiment())
+      logger.error('Couldnt find experiment %s.'%FLAGS.from_experiment())
       exit(-1)
 
-    if os.path.exists(os.path.join(experiment_path, 'train')):
-      ant_context.from_experiment = os.path.join(experiment_path, 'train')
-    elif os.path.exists(os.path.join(experiment_path, 'inference')):
-      ant_context.from_experiment = os.path.join(experiment_path, 'inference')
-    else:
-      ant_context.from_experiment = experiment_path
+    # 设置实验目录
+    ant_context.from_experiment = experiment_path
 
   # time stamp
   time_stamp = timestamp()
@@ -396,16 +428,7 @@ def main():
                                         main_file=main_file,
                                         main_folder=main_folder,
                                         main_param=main_param,
-                                        time_stamp=time_stamp,
-                                        running_platform=FLAGS.running_platform(),
-                                        max_time=FLAGS.max_time(),
-                                        ip=FLAGS.host_ip(),
-                                        port=FLAGS.host_port(),
-                                        task=FLAGS.task(),
-                                        skip_training=FLAGS.skip_training(),
-                                        option=FLAGS.option(),
-                                        from_experiment=FLAGS.from_experiment(),
-                                        devices=FLAGS.devices())
+                                        time_stamp=time_stamp)
     running_process.start()
   elif ant_cmd == 'dataset':
     running_process = AntGenerate(ant_context,

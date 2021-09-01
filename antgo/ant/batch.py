@@ -39,6 +39,7 @@ class AntBatch(AntBase):
         self.host_ip = ant_host_ip
         self.host_port = ant_host_port
         self.rpc = None
+        self.command_queue = None
 
     def ping_until_ok(self):
         while True:
@@ -98,24 +99,26 @@ class AntBatch(AntBase):
         experiment_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid)
 
         # 4.step 配置web服务基本信息
-        # 选择端口
-        self.host_port = _pick_idle_port(self.host_port)
+        is_launch_web_server = True
+        if self.host_port < 0:
+            is_launch_web_server = False
 
-        # 配置调用
-        self.rpc = HttpRpc("v1", "batch-api", "127.0.0.1", self.host_port)
+        if is_launch_web_server:
+            # 选择端口
+            self.host_port = _pick_idle_port(self.host_port)
 
-        # 准备素材资源
-        static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
-        batch_static_dir = os.path.join(experiment_dump_dir, 'batch')
-        if not os.path.exists(batch_static_dir):
-            shutil.copytree(os.path.join(static_folder, 'resource', 'batch'), batch_static_dir)
+            # 配置调用
+            self.rpc = HttpRpc("v1", "batch-api", "127.0.0.1", self.host_port)
 
-        # 命令队列
-        command_queue = queue.Queue()
+            # 准备素材资源
+            static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
+            batch_static_dir = os.path.join(experiment_dump_dir, 'batch')
+            if not os.path.exists(batch_static_dir):
+                shutil.copytree(os.path.join(static_folder, 'resource', 'batch'), batch_static_dir)
 
-        # # 临时测试假数据
-        # command_queue.put(('baidu', {'datasource_address':'baidu', 'datasource_keywards': '人像'}))
-        
+            # 命令队列
+            self.command_queue = queue.Queue()
+
         # 数据标签
         batch_params = getattr(self.context.params, 'predict', None)
         tags = []
@@ -125,7 +128,8 @@ class AntBatch(AntBase):
         # 5.step 配置运行
         def _run_batch_process():
             # 等待web服务启动
-            self.ping_until_ok()
+            if is_launch_web_server:
+                self.ping_until_ok()
 
             # 是否来自已有实验
             if self.restore_experiment is not None and \
@@ -136,7 +140,8 @@ class AntBatch(AntBase):
                     running_info = json.load(fp)
 
                 # 更新web页面
-                self.rpc.config.post(config_data=json.dumps(running_info))
+                if is_launch_web_server:
+                    self.rpc.config.post(config_data=json.dumps(running_info))
                 return
 
             # 4.step load dataset
@@ -168,7 +173,7 @@ class AntBatch(AntBase):
                 if dataset_name.startswith('spider'):
                     # 使用SpiderDataset
                     ant_test_dataset = \
-                        SpiderDataset(command_queue,
+                        SpiderDataset(self.command_queue,
                                         os.path.join(self.ant_data_source, dataset_name), None)
                 else:
                     ant_test_dataset = \
@@ -179,9 +184,11 @@ class AntBatch(AntBase):
                 if self.unlabel:
                     ant_test_dataset = UnlabeledDataset(ant_test_dataset)
 
-                output_dir = os.path.join(experiment_dump_dir, 'batch', 'static', 'data', dataset_stage)
-                if not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
+                output_dir = experiment_dump_dir
+                if is_launch_web_server:
+                    output_dir = os.path.join(experiment_dump_dir, 'batch', 'static', 'data', dataset_stage)
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
 
                 # 设置记录器
                 def _callback_func(data):
@@ -215,16 +222,27 @@ class AntBatch(AntBase):
                         with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'w') as fp:
                             json.dump(history_running_info, fp)
 
-                self.context.recorder =  LocalRecorderNodeV2(_callback_func)
+                self.context.recorder =  LocalRecorderNodeV2(_callback_func if is_launch_web_server else None)
                 with safe_recorder_manager(self.context.recorder):
                     # 完成推断过程
-                    self.context.call_infer_process(ant_test_dataset, dump_dir=output_dir)
+                    try:
+                        self.context.call_infer_process(ant_test_dataset, dump_dir=output_dir)
+                    except Exception as e:
+                        if type(e.__cause__) != StopIteration:
+                            print(e)
 
+                self.context.recorder.close()
             return
 
-        process = threading.Thread(target=_run_batch_process)
-        process.daemon = True
-        process.start()
-
         # 5.step 启动bach server
-        batch_server_start(experiment_dump_dir, self.host_port, command_queue)
+        if is_launch_web_server:
+            # 在独立线程中启动预测
+            process = threading.Thread(target=_run_batch_process)
+            process.daemon = True
+            process.start()
+            
+            # 主线程中启动web服务
+            batch_server_start(experiment_dump_dir, self.host_port, self.command_queue)
+        else:
+            # 启动预测
+            _run_batch_process()

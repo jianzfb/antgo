@@ -38,8 +38,9 @@ class RecordWriter(object):
       count = self._db.get(str('attrib-count'))
       if count is None:
         self._db.set(str('attrib-count'), str(0))
-    except:
-      logger.error('couldnt open db')
+    except Exception as e:
+      print(e)
+      logger.error('Couldnt open db')
     
   def close(self):
     self._db.dump()

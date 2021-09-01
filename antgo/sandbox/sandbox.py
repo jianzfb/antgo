@@ -79,5 +79,6 @@ def running_sandbox(*wargs, **kwargs):
       timer_thread.join()
 
     logger.info('exit antgo running environment')
-  except:
+  except Exception as e:
+    print(e)
     logger.error('error occured in antgo running environment')

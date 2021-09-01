@@ -72,7 +72,7 @@ class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
     self.http_port = getattr(Config, 'server_port', '8999')
-    self.user_token = getattr(Config, 'server_user_token', 'xxx.xxx.xxx.xxx')
+    self.user_token = getattr(Config, 'server_user_token', '')
     self.http_prefix = 'http'
     self.ant_name = ant_name
     self.app_token = ant_token
@@ -171,8 +171,6 @@ class AntBase(object):
         if 'INPUT_TYPE' in config_params['DESCRIPTION_CONFIG']:
           self._description_config['INPUT_TYPE'] = config_params['DESCRIPTION_CONFIG']['INPUT_TYPE']
 
-    self._running_platform = kwargs.get('running_platform', 'local')    # local, cloud
-
     # global context
     self.ant_context = None
     if ant_context is not None:
@@ -197,7 +195,7 @@ class AntBase(object):
         if mlogger.getEnv().dashboard.experiment_uuid is not None:
           self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
           self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
-      else:
+      elif self.user_token is not None and self.user_token != '':
         # 非任务模式，基于user token与dashboard进行通信
         mlogger.config(ip=self.server_ip,
                       port=(int)(self.http_port),
@@ -207,6 +205,9 @@ class AntBase(object):
         if mlogger.getEnv().dashboard.experiment_uuid is not None:
           self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
           self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+      else:
+        # 本地模式（用户没有配置token）
+        logger.warn("Now is in local mode. Please set user token in config file, enjoy experiment manage!")
 
   @property
   def pid(self):
@@ -226,7 +227,7 @@ class AntBase(object):
 
   @property
   def running_platform(self):
-    return self._running_platform
+    return self.context.params.system['running_platform']
 
   def package_codebase(self, prefix='qiniu', target_path='', signature='123'):
     logger.info('package code envoriment')
@@ -308,7 +309,10 @@ class AntBase(object):
     return self.context.stage
 
   @stage.setter
-  def stage(self, val):
+  def stage(self, val):    
+    if mlogger.getEnv() is not None:
+      mlogger.getEnv().dashboard.experiment_stage = val
+  
     self.context.stage = val
 
   @property

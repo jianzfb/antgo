@@ -38,12 +38,11 @@ class UploadHandler(BaseHandler):
     slice_index = int(slice_index)
     slice_num = self.get_argument('sliceNum')
     slice_num = int(slice_num)
+    file_name = self.get_argument('fileName')
 
     file_metas = self.request.files['file']
-    filename = ''
     for meta in file_metas:
-      filename = meta['filename']
-      filepath = os.path.join(self.upload_folder, filename)
+      filepath = os.path.join(self.upload_folder, file_name)
       if slice_index == 0:
         with open(filepath, 'wb') as fp:
           fp.write(meta['body'])
@@ -52,13 +51,14 @@ class UploadHandler(BaseHandler):
           fp.write(meta['body'])
 
       self.write('finished!')
+      break
 
     if slice_index == slice_num - 1:
       # 3.step 修改当前状态
       self.db["process_state"] = 'LABEL-CHECK'
 
       # 4.step notify backend
-      self.request_queue.put({'ROUND': round_index, 'FILE': filename})
+      self.request_queue.put({'ROUND': round_index, 'FILE': file_name})
 
 
 class DownloadHandler(BaseHandler):
@@ -73,8 +73,7 @@ class DownloadHandler(BaseHandler):
     # 2.step 下载数据(未标注)
     unlabeled_dataset = self.db.get('unlabel_dataset', None)
     if unlabeled_dataset is None:
-      self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND, 'unlabeled data dont exist')
-      return
+      unlabeled_dataset = 'round_%d.tar.gz'%round_index
 
     if not os.path.exists(os.path.join(self.download_folder, unlabeled_dataset)):
       self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND, 'unlabeled data dont exist')

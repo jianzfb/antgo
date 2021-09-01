@@ -151,8 +151,6 @@ class Context(object):
   def stage(self, val):
     # reset experiment stage
     self._stage = val
-    # reset experiment dashboard
-    mlogger.getEnv().dashboard.experiment_stage = val
 
   @property
   def devices(self):

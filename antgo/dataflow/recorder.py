@@ -109,10 +109,68 @@ class RecorderNode(Node):
 
   def iterator_value(self):
     pass
+
+
+class RecorderNode2(object):
+  def __init__(self):
+    self._dump_dir = None
+    self._record_writer = None
   
   @property
-  def model_fn(self):
-    return self._positional_inputs[0].model_fn
+  def is_measure(self):
+    if self._record_writer is None:
+      return False
+    
+    if self._record_writer.size == 0:
+      return False    
+    return True
+
+  def close(self):
+    if self._record_writer is not None:
+        self._record_writer.close()
+    self._record_writer = None
+    
+  @property
+  def dump_dir(self):
+    return self._dump_dir
+
+  @dump_dir.setter
+  def dump_dir(self, val):
+    self._dump_dir = val
+    
+    if self._dump_dir is None:
+      self.close()
+      return
+      
+    # remove existed dump_dir
+    if os.path.exists(self._dump_dir):
+      shutil.rmtree(self._dump_dir)
+    
+    # mkdir
+    os.makedirs(self._dump_dir)
+    
+    # set record workspace
+    self._record_writer = RecordWriter(self._dump_dir)
+
+  def action(self, *args, **kwargs):
+    value = [copy.deepcopy(args[0])]
+    for entry in value:
+      self._annotation_cache.put(copy.deepcopy(entry))
+
+  def record(self, val, **kwargs):
+    # KEY: PREDICT, KEY: GT
+    predicts = []
+    gts = []
+    if type(val) == list or type(val) == tuple:
+      for a in val:
+        predicts.append(a['PREDICT']['data'])
+        gts.append(a['GT']['data'])
+    else:
+      predicts = [val['PREDICT']['data']]
+      gts = [val['GT']['data']]
+
+    for predict, gt in zip(predicts, gts):
+      self._record_writer.write(Sample(groundtruth=gt, predict=predict, predict_label=[]))
 
 
 class QueueRecorderNode(Node):
@@ -409,10 +467,12 @@ class LocalRecorderNodeV2(object):
     self._dump_dir = None
     self._count = 0
     self._callback = callback
+    self._record_writer = None
     setattr(self, 'model_fn', None)
 
   def close(self):
-    pass
+    if self._record_writer is not None:
+      self._record_writer.close()
 
   def save(self, data, data_type, name, count, index, params={}):
     # only support 'FILE', 'JSON', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO'
@@ -470,17 +530,9 @@ class LocalRecorderNodeV2(object):
 
       return file_name
     elif data_type == 'AUDIO':
-      logger.error('now, dont support save audio')
+      logger.error('Now, dont support save audio.')
 
     return None
-
-  def action(self, *args, **kwargs):
-    value = copy.deepcopy(args[0])
-    if type(value) != list:
-      value = [value]
-
-    for entry in value:
-      self._annotation_cache.put(copy.deepcopy(entry))
 
   def record(self, val, **kwargs):
     results = val
@@ -488,7 +540,6 @@ class LocalRecorderNodeV2(object):
       results = [val]
 
     for index, result in enumerate(results):
-      group = []
       # 均转换成文件或字符串形式输出 [{'TYPE': 'FILE', 'PATH': ''},
       #                           {'TYPE': 'JSON', 'CONTENT': ''},
       #                           {'TYPE': 'STRING', 'CONTENT': ''},
@@ -498,20 +549,15 @@ class LocalRecorderNodeV2(object):
 
       # 重新组织数据格式
       data = {}
+      group = []
       for key, value in result.items():
         data_name = key
         if data_name not in data:
           data[data_name] = {}
           data[data_name]['attribute'] = {}
-        
-        data[data_name]['title'] = data_name
-        if 'data' in value or 'DATA' in value:
-          if 'data' in value:
-            data[data_name]['data'] = value['data']
-            value.pop('data')
-          else:
-            data[data_name]['data'] = value['DATA']
-            value.pop('DATA')
+                
+        if 'type' not in value and 'TYPE' not in value:
+          data[data_name]['type'] = "UNKOWN"
 
         if 'type' in value or 'TYPE' in value:
           if 'type' in value:
@@ -521,21 +567,23 @@ class LocalRecorderNodeV2(object):
             data[data_name]['type'] = value['TYPE']
             value.pop('TYPE')
 
+        data[data_name]['title'] = data_name
+        if 'data' in value or 'DATA' in value:
+          if 'data' in value:
+            data[data_name]['data'] = value['data']
+            value.pop('data')
+          else:
+            data[data_name]['data'] = value['DATA']
+            value.pop('DATA')
+
         # 将value中的其它作为params
         data[data_name]['params'] = value
 
-        # if(len(xxyy) == 1):
-        #   data[data_name]['data'] = value
-        #   data[data_name]['title'] = key
-        # elif xxyy[1] == 'TYPE':
-        #   data[data_name]['type'] = value
-        # else:
-        #   if type(vaßlue) == np.ndarray:
-        #     value = value.tolist()
-        #   data[data_name]['attribute'][key] = str(value)
-
-      # 转换数据到适合web
+      # 转换数据格式（记录到文件）
       for data_name, data_content in data.items():
+        if data[data_name]['type'] not in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO']:
+          continue
+
         data_content['data'] = self.save(data_content['data'],
                              data_content['type'],
                              data_content['title'],
@@ -545,9 +593,19 @@ class LocalRecorderNodeV2(object):
 
         group.append(data_content)
 
-      # 记录
+      # 回调,后续处理
       if self._callback is not None:
         self._callback([group])
+      
+      # 针对保留字段，进行特殊处理
+      GT = {}
+      if 'PREDICT' in data:
+        if self._record_writer is None:
+          self._record_writer = RecordWriter(self._dump_dir)
+        
+        if 'GT' in data:
+          GT = data['GT']['data']          
+        self._record_writer.write(Sample(groundtruth=GT, predict=data['PREDICT']['data']))
 
     self._count += 1
 

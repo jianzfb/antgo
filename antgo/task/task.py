@@ -39,7 +39,6 @@ class AntTask(object):
     if ext_params is not None:
       for k, v in ext_params.items():
         if k != 'self':
-          print(k)
           setattr(self, k, v)
     
     if self._dataset_params is None:
@@ -235,6 +234,9 @@ def create_task_from_json(task_config_json, ant_context=None):
           if measure_param is not None and len(measure_param) > 0:
             # params = {}
             for k, v in measure_param.items():
+              if k is None:
+                continue
+
               # params[k.strip()] = v
               if k.strip() not in task_ext_params:
                 task_ext_params[k.strip()] = v
@@ -285,6 +287,12 @@ def create_task_from_xml(task_config_xml, ant_context):
       elif child.tag == 'task_type':
         if child.text is not None:
           task_type = child.text.strip()
+      elif child.tag == "task_badcase":
+        for item in child:
+          if item.tag == 'badcase_num':
+            task_ext_params.update({'badcase_size': (int)(item.text)})
+          if item.tag == 'badcase_category':
+            task_ext_params.update({'badcase_category': (int)(item.text)})
       elif child.tag == 'input':
         for input_item in child:
           if input_item.tag == 'source_data':
@@ -310,6 +318,9 @@ def create_task_from_xml(task_config_xml, ant_context):
           elif input_item.tag == 'evaluation_measures':
             for data_item in input_item:
               if data_item.tag == 'evaluation_measure':
+                if data_item.text is None:
+                  continue
+
                 task_evaluation_measures.append(data_item.text.strip())
                 if len(data_item.attrib) > 0:
                   params = {}
@@ -347,5 +358,5 @@ def create_task_from_xml(task_config_xml, ant_context):
                    class_label=class_label,
                    ext_params=task_ext_params,
                    ant_context=ant_context)
-  except:
-    return None
+  except Exception as e:
+    print(e)

@@ -8,7 +8,6 @@ from __future__ import unicode_literals
 import tarfile
 from datetime import datetime
 from multiprocessing import Process
-
 from antgo.ant import flags
 from antgo.ant.base import *
 from antgo.ant.utils import *
@@ -50,7 +49,7 @@ class AntTrain(AntBase):
 
   def error_analysis(self, running_ant_task, running_ant_dataset, task_running_statictic):
     # error analysis
-    logger.info('start error analysis')
+    logger.info('Start error analysis.')
     # task_running_statictic={self.ant_name:
     #                           {'measure':[
     #                             {'statistic': {'name': 'MESR',
@@ -232,9 +231,8 @@ class AntTrain(AntBase):
                 task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
     
     # stage-2 error eye analysis (all or subset in wrong samples)
-    # bad_score, eye_size 与 measure绑定
-    eye_analysis_set_size = int(getattr(running_ant_task, 'eye_size', 100))
-    focus_category = int(getattr(running_ant_task, 'eye_focus_category', 1))
+    eye_analysis_set_size = int(getattr(running_ant_task, 'badcase_size', 100))
+    focus_category = int(getattr(running_ant_task, 'badcase_category', 1))
     
     for measure_result in task_running_statictic[self.ant_name]['measure']:
       # analyze measure result
@@ -323,7 +321,7 @@ class AntTrain(AntBase):
       response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         # invalid token
-        logger.error('couldnt load train task')
+        logger.error('Couldnt load train task.')
         self.token = None
       elif response['status'] in ['OK', 'SUSPEND']:
         content = response['content']
@@ -333,12 +331,12 @@ class AntTrain(AntBase):
           # task token
           challenge_task = create_task_from_json(content)
           if challenge_task is None:
-            logger.error('couldnt load train task')
+            logger.error('Couldnt load train task.')
             exit(-1)
           running_ant_task = challenge_task
       else:
         # unknow error
-        logger.error('unknow error')
+        logger.error('Unknow error.')
         exit(-1)
 
     if running_ant_task is None:
@@ -346,7 +344,7 @@ class AntTrain(AntBase):
       if self.ant_task_config is not None:
         custom_task = create_task_from_xml(self.ant_task_config, self.context)
         if custom_task is None:
-          logger.error('couldnt load custom task')
+          logger.error('Couldnt load custom task.')
           exit(-1)
         running_ant_task = custom_task
 
@@ -374,7 +372,7 @@ class AntTrain(AntBase):
       if ablation_method in ['regular', 'inregular', 'accumulate']:
         ablation_experiments_devices_num = len(ablation_blocks)
         if ablation_method == 'inregular' and len(ablation_blocks) == 1:
-          logger.warn('only exists one ablation block %s, couldnt set inregular ablation method' % ablation_blocks[0])
+          logger.warn('Only exists one ablation block %s, couldnt set inregular ablation method.' % ablation_blocks[0])
           ablation_method = 'regular'
       elif ablation_method == 'any':
         for i in range(len(ablation_blocks)):
@@ -395,7 +393,7 @@ class AntTrain(AntBase):
     if os.path.exists(goldcoin):
       os.remove(goldcoin)
 
-    logger.info('prepare package model files')
+    logger.info('Prepare package model files.')
     tar = tarfile.open(goldcoin, 'w:gz')
 
     # 排除dump目录，将当前文件夹下所有数据上传
@@ -408,7 +406,7 @@ class AntTrain(AntBase):
         tar.add(os.path.join(root, f), arcname=os.path.join(rel_root, f))
 
     tar.close()
-    logger.info('finish package process')
+    logger.info('Finish package process.')
 
     # TODO: 在下一个版本支持模型文件上传
     # # 上传模型代码
@@ -416,11 +414,12 @@ class AntTrain(AntBase):
     # logger.info('finish upload model files')
 
     # 4.2.step 更新实验配置
-    mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,
-                                                experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
+    if self.app_token is not None or self.user_token is not None:
+      mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,
+                                                  experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
 
     # 5.step 加载训练数据集
-    logger.info('loading train dataset %s'%running_ant_task.dataset_name)
+    logger.info('Loading train dataset %s.'%running_ant_task.dataset_name)
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                  running_ant_task.dataset_params)
@@ -542,7 +541,7 @@ class AntTrain(AntBase):
                                                                 "repeated-holdout",
                                                                 "bootstrap",
                                                                 "kfold"]:
-        logger.info('start model training and evaluation process')
+        logger.info('Start model training and evaluation process.')
 
         estimation_procedure = running_ant_task.estimation_procedure.lower()
         estimation_procedure_params = running_ant_task.estimation_procedure_params
@@ -552,23 +551,25 @@ class AntTrain(AntBase):
           evaluation_statistic = self._holdout_validation(ant_train_dataset, running_ant_task, experiment_uuid)
           
           if evaluation_statistic is not None and len(evaluation_statistic) > 0:
-            logger.info('generate model evaluation report')
+            logger.info('Generate model evaluation report.')
             self.stage = 'EVALUATION-HOLDOUT-REPORT'
 
             # 更新实验统计信息
-            mlogger.getEnv().dashboard.experiment.patch(
-              experiment_data=json.dumps({'REPORT': evaluation_statistic,
-                                          'APP_STAGE': self.stage}))
+            if self.app_token is not None or self.user_token is not None:
+              mlogger.getEnv().dashboard.experiment.patch(
+                experiment_data=json.dumps({'REPORT': evaluation_statistic,
+                                            'APP_STAGE': self.stage}))
 
             # 生成实验报告
             everything_to_html(evaluation_statistic,
                                os.path.join(self.ant_dump_dir, experiment_uuid))
 
             # 上传实验报告
-            logger.info('uploading experiment report')
-            mlogger.getEnv().dashboard.experiment.upload(
-              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-              APP_STAGE=self.stage)
+            if self.app_token is not None or self.user_token is not None:
+              logger.info('Uploading experiment report.')
+              mlogger.getEnv().dashboard.experiment.upload(
+                REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+                APP_STAGE=self.stage)
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 2              # default value
           is_stratified_sampling = True   # default value
@@ -585,22 +586,24 @@ class AntTrain(AntBase):
                                                                    is_stratified_sampling,
                                                                    evaluation_measures,
                                                                    experiment_uuid)
-          logger.info('generate model evaluation report')
+          logger.info('Generate model evaluation report.')
           self.stage = 'EVALUATION-REPEATEDHOLDOUT-REPORT'
 
           # 更新实验统计信息
-          mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                      json.dumps({'REPORT': evaluation_statistic,
-                                                                  'APP_STAGE': self.stage}))
+          if self.app_token is not None or self.user_token is not None:
+            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
+                                                        json.dumps({'REPORT': evaluation_statistic,
+                                                                    'APP_STAGE': self.stage}))
           # 生成实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
 
           # 上传实验报告
-          logger.info('uploading experiment report')
-          mlogger.getEnv().dashboard.experiment.upload(
-            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-            APP_STAGE=self.stage)
+          if self.app_token is not None or self.user_token is not None:
+            logger.info('Uploading experiment report.')
+            mlogger.getEnv().dashboard.experiment.upload(
+              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+              APP_STAGE=self.stage)
         elif estimation_procedure == "bootstrap":
           bootstrap_counts = 5
           if estimation_procedure_params is not None:
@@ -609,22 +612,24 @@ class AntTrain(AntBase):
                                                             ant_train_dataset,
                                                             evaluation_measures,
                                                             experiment_uuid)
-          logger.info('generate model evaluation report')
+          logger.info('Generate model evaluation report.')
           self.stage = 'EVALUATION-BOOTSTRAP-REPORT'
 
           # 更新实验统计信息
-          mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                  json.dumps({'REPORT': evaluation_statistic,
-                                                               'APP_STAGE': self.stage}))
+          if self.app_token is not None or self.user_token is not None:
+            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
+                                                    json.dumps({'REPORT': evaluation_statistic,
+                                                                'APP_STAGE': self.stage}))
           # 生成实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
 
           # 上传实验报告
-          logger.info('uploading experiment report')
-          mlogger.getEnv().dashboard.experiment.upload(
-            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-            APP_STAGE=self.stage)
+          if self.app_token is not None or self.user_token is not None:
+            logger.info('Uploading experiment report.')
+            mlogger.getEnv().dashboard.experiment.upload(
+              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+              APP_STAGE=self.stage)
         else:
           kfolds = 5
           if estimation_procedure_params is not None:
@@ -634,22 +639,24 @@ class AntTrain(AntBase):
                                                               evaluation_measures,
                                                               experiment_uuid)
 
-          logger.info('generate model evaluation report')
+          logger.info('Generate model evaluation report.')
           self.stage = 'EVALUATION-KFOLD-REPORT'
 
           # 更新实验统计信息
-          mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                  json.dumps({'REPORT': evaluation_statistic,
-                                                              'APP_STAGE': self.stage}))
+          if self.app_token is not None or self.user_token is not None:
+            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
+                                                    json.dumps({'REPORT': evaluation_statistic,
+                                                                'APP_STAGE': self.stage}))
           # 生成实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
 
           # 上传实验报告
-          logger.info('uploading experiment report')
-          mlogger.getEnv().dashboard.experiment.upload(
-            REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-            APP_STAGE=self.stage)
+          if self.app_token is not None or self.user_token is not None:
+            logger.info('Uploading experiment report.')
+            mlogger.getEnv().dashboard.experiment.upload(
+              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
+              APP_STAGE=self.stage)
 
         return
 
@@ -659,11 +666,16 @@ class AntTrain(AntBase):
       if not os.path.exists(train_dump_dir):
           os.makedirs(train_dump_dir)
 
-      logger.info('start training process')
+      logger.info('Start training process.')
       ant_train_dataset.reset_state()
-      self.context.call_training_process(ant_train_dataset, train_dump_dir)
+      try:
+        self.context.call_training_process(ant_train_dataset, train_dump_dir)
+      except Exception as e:
+        if type(e.__cause__) != StopIteration:
+          print(e)
+      
       self.context.from_experiment = train_dump_dir
-      logger.info('stop training process')
+      logger.info('Stop training process.')
 
   def _holdout_validation(self, train_dataset, running_ant_task, now_time):
     # 1.step split train set and validation set
@@ -680,17 +692,28 @@ class AntTrain(AntBase):
     self.stage = 'EVALUATION-HOLDOUT-TRAIN'
     if not self.skip_training:
       # training model
-      self.context.call_training_process(part_train_dataset, dump_dir)
+      logger.info("Traning process.")
+      try:
+        self.context.call_training_process(part_train_dataset, dump_dir)
+      except Exception as e:
+          if type(e.__cause__) != StopIteration:
+            print(e)
+
       self.context.from_experiment = dump_dir
     
-    data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
-    self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
+    logger.info("Infer process.")
+    # data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
+    self.context.recorder = RecorderNode2()
     intermediate_dump_dir = os.path.join(self.ant_dump_dir, dump_dir, 'record')
     
     with safe_recorder_manager(self.context.recorder):
-      self.context.recorder.dump_dir = intermediate_dump_dir
+      # self.context.recorder.dump_dir = intermediate_dump_dir
       with performance_statistic_region(self.ant_name):
-        self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
+        try:
+          self.context.call_infer_process(part_validation_dataset, dump_dir)
+        except Exception as e:
+          if type(e.__cause__) != StopIteration:
+            print(e)
 
     task_running_statictic = get_performance_statistic(self.ant_name)
     task_running_statictic = {self.ant_name: task_running_statictic}
@@ -788,14 +811,19 @@ class AntTrain(AntBase):
       # 2.step training model
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-TRAIN-%d' % repeat
       self.context.from_experiment = from_experiment
-      logger.info('start training process at repeathold %d round'%repeat)
-      self.context.call_training_process(part_train_dataset, dump_dir)
+      logger.info('Start training process at repeathold %d round.'%repeat)
+      try:
+        self.context.call_training_process(part_train_dataset, dump_dir)
+      except Exception as e:
+          if type(e.__cause__) != StopIteration:
+            print(e)
+
       self.context.from_experiment = dump_dir
-      logger.info('stop training process at repeathold %d round' % repeat)
+      logger.info('Stop training process at repeathold %d round.' % repeat)
       
       # 3.step evaluation measures
       # split data and label
-      logger.info('start infer process at repeathold %d round' % repeat)
+      logger.info('Start infer process at repeathold %d round.' % repeat)
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
       
@@ -803,8 +831,13 @@ class AntTrain(AntBase):
       self.stage = 'EVALUATION-REPEATEDHOLDOUT-EVALUATION-%d' % repeat
       with safe_recorder_manager(self.context.recorder):
         with performance_statistic_region(self.ant_name):
-          self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-      logger.info('start infer process at repeathold %d round' % repeat)
+          try:
+            self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
+          except Exception as e:
+            if type(e.__cause__) != StopIteration:
+              print(e)
+
+      logger.info('Start infer process at repeathold %d round.' % repeat)
       
       # clear
       self.context.recorder = None
@@ -815,7 +848,7 @@ class AntTrain(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(part_validation_dataset.size)
 
-      logger.info('start evaluation process at repeathold %d round'%repeat)
+      logger.info('Start evaluation process at repeathold %d round.'%repeat)
       evaluation_measure_result = []
 
       with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
@@ -825,7 +858,7 @@ class AntTrain(AntBase):
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
       
-      logger.info('stop evaluation process at repeathold %d round'%repeat)
+      logger.info('Stop evaluation process at repeathold %d round.'%repeat)
       repeated_running_statistic.append(task_running_statictic)
 
     evaluation_result = \
@@ -857,22 +890,32 @@ class AntTrain(AntBase):
       # 2.step training model
       self.stage = 'EVALUATION-BOOTSTRAP-TRAIN-%d' % bootstrap_i
       self.context.from_experiment = from_experiment
-      logger.info('start training process at bootstrap %d round'%bootstrap_i)
-      self.context.call_training_process(part_train_dataset, dump_dir)
+      logger.info('Start training process at bootstrap %d round.'%bootstrap_i)
+      try:
+        self.context.call_training_process(part_train_dataset, dump_dir)
+      except Exception as e:
+          if type(e.__cause__) != StopIteration:
+            print(e)
+
       self.context.from_experiment = dump_dir
-      logger.info('stop training process at bootstrap %d round' % bootstrap_i)
+      logger.info('Stop training process at bootstrap %d round.' % bootstrap_i)
       
       # 3.step evaluation measures
       # split data and label
-      logger.info('start infer process at bootstrap %d round' % bootstrap_i)
+      logger.info('Start infer process at bootstrap %d round.' % bootstrap_i)
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
       self.context.from_experiment = None
       self.stage = 'EVALUATION-BOOTSTRAP-EVALUATION-%d' % bootstrap_i
       with safe_recorder_manager(self.context.recorder):
         with performance_statistic_region(self.ant_name):
-          self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-      logger.info('stop infer process at bootstrap %d round' % bootstrap_i)
+          try:
+            self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
+          except Exception as e:
+            if type(e.__cause__) != StopIteration:
+              print(e)
+
+      logger.info('Stop infer process at bootstrap %d round.' % bootstrap_i)
       
       # clear
       self.context.recorder = None
@@ -883,7 +926,7 @@ class AntTrain(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(part_validation_dataset.size)
 
-      logger.info('start evaluation process at bootstrap %d round' % bootstrap_i)
+      logger.info('Start evaluation process at bootstrap %d round.' % bootstrap_i)
       evaluation_measure_result = []
 
       with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
@@ -893,7 +936,7 @@ class AntTrain(AntBase):
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
       
-      logger.info('stop evaluation process at bootstrap %d round' % bootstrap_i)
+      logger.info('Stop evaluation process at bootstrap %d round.' % bootstrap_i)
       
       bootstrap_running_statistic.append(task_running_statictic)
 
@@ -924,15 +967,20 @@ class AntTrain(AntBase):
 
       # 2.step training model
       self.stage = 'EVALUATION-KFOLD-TRAIN-%d' % k
-      logger.info('start training process at kfold %d round'%k)
+      logger.info('Start training process at kfold %d round.'%k)
       self.context.from_experiment = from_experiment
-      self.context.call_training_process(part_train_dataset, dump_dir)
+      try:
+        self.context.call_training_process(part_train_dataset, dump_dir)
+      except Exception as e:
+          if type(e.__cause__) != StopIteration:
+            print(e)
+
       self.context.from_experiment = dump_dir
-      logger.info('stop training process at kfold %d round'%k)
+      logger.info('Stop training process at kfold %d round.'%k)
 
       # 3.step evaluation measures
       # split data and label
-      logger.info('start infer process at kfold %d round'%k)
+      logger.info('Start infer process at kfold %d round.'%k)
       data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
       self.context.recorder = RecorderNode(Node.inputs(data_annotation_branch.output(1)))
       self.context.from_experiment = None
@@ -940,8 +988,13 @@ class AntTrain(AntBase):
       self.stage = 'EVALUATION-KFOLD-EVALUATION-%d' % k
       with safe_recorder_manager(self.context.recorder):
         with performance_statistic_region(self.ant_name):
-          self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
-      logger.info('stop infer process at kfold %d round'%k)
+          try:
+            self.context.call_infer_process(data_annotation_branch.output(0), dump_dir)
+          except Exception as e:
+            if type(e.__cause__) != StopIteration:
+              print(e)
+
+      logger.info('Stop infer process at kfold %d round.'%k)
       # clear
       self.context.recorder = None
 
@@ -951,7 +1004,7 @@ class AntTrain(AntBase):
       task_running_statictic[self.ant_name]['time']['elapsed_time_per_sample'] = \
           task_running_elapsed_time / float(part_validation_dataset.size)
 
-      logger.info('start evaluation process at kfold %d round'%k)
+      logger.info('Start evaluation process at kfold %d round.'%k)
       evaluation_measure_result = []
 
       with safe_recorder_manager(RecordReader(dump_dir)) as record_reader:
@@ -960,7 +1013,7 @@ class AntTrain(AntBase):
           result = measure.eva(record_generator, None)
           evaluation_measure_result.append(result)
         task_running_statictic[self.ant_name]['measure'] = evaluation_measure_result
-      logger.info('stop evaluation process at kfold %d round'%k)
+      logger.info('Stop evaluation process at kfold %d round.'%k)
       
       kfolds_running_statistic.append(task_running_statictic)
 

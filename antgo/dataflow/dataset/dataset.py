@@ -114,8 +114,8 @@ class Dataset(BaseNode):
       with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
         line_content = fp.readline()
         while line_content:
-          data_file, _ = line_content.split(',')
-          has_labeled_list.append(data_file)
+          _, data_file, _ = line_content.split(',')
+          has_labeled_list.append(data_file.split('/')[-1])
           line_content = fp.readline()
     else:
       # build empty candidates file
@@ -123,7 +123,6 @@ class Dataset(BaseNode):
         pass
 
     unlabeled_list = []
-
     with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'r') as fp:
       line_content = fp.readline()
       while line_content:
@@ -152,8 +151,8 @@ class Dataset(BaseNode):
       with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
         line_content = fp.readline()
         while line_content:
-          data_file, _ = line_content.split(',')
-          has_labeled_list.append(data_file)
+          _, data_file, _ = line_content.split(',')
+          has_labeled_list.append(data_file.split('/')[-1])
           line_content = fp.readline()
     else:
       # build empty candidates file
@@ -168,16 +167,15 @@ class Dataset(BaseNode):
         unlabeled_list.append(file_name)
 
         line_content = fp.readline()
-
-    data = []
-    for file in unlabeled_list:
+    
+    unlabeled_data = []
+    for index, file in enumerate(unlabeled_list):
       if file not in has_labeled_list:
-        data.append((os.path.join(self.dir, self.unlabeled_tag, file), {'id': len(data), 'file_id': file}))
+        unlabeled_data.append((os.path.join(self.dir, self.unlabeled_tag, file), {'id': index, 'file_id': file}))
 
-    return data
+    return unlabeled_data
 
-
-  def make_candidate(self, unlabeled_file, label_file, status=''):
+  def make_candidate(self, unlabeled_id, unlabeled_file, label_file, status=''):
     # status: 'SKIP/OK'
     if not os.path.exists(os.path.join(self.dir, 'candidates')):
       os.makedirs(os.path.join(self.dir, 'candidates'))
@@ -192,10 +190,22 @@ class Dataset(BaseNode):
         # copy label file to candidates/label
         shutil.copy(label_file, os.path.join(self.dir, 'candidates', 'label'))
 
-        # record how map
-        fp.write('%s,%s\n'%(unlabeled_file, label_file.split('/')[-1]))
+        # write to canndidates.txt
+        fp.write('%d,%s,%s\n'%(unlabeled_id, 'candidates/data/%s'%unlabeled_file, 'candidates/label/%s'%label_file.split('/')[-1]))
 
-  def check_candidate(self, unlabeled_files, candidate_folder):
+  def check_candidate(self, unlabeled_files, finished_label_folder):
+    # 检查准备进入候选列表的标注数据，与等待的未标注数据一致
+    consistent_sample_num = 0
+    logger.info("Finshed label folder %s"%finished_label_folder)
+
+    for sample_file, _ in unlabeled_files:
+      if os.path.exists(os.path.join(finished_label_folder, sample_file)):
+        consistent_sample_num += 1
+
+    logger.info('Consistent unlabeled file and labeled file %d'%consistent_sample_num)
+    if consistent_sample_num != len(unlabeled_files):
+      return False
+
     return True
 
   def candidates(self, candidate_type='IMAGE'):
@@ -209,15 +219,15 @@ class Dataset(BaseNode):
     with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
       line_content = fp.readline()
       while line_content:
-        data_file, label_file = line_content.split(',')
+        _, data_file, label_file = line_content.split(',')
         data_file = data_file.strip()
         label_file = label_file.strip()
         if candidate_type == 'IMAGE':
-          yield imread(os.path.join(self.dir, 'candidates', 'data', data_file)), \
-                imread(os.path.join(self.dir, 'candidates', 'label', label_file))
+          yield imread(os.path.join(self.dir, data_file)), \
+                imread(os.path.join(self.dir, label_file))
         else:
-          yield os.path.join(self.dir, 'candidates', 'data', data_file), \
-                os.path.join(self.dir, 'candidates', 'label', label_file)
+          yield os.path.join(self.dir, data_file), \
+                os.path.join(self.dir, label_file)
 
         line_content = fp.readline()
 
@@ -805,10 +815,11 @@ class UnlabeledDataset(Dataset):
     self.data = dataset.unlabeled()
 
   def data_pool(self):
-    for a, b in self.data:
-      yield a, b
+    for id in range(self.size):
+      yield self.at(id)
 
   def at(self, id):
+    print(id)
     return self.data[id]
 
   @property
