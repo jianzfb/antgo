@@ -35,7 +35,7 @@ def readme():
 
 
 setup(name='antgo',
-      version='0.0.7',
+      version='0.0.8',
       description='machine learning experiment platform',
       __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',
