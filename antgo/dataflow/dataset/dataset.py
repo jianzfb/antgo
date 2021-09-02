@@ -103,10 +103,15 @@ class Dataset(BaseNode):
       return 0
 
     if not os.path.exists(os.path.join(self.dir, 'unlabeled_list.txt')):
+      unorder_list = []
+      for file in os.listdir(unlabeled_folder):
+        if file[0] == '.':
+          continue
+        unorder_list.append(file)
+      
+      order_list = sorted(unorder_list)
       with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'w') as fp:
-        for file in os.listdir(unlabeled_folder):
-          if file[0] == '.':
-            continue
+        for file in order_list:
           fp.write('%s/%s,%d\n' % (self.unlabeled_tag, file, 0))
 
     has_labeled_list = []
@@ -140,10 +145,15 @@ class Dataset(BaseNode):
       return None
 
     if not os.path.exists(os.path.join(self.dir, 'unlabeled_list.txt')):
+      unorder_list = []
+      for file in os.listdir(unlabeled_folder):
+        if file[0] == '.':
+          continue
+        unorder_list.append(file)
+      
+      order_list = sorted(unorder_list)
       with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'w') as fp:
-        for file in os.listdir(unlabeled_folder):
-          if file[0] == '.':
-            continue
+        for file in order_list:
           fp.write('%s/%s,%d\n' % (self.unlabeled_tag, file, 0))
 
     has_labeled_list = []
@@ -171,7 +181,7 @@ class Dataset(BaseNode):
     unlabeled_data = []
     for index, file in enumerate(unlabeled_list):
       if file.split('/')[-1] not in has_labeled_list:
-        unlabeled_data.append((os.path.join(self.dir, file), {'id': index, 'file_id': file}))
+        unlabeled_data.append({'id': index, 'file_id': file})
 
     return unlabeled_data
 
@@ -812,19 +822,23 @@ class Dataset(BaseNode):
 class UnlabeledDataset(Dataset):
   def __init__(self, dataset):
     super(UnlabeledDataset, self).__init__()
-    self.data = dataset.unlabeled()
+    self.dataset = dataset
+    self.unlabeled_data = dataset.unlabeled()
 
   def data_pool(self):
     for id in range(self.size):
       yield self.at(id)
 
-  def at(self, id):
-    print(id)
-    return self.data[id]
+  def at(self, unlabeled_id):
+    id = self.unlabeled_data[unlabeled_id]['id']
+    file_id = self.unlabeled_data[unlabeled_id]['file_id']
+    data = self.dataset.at(id)
+    data[1].update({'file_id': file_id, 'id': id})
+    return data
 
   @property
   def size(self):
-    return len(self.data)
+    return len(self.unlabeled_data)
 
 class DataAnnotationSplitDataset(object):
   def __init__(self, dataset):

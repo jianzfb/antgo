@@ -18,7 +18,7 @@ from types import FunctionType
 from antgo import config
 from antgo.dataflow.recorder import *
 from antgo.dataflow.common import *
-
+import traceback
 
 def debug_training_process(dataset_func, param_config=None, dump_dir=None):
   # 0.step get global context

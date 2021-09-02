@@ -5,6 +5,8 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+
+from cv2 import log
 from antgo.dataflow.dataset.spider_dataset import SpiderDataset
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
@@ -15,6 +17,7 @@ from antgo.dataflow.recorder import *
 from antgo.crowdsource.batch_server import *
 from antvis.client.httprpc import *
 import json
+import traceback
 
 
 class AntBatch(AntBase):
@@ -146,7 +149,7 @@ class AntBatch(AntBase):
 
             # 4.step load dataset
             logger.info('Load task dataset and split.')
-
+            
             dataset_name = ''
             selected_dataset_stages = []
             if len(running_ant_task.dataset_name.split('/')) == 2:
@@ -155,6 +158,8 @@ class AntBatch(AntBase):
             else:
                 dataset_name = running_ant_task.dataset_name
                 selected_dataset_stages = ['test']
+            
+            logger.info('Using dataset %s/%s'%(dataset_name, selected_dataset_stages[0]))
 
             # 5.step prepare ablation blocks
             logger.info('Prepare model ablation blocks.')
@@ -180,6 +185,7 @@ class AntBatch(AntBase):
                         running_ant_task.dataset(dataset_stage,
                                                     os.path.join(self.ant_data_source, dataset_name),
                                                     running_ant_task.dataset_params)
+
                 # using unlabel
                 if self.unlabel:
                     ant_test_dataset = UnlabeledDataset(ant_test_dataset)
@@ -230,6 +236,7 @@ class AntBatch(AntBase):
                     except Exception as e:
                         if type(e.__cause__) != StopIteration:
                             print(e)
+                            traceback.print_exc()
 
                 self.context.recorder.close()
             return

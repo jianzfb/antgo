@@ -26,7 +26,6 @@ class AntTask(object):
     self._task_type_id = task_type_id
     self._task_type = task_type
     self._dataset_id = dataset_id
-    self._dataset_name = dataset_name
     self._dataset_params = dataset_params
     self._dataset_url = dataset_url
     self._estimation_procedure_type = estimation_procedure_type
@@ -47,15 +46,18 @@ class AntTask(object):
     if self._dataset_url is not None and len(self._dataset_url) > 0:
       self._dataset_params['dataset_url'] = self._dataset_url
 
-    self._dataset_params['dataset_name'] = self._dataset_name
+    # 
+    self._dataset_name = dataset_name
+    if len(dataset_name.split('/')) != 1:
+      dataset_name = dataset_name.split('/')[0]
+    self._dataset_params['dataset_name'] = dataset_name
 
     # dataset class
-    if self._dataset_name is not None:
+    if dataset_name is not None:
       parse_flag = ''
       if self._dataset_url is not None and len(self._dataset_url) > 0:
         parse_flag = self._dataset_url.split('/')[-2]
-
-      self._ant_dataset = AntDatasetFactory.dataset(self._dataset_name, parse_flag)
+      self._ant_dataset = AntDatasetFactory.dataset(dataset_name, parse_flag)
 
     # related evaluation measures
     self._ant_measures = AntMeasuresFactory(self)
@@ -64,6 +66,7 @@ class AntTask(object):
   @property
   def dataset_name(self):
     return self._dataset_name
+
   @dataset_name.setter
   def dataset_name(self, name):
     self._dataset_name = name

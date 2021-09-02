@@ -24,7 +24,6 @@ import yaml
 from antgo.utils.utils import *
 from datetime import datetime
 from antgo.ant.warehouse import *
-import antvis.client.mlogger as mlogger
 from antgo.context import *
 import socket
 

@@ -17,7 +17,7 @@ try:
     import queue
 except:
     import Queue as queue
-
+import traceback
 
 class AntDemo(AntBase):
   def __init__(self, ant_context,
@@ -167,9 +167,9 @@ class AntDemo(AntBase):
                     
         self.context.recorder =  LocalRecorderNodeV2(_callback_func)
         self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
-      except:
+      except Exception as e:
+        print(e)
         traceback.print_exc()
-        raise sys.exc_info()[0]
 
     process = threading.Thread(target=_run_infer_process)
     process.daemon = True

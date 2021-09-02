@@ -16,7 +16,7 @@ from antgo.dataflow.dataset.parallel_read import *
 import requests
 import json
 from jinja2 import Environment, FileSystemLoader
-
+import traceback
 
 class BrowserDataRecorder(object):
   def __init__(self, maxsize=30):

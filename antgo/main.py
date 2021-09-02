@@ -6,8 +6,9 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
-# sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
-# sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
+from typing import NamedTuple
+sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
+sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
 from antgo.ant.generate import *
 from antgo.ant.demo import *
 from antgo.ant.train import *
@@ -21,6 +22,7 @@ from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
 from antgo.utils.dht import *
 from antgo import version
+import traceback
 from jinja2 import Environment, FileSystemLoader
 
 import multiprocessing
@@ -161,7 +163,7 @@ def main():
     sys_a, sys_b, sys_c = version.split('.')
     if int(sys_a) < int(a) or int(sys_b) < int(b) or int(sys_c) < int(c):
       logger.error('Antgo version dont satisfy task minimum request (%s).'%FLAGS.version())
-      sys.exit(-1)
+      return
 
   # 4.step check factory
   factory = getattr(Config, 'factory', None)
@@ -288,7 +290,7 @@ def main():
   if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
     if not (FLAGS.worker() or FLAGS.master()):
       logger.error('Main executing file dont exist.')
-      sys.exit(-1)
+      return
 
   # 8 step ant running
   # 8.1 step what is task
@@ -310,7 +312,7 @@ def main():
                      '<estimation_procedure><type>%s</type></estimation_procedure>' \
                      '<evaluation_measures><evaluation_measure>%s</evaluation_measure></evaluation_measures>' \
                      '</input>' \
-                     '</task>'%('default-task', FLAGS.task_t(), FLAGS.task_badcase_num(), FLAGS.task_badcase_category(),dataset, FLAGS.task_ep(), FLAGS.task_em())
+                     '</task>'%(name, FLAGS.task_t(), FLAGS.task_badcase_num(), FLAGS.task_badcase_category(), dataset, FLAGS.task_ep(), FLAGS.task_em())
       fp.write(task_content)
     task = os.path.join(task_factory, '%s.xml'%name)
 
@@ -320,8 +322,9 @@ def main():
     try:
       ant_context = main_context(main_file, main_folder)
     except Exception as e:
-      print(e)
+      traceback.print_exc()
       print('Fail to load main_file %s.'%main_file)
+      return
   else:
     ant_context = Context()
   
@@ -345,8 +348,9 @@ def main():
         })
         ant_context.params = params
     except Exception as e:
-      print(e)
+      traceback.print_exc()
       print('Fail to load main_param %s.'%main_param)
+      return
 
   ant_context.name = name
   ant_context.data_factory = data_factory
@@ -365,7 +369,7 @@ def main():
 
     if not os.path.exists(experiment_path):
       logger.error('Couldnt find experiment %s.'%FLAGS.from_experiment())
-      exit(-1)
+      return
 
     # 设置实验目录
     ant_context.from_experiment = experiment_path

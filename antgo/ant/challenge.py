@@ -20,7 +20,7 @@ import tarfile
 from datetime import datetime
 from antgo.measures import *
 from antgo.measures.yesno_crowdsource import *
-
+import traceback
 
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
@@ -154,6 +154,7 @@ class AntChallenge(AntBase):
           except Exception as e:
             if type(e.__cause__) != StopIteration:
               print(e)
+              traceback.print_exc()
 
         task_running_statictic = get_performance_statistic(self.ant_name)
         task_running_statictic = {self.ant_name: task_running_statictic}

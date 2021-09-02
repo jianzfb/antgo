@@ -23,6 +23,7 @@ from antgo.measures.statistic import *
 from antgo.measures.repeat_statistic import *
 from antgo.measures.deep_analysis import *
 import signal
+import traceback
 if sys.version > '3':
     PY3 = True
 else:
@@ -673,6 +674,7 @@ class AntTrain(AntBase):
       except Exception as e:
         if type(e.__cause__) != StopIteration:
           print(e)
+          traceback.print_exc()
       
       self.context.from_experiment = train_dump_dir
       logger.info('Stop training process.')
@@ -698,6 +700,7 @@ class AntTrain(AntBase):
       except Exception as e:
           if type(e.__cause__) != StopIteration:
             print(e)
+            traceback.print_exc()
 
       self.context.from_experiment = dump_dir
     
@@ -714,6 +717,7 @@ class AntTrain(AntBase):
         except Exception as e:
           if type(e.__cause__) != StopIteration:
             print(e)
+            traceback.print_exc()
 
     task_running_statictic = get_performance_statistic(self.ant_name)
     task_running_statictic = {self.ant_name: task_running_statictic}
@@ -817,6 +821,7 @@ class AntTrain(AntBase):
       except Exception as e:
           if type(e.__cause__) != StopIteration:
             print(e)
+            traceback.print_exc()
 
       self.context.from_experiment = dump_dir
       logger.info('Stop training process at repeathold %d round.' % repeat)
@@ -836,6 +841,7 @@ class AntTrain(AntBase):
           except Exception as e:
             if type(e.__cause__) != StopIteration:
               print(e)
+              traceback.print_exc()
 
       logger.info('Start infer process at repeathold %d round.' % repeat)
       
@@ -896,6 +902,7 @@ class AntTrain(AntBase):
       except Exception as e:
           if type(e.__cause__) != StopIteration:
             print(e)
+            traceback.print_exc()
 
       self.context.from_experiment = dump_dir
       logger.info('Stop training process at bootstrap %d round.' % bootstrap_i)
@@ -914,6 +921,7 @@ class AntTrain(AntBase):
           except Exception as e:
             if type(e.__cause__) != StopIteration:
               print(e)
+              traceback.print_exc()
 
       logger.info('Stop infer process at bootstrap %d round.' % bootstrap_i)
       
@@ -974,6 +982,7 @@ class AntTrain(AntBase):
       except Exception as e:
           if type(e.__cause__) != StopIteration:
             print(e)
+            traceback.print_exc()
 
       self.context.from_experiment = dump_dir
       logger.info('Stop training process at kfold %d round.'%k)
@@ -993,6 +1002,7 @@ class AntTrain(AntBase):
           except Exception as e:
             if type(e.__cause__) != StopIteration:
               print(e)
+              traceback.print_exc()
 
       logger.info('Stop infer process at kfold %d round.'%k)
       # clear

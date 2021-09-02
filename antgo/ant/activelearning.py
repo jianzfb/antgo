@@ -15,6 +15,7 @@ from antvis.client.httprpc import *
 from multiprocessing import Process, Queue
 from antgo.task.task import *
 from scipy.stats import entropy
+import traceback
 import subprocess
 import os
 import socket
@@ -65,7 +66,7 @@ class AntActiveLearning(AntBase):
     super(AntActiveLearning, self).__init__(ant_name, ant_context, ant_token, **kwargs)
 
     self.skip_first_training = self.context.params.system['skip_training']
-    self.max_iterators = getattr(self.context.params, 'max_iterators', 100)
+    self.max_iterators = getattr(self.context.params.activelearning, 'max_iterators', 100)
     if self.max_iterators is None:
       self.max_iterators = 100
 
@@ -107,7 +108,7 @@ class AntActiveLearning(AntBase):
     return np.random.choice(unlabeled_pool, num, False)
 
   def _waiting_label_sample_select(self, unlabeled_pool, num):
-    sampling_strategy = getattr(self.context.params, 'sampling_strategy', 'entropy')
+    sampling_strategy = getattr(self.context.params.activelearning, 'sampling_strategy', 'entropy')
     if sampling_strategy == 'coreset':
       return self._core_set_algorithm(unlabeled_pool, num)
     elif sampling_strategy == 'entropy':
@@ -163,9 +164,8 @@ class AntActiveLearning(AntBase):
     self.keywords_template['LABEL_COMPLEX'] = 0
 
     # dataset
-    dataset = running_ant_task.dataset('train',
-                                       os.path.join(self.ant_data_source, running_ant_task.dataset_name),
-                                       running_ant_task.dataset_params)
+    dataset = \
+        running_ant_task.dataset('unlabel',os.path.join(self.ant_data_source, running_ant_task.dataset_name), running_ant_task.dataset_params)
 
     # prepare workspace
     if not os.path.exists(os.path.join(self.main_folder, 'web', 'static', 'data')):
@@ -222,7 +222,7 @@ class AntActiveLearning(AntBase):
       unlabeled_dataset_size = dataset.unlabeled_size()
       labeled_dataset_size = dataset.candidates_size()
 
-      min_sampling_num = getattr(self.context.params, 'min_sampling_num', None)
+      min_sampling_num = getattr(self.context.params.activelearning, 'min_sampling_num', None)
       if min_sampling_num is not None:
         min_sampling_num = (int)(min_sampling_num)
         if unlabeled_dataset_size < min_sampling_num:
@@ -250,6 +250,7 @@ class AntActiveLearning(AntBase):
       if (not self.skip_first_training or try_iter > 0) and labeled_dataset_size > 0:
         # shell call
         logger.info('Start training using all labeled data (%d iter).'%try_iter)
+
         if os.path.exists(os.path.join(self.dump_dir, 'try_round_train_%d'%try_iter)):
           shutil.rmtree(os.path.join(self.dump_dir, 'try_round_train_%d'%try_iter))
         os.makedirs(os.path.join(self.dump_dir, 'try_round_train_%d'%try_iter))
@@ -262,7 +263,7 @@ class AntActiveLearning(AntBase):
           cmd_shell += ' --from_experiment=%s' % experiment_id
         cmd_shell += ' --devices=%s' % self.devices
         cmd_shell += ' --dataset=%s' % running_ant_task.dataset_name
-        cmd_shell += ' --name=%s' % self.ant_name
+        cmd_shell += ' --name=%s_train_round_%d' % (self.ant_name, try_iter)
         training_p = \
             subprocess.Popen('%s > %s.log' % (cmd_shell, '%s_try_rounnd_train_%d'%(self.name, try_iter)), 
                               shell=True, 
@@ -300,11 +301,11 @@ class AntActiveLearning(AntBase):
       cmd_shell += ' --dump=%s/%s' % (self.dump_dir, 'try_round_analyze_%d'%try_iter)
       if experiment_id is not None:
         cmd_shell += ' --from_experiment=%s' % experiment_id
-      cmd_shell += ' --task=%s' % self.ant_task_config.split('/')[-1]
+      cmd_shell += ' --task_t=%s' % running_ant_task.task_type
       cmd_shell += ' --unlabel'
       cmd_shell += ' --devices=%s' % self.devices
-      cmd_shell += ' --dataset=%s' % running_ant_task.dataset_name
-      cmd_shell += ' --name=%s' % self.ant_name
+      cmd_shell += ' --dataset=%s/unlabel' % running_ant_task.dataset_name
+      cmd_shell += ' --name=%s_predict_round_%d' % (self.ant_name, try_iter)
       inference_p = subprocess.Popen('%s > %s.log' %(cmd_shell, '%s_try_rounnd_analyze_%d'%(self.name, try_iter)), 
                                       shell=True, 
                                       cwd=self.main_folder)
@@ -334,9 +335,9 @@ class AntActiveLearning(AntBase):
         gt, feature = ss
         unlabeled_pool.append({'file_id': gt['file_id'], 'feature': feature, 'id': gt['id']})
 
-      select_size = getattr(self.context.params, 'min_sampling_num', None)
+      select_size = getattr(self.context.params.activelearning, 'min_sampling_num', None)
       if select_size is None:
-        min_sampling_ratio = getattr(self.context.params, 'min_sampling_ratio', None)
+        min_sampling_ratio = getattr(self.context.params.activelearning, 'min_sampling_ratio', None)
         if min_sampling_ratio is None:
           min_sampling_ratio = 0.1
         select_size = int(len(unlabeled_pool) * min_sampling_ratio)
@@ -352,7 +353,7 @@ class AntActiveLearning(AntBase):
         logger.info("Active learning is over. (selecting size == 0).")
         return
 
-      logger.info("Round %d, selecting size %d by %s method."%(try_iter, select_size, getattr(self.context.params, 'sampling_strategy', 'entropy')))
+      logger.info("Round %d, selecting size %d by %s method."%(try_iter, select_size, getattr(self.context.params.activelearning, 'sampling_strategy', 'entropy')))
 
       # 结束分析时间
       analyze_end_time = time.time()
@@ -385,7 +386,8 @@ class AntActiveLearning(AntBase):
 
         for file_id, id in next_unlabeled_sample_ids:
           _, label = dataset.at(id)
-
+          label.update({'file_id': file_id, 'id': id})
+          
           # 自动生成子目录
           if '/' in file_id:
             if not os.path.exists(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter, file_id.split('/')[0])):
