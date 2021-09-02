@@ -66,7 +66,7 @@ class AntActiveLearning(AntBase):
     super(AntActiveLearning, self).__init__(ant_name, ant_context, ant_token, **kwargs)
 
     self.skip_first_training = self.context.params.system['skip_training']
-    self.max_iterators = getattr(self.context.params.activelearning, 'max_iterators', 100)
+    self.max_iterators = self.context.params.activelearning.get('max_iterators', 100)
     if self.max_iterators is None:
       self.max_iterators = 100
 
@@ -108,7 +108,7 @@ class AntActiveLearning(AntBase):
     return np.random.choice(unlabeled_pool, num, False)
 
   def _waiting_label_sample_select(self, unlabeled_pool, num):
-    sampling_strategy = getattr(self.context.params.activelearning, 'sampling_strategy', 'entropy')
+    sampling_strategy = self.context.params.activelearning.get('sampling_strategy', 'entropy')
     if sampling_strategy == 'coreset':
       return self._core_set_algorithm(unlabeled_pool, num)
     elif sampling_strategy == 'entropy':
@@ -222,7 +222,7 @@ class AntActiveLearning(AntBase):
       unlabeled_dataset_size = dataset.unlabeled_size()
       labeled_dataset_size = dataset.candidates_size()
 
-      min_sampling_num = getattr(self.context.params.activelearning, 'min_sampling_num', None)
+      min_sampling_num = self.context.params.activelearning.get('min_sampling_num', None)
       if min_sampling_num is not None:
         min_sampling_num = (int)(min_sampling_num)
         if unlabeled_dataset_size < min_sampling_num:
@@ -335,9 +335,9 @@ class AntActiveLearning(AntBase):
         gt, feature = ss
         unlabeled_pool.append({'file_id': gt['file_id'], 'feature': feature, 'id': gt['id']})
 
-      select_size = getattr(self.context.params.activelearning, 'min_sampling_num', None)
+      select_size = self.context.params.activelearning.get('min_sampling_num', None)
       if select_size is None:
-        min_sampling_ratio = getattr(self.context.params.activelearning, 'min_sampling_ratio', None)
+        min_sampling_ratio = self.context.params.activelearning.get('min_sampling_ratio', None)
         if min_sampling_ratio is None:
           min_sampling_ratio = 0.1
         select_size = int(len(unlabeled_pool) * min_sampling_ratio)
@@ -353,7 +353,7 @@ class AntActiveLearning(AntBase):
         logger.info("Active learning is over. (selecting size == 0).")
         return
 
-      logger.info("Round %d, selecting size %d by %s method."%(try_iter, select_size, getattr(self.context.params.activelearning, 'sampling_strategy', 'entropy')))
+      logger.info("Round %d, selecting size %d by %s method."%(try_iter, select_size, self.context.params.activelearning.get('sampling_strategy', 'entropy')))
 
       # 结束分析时间
       analyze_end_time = time.time()
