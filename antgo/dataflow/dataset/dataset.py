@@ -107,7 +107,7 @@ class Dataset(BaseNode):
         for file in os.listdir(unlabeled_folder):
           if file[0] == '.':
             continue
-          fp.write('%s,%d\n' % (file, 0))
+          fp.write('%s/%s,%d\n' % (self.unlabeled_tag, file, 0))
 
     has_labeled_list = []
     if os.path.exists(os.path.join(self.dir, 'candidates.txt')):
@@ -127,7 +127,7 @@ class Dataset(BaseNode):
       line_content = fp.readline()
       while line_content:
         file_name, _ = line_content.split(',')
-        if file_name not in has_labeled_list:
+        if file_name.split('/')[-1] not in has_labeled_list:
           unlabeled_list.append(file_name)
 
         line_content = fp.readline()
@@ -144,7 +144,7 @@ class Dataset(BaseNode):
         for file in os.listdir(unlabeled_folder):
           if file[0] == '.':
             continue
-          fp.write('%s,%d\n' % (file, 0))
+          fp.write('%s/%s,%d\n' % (self.unlabeled_tag, file, 0))
 
     has_labeled_list = []
     if os.path.exists(os.path.join(self.dir, 'candidates.txt')):
@@ -170,8 +170,8 @@ class Dataset(BaseNode):
     
     unlabeled_data = []
     for index, file in enumerate(unlabeled_list):
-      if file not in has_labeled_list:
-        unlabeled_data.append((os.path.join(self.dir, self.unlabeled_tag, file), {'id': index, 'file_id': file}))
+      if file.split('/')[-1] not in has_labeled_list:
+        unlabeled_data.append((os.path.join(self.dir, file), {'id': index, 'file_id': file}))
 
     return unlabeled_data
 
@@ -185,13 +185,13 @@ class Dataset(BaseNode):
     with open(os.path.join(self.dir, 'candidates.txt'), 'a') as fp:
       if status == 'OK':
         # copy data file to candidates/data
-        shutil.copy(os.path.join(self.dir, self.unlabeled_tag, unlabeled_file), os.path.join(self.dir, 'candidates', 'data'))
+        shutil.copy(os.path.join(self.dir, unlabeled_file), os.path.join(self.dir, 'candidates', 'data'))
 
         # copy label file to candidates/label
         shutil.copy(label_file, os.path.join(self.dir, 'candidates', 'label'))
 
         # write to canndidates.txt
-        fp.write('%d,%s,%s\n'%(unlabeled_id, 'candidates/data/%s'%unlabeled_file, 'candidates/label/%s'%label_file.split('/')[-1]))
+        fp.write('%d,%s,%s\n'%(unlabeled_id, 'candidates/data/%s'%unlabeled_file.split('/')[-1], 'candidates/label/%s'%label_file.split('/')[-1]))
 
   def check_candidate(self, unlabeled_files, finished_label_folder):
     # 检查准备进入候选列表的标注数据，与等待的未标注数据一致

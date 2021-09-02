@@ -372,7 +372,7 @@ class AntActiveLearning(AntBase):
 
       tar = tarfile.open(tar_path, "w:gz")
       for next_unlabeled_sample_id, _ in next_unlabeled_sample_ids:
-        tar.add(os.path.join(dataset.unlabeled_folder, next_unlabeled_sample_id),
+        tar.add(os.path.join(dataset.dir, next_unlabeled_sample_id),
                 arcname="round_%d/%s"%(try_iter,next_unlabeled_sample_id))
       tar.close()
 
@@ -385,6 +385,11 @@ class AntActiveLearning(AntBase):
 
         for file_id, id in next_unlabeled_sample_ids:
           _, label = dataset.at(id)
+
+          # 自动生成子目录
+          if '/' in file_id:
+            if not os.path.exists(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter, file_id.split('/')[0])):
+              os.makedirs(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter, file_id.split('/')[0]))
 
           # label 写成文件
           with open(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter, file_id), 'w') as fp:

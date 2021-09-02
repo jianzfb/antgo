@@ -110,17 +110,40 @@ def main():
     token = unicode(token)
 
   if sys.argv[1] == 'config':
+    if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+      os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
+
     if FLAGS.config() is not None:
       # 使用指定配置文件更新
-      if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
-        os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
-
       shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
       logger.info('Success update config file.')
     else:
       # 在当前目录生成默认配置文件
-      shutil.copy(os.path.join('/'.join(os.path.realpath(__file__).split('/')[0:-1]), 'config.xml'), "./config.xml")
-      logger.info('Build default config file.')
+      # --dataset, --token, 自动配置
+      config_data = {'DATASET_FACTORY': '', 'USER_TOKEN': ''}
+      if FLAGS.dataset() is not None:
+        if not os.path.exists(FLAGS.dataset()):
+          logger.error('Dataset factory path dont exist.')
+          return
+        config_data['DATASET_FACTORY'] = FLAGS.dataset()
+
+      if FLAGS.token() is not None:
+         config_data['USER_TOKEN'] = FLAGS.token()
+
+      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+      config_template = env.get_template('config.xml')
+      config_content = config_template.render(**config_data)
+
+      if config_data['DATASET_FACTORY'] != '':
+        with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'),'w') as fp:
+          fp.write(config_content)
+        
+        logger.info('Finish antgo global config.')
+      else:
+        with open('./config.xml','w') as fp:
+          fp.write(config_content)
+
+        logger.info('Please fill ./config.xml, then call (antgo config --config=./config.xml) to finish global config.')
     return
 
   # 检查配置文件是否存在
