@@ -1,9 +1,12 @@
 from setuptools import setup
 from Cython.Build import cythonize
 from distutils.extension import Extension
+from os import path as os_path
 import os
 import numpy as np
 import shutil
+
+this_directory = os_path.abspath(os_path.dirname(__file__))
 
 # install: python setup.py build_ext install -r requirements.txt (from github)
 ext_modules = [
@@ -33,9 +36,18 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
+def read_file(filename):
+    with open(os_path.join(this_directory, filename), encoding='utf-8') as f:
+        long_description = f.read()
+    return long_description
+
+
+def read_requirements(filename):
+    return [line.strip() for line in read_file(filename).splitlines()
+            if not line.startswith('#')]
 
 setup(name='antgo',
-      version='0.0.10',
+      version='0.0.11',
       description='machine learning experiment platform',
       __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',
@@ -77,6 +89,7 @@ setup(name='antgo',
                 'antgo.codebook.tf'],
       ext_modules=cythonize(ext_modules),
       entry_points={'console_scripts': ['antgo=antgo.main:main'], },
+      install_requires=read_requirements('requirements.txt'), 
       long_description=readme(),
       include_package_data=True,
       zip_safe=False,)
