@@ -427,11 +427,8 @@ class AntTrain(AntBase):
 
     # 5.1.step 检查设置候选数据
     if self.context.params.system['candidate']:
-      print('HERE')
       ant_train_dataset = CandidateDataset(ant_train_dataset)
-      if ant_train_dataset is None:
-        print('why here')
-      
+
     # 6.step 消除实验
     # if ablation_blocks is not None:
     #   if len(apply_devices) >= ablation_experiments_devices_num + 1:

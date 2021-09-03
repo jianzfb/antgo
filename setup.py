@@ -47,7 +47,7 @@ def read_requirements(filename):
             if not line.startswith('#')]
 
 setup(name='antgo',
-      version='0.0.11',
+      version='0.0.12',
       description='machine learning experiment platform',
       __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',
