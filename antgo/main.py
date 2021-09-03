@@ -84,7 +84,8 @@ flags.DEFINE_integer('host_port', -1, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
-flags.DEFINE_indicator('unlabel', '')
+flags.DEFINE_indicator('unlabel', '')           # 未标注数据
+flags.DEFINE_indicator('candidate', '')         # 候选数据
 flags.DEFINE_indicator('skip_training', '')
 flags.DEFINE_indicator('research', 'research mode or not')
 flags.DEFINE_string('running_platform', 'local', 'local/cloud')
@@ -344,7 +345,9 @@ def main():
                     'ip': FLAGS.host_ip(),
                     'port': FLAGS.host_port(),
                     'devices': FLAGS.devices(),
-                    'running_platform': FLAGS.running_platform()},
+                    'running_platform': FLAGS.running_platform(),
+                    'unlabel': FLAGS.unlabel(),
+                    'candidate': FLAGS.candidate()},
         })
         ant_context.params = params
     except Exception as e:

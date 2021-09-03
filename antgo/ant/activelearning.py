@@ -165,7 +165,7 @@ class AntActiveLearning(AntBase):
 
     # dataset
     dataset = \
-        running_ant_task.dataset('unlabel',os.path.join(self.ant_data_source, running_ant_task.dataset_name), running_ant_task.dataset_params)
+        running_ant_task.dataset('train',os.path.join(self.ant_data_source, running_ant_task.dataset_name), running_ant_task.dataset_params)
 
     # prepare workspace
     if not os.path.exists(os.path.join(self.main_folder, 'web', 'static', 'data')):
@@ -261,8 +261,9 @@ class AntActiveLearning(AntBase):
         cmd_shell += ' --task=%s' % self.ant_task_config.split('/')[-1]
         if experiment_id is not None:
           cmd_shell += ' --from_experiment=%s' % experiment_id
+        cmd_shell += ' --candidate'
         cmd_shell += ' --devices=%s' % self.devices
-        cmd_shell += ' --dataset=%s' % running_ant_task.dataset_name
+        cmd_shell += ' --dataset=%s/train' % running_ant_task.dataset_name
         cmd_shell += ' --name=%s_train_round_%d' % (self.ant_name, try_iter)
         training_p = \
             subprocess.Popen('%s > %s.log' % (cmd_shell, '%s_try_rounnd_train_%d'%(self.name, try_iter)), 
@@ -304,7 +305,7 @@ class AntActiveLearning(AntBase):
       cmd_shell += ' --task_t=%s' % running_ant_task.task_type
       cmd_shell += ' --unlabel'
       cmd_shell += ' --devices=%s' % self.devices
-      cmd_shell += ' --dataset=%s/unlabel' % running_ant_task.dataset_name
+      cmd_shell += ' --dataset=%s/train' % running_ant_task.dataset_name
       cmd_shell += ' --name=%s_predict_round_%d' % (self.ant_name, try_iter)
       inference_p = subprocess.Popen('%s > %s.log' %(cmd_shell, '%s_try_rounnd_analyze_%d'%(self.name, try_iter)), 
                                       shell=True, 
@@ -385,7 +386,7 @@ class AntActiveLearning(AntBase):
           os.makedirs(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter))
 
         for file_id, id in next_unlabeled_sample_ids:
-          _, label = dataset.at(id)
+          _, label = dataset.at(id, file_id)
           label.update({'file_id': file_id, 'id': id})
           
           # 自动生成子目录

@@ -832,13 +832,60 @@ class UnlabeledDataset(Dataset):
   def at(self, unlabeled_id):
     id = self.unlabeled_data[unlabeled_id]['id']
     file_id = self.unlabeled_data[unlabeled_id]['file_id']
-    data = self.dataset.at(id)
+    data = self.dataset.at(id, file_id)
     data[1].update({'file_id': file_id, 'id': id})
     return data
 
   @property
   def size(self):
     return len(self.unlabeled_data)
+
+
+class CandidateDataset(Dataset):
+  def __init__(self, dataset):
+    super(CandidateDataset, self).__init__()
+    self.dataset = dataset
+    self.candidates = []
+
+    # 使用candidate文件夹中的数据(已经完成标注的数据)
+    if os.path.exists(os.path.join(self.dataset.dir, 'candidates.txt')):
+      with open(os.path.join(self.dataset.dir, 'candidates.txt'), 'r') as fp:
+        content = fp.readline()
+        content = content.strip()
+
+        while content != '':
+          id, file_id, annotation_file_id = content.split(',')
+
+          self.candidates.append({
+            'id': id,
+            'file_id': file_id,
+            'annotation_file_id': annotation_file_id
+          })
+          content = fp.readline()
+          content = content.strip()
+
+  def data_pool(self):
+    for id in range(self.size):
+      yield self.at(id)
+
+  def at(self, local_id):
+    id = self.candidates[local_id]['id']
+    file_id = self.candidates[local_id]['file_id']
+    annotation_file_id = self.candidates[local_id]['annotation_file_id']
+ 
+    data = self.dataset.at((int)(id), file_id)
+    data[1].update({'file_id': file_id, 'id': id, 'annotation_file_id': os.path.join(self.dataset.dir, annotation_file_id)})
+
+    return data
+
+  def split(self, split_params, split_method):
+    _, b = self.dataset.split(split_params, split_method)
+    return self, b
+
+  @property
+  def size(self):
+    return len(self.candidates)
+
 
 class DataAnnotationSplitDataset(object):
   def __init__(self, dataset):
