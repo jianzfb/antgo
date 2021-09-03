@@ -82,6 +82,7 @@ class AntActiveLearning(AntBase):
     self.rpc = None
 
   def _core_set_algorithm(self, unlabeled_pool, num):
+    # data: 1XC (C表示特征维度)
     feature_data = np.array([data['feature'] for data in unlabeled_pool])
     channels = feature_data.shape[-1]
     kcg = kCenterGreedy(feature_data.reshape(-1, channels))
@@ -93,11 +94,22 @@ class AntActiveLearning(AntBase):
   def _entroy_algorithm(self, unlabeled_pool, num):
     unlabeled_entropy = []
     for index, data in enumerate(unlabeled_pool):
-      h = np.histogram(data['feature'].flatten(), 255)
-      p = h[0].astype(float) / h[0].sum()   # probability of bins
+      # data: DxC（D表示实验次数，C表示概率信息）
+      p = np.mean(data['feature'], axis=0)
       unlabeled_entropy.append((entropy(p), index))
 
     ordered_unlabeled = sorted(unlabeled_entropy, key=lambda x: x[0], reverse=True)
+    next_selected = [unlabeled_pool[s[1]] for s in ordered_unlabeled[0:num]]
+    return next_selected
+
+  def _variance_algorithm(self, unlabeled_pool, num):
+    unlabeled_var = []
+    for index, data in enumerate(unlabeled_pool):
+      # data: DxC (D表示试验次数，C表示概率信息)
+      var_val = np.var(data['feature'], axis=0)
+      unlabeled_var.append(((float)(np.mean(var_val)), index))
+    
+    ordered_unlabeled = sorted(unlabeled_var, key=lambda x: x[0], reverse=True)
     next_selected = [unlabeled_pool[s[1]] for s in ordered_unlabeled[0:num]]
     return next_selected
 
@@ -109,10 +121,13 @@ class AntActiveLearning(AntBase):
 
   def _waiting_label_sample_select(self, unlabeled_pool, num):
     sampling_strategy = self.context.params.activelearning.get('sampling_strategy', 'entropy')
+    logger.info('Using %s Strategy to select waiting label data.'%sampling_strategy)
     if sampling_strategy == 'coreset':
       return self._core_set_algorithm(unlabeled_pool, num)
     elif sampling_strategy == 'entropy':
       return self._entroy_algorithm(unlabeled_pool, num)
+    elif sampling_strategy == 'variance':
+      return self._variance_algorithm(unlabeled_pool, num)
     elif sampling_strategy == 'random':
       return self._unform_sampling_algorithm(unlabeled_pool, num)
     else:
