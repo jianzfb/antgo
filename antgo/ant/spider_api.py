@@ -26,6 +26,8 @@ def spider_api_baidu():
             datasource_type = v
         elif k == 'keyword':
             datasource_keyword = v
+            # 替换;为,
+            datasource_keyword = datasource_keyword.replace(';', ',')
 
     if datasource_name not in ['baidu', 'google', 'bing', 'vcg']:
         logger.error('Only support datasource baidu/google/bing/vcg')
@@ -56,6 +58,8 @@ def spider_api_bing():
             datasource_type = v
         elif k == 'keyword':
             datasource_keyword = v
+            # 替换;为,
+            datasource_keyword = datasource_keyword.replace(';', ',')
 
     if datasource_name not in ['baidu', 'google', 'bing', 'vcg']:
         logger.error('Only support datasource baidu/google/bing/vcg')
@@ -91,6 +95,8 @@ def spider_api_vcg():
             datasource_type = v
         elif k == 'keyword':
             datasource_keyword = v
+            # 替换;为,
+            datasource_keyword = datasource_keyword.replace(';', ',')            
 
     if datasource_name not in ['baidu', 'google', 'bing', 'vcg']:
         logger.error('Only support datasource baidu/google/bing/vcg')
