@@ -20,6 +20,7 @@ def get_file_name(headers):
     
     return filename
 
+
 def activelearning_api_download():
     FLAGS = flags.AntFLAGS
 
@@ -27,7 +28,7 @@ def activelearning_api_download():
     host_ip = FLAGS.host_ip()
     host_port = FLAGS.host_port()
     round = None
-    for p in FLAGS.param().split(';'):
+    for p in FLAGS.param().split(','):
         k,v = p.split(":")
         if k == 'round':
             round = (int)(v)

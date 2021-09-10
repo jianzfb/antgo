@@ -17,6 +17,7 @@ from antgo.ant.browser import *
 from antgo.ant.batch import *
 from antgo.ant.activelearning import *
 from antgo.ant import activelearning_api
+from antgo.ant import spider_api
 from antgo.ant.utils import *
 from antgo.sandbox.sandbox import *
 from antgo.utils.utils import *
@@ -45,6 +46,7 @@ _ant_support_commands = ["train",
                          "dataset",
                          "predict",
                          "demo",
+                         "spider",
                          "browser",
                          "startproject",
                          "config"]
@@ -198,6 +200,13 @@ def main():
         logger.error('%s/%s dont support.'%(ant_cmd, ant_cmd_api))
         return
       
+      func()
+    elif ant_cmd == 'spider':
+      func = getattr(spider_api, 'spider_api_'+ant_cmd_api, None)
+      if func is None:
+        logger.error('%s/%s dont support.'%(ant_cmd, ant_cmd_api))
+        return
+
       func()
     return
 
@@ -380,104 +389,133 @@ def main():
   # time stamp
   time_stamp = timestamp()
   if ant_cmd == "train":
-    with running_sandbox(sandbox_time=FLAGS.max_time(),
-                         sandbox_dump_dir=main_folder,
-                         sandbox_experiment=None,
-                         sandbox_user_token=token,
-                         sandbox_user_proxy=FLAGS.proxy(),
-                         sandbox_user_signature=FLAGS.signature()):
-      running_process = AntTrain(ant_context,
-                                 name,
-                                 data_factory,
-                                 dump_dir,
-                                 token,
-                                 task,
-                                 main_file=main_file,
-                                 main_folder=main_folder,
-                                 main_param=main_param,
-                                 time_stamp=time_stamp,
-                                 skip_training=FLAGS.skip_training(),
-                                 running_platform=FLAGS.running_platform(),
-                                 proxy=FLAGS.proxy(),
-                                 signature=FLAGS.signature(),
-                                 devices=FLAGS.devices())
-      running_process.start()
-  elif ant_cmd == 'challenge':
-    with running_sandbox(sandbox_dump_dir=main_folder,
-                         sandbox_experiment=None,
-                         sandbox_user_token=token,
-                         sandbox_user_proxy=FLAGS.proxy(),
-                         sandbox_user_signature=FLAGS.signature()):
-      running_process = AntChallenge(ant_context,
-                                     name,
-                                     data_factory,
-                                     dump_dir,
-                                     token,
-                                     task,
-                                     FLAGS.benchmark(),
-                                     main_file=main_file,
-                                     main_folder=main_folder,
-                                     main_param=main_param,
-                                     time_stamp=time_stamp,
-                                     running_platform=FLAGS.running_platform(),
-                                     devices=FLAGS.devices())
-      running_process.start()
-  elif ant_cmd == "demo":
-    running_process = AntDemo(ant_context,
-                              name,
-                              dump_dir,
-                              token,
-                              task,
-                              html_template=FLAGS.html_template(),
-                              ip=FLAGS.host_ip(),
-                              port=FLAGS.host_port(),
-                              time_stamp=time_stamp,
-                              devices=FLAGS.devices())
-
-    running_process.start()
-  elif ant_cmd == "predict":
-    running_process = AntBatch(ant_context,
-                               name,
-                               FLAGS.host_ip(),
-                               FLAGS.host_port(),
-                               token,
-                               data_factory,
-                               dump_dir,
-                               task,
-                               unlabel=FLAGS.unlabel(),
-                               devices=FLAGS.devices(),
-                               restore_experiment=FLAGS.restore_experiment())
-    running_process.start()
-  elif ant_cmd == "activelearning":
-    running_process = AntActiveLearning(ant_context,
-                                        name,
-                                        data_factory,
-                                        dump_dir,
-                                        token,
-                                        task,
-                                        main_file=main_file,
-                                        main_folder=main_folder,
-                                        main_param=main_param,
-                                        time_stamp=time_stamp)
-    running_process.start()
-  elif ant_cmd == 'dataset':
-    running_process = AntGenerate(ant_context,
+    try:
+      with running_sandbox(sandbox_time=FLAGS.max_time(),
+                          sandbox_dump_dir=main_folder,
+                          sandbox_experiment=None,
+                          sandbox_user_token=token,
+                          sandbox_user_proxy=FLAGS.proxy(),
+                          sandbox_user_signature=FLAGS.signature()):
+        running_process = AntTrain(ant_context,
                                   name,
                                   data_factory,
                                   dump_dir,
                                   token,
-                                  dataset)
-    running_process.start()
+                                  task,
+                                  main_file=main_file,
+                                  main_folder=main_folder,
+                                  main_param=main_param,
+                                  time_stamp=time_stamp,
+                                  skip_training=FLAGS.skip_training(),
+                                  running_platform=FLAGS.running_platform(),
+                                  proxy=FLAGS.proxy(),
+                                  signature=FLAGS.signature(),
+                                  devices=FLAGS.devices())
+        running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
+  elif ant_cmd == 'challenge':
+    try:
+      with running_sandbox(sandbox_dump_dir=main_folder,
+                          sandbox_experiment=None,
+                          sandbox_user_token=token,
+                          sandbox_user_proxy=FLAGS.proxy(),
+                          sandbox_user_signature=FLAGS.signature()):
+        running_process = AntChallenge(ant_context,
+                                      name,
+                                      data_factory,
+                                      dump_dir,
+                                      token,
+                                      task,
+                                      FLAGS.benchmark(),
+                                      main_file=main_file,
+                                      main_folder=main_folder,
+                                      main_param=main_param,
+                                      time_stamp=time_stamp,
+                                      running_platform=FLAGS.running_platform(),
+                                      devices=FLAGS.devices())
+        running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
+  elif ant_cmd == "demo":
+    try:
+      running_process = AntDemo(ant_context,
+                                name,
+                                dump_dir,
+                                token,
+                                task,
+                                html_template=FLAGS.html_template(),
+                                ip=FLAGS.host_ip(),
+                                port=FLAGS.host_port(),
+                                time_stamp=time_stamp,
+                                devices=FLAGS.devices())
+
+      running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
+  elif ant_cmd == "predict":
+    try:
+      running_process = AntBatch(ant_context,
+                                name,
+                                FLAGS.host_ip(),
+                                FLAGS.host_port(),
+                                token,
+                                data_factory,
+                                dump_dir,
+                                task,
+                                unlabel=FLAGS.unlabel(),
+                                devices=FLAGS.devices(),
+                                restore_experiment=FLAGS.restore_experiment())
+      running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
+  elif ant_cmd == "activelearning":
+    try:
+      running_process = AntActiveLearning(ant_context,
+                                          name,
+                                          data_factory,
+                                          dump_dir,
+                                          token,
+                                          task,
+                                          main_file=main_file,
+                                          main_folder=main_folder,
+                                          main_param=main_param,
+                                          time_stamp=time_stamp)
+      running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
+
+  elif ant_cmd == 'dataset':
+    try:
+      running_process = AntGenerate(ant_context,
+                                    name,
+                                    data_factory,
+                                    dump_dir,
+                                    token,
+                                    dataset)
+      running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
   elif ant_cmd == 'browser':
-    running_process = AntBrowser(ant_context,
-                                 name,
-                                 token,
-                                 FLAGS.host_ip(),
-                                 FLAGS.host_port(),
-                                 data_factory,
-                                 dataset,
-                                 dump_dir)
-    running_process.start()
+    try:
+      running_process = AntBrowser(ant_context,
+                                  name,
+                                  token,
+                                  FLAGS.host_ip(),
+                                  FLAGS.host_port(),
+                                  data_factory,
+                                  dataset,
+                                  dump_dir)
+      running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
 
   # 9.step clear context
   ant_context.wait_until_clear()

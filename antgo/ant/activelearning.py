@@ -66,9 +66,9 @@ class AntActiveLearning(AntBase):
     super(AntActiveLearning, self).__init__(ant_name, ant_context, ant_token, **kwargs)
 
     self.skip_first_training = self.context.params.system['skip_training']
-    self.max_iterators = self.context.params.activelearning.get('max_iterators', 100)
+    self.max_iterators = self.context.params.activelearning.get('max_iterators', 10)
     if self.max_iterators is None:
-      self.max_iterators = 100
+      self.max_iterators = 10
 
     self.dump_dir = ant_dump_dir
     self.web_server_port = self.context.params.system['port']
@@ -82,6 +82,10 @@ class AntActiveLearning(AntBase):
     self.rpc = None
 
   def _core_set_algorithm(self, unlabeled_pool, num):
+    if num > len(unlabeled_pool):
+      logger.warn("Dont have enough unlabeled data(%d), return all."%len(unlabeled_pool))
+      return unlabeled_pool
+
     # data: 1XC (C表示特征维度)
     feature_data = np.array([data['feature'] for data in unlabeled_pool])
     channels = feature_data.shape[-1]
@@ -92,9 +96,14 @@ class AntActiveLearning(AntBase):
     return next_selected
 
   def _entroy_algorithm(self, unlabeled_pool, num):
+    if num > len(unlabeled_pool):
+      logger.warn("Dont have enough unlabeled data(%d), return all."%len(unlabeled_pool))
+      return unlabeled_pool
+
     unlabeled_entropy = []
     for index, data in enumerate(unlabeled_pool):
       # data: DxC（D表示实验次数，C表示概率信息）
+      assert(len(data['feature'].shape) == 2)
       p = np.mean(data['feature'], axis=0)
       unlabeled_entropy.append((entropy(p), index))
 
@@ -103,9 +112,14 @@ class AntActiveLearning(AntBase):
     return next_selected
 
   def _variance_algorithm(self, unlabeled_pool, num):
+    if num > len(unlabeled_pool):
+      logger.warn("Dont have enough unlabeled data(%d), return all."%len(unlabeled_pool))      
+      return unlabeled_pool
+
     unlabeled_var = []
     for index, data in enumerate(unlabeled_pool):
       # data: DxC (D表示试验次数，C表示概率信息)
+      assert(len(data['feature'].shape) == 2)
       var_val = np.var(data['feature'], axis=0)
       unlabeled_var.append(((float)(np.mean(var_val)), index))
     
@@ -115,6 +129,7 @@ class AntActiveLearning(AntBase):
 
   def _unform_sampling_algorithm(self, unlabeled_pool, num):
     if num > len(unlabeled_pool):
+      logger.warn("Dont have enough unlabeled data(%d), return all."%len(unlabeled_pool))
       return unlabeled_pool
     
     return np.random.choice(unlabeled_pool, num, False)
@@ -234,6 +249,7 @@ class AntActiveLearning(AntBase):
     try_iter = 0
     experiment_id = None
     while try_iter < self.max_iterators:
+      logger.info('Finding unlabeled and cnadidates size.')
       unlabeled_dataset_size = dataset.unlabeled_size()
       labeled_dataset_size = dataset.candidates_size()
 
@@ -498,7 +514,7 @@ class AntActiveLearning(AntBase):
                            process_state='LABEL-FINISH',
                            next_round_waiting=avg_analyze_time)
 
-      logger.info('Finish round %d label, start next round.'%try_iter)
+      logger.info('Prepare candidates.txt by using new labeled data.')
       for sample_file, sample_id in next_unlabeled_sample_ids:
         if os.path.exists(os.path.join(upload_folder, 'round_%d'%try_iter, sample_file)):
           dataset.make_candidate(sample_id,
@@ -506,5 +522,6 @@ class AntActiveLearning(AntBase):
                                   os.path.join(upload_folder, 'round_%d'%try_iter, sample_file),
                                   'OK')
 
+      logger.info('Finish round %d label, start next round.'%try_iter)
       # increment round
       try_iter += 1
