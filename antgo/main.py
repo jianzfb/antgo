@@ -91,7 +91,7 @@ flags.DEFINE_indicator('candidate', '')         # 候选数据
 flags.DEFINE_indicator('skip_training', '')
 flags.DEFINE_indicator('research', 'research mode or not')
 flags.DEFINE_string('running_platform', 'local', 'local/cloud')
-flags.DEFINE_string('param', '', '')  # k:v;k:v
+flags.DEFINE_string('param', '', '')  # k:v,k:v (v内部需要分段时使用/切分)
 
 
 FLAGS = flags.AntFLAGS
