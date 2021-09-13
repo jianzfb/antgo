@@ -197,6 +197,10 @@ class AntActiveLearning(AntBase):
     dataset = \
         running_ant_task.dataset('train',os.path.join(self.ant_data_source, running_ant_task.dataset_name), running_ant_task.dataset_params)
 
+    # 清空历史信息（删除候选样本）
+    if os.path.exists(os.path.join(self.ant_data_source, running_ant_task.dataset_name, 'candidates.txt')):
+      os.remove(os.path.join(self.ant_data_source, running_ant_task.dataset_name, 'candidates.txt'))
+
     # prepare workspace
     if not os.path.exists(os.path.join(self.main_folder, 'web', 'static', 'data')):
       os.makedirs(os.path.join(self.main_folder, 'web', 'static', 'data'))

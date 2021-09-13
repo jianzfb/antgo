@@ -88,25 +88,25 @@ class AntChallenge(AntBase):
     if not os.path.exists(os.path.join(self.ant_dump_dir, experiment_uuid)):
       os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
 
-    goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, 'code.tar.gz')
+    # goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, 'code.tar.gz')
 
-    if os.path.exists(goldcoin):
-      os.remove(goldcoin)
+    # if os.path.exists(goldcoin):
+    #   os.remove(goldcoin)
 
-    logger.info('Prepare package model files.')
-    tar = tarfile.open(goldcoin, 'w:gz')
+    # logger.info('Prepare package model files.')
+    # tar = tarfile.open(goldcoin, 'w:gz')
 
-    # 排除dump目录，将当前文件夹下所有数据上传
-    for root, dirs, files in os.walk(main_folder):
-      if os.path.commonprefix([root, self.ant_dump_dir]) == self.ant_dump_dir:
-        continue
+    # # 排除dump目录，将当前文件夹下所有数据上传
+    # for root, dirs, files in os.walk(main_folder):
+    #   if os.path.commonprefix([root, self.ant_dump_dir]) == self.ant_dump_dir:
+    #     continue
 
-      rel_root = os.path.relpath(root, main_folder)
-      for f in files:
-        tar.add(os.path.join(root, f), arcname=os.path.join(rel_root, f))
+    #   rel_root = os.path.relpath(root, main_folder)
+    #   for f in files:
+    #     tar.add(os.path.join(root, f), arcname=os.path.join(rel_root, f))
 
-    tar.close()
-    logger.info('Finish package process.')
+    # tar.close()
+    # logger.info('Finish package process.')
 
     # TODO: 在下一个版本支持模型文件上传
     # # 上传模型代码
