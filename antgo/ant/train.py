@@ -427,6 +427,9 @@ class AntTrain(AntBase):
 
     # 5.1.step 检查设置候选数据
     if self.context.params.system['candidate']:
+      if 'candidate_file' in self.context.params.system['ext_params']:
+        logger.info('Using candidate file %s'%self.context.params.system['ext_params']['candidate_file'])
+        ant_train_dataset.candidate_file = self.context.params.system['ext_params']['candidate_file']
       ant_train_dataset = CandidateDataset(ant_train_dataset)
 
     # 6.step 消除实验

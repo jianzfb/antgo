@@ -188,7 +188,16 @@ class AntBatch(AntBase):
 
                 # using unlabel
                 if self.unlabel:
+                    if 'candidate_file' in self.context.params.system['ext_params']:
+                        logger.info('Using candidate file %s'%self.context.params.system['ext_params']['candidate_file'])
+                        ant_test_dataset.candidate_file = self.context.params.system['ext_params']['candidate_file']
+                    if 'unlabeled_list_file' in self.context.params.system['ext_params']:
+                        logger.info('Using unlabeled list file %s'%self.context.params.system['ext_params']['unlabeled_list_file'])
+                        ant_test_dataset.unlabeled_list_file = self.context.params.system['ext_params']['unlabeled_list_file']
                     ant_test_dataset = UnlabeledDataset(ant_test_dataset)
+
+                    print('unlabel size')
+                    print(ant_test_dataset.size)
 
                 output_dir = experiment_dump_dir
                 if is_launch_web_server:
