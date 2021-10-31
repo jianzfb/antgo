@@ -189,7 +189,7 @@ class AntBrowser(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step load challenge task
-      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.info.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         # invalid token
         logger.error('couldnt load challenge task')

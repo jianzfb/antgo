@@ -152,11 +152,6 @@ class RecorderNode2(object):
     # set record workspace
     self._record_writer = RecordWriter(self._dump_dir)
 
-  def action(self, *args, **kwargs):
-    value = [copy.deepcopy(args[0])]
-    for entry in value:
-      self._annotation_cache.put(copy.deepcopy(entry))
-
   def record(self, val, **kwargs):
     # KEY: PREDICT, KEY: GT
     predicts = []

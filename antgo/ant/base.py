@@ -177,33 +177,27 @@ class AntBase(object):
       self.ant_context.ant = self
 
     self.experiment_uuid = \
-      '%s-%s-%s' % (str(uuid.uuid4()),
-                    str(uuid.uuid4()),
+      'antgo-%s-%s' % (str(uuid.uuid4()),
                     datetime.fromtimestamp(timestamp()).strftime('%Y%m%d-%H%M%S-%f'))
-    self.context.experiment_uuid = self.experiment_uuid
 
-    if self.app_server in ["AntChallenge","AntTrain"]:
+    if self.app_server in ["AntChallenge", "AntTrain", "AntBatch", "AntBrowser", "AntDemo", "AntWatch", "AntEnsemble"]:
       if self.app_token is not None:
         # 任务模式，在dashboard上创建实验记录
-        mlogger.config(ip=self.server_ip,
-                      port=(int)(self.http_port),
-                      project=self.ant_name,
-                      experiment=self.ant_name,
-                      token=self.app_token)
+        mlogger.config(project=self.ant_name,
+                       experiment=self.ant_name,
+                       token=self.app_token,
+                       server=self.app_server)
 
-        if mlogger.getEnv().dashboard.experiment_uuid is not None:
-          self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
-          self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+        if mlogger.info.experiment_uuid is not None:
+          self.experiment_uuid = mlogger.info.experiment_uuid
       elif self.user_token is not None and self.user_token != '':
         # 非任务模式，基于user token与dashboard进行通信
-        mlogger.config(ip=self.server_ip,
-                      port=(int)(self.http_port),
-                      project=self.ant_name,
-                      experiment='exp',
-                      token=self.user_token)
-        if mlogger.getEnv().dashboard.experiment_uuid is not None:
-          self.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
-          self.context.experiment_uuid = mlogger.getEnv().dashboard.experiment_uuid
+        mlogger.config(project=self.ant_name,
+                       experiment=self.ant_name,
+                       token=self.user_token,
+                       server=self.app_server)
+        if mlogger.info.experiment_uuid is not None:
+          self.experiment_uuid = mlogger.info.experiment_uuid
       else:
         # 本地模式（用户没有配置token）
         logger.warn("Now is in local mode. Please set user token in config file, enjoy experiment manage!")
@@ -308,10 +302,8 @@ class AntBase(object):
     return self.context.stage
 
   @stage.setter
-  def stage(self, val):    
-    if mlogger.getEnv() is not None:
-      mlogger.getEnv().dashboard.experiment_stage = val
-  
+  def stage(self, val):
+    mlogger.info.experiment_stage = val
     self.context.stage = val
 
   @property
@@ -320,6 +312,13 @@ class AntBase(object):
   @token.setter
   def token(self, val):
     self.app_token = val
+
+  @property
+  def experiment_uuid(self):
+    return self.context.experiment_uuid
+  @experiment_uuid.setter
+  def experiment_uuid(self, val):
+    self.context.experiment_uuid = val
 
   @property
   def name(self):

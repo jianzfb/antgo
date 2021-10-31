@@ -130,7 +130,7 @@ class AntWatch(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step 从平台获取挑战任务配置信息
-      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.info.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         logger.error('couldnt load challenge task')
         self.token = None

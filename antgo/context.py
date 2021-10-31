@@ -25,9 +25,9 @@ class Params(object):
 
     return object.__dict__[item]
 
-  @property
-  def content(self):
-    return self._params
+  def items(self):
+    return self._params.items()
+
 
 global_context = None
 

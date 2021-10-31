@@ -20,7 +20,8 @@ import requests
 import json
 import zipfile
 
-class Ensemble(AntBase):
+
+class AntEnsemble(AntBase):
     def __init__(self, ant_name, ant_context, ant_token, **kwargs):
         super().__init__(ant_name, ant_context=ant_context, ant_token=ant_token, **kwargs)
         # master, slave

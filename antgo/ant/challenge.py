@@ -21,6 +21,7 @@ from datetime import datetime
 from antgo.measures import *
 from antgo.measures.yesno_crowdsource import *
 import traceback
+import zlib
 
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
@@ -29,6 +30,7 @@ class AntChallenge(AntBase):
                ant_dump_dir,
                ant_token,
                ant_task_config=None,
+               ant_dataset=None,
                ant_task_benchmark=None,
                **kwargs):
     super(AntChallenge, self).__init__(ant_name, ant_context, ant_token, **kwargs)
@@ -36,6 +38,7 @@ class AntChallenge(AntBase):
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
+    self.ant_dataset = ant_dataset
     self.ant_task_benchmark = ant_task_benchmark
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
@@ -44,7 +47,7 @@ class AntChallenge(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step 从平台获取挑战任务配置信息
-      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.info.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         logger.error('Couldnt load challenge task.')
         self.token = None
@@ -114,19 +117,24 @@ class AntChallenge(AntBase):
     #                                              APP_STAGE=self.stage)
 
     # 3.2.step 更新基本配置
-    if mlogger.getEnv() is not None:
-      mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,
-                                                  experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
+    if self.app_token is not None or self.user_token is not None:
+      for k, v in self.context.params.items():
+        setattr(mlogger.tag, k, str(v))
 
     # 4.step 加载测试数据集
+    if running_ant_task.dataset_name is None or running_ant_task.dataset_name == '':
+      logger.info('Missing dataset set in task config, switch to use --dataset=xxx')
+      if self.ant_dataset is None or self.ant_dataset == '':
+        logger.error('Sorry, --dataset= is empty.')
+        return
+      running_ant_task.config(dataset_name=self.ant_dataset)
+
     logger.info('Loading test dataset %s.'%running_ant_task.dataset_name)
     ant_test_dataset = running_ant_task.dataset('test',
                                                 os.path.join(self.ant_data_source, running_ant_task.dataset_name),
                                                 running_ant_task.dataset_params)
 
     with safe_manager(ant_test_dataset):
-      # split data and label
-      # data_annotation_branch = DataAnnotationBranch(Node.inputs(ant_test_dataset))
       self.context.recorder = RecorderNode2()
 
       self.stage = "CHALLENGE"
@@ -165,23 +173,15 @@ class AntChallenge(AntBase):
         if not self.context.recorder.is_measure:
           # has no annotation to continue to meausre
           # 更新实验统计信息
-          if mlogger.getEnv() is not None:
-            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                        json.dumps({'REPORT': task_running_statictic,
-                                                                    'APP_STAGE': self.stage}))
+          if self.app_token is not None or self.user_token is not None:
+            mlogger.info.experiment.patch(
+              experiment_data=zlib.compress(json.dumps({'REPORT': task_running_statictic,
+                                          'APP_STAGE': self.stage}).encode()))
 
           # 生成实验报告
           logger.info('Save experiment report.')
           everything_to_html(task_running_statictic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
-
-          # 上传实验报告和记录
-          if mlogger.getEnv() is not None:
-            logger.info('Uploading experiment report.')
-            mlogger.getEnv().dashboard.experiment.upload(
-              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-              RECORD=intermediate_dump_dir,
-              APP_STAGE=self.stage)
           return
 
       logger.info('Start evaluation process.')
@@ -252,7 +252,7 @@ class AntChallenge(AntBase):
       # benchmark record
       benchmark_model_data = {}
       if self.token is not None:
-        response = mlogger.getEnv().dashboard.benchmark.get()
+        response = mlogger.info.benchmark.get()
         if response['status'] == 'OK':
           benchmark_info = response['content']
           for bmd in benchmark_info:
@@ -262,12 +262,12 @@ class AntChallenge(AntBase):
   
             # download benchmark record from url
             logger.info('Download benchmark %s.'%benchmark_name)
-            mlogger.getEnv().dashboard.experiment.download(file_name=benchmark_record,
-                                                       file_folder=os.path.join(self.ant_dump_dir,
+            mlogger.info.experiment.download(file_name=benchmark_record,
+                                             file_folder=os.path.join(self.ant_dump_dir,
                                                                            experiment_uuid,
                                                                            'benchmark',
                                                                            benchmark_name),
-                                                       experiment_uuid=benchmark_name)
+                                             experiment_uuid=benchmark_name)
 
             if 'record' not in benchmark_model_data:
               benchmark_model_data['record'] = {}
@@ -532,20 +532,12 @@ class AntChallenge(AntBase):
                   task_running_statictic[self.ant_name]['analysis'][measure_name][analysis_tag].append((tag, tag_data))
 
       # 更新实验统计信息
-      if mlogger.getEnv() is not None:
-        mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                json.dumps({'REPORT': task_running_statictic,
-                                                            'APP_STAGE': self.stage}))
+      if self.app_token is not None or self.user_token is not None:
+        mlogger.info.experiment.patch(
+          experiment_data=zlib.compress(json.dumps({'REPORT': task_running_statictic,
+                                      'APP_STAGE': self.stage}).encode()))
 
       # 生成实验报告
       logger.info('Save experiment report.')
       everything_to_html(task_running_statictic,
                          os.path.join(self.ant_dump_dir, experiment_uuid))
-
-      # 上传实验报告和记录
-      if mlogger.getEnv() is not None:
-        logger.info('Uploading experiment report.')
-        mlogger.getEnv().dashboard.experiment.upload(
-          REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-          RECORD=intermediate_dump_dir,
-          APP_STAGE=self.stage)

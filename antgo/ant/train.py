@@ -24,6 +24,7 @@ from antgo.measures.repeat_statistic import *
 from antgo.measures.deep_analysis import *
 import signal
 import traceback
+import zlib
 if sys.version > '3':
     PY3 = True
 else:
@@ -39,12 +40,14 @@ class AntTrain(AntBase):
                ant_dump_dir,
                ant_token,
                ant_task_config,
+               ant_dataset,
                **kwargs):
     super(AntTrain, self).__init__(ant_name, ant_context, ant_token, **kwargs)
     self.ant_data_source = ant_data_folder
     self.ant_dump_dir = ant_dump_dir
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
+    self.ant_dataset = ant_dataset
     self.skip_training = kwargs.get('skip_training', False)
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
@@ -319,7 +322,7 @@ class AntTrain(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step load train task
-      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.info.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         # invalid token
         logger.error('Couldnt load train task.')
@@ -390,7 +393,7 @@ class AntTrain(AntBase):
     if not os.path.exists(os.path.join(self.ant_dump_dir, experiment_uuid)):
       os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
     # goldcoin = os.path.join(self.ant_dump_dir, experiment_uuid, 'code.tar.gz')
-    
+    # TODO: 在下一个版本支持模型文件上传
     # if os.path.exists(goldcoin):
     #   os.remove(goldcoin)
 
@@ -409,17 +412,23 @@ class AntTrain(AntBase):
     # tar.close()
     # logger.info('Finish package process.')
 
-    # TODO: 在下一个版本支持模型文件上传
     # # 上传模型代码
     # mlogger.getEnv().dashboard.experiment.upload(MODEL=goldcoin, APP_STAGE=self.stage)
     # logger.info('finish upload model files')
 
     # 4.2.step 更新实验配置
     if self.app_token is not None or self.user_token is not None:
-      mlogger.getEnv().dashboard.experiment.patch(experiment_uuid=experiment_uuid,
-                                                  experiment_hyper_parameter=json.dumps(self.ant_context.params.content))
+      for k, v in self.context.params.items():
+        setattr(mlogger.tag, k, str(v))
 
     # 5.step 加载训练数据集
+    if running_ant_task.dataset_name is None or running_ant_task.dataset_name == '':
+      logger.info('Missing dataset set in task config, switch to use --dataset=xxx')
+      if self.ant_dataset is None or self.ant_dataset == '':
+        logger.error('Sorry, --dataset= is empty.')
+        return
+      running_ant_task.config(dataset_name=self.ant_dataset)
+
     logger.info('Loading train dataset %s.'%running_ant_task.dataset_name)
     ant_train_dataset = running_ant_task.dataset('train',
                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
@@ -549,7 +558,7 @@ class AntTrain(AntBase):
                                                                 "repeated-holdout",
                                                                 "bootstrap",
                                                                 "kfold"]:
-        logger.info('Start model training and evaluation process.')
+        logger.info('Start training and evaluation process.')
 
         estimation_procedure = running_ant_task.estimation_procedure.lower()
         estimation_procedure_params = running_ant_task.estimation_procedure_params
@@ -564,20 +573,13 @@ class AntTrain(AntBase):
 
             # 更新实验统计信息
             if self.app_token is not None or self.user_token is not None:
-              mlogger.getEnv().dashboard.experiment.patch(
-                experiment_data=json.dumps({'REPORT': evaluation_statistic,
-                                            'APP_STAGE': self.stage}))
+              mlogger.info.experiment.patch(
+                experiment_data=zlib.compress(json.dumps({'REPORT': evaluation_statistic,
+                                                          'APP_STAGE': self.stage}).encode()))
 
-            # 生成实验报告
+            # 生成本地实验报告
             everything_to_html(evaluation_statistic,
                                os.path.join(self.ant_dump_dir, experiment_uuid))
-
-            # 上传实验报告
-            if self.app_token is not None or self.user_token is not None:
-              logger.info('Uploading experiment report.')
-              mlogger.getEnv().dashboard.experiment.upload(
-                REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-                APP_STAGE=self.stage)
         elif estimation_procedure == "repeated-holdout":
           number_repeats = 2              # default value
           is_stratified_sampling = True   # default value
@@ -599,19 +601,12 @@ class AntTrain(AntBase):
 
           # 更新实验统计信息
           if self.app_token is not None or self.user_token is not None:
-            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                        json.dumps({'REPORT': evaluation_statistic,
-                                                                    'APP_STAGE': self.stage}))
-          # 生成实验报告
+            mlogger.info.experiment.patch(
+              experiment_data=zlib.compress(json.dumps({'REPORT': evaluation_statistic,
+                                                        'APP_STAGE': self.stage}).encode()))
+          # 生成本地实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
-
-          # 上传实验报告
-          if self.app_token is not None or self.user_token is not None:
-            logger.info('Uploading experiment report.')
-            mlogger.getEnv().dashboard.experiment.upload(
-              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-              APP_STAGE=self.stage)
         elif estimation_procedure == "bootstrap":
           bootstrap_counts = 5
           if estimation_procedure_params is not None:
@@ -625,19 +620,12 @@ class AntTrain(AntBase):
 
           # 更新实验统计信息
           if self.app_token is not None or self.user_token is not None:
-            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                    json.dumps({'REPORT': evaluation_statistic,
-                                                                'APP_STAGE': self.stage}))
-          # 生成实验报告
+            mlogger.info.experiment.patch(
+              experiment_data=zlib.compress(json.dumps({'REPORT': evaluation_statistic,
+                                                        'APP_STAGE': self.stage}).encode()))
+          # 生成本地实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
-
-          # 上传实验报告
-          if self.app_token is not None or self.user_token is not None:
-            logger.info('Uploading experiment report.')
-            mlogger.getEnv().dashboard.experiment.upload(
-              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-              APP_STAGE=self.stage)
         else:
           kfolds = 5
           if estimation_procedure_params is not None:
@@ -652,20 +640,14 @@ class AntTrain(AntBase):
 
           # 更新实验统计信息
           if self.app_token is not None or self.user_token is not None:
-            mlogger.getEnv().dashboard.experiment.patch(experiment_data=
-                                                    json.dumps({'REPORT': evaluation_statistic,
-                                                                'APP_STAGE': self.stage}))
-          # 生成实验报告
+            mlogger.info.experiment.patch(
+              experiment_data=zlib.compress(json.dumps({'REPORT': evaluation_statistic,
+                                          'APP_STAGE': self.stage}).encode()))
+          # 生成本地实验报告
           everything_to_html(evaluation_statistic,
                              os.path.join(self.ant_dump_dir, experiment_uuid))
 
-          # 上传实验报告
-          if self.app_token is not None or self.user_token is not None:
-            logger.info('Uploading experiment report.')
-            mlogger.getEnv().dashboard.experiment.upload(
-              REPORT_HTML=os.path.join(self.ant_dump_dir, experiment_uuid, 'statistic-report.html'),
-              APP_STAGE=self.stage)
-
+        logger.info('Stop training process.')
         return
 
       # 7.2.step 模型训练 (忽略 --skip_training)
@@ -712,12 +694,10 @@ class AntTrain(AntBase):
       self.context.from_experiment = dump_dir
     
     logger.info("Infer process.")
-    # data_annotation_branch = DataAnnotationBranch(Node.inputs(part_validation_dataset))
     self.context.recorder = RecorderNode2()
     intermediate_dump_dir = os.path.join(self.ant_dump_dir, dump_dir, 'record')
     
     with safe_recorder_manager(self.context.recorder):
-      # self.context.recorder.dump_dir = intermediate_dump_dir
       with performance_statistic_region(self.ant_name):
         try:
           self.context.call_infer_process(part_validation_dataset, dump_dir)
@@ -788,8 +768,10 @@ class AntTrain(AntBase):
     #                                                                    {'name': '20180429.222721.264422', 'score': 1}]
     # ################
 
-    # error analysis
-    task_running_statictic = self.error_analysis(running_ant_task, part_validation_dataset, task_running_statictic)
+    task_running_statictic = \
+      self.error_analysis(running_ant_task, part_validation_dataset, task_running_statictic)
+
+    # other
     task_running_statictic[self.ant_name]['measure'].extend(no_rank_measure)
     return task_running_statictic
 
@@ -875,8 +857,7 @@ class AntTrain(AntBase):
       repeated_running_statistic.append(task_running_statictic)
 
     evaluation_result = \
-      multi_repeats_measures_statistic(repeated_running_statistic,
-                                       method='repeated-holdout')
+      multi_repeats_measures_statistic(repeated_running_statistic, method='repeated-holdout')
     return evaluation_result
 
   def _bootstrap_validation(self, bootstrap_rounds, train_dataset, evaluation_measures, nowtime):
