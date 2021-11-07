@@ -9,7 +9,6 @@ import sys
 from typing import NamedTuple
 # sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
 # sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
-from antgo.ant.generate import *
 from antgo.ant.demo import *
 from antgo.ant.train import *
 from antgo.ant.challenge import *
@@ -82,7 +81,7 @@ flags.DEFINE_string('factory', None, '')
 flags.DEFINE_string('config', None, 'config file')
 flags.DEFINE_string('benchmark', None, 'benchmark experiments')
 flags.DEFINE_string('host_ip', '127.0.0.1', 'host ip address')
-flags.DEFINE_integer('host_port', -1, 'port')
+flags.DEFINE_integer('host_port', 80, 'port')
 flags.DEFINE_string('html_template', None, 'html template')
 flags.DEFINE_indicator('worker', '')
 flags.DEFINE_indicator('master', '')
@@ -119,8 +118,20 @@ def main():
       os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
     if FLAGS.config() is not None:
+      if not os.path.exists(FLAGS.config()):
+        logger.error('Config file not exist.')
+        return
+
       # 使用指定配置文件更新
       shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
+
+      # 解析配置文件，并创建对应信息
+      Config.parse_xml(FLAGS.config())
+      if not os.path.exists(Config.data_factory):
+        os.makedirs(Config.data_factory)
+      if not os.path.exists(Config.task_factory):
+        os.makedirs(Config.task_factory)
+
       logger.info('Success update config file.')
     else:
       # 在当前目录生成默认配置文件
@@ -132,6 +143,11 @@ def main():
           return
         config_data['DATASET_FACTORY'] = FLAGS.dataset()
 
+        # 创建目录
+        if not os.path.exists(os.path.join(FLAGS.dataset(), 'dataset')):
+          os.makedirs(os.path.join(FLAGS.dataset(), 'dataset'))
+        if not os.path.exists(os.path.join(FLAGS.dataset(), 'task')):
+          os.makedirs(os.path.join(FLAGS.dataset(), 'task'))
       if FLAGS.token() is not None:
          config_data['USER_TOKEN'] = FLAGS.token()
 
@@ -139,16 +155,10 @@ def main():
       config_template = env.get_template('config.xml')
       config_content = config_template.render(**config_data)
 
-      if config_data['DATASET_FACTORY'] != '':
-        with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'),'w') as fp:
-          fp.write(config_content)
-        
-        logger.info('Finish antgo global config.')
-      else:
-        with open('./config.xml','w') as fp:
-          fp.write(config_content)
+      with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+        fp.write(config_content)
 
-        logger.info('Please fill ./config.xml, then call (antgo config --config=./config.xml) to finish global config.')
+      logger.info('Finish antgo global config.')
     return
 
   # 检查配置文件是否存在
@@ -347,6 +357,13 @@ def main():
         # 用户配置参数
         params = yaml.load(fp, Loader=yaml.FullLoader)
 
+        # 扩展参数
+        ext_params = {}
+        if FLAGS.param() != '':
+          for p in FLAGS.param().split(','):
+            k,v = p.split(":")     
+            ext_params[k] = v
+
         # 系统全局参数
         params.update({
           'system': {'research': FLAGS.research(), 
@@ -356,7 +373,8 @@ def main():
                     'devices': FLAGS.devices(),
                     'running_platform': FLAGS.running_platform(),
                     'unlabel': FLAGS.unlabel(),
-                    'candidate': FLAGS.candidate()},
+                    'candidate': FLAGS.candidate(),
+                    'ext_params': ext_params},
         })
         ant_context.params = params
     except Exception as e:
@@ -370,8 +388,7 @@ def main():
 
   # 8.4 step load experiment
   if FLAGS.from_experiment() is not None and \
-          FLAGS.running_platform() == 'local' and \
-          ant_cmd not in ['release']:
+          FLAGS.running_platform() == 'local':
     experiment_path = ''
     if os.path.isdir(FLAGS.from_experiment()):
       # 绝对路径指定的实验
@@ -402,6 +419,7 @@ def main():
                                   dump_dir,
                                   token,
                                   task,
+                                  dataset,
                                   main_file=main_file,
                                   main_folder=main_folder,
                                   main_param=main_param,
@@ -428,6 +446,7 @@ def main():
                                       dump_dir,
                                       token,
                                       task,
+                                      dataset,
                                       FLAGS.benchmark(),
                                       main_file=main_file,
                                       main_folder=main_folder,
@@ -466,6 +485,7 @@ def main():
                                 data_factory,
                                 dump_dir,
                                 task,
+                                dataset,
                                 unlabel=FLAGS.unlabel(),
                                 devices=FLAGS.devices(),
                                 restore_experiment=FLAGS.restore_experiment())
@@ -485,19 +505,6 @@ def main():
                                           main_folder=main_folder,
                                           main_param=main_param,
                                           time_stamp=time_stamp)
-      running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-
-  elif ant_cmd == 'dataset':
-    try:
-      running_process = AntGenerate(ant_context,
-                                    name,
-                                    data_factory,
-                                    dump_dir,
-                                    token,
-                                    dataset)
       running_process.start()
     except Exception as e:
       print(e)

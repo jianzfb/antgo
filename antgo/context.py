@@ -25,9 +25,9 @@ class Params(object):
 
     return object.__dict__[item]
 
-  @property
-  def content(self):
-    return self._params
+  def items(self):
+    return self._params.items()
+
 
 global_context = None
 
@@ -68,7 +68,7 @@ class Context(object):
 
     self.training_process_callback = None
     self.infer_process_callback = None
-    self._data_generator = None
+    self._data_processor = None
     self.running_recorder = None
     self.context_params = None
     
@@ -118,7 +118,7 @@ class Context(object):
     self.training_process_callback = None
     self.infer_process_callback = None
 
-    self._data_generator = None
+    self._data_processor = None
 
     self.running_recorder = None
     self.context_params = None
@@ -219,12 +219,12 @@ class Context(object):
         self.recorder.dump_dir = None
 
   @property
-  def data_generator(self):
-    return self._data_generator
+  def data_processor(self):
+    return self._data_processor
 
-  @data_generator.setter
-  def data_generator(self, g):
-    self._data_generator = g
+  @data_processor.setter
+  def data_processor(self, g):
+    self._data_processor = g
 
   @property
   def recorder(self):

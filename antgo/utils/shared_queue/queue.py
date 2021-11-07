@@ -55,6 +55,7 @@ class SharedQueue(Queue):
         else:
             super(SharedQueue, self).__init__(maxsize)
 
+        self._shared_mem = None
         if mem_mgr is not None:
             self._shared_mem = mem_mgr
         else:

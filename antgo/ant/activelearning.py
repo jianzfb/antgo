@@ -111,6 +111,29 @@ class AntActiveLearning(AntBase):
     next_selected = [unlabeled_pool[s[1]] for s in ordered_unlabeled[0:num]]
     return next_selected
 
+  def _bald_algorithm(self, unlabeled_pool, num):
+    if num > len(unlabeled_pool):
+      logger.warn("Dont have enough unlabeled data(%d), return all."%len(unlabeled_pool))
+      return unlabeled_pool
+
+    unlabeled_entropy = []
+    for index, data in enumerate(unlabeled_pool):
+      # data: DxC（D表示实验次数，C表示概率信息）
+      assert(len(data['feature'].shape) == 2)
+      part1 = entropy(np.mean(data['feature'], axis=0))
+
+      experiment_num = data['feature'].shape[0]
+      part2 = []
+      for experiment_i in range(experiment_num):
+        part2.append(entropy(data['feature'][experiment_i:experiment_i+1,:]))
+      part2 = np.mean(part2)
+      unlabeled_entropy.append((part1-part2, index))
+
+    ordered_unlabeled = sorted(unlabeled_entropy, key=lambda x: x[0], reverse=True)
+    next_selected = [unlabeled_pool[s[1]] for s in ordered_unlabeled[0:num]]
+    return next_selected
+
+
   def _variance_algorithm(self, unlabeled_pool, num):
     if num > len(unlabeled_pool):
       logger.warn("Dont have enough unlabeled data(%d), return all."%len(unlabeled_pool))      
@@ -141,6 +164,8 @@ class AntActiveLearning(AntBase):
       return self._core_set_algorithm(unlabeled_pool, num)
     elif sampling_strategy == 'entropy':
       return self._entroy_algorithm(unlabeled_pool, num)
+    elif sampling_strategy == 'bald':
+      return self._bald_algorithm(unlabeled_pool, num)
     elif sampling_strategy == 'variance':
       return self._variance_algorithm(unlabeled_pool, num)
     elif sampling_strategy == 'random':
@@ -197,6 +222,23 @@ class AntActiveLearning(AntBase):
     dataset = \
         running_ant_task.dataset('train',os.path.join(self.ant_data_source, running_ant_task.dataset_name), running_ant_task.dataset_params)
 
+    # 如果处于研究状态，自动生成未标注数据（等价于训练集）
+    if self.context.params.system['research']:
+      unlabeled_folder = os.path.join(dataset.dir, dataset.unlabeled_tag)
+      if not os.path.exists(unlabeled_folder):
+        os.makedirs(unlabeled_folder)
+        
+        # 生成空文件
+        for index in range(dataset.size):
+          with open('%s/%d'%(unlabeled_folder,index), 'w') as fp:
+              fp.write('')
+
+    use_local_candidate_file = False
+    if os.path.exists(os.path.join(self.main_folder, 'candidates.txt')):
+      use_local_candidate_file = True
+      logger.info('Using candidate file %s'%os.path.join(self.main_folder, 'candidates.txt'))
+      dataset.candidate_file = os.path.join(self.main_folder, 'candidates.txt')
+  
     # prepare workspace
     if not os.path.exists(os.path.join(self.main_folder, 'web', 'static', 'data')):
       os.makedirs(os.path.join(self.main_folder, 'web', 'static', 'data'))
@@ -252,16 +294,17 @@ class AntActiveLearning(AntBase):
       logger.info('Finding unlabeled and cnadidates size.')
       unlabeled_dataset_size = dataset.unlabeled_size()
       labeled_dataset_size = dataset.candidates_size()
-
+      
+      logger.info('Unlabeled data size %d, Labeled data size %d'%(unlabeled_dataset_size, labeled_dataset_size))
       min_sampling_num = self.context.params.activelearning.get('min_sampling_num', None)
       if min_sampling_num is not None:
         min_sampling_num = (int)(min_sampling_num)
         if unlabeled_dataset_size < min_sampling_num:
-          logger.info('Active learning is over. (unlabeled sample size < %d).'%min_sampling_num)
+          logger.info('Active learning is over. (unlabeled sample size %d < %d).'%(unlabeled_dataset_size, min_sampling_num))
           return
 
       if unlabeled_dataset_size < 10:
-        logger.info('Active learning is over. (unlabeled sample size < 10).')
+        logger.info('Active learning is over. (unlabeled sample size %d < 10).'%unlabeled_dataset_size)
         return
 
       logger.info("Round %d, unlabeled dataset size %d, labeled dataset size %d."%(try_iter, unlabeled_dataset_size, labeled_dataset_size))
@@ -296,6 +339,8 @@ class AntActiveLearning(AntBase):
         cmd_shell += ' --devices=%s' % self.devices
         cmd_shell += ' --dataset=%s/train' % running_ant_task.dataset_name
         cmd_shell += ' --name=%s_train_round_%d' % (self.ant_name, try_iter)
+        if use_local_candidate_file:
+          cmd_shell += ' --param=candidate_file:%s/candidates.txt'%self.main_folder
         training_p = \
             subprocess.Popen('%s > %s.log' % (cmd_shell, '%s_try_rounnd_train_%d'%(self.name, try_iter)), 
                               shell=True, 
@@ -331,13 +376,15 @@ class AntActiveLearning(AntBase):
       cmd_shell = 'antgo predict --main_file=%s --main_param=%s'%(self.main_file, self.main_param)
       cmd_shell += ' --main_folder=%s' % self.main_folder
       cmd_shell += ' --dump=%s/%s' % (self.dump_dir, 'try_round_analyze_%d'%try_iter)
-      if experiment_id is not None:
+      if experiment_id is not None and experiment_id != '':
         cmd_shell += ' --from_experiment=%s' % experiment_id
       cmd_shell += ' --task_t=%s' % running_ant_task.task_type
       cmd_shell += ' --unlabel'
       cmd_shell += ' --devices=%s' % self.devices
       cmd_shell += ' --dataset=%s/train' % running_ant_task.dataset_name
       cmd_shell += ' --name=%s_predict_round_%d' % (self.ant_name, try_iter)
+      if use_local_candidate_file:
+          cmd_shell += ' --param=candidate_file:%s/candidates.txt'%self.main_folder      
       inference_p = subprocess.Popen('%s > %s.log' %(cmd_shell, '%s_try_rounnd_analyze_%d'%(self.name, try_iter)), 
                                       shell=True, 
                                       cwd=self.main_folder)
@@ -419,7 +466,16 @@ class AntActiveLearning(AntBase):
         for file_id, id in next_unlabeled_sample_ids:
           _, label = dataset.at(id, file_id)
           label.update({'file_id': file_id, 'id': id})
+          # 去除不可序列化数据
+          filter_label = {}
+          for a, b in label.items():
+            if type(b) != float and type(b) != int and type(b) != list and type(b) != dict and type(b) != tuple and type(b) != str:
+              # 不可序列化数据
+              continue
+
+            filter_label[a] = b 
           
+          label = filter_label
           # 自动生成子目录
           if '/' in file_id:
             if not os.path.exists(os.path.join(self.dump_dir, 'try_round_auto_label_%d'%try_iter, file_id.split('/')[0])):

@@ -53,11 +53,8 @@ class AntTask(object):
     self._dataset_params['dataset_name'] = dataset_name
 
     # dataset class
-    if dataset_name is not None:
-      parse_flag = ''
-      if self._dataset_url is not None and len(self._dataset_url) > 0:
-        parse_flag = self._dataset_url.split('/')[-2]
-      self._ant_dataset = AntDatasetFactory.dataset(dataset_name, parse_flag)
+    if dataset_name is not None and dataset_name != '':
+      self._ant_dataset = AntDatasetFactory.dataset(dataset_name)
 
     # related evaluation measures
     self._ant_measures = AntMeasuresFactory(self)
@@ -70,6 +67,13 @@ class AntTask(object):
   @dataset_name.setter
   def dataset_name(self, name):
     self._dataset_name = name
+
+  def config(self, dataset_name=None, task_xml=None):
+    if dataset_name is not None and dataset_name != '':
+      # 更新dataset配置
+      self._ant_dataset = AntDatasetFactory.dataset(dataset_name)
+      self._dataset_name = dataset_name
+      self._dataset_params['dataset_name'] = dataset_name
 
   @property
   def dataset_params(self):

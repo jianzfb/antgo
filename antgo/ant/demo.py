@@ -46,7 +46,7 @@ class AntDemo(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step load challenge task
-      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.info.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         # invalid token
         logger.error('couldnt load challenge task')
@@ -165,7 +165,7 @@ class AntDemo(AntBase):
                 
             self.rpc.response.post(response=json.dumps(record_content))
                     
-        self.context.recorder =  LocalRecorderNodeV2(_callback_func)
+        self.context.recorder = LocalRecorderNodeV2(_callback_func)
         self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
       except Exception as e:
         print(e)

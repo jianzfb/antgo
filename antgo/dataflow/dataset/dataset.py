@@ -78,7 +78,13 @@ class Dataset(BaseNode):
     self._ids = []
     # data rng flag
     self._is_data_rng = False
-  
+
+    self._candidate_file = None
+    self._unlabeled_list_file = None
+    if self.dir is not None:
+      self._candidate_file = os.path.join(self.dir, 'candidates.txt')
+      self._unlabeled_list_file = os.path.join(self.dir, 'unlabeled_list.txt')
+
   def init(self, *args, **kwargs):
     pass
   
@@ -97,12 +103,27 @@ class Dataset(BaseNode):
   def candidate_folder(self):
     return os.path.join(self.dir, 'candidates')
 
+  @property
+  def candidate_file(self):
+    return self._candidate_file
+  @candidate_file.setter
+  def candidate_file(self, val):
+    self._candidate_file = val
+
+  @property
+  def unlabeled_list_file(self):
+    return self._unlabeled_list_file
+  @unlabeled_list_file.setter
+  def unlabeled_list_file(self, val):
+    self._unlabeled_list_file = val
+
   def unlabeled_size(self):
     unlabeled_folder = os.path.join(self.dir, self.unlabeled_tag)
     if not os.path.exists(unlabeled_folder):
       return 0
 
-    if not os.path.exists(os.path.join(self.dir, 'unlabeled_list.txt')):
+    if not os.path.exists(self.unlabeled_list_file):
+      # 构建无标注数据文件列表
       unorder_list = []
       for file in os.listdir(unlabeled_folder):
         if file[0] == '.':
@@ -110,13 +131,13 @@ class Dataset(BaseNode):
         unorder_list.append(file)
       
       order_list = sorted(unorder_list)
-      with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'w') as fp:
+      with open(self.unlabeled_list_file, 'w') as fp:
         for file in order_list:
           fp.write('%s/%s,%d\n' % (self.unlabeled_tag, file, 0))
 
     has_labeled_list = []
-    if os.path.exists(os.path.join(self.dir, 'candidates.txt')):
-      with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+    if os.path.exists(self.candidate_file):
+      with open(self.candidate_file, 'r') as fp:
         line_content = fp.readline()
         while line_content:
           _, data_file, _ = line_content.split(',')
@@ -124,27 +145,28 @@ class Dataset(BaseNode):
           line_content = fp.readline()
     else:
       # build empty candidates file
-      with open(os.path.join(self.dir, 'candidates.txt'), 'w') as fp:
+      with open(self.candidate_file, 'w') as fp:
         pass
-
-    unlabeled_list = []
-    with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'r') as fp:
+    
+    unlabeled_num = 0
+    with open(self.unlabeled_list_file, 'r') as fp:
       line_content = fp.readline()
       while line_content:
         file_name, _ = line_content.split(',')
         if file_name.split('/')[-1] not in has_labeled_list:
-          unlabeled_list.append(file_name)
+          unlabeled_num += 1
 
         line_content = fp.readline()
 
-    return len(unlabeled_list)
+    return unlabeled_num
 
   def unlabeled(self, tag=''):
     unlabeled_folder = os.path.join(self.dir, self.unlabeled_tag)
     if not os.path.exists(unlabeled_folder):
       return None
 
-    if not os.path.exists(os.path.join(self.dir, 'unlabeled_list.txt')):
+    if not os.path.exists(self.unlabeled_list_file):
+      # 构建无标注数据文件列表
       unorder_list = []
       for file in os.listdir(unlabeled_folder):
         if file[0] == '.':
@@ -152,13 +174,13 @@ class Dataset(BaseNode):
         unorder_list.append(file)
       
       order_list = sorted(unorder_list)
-      with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'w') as fp:
+      with open(self.unlabeled_list_file, 'w') as fp:
         for file in order_list:
           fp.write('%s/%s,%d\n' % (self.unlabeled_tag, file, 0))
 
     has_labeled_list = []
-    if os.path.exists(os.path.join(self.dir, 'candidates.txt')):
-      with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+    if os.path.exists(self.candidate_file):
+      with open(self.candidate_file, 'r') as fp:
         line_content = fp.readline()
         while line_content:
           _, data_file, _ = line_content.split(',')
@@ -166,20 +188,22 @@ class Dataset(BaseNode):
           line_content = fp.readline()
     else:
       # build empty candidates file
-      with open(os.path.join(self.dir, 'candidates.txt'), 'w') as fp:
+      with open(self.candidate_file, 'w') as fp:
         pass
 
     unlabeled_list = []
-    with open(os.path.join(self.dir, 'unlabeled_list.txt'), 'r') as fp:
+    unlabeled_index = 0
+    with open(self.unlabeled_list_file, 'r') as fp:
       line_content = fp.readline()
       while line_content:
         file_name, _ = line_content.split(',')
-        unlabeled_list.append(file_name)
+        unlabeled_list.append((unlabeled_index,file_name))
 
         line_content = fp.readline()
+        unlabeled_index += 1
     
     unlabeled_data = []
-    for index, file in enumerate(unlabeled_list):
+    for index, file in unlabeled_list:
       if file.split('/')[-1] not in has_labeled_list:
         unlabeled_data.append({'id': index, 'file_id': file})
 
@@ -192,7 +216,7 @@ class Dataset(BaseNode):
       os.makedirs(os.path.join(self.dir, 'candidates', 'data'))
       os.makedirs(os.path.join(self.dir, 'candidates', 'label'))
 
-    with open(os.path.join(self.dir, 'candidates.txt'), 'a') as fp:
+    with open(self.candidate_file, 'a') as fp:
       if status == 'OK':
         # copy data file to candidates/data
         shutil.copy(os.path.join(self.dir, unlabeled_file), os.path.join(self.dir, 'candidates', 'data'))
@@ -223,10 +247,10 @@ class Dataset(BaseNode):
 
     :return:
     '''
-    if not os.path.exists(os.path.join(self.dir, 'candidates.txt')):
+    if not os.path.exists(self.candidate_file):
       raise StopIteration
 
-    with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+    with open(self.candidate_file, 'r') as fp:
       line_content = fp.readline()
       while line_content:
         _, data_file, label_file = line_content.split(',')
@@ -244,11 +268,11 @@ class Dataset(BaseNode):
     raise StopIteration
 
   def candidates_size(self):
-    if not os.path.exists(os.path.join(self.dir, 'candidates.txt')):
+    if not os.path.exists(self.candidate_file):
       return 0
 
     count = 0
-    with open(os.path.join(self.dir, 'candidates.txt'), 'r') as fp:
+    with open(self.candidate_file, 'r') as fp:
       line_content = fp.readline()
       while line_content:
         count += 1
@@ -325,7 +349,10 @@ class Dataset(BaseNode):
       self._value = self.get_value()
       yield self._value
       self._force_inputs_dirty()
-  
+
+  def __iter__(self):
+    return self.iterator_value()
+
   def at(self, id):
     return None
   
@@ -824,6 +851,7 @@ class UnlabeledDataset(Dataset):
     super(UnlabeledDataset, self).__init__()
     self.dataset = dataset
     self.unlabeled_data = dataset.unlabeled()
+    self.dir = dataset.dir
 
   def data_pool(self):
     for id in range(self.size):
@@ -845,11 +873,12 @@ class CandidateDataset(Dataset):
   def __init__(self, dataset):
     super(CandidateDataset, self).__init__()
     self.dataset = dataset
+    self.dir = dataset.dir
     self.candidates = []
 
     # 使用candidate文件夹中的数据(已经完成标注的数据)
-    if os.path.exists(os.path.join(self.dataset.dir, 'candidates.txt')):
-      with open(os.path.join(self.dataset.dir, 'candidates.txt'), 'r') as fp:
+    if os.path.exists(self.dataset.candidate_file):
+      with open(self.dataset.candidate_file, 'r') as fp:
         content = fp.readline()
         content = content.strip()
 

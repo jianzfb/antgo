@@ -28,7 +28,7 @@ class BrowserDataRecorder(object):
     self.tag_dir = ''
 
     # 5个线程，等待处理
-    for _ in range(5):
+    for _ in range(1):
       t = threading.Thread(target=self.asyn_record)
       t.daemon = True
       t.start()
@@ -126,6 +126,7 @@ class BrowserDataRecorder(object):
 
       # 如果从指定实验加载，则找寻是否存在以筛选标记
       if id is None:
+        logger.error('Missing id flag, please return {"id": {"data": ...}}')
         continue
 
       if os.path.exists(os.path.join(self.tag_dir, self.dataset_flag, '%s.json' % str(id))):
@@ -189,7 +190,7 @@ class AntBrowser(AntBase):
     running_ant_task = None
     if self.token is not None:
       # 1.1.step load challenge task
-      response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+      response = mlogger.info.challenge.get(command=type(self).__name__)
       if response['status'] == 'ERROR':
         # invalid token
         logger.error('couldnt load challenge task')
@@ -333,7 +334,7 @@ class AntBrowser(AntBase):
     def _run_datagenerator_process():
       try:
         count = 0
-        for data in self.context.data_generator(train_dataset):
+        for data in self.context.data_processor(train_dataset):
           logger.info('Record data %d for browser.' % count)
           self.context.recorder.record(data)
           count += 1

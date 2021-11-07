@@ -152,11 +152,6 @@ class RecorderNode2(object):
     # set record workspace
     self._record_writer = RecordWriter(self._dump_dir)
 
-  def action(self, *args, **kwargs):
-    value = [copy.deepcopy(args[0])]
-    for entry in value:
-      self._annotation_cache.put(copy.deepcopy(entry))
-
   def record(self, val, **kwargs):
     # KEY: PREDICT, KEY: GT
     predicts = []
@@ -497,18 +492,17 @@ class LocalRecorderNodeV2(object):
       #   fp.write(str(data))
       return str(data)
     elif data_type == 'IMAGE':
-      transfer_result = data
-      if len(data.shape) == 2:
-        if data.dtype == np.uint8:
-          transfer_result = data
-        else:
-          data_min = np.min(data)
-          data_max = np.max(data)
-          transfer_result = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+      if data.dtype == np.uint8:
+        transfer_result = data
       else:
-        assert (data.shape[2] == 3)
-        transfer_result = data.astype(np.uint8)
+        data_min = np.min(data)
+        data_max = np.max(data)
+        transfer_result = ((data - data_min) / (data_max - data_min) * 255).astype(np.uint8)
 
+      if len(data.shape) == 3:
+        assert(data.shape[2] == 3 or data.shape[2] == 4)
+
+      assert(len(data.shape) == 2 or len(data.shape) == 3)
       file_name = '%d_%d_%s.png'%(count, index, name)
       # scipy.misc.imsave(os.path.join(self.dump_dir, file_name), transfer_result)
       # imageio.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
@@ -521,10 +515,21 @@ class LocalRecorderNodeV2(object):
       fps = 30
       if 'fps' in params:
         fps = params['fps']
-      fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+      # fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
       # fourcc = cv2.VideoWriter_fourcc(*'XVID')
+      fourcc = cv2.VideoWriter_fourcc(*'H264')
       vout_1 = cv2.VideoWriter(video_path, fourcc, fps, (data[0].shape[1], data[0].shape[0]))
       for frame in data:
+        if frame.dtype != np.uint8:
+          data_min = np.min(frame)
+          data_max = np.max(frame)
+          frame = ((frame - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+        if len(frame.shape) == 3:
+          assert (frame.shape[2] == 3 or frame.shape[2] == 4)
+        if len(frame.shape) == 2:
+          frame = frame[:, :, np.newaxis].repeat(3, axis=2)
+        assert(len(frame.shape) == 2 or len(frame.shape) == 3)
+
         vout_1.write(frame)
       vout_1.release()
 
@@ -582,6 +587,7 @@ class LocalRecorderNodeV2(object):
       # 转换数据格式（记录到文件）
       for data_name, data_content in data.items():
         if data[data_name]['type'] not in ['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO']:
+          logger.error('type only support: '+','.join(['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO', 'AUDIO']))
           continue
 
         data_content['data'] = self.save(data_content['data'],

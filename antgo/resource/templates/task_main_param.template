@@ -27,3 +27,12 @@ checkpoint_path: ''
 # set allowed hardware devices list
 devices:
 - 0
+
+#browser:
+#  offset:
+#    TRAIN: 0
+#    VAL: 0
+#    TEST: 0
+#  dataset_flag: 'test'
+#  tags: ['a','b','c']
+r

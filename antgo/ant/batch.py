@@ -29,7 +29,9 @@ class AntBatch(AntBase):
                  token,
                  data_factory,
                  ant_dump_dir,
-                 ant_task_config, **kwargs):
+                 ant_task_config,
+                 dataset,
+                 **kwargs):
         super(AntBatch, self).__init__(ant_name, ant_context, token)
 
         self.ant_data_source = data_factory
@@ -41,6 +43,7 @@ class AntBatch(AntBase):
         self.restore_experiment = kwargs.get('restore_experiment', None)
         self.host_ip = ant_host_ip
         self.host_port = ant_host_port
+        self.dataset = dataset
         self.rpc = None
         self.command_queue = None
 
@@ -57,7 +60,7 @@ class AntBatch(AntBase):
         running_ant_task = None
         if self.token is not None:
             # 1.1.step 从平台获取挑战任务配置信息
-            response = mlogger.getEnv().dashboard.challenge.get(command=type(self).__name__)
+            response = mlogger.info.challenge.get(command=type(self).__name__)
             if response['status'] == 'ERROR':
                 logger.error('Couldnt load challenge task.')
                 self.token = None
@@ -158,7 +161,16 @@ class AntBatch(AntBase):
             else:
                 dataset_name = running_ant_task.dataset_name
                 selected_dataset_stages = ['test']
-            
+
+            if self.dataset is not None and self.dataset != '':
+                logger.info('')
+                if len(self.dataset.split('/')) == 2:
+                    dataset_name, dataset_stage = self.dataset.split('/')
+                    selected_dataset_stages.append(dataset_stage)
+                else:
+                    dataset_name = self.dataset
+                    selected_dataset_stages = ['test']
+
             logger.info('Using dataset %s/%s'%(dataset_name, selected_dataset_stages[0]))
 
             # 5.step prepare ablation blocks
@@ -188,7 +200,16 @@ class AntBatch(AntBase):
 
                 # using unlabel
                 if self.unlabel:
+                    if 'candidate_file' in self.context.params.system['ext_params']:
+                        logger.info('Using candidate file %s'%self.context.params.system['ext_params']['candidate_file'])
+                        ant_test_dataset.candidate_file = self.context.params.system['ext_params']['candidate_file']
+                    if 'unlabeled_list_file' in self.context.params.system['ext_params']:
+                        logger.info('Using unlabeled list file %s'%self.context.params.system['ext_params']['unlabeled_list_file'])
+                        ant_test_dataset.unlabeled_list_file = self.context.params.system['ext_params']['unlabeled_list_file']
                     ant_test_dataset = UnlabeledDataset(ant_test_dataset)
+
+                    print('unlabel size')
+                    print(ant_test_dataset.size)
 
                 output_dir = experiment_dump_dir
                 if is_launch_web_server:
