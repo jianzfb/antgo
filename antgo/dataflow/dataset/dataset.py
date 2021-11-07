@@ -349,7 +349,10 @@ class Dataset(BaseNode):
       self._value = self.get_value()
       yield self._value
       self._force_inputs_dirty()
-  
+
+  def __iter__(self):
+    return self.iterator_value()
+
   def at(self, id):
     return None
   

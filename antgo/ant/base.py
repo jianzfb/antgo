@@ -70,7 +70,7 @@ def _pick_idle_port(from_port=40000, check_count=100):
 class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
     self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
-    self.http_port = getattr(Config, 'server_port', '8999')
+    self.http_port = getattr(Config, 'server_port', '80')
     self.user_token = getattr(Config, 'server_user_token', '')
     self.http_prefix = 'http'
     self.ant_name = ant_name

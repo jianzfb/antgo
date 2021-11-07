@@ -17,13 +17,6 @@ from antgo.trainer.trainer import *
 from antgo.ant.debug import *
 import antvis.client.mlogger as mlogger
 
-{% if tensorflow %}
-from antgo.trainer.tftrainer import *
-from antgo.trainer.tfgantrainer import *
-from antgo.codebook.tf.dataset import *
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
-{% endif %}
 
 '''
 Antgo Machine Learning Running Framework Mechanism
@@ -79,17 +72,14 @@ ctx = Context()
 class {{ModelName}}Dataset(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
     super({{ModelName}}Dataset, self).__init__(train_or_test, dir, params)
-    # fill dataset
-    self.dataset = []
-    self.dataset_size = len(self.dataset)
-
-    # fill dataset annotation
-    self.label = []
+    # train_or_test： 为train（训练集）,val（验证集）或test（测试集）
+    # dir： 为数据集所在目录（factor/YourDataset）
+    self.dataset_list = [None,...]  # 数据
+    self.annotation_list = [{},...] # 标注
 
   @property
   def size(self):
-    # return data size
-    return self.dataset_size
+    return len(self.dataset_list)
 
   def split(self, split_params, split_method):
     # set how to split dataset into val/test
@@ -98,45 +88,10 @@ class {{ModelName}}Dataset(Dataset):
 
   def data_pool(self):
     for i in range(self.size):
-      yield self.dataset[i], self.label[i]
+      yield self.at(i)
 
-  {% if tensorflow%}
-  def model_fn(self, *args, **kwargs):
-    # set tfrecords key features
-    keys_to_features = {
-        'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
-        'image/format': tf.FixedLenFeature((), tf.string, default_value='jpg'),
-        'label/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
-        'label/format': tf.FixedLenFeature((), tf.string, default_value='jpg'),
-    }
-    items_to_handlers = {
-        'image': slim.tfexample_decoder.Image('image/encoded', 'image/format', channels=3),
-        'label': slim.tfexample_decoder.Image('label/encoded', 'label/format', channels=1),
-    }
-    decoder = slim.tfexample_decoder.TFExampleDecoder(keys_to_features, items_to_handlers)
-    
-    # set how to filter tfrecords by pattern
-    tfrecord_pattern = '*.tfrecord'
-    dataset = slim.dataset.Dataset(
-                data_sources=os.path.join(self.dir, self.train_or_test, tfrecord_pattern),
-                reader=tf.TFRecordReader,
-                decoder=decoder,
-                num_samples=self.size,
-                items_to_descriptions=None)
-    
-    # dataset provider
-    with tf.name_scope('dataset_data_provider'):
-        provider = slim.dataset_data_provider.DatasetDataProvider(
-            dataset,
-            num_readers=12,
-            common_queue_capacity=3000,
-            common_queue_min=1000,
-            shuffle=self.train_or_test=='train',
-            num_epochs=None)
-
-        image, label = provider.get(['image', 'label'])
-        return image, label
-  {% endif %}
+  def at(self, id):
+    return self.dataset_list[id], self.annotation_list[id]
 '''
 
 ##################################################
@@ -163,332 +118,91 @@ class {{ModelName}}Measure(AntMeasure):
 '''
 
 ##################################################
-######## 2.3.step custom model code        ######
-##################################################
-{% if tensorflow %}
-'''
-there are two ways to feed data into tensorflow framework.
-method 1:
-+-----------------------------------------------+
-|---------------+             +-----------------|
-||local dataflow+------------>+tensorflow model||
-||              |             |     (feed)     ||
-|---------------+             +-----------------|
-+-----------------------------------------------+
-method 2:
-+--------------------------------------------------+
-|---------------+             +--------------------|
-||local dataflow+------------>+tensorflow pipeline||
-|---------------+             +--------------------|
-+--------------------------------------------------+
-'''
-{% endif %}
-# write your model code
-class {{ModelName}}Model(ModelDesc):
-  def __init__(self, model_data_source=None):
-    super({{ModelName}}Model, self).__init__({{ModelName}}Model, model_data_source=model_data_source)
-
-  {%if tensorflow %}
-  '''
-  if you want to adopt method 1 to connect data source to tensorflow, model_input must be commented out
-  '''
-  def model_input(self, is_training, *args, **kwargs):
-    # online augmentation and preprocess module (for tensorflow)
-    # for method 2, all data process operations must be finished in tensorflow
-    if is_training:
-      # for train stage, get both data and label info
-      data, label = self.data_source.model_fn()
-
-      # step 1: online augmentation
-
-      # step 2: preprocess
-      # use ctx.params.input_size to resize data to fit your model
-      # ctx.params.input_size is set on {{ModelName}}_param.yaml
-
-      # step 3: warp to batch
-      # ctx.params.batch_size is set on {{ModelName}}_param.yaml
-      # ctx.params.num_clones is set on {{ModelName}}_param.yaml, which is computing hardware number
-      batch_data, batch_label = tf.train.shuffle_batch([data, label],
-                                                       batch_size=ctx.params.batch_size,
-                                                       num_threads=4,
-                                                       capacity=200,
-                                                       min_after_dequeue=100)
-      data_queue = slim.prefetch_queue.prefetch_queue([batch_data, batch_label],
-                                                      capacity=ctx.params.num_clones*2,
-                                                      num_threads=ctx.params.num_clones*2)
-      return data_queue
-    else:
-      # for non-train stage, only get data info
-      data = self.data_source.model_fn()
-
-      # step 1: preprocess
-      # use ctx.params.input_size to resize data to fit your model
-      # ctx.params.input_size is set on {{ModelName}}_param.yaml
-
-
-      # step 2: warp to batch
-      # ctx.params.batch_size is set on {{ModelName}}_param.yaml
-      batch_data = tf.train.batch([data],
-                                  batch_size=ctx.params.batch_size,
-                                  allow_smaller_final_batch=True)
-      return batch_data
-  {% endif %}
-
-  def model_fn(self, is_training=True, *args, **kwargs):
-    # write your own model code
-    {% if GAN %}
-    {% if tensorflow %}
-    # step.1 build generative model
-
-    if is_training:
-      # step.2 build generative model loss
-      g_loss = None
-      # define generative loss tensor name
-      g_loss = tf.identity(g_loss, 'g_loss')
-
-      # step.3 build discriminative model
-
-      # step.4 build discriminative model loss
-      d_loss = None
-      # define discriminative loss tensor name
-      d_loss = tf.identity(d_loss, 'd_loss')
-
-      #
-      return {'g_loss': [], 'd_loss': []}
-    else:
-      # use generative model to create image
-      generate_img = None
-      return generate_img
-    {% endif %}
-    {% else %}
-    {% if tensorflow %}
-    # for tensorflow
-    # step 1: unwarp data
-    batch_data = None
-    batch_label = None
-    if len(args) > 0:
-      # for method 2
-      # on train or test stage, unwarp data from args (which comes from model_input())
-      if is_training:
-        batch_data, batch_label = args[0].dequeue()
-      else:
-        batch_data = args[0]
-    else:
-      # for method 1
-      # use placeholder
-      batch_data = tf.placeholder(tf.float32,
-                                  shape=[ctx.params.batch_size, ctx.params.input_size, ctx.params.input_size, 3],
-                                  name='data_node')
-
-      if not is_training:
-        batch_label = tf.placeholder(tf.int32,
-                                     shape=[ctx.params.batch_size, ctx.params.input_size, ctx.params.input_size, 1],
-                                     name='label_node')
-    {% else %}
-    # step 1: unwarp data
-    batch_data = None
-    batch_label = None
-    {% endif %}
-
-    # step 2: building model
-    logits = None
-
-    # step 3: output
-    if is_training:
-      # use logits to compute loss
-      loss = None
-      return loss
-    else:
-      # use logits to compute model predict
-      predict = None
-      return predict
-    {% endif %}
-
-
-##################################################
 ######## 3.step define training process  #########
 ##################################################
 def training_callback(data_source, dump_dir):
+  # 第1步：定义日志工具
   mc = mlogger.Container()
   mc.loss = mlogger.metric.Simple('model loss')
 
-  {% if tensorflow %}
-  # 0.step bind data source and tensorflow data pipeline
-  # method 2
-  if data_source is not None and not data_source.name.startswith('{{ModelName}}Dataset'):
-    data_source = TFQueueDataset(data_source,
-                                 [tf.uint8,
-                                  tf.int32],
-                                 [(None, None, 3),
-                                  ()])
+  # 第2步：定义预处理管线
+  # 切分数据集为训练集和验证集，这里使用holdout方法。
+  train_data_source, val_data_source = data_source.split(split_method='holdout')
+  train_loader = torch.utils.data.DataLoader(
+    dataset=TorchDataset(train_data_source),
+    batch_size=16,
+    shuffle=True,
+    num_workers=1
+  )
 
-  # method 1
-  # # if you want to adopt 'method 1' feed data into model, you have to preprocess data by antgo provided methods
-  # # preprocess data
-  # # ...
-  # # warp data to batch
-  # batch_data_source = BatchData(Node.inputs(data_source), ctx.params.batch_size)
+  eval_loader = torch.utils.data.DataLoader(
+    dataset=TorchDataset(val_data_source),
+    batch_size=16,
+    shuffle=False,
+    num_workers=1,
+    drop_last=False
+  )
 
-  {% if GAN %}
-  model = {{ModelName}}Model(data_source)
+  # 第3步：定义你的分类模型
+  model = None
+  max_epoch = 50
+  for epoch in range(max_epoch):
+    # 启动训练(mc.loss用于记录每次迭代的损失值)
+    model.train(train_loader, mc.loss)
 
-  trainer = TFGANTrainer(dump_dir, is_training=True)
-  # bind d_loss and its scope
-  # bind g_loss and its scope
-  trainer.deploy(model,
-                 d_loss={'scope': 'discriminator'},
-                 g_loss={'scope': 'generator'})
-
-  ##iterate run for method 1
-  #count = 0
-  #for epoch in range(ctx.params.max_epochs):
-  #  for batch_data in batch_data_source.iterator_value():
-  #      # step.1 run generative model
-  #      g_loss_val, ..., ... = trainer.g_loss_run(...=batch_data)
-  #
-  #      # step.2 run discriminative model
-  #      d_loss_val, ..., ... = trainer.d_loss_run(...=...)
-  #
-  #      count += 1
-  #
-  #  # save model
-  #  trainer.snapshot(epoch, count)
-
-  count = 0
-  for epoch in range(ctx.params.max_epochs):
-    rounds = int(float(data_source.size) / float(ctx.params.batch_size * ctx.params.num_clones))
-    for _ in range(rounds):
-        # step.1 run generative model
-        g_loss_val, ..., ... = trainer.g_loss_run()
-
-        # step.2 run discriminative model
-        d_loss_val, ..., ... = trainer.d_loss_run()
-
-        count += 1
-
-    # save every epoch
-    trainer.snapshot(epoch, count)
-  {% else %}
-  # 1.step build model and trainer
-  model = {{ModelName}}Model(data_source)
-
-  trainer = TFTrainer(dump_dir, is_training=True)
-  trainer.deploy(model)
-
-  # # iterate run for method 1
-  # for epoch in range(ctx.params.max_epochs):
-  #   while True:
-  #     try:
-  #       input_name = ''         # input_name is your defined input name in your model
-  #       input_binded_index = 0  # input_binded_index is binded index in your data source
-  #
-  #       label_name = ''         # label_name is your defined groundtruth name in your model
-  #       label_binded_index = 1  # label_binded_index is binded index in your data source
-  #       _, loss_val = trainer.run(batch_data_source.iterator_value(),
-  #                                 binds={input_name:input_binded_index, label_name:label_binded_index})
-  #
-  #       if trainer.iter_at % 100 == 0:
-  #         # record training info
-  #         loss_channel.send(trainer.iter_at, loss_val)
-  #
-  #     except:
-  #       break
-
-  # ctx.params.batch_size is set on {{ModelName}}_param.yaml
-  # ctx.params.num_clones is set on {{ModelName}}_param.yaml, which is computing hardware number
-  for epoch in range(ctx.params.max_epochs):
-    rounds = int(float(data_source.size) / float(ctx.params.batch_size * ctx.params.num_clones))
-    for _ in range(rounds):
-      _, loss_val = trainer.run()
-      if trainer.iter_at % 100 == 0:
-        # record training info
-        loss_channel.send(trainer.iter_at, loss_val)
-
-    # save every epoch
-    trainer.snapshot(epoch)
-  {% endif %}
-  {% else %}
-  pass
-  {% endif %}
-
+    # 启动预测
+    acc = model.eval(eval_loader)
+    acc = acc.detach().cpu().item()
+    mc.acc.update(acc)
 
 ###################################################
 ######## 4.step define infer process     ##########
 ###################################################
 def infer_callback(data_source, dump_dir):
-  {% if tensorflow %}
-  # 0.step bind data source and tensorflow data pipeline
-  # method 2
-  if data_source is not None and not data_source.name.startswith('{{ModelName}}Dataset'):
-    data_source = TFQueueDataset(data_source,
-                                 [tf.uint8],
-                                 [(None, None, 3)])
+  # 定义你的分类模型
+  model = None
+  # 从ctx.from_experiment获得基于哪组实验的目录（其中保存有对应的模型数据）
+  # model.load(os.path.join(ctx.from_experiment, 'train'))
 
-  # method 1
-  # # if you want to adopt 'method 1' feed data into model, you have to preprocess data by antgo provided methods
-  # # preprocess data
-  # # ...
-  # # warp data to batch
-  # batch_data_source = BatchData(Node.inputs(data_source), ctx.params.batch_size)
+  # 注：考虑到infer_callback将对不同场景进行支持，如页面DEMO，批量处理，指标评估等。
+  # 在这些场景下，测试数据样本数是不固定的，因而这里不采用torch自身的DataLoader进行数据加载
+  data_loader = MultithreadReader(data_source,
+                                   transformers=[],
+                                   num_workers=1,
+                                   buffer_size=1,
+                                   drop_last=False)
+  for data, annotation in data_loader:
+    # 转换到torch.Tensor
+    data = torch.from_numpy(data)
+    # 基于模型预测输出
+    value = model.predict(data)
+    # 获得分类预测标签
+    cls_label = value.detach().cpu().numpy()[0]
 
-  {% if GAN %}
-  model = {{ModelName}}Model(data_source)
+    # 定义输出数据
+    # 1：输出数据格式，'name':{'data': ..., 'type': ...}，其中name开发者自己随意定义，
+    # data对应的值表示数据，type对应的值表示数据的类型，目前仅支持['FILE', 'JSON', 'SCALAR', 'STRING', 'IMAGE', 'VIDEO']
+    # 2：'PREDICT', 'GT'是保留名字，用于定义预测数据和GT，并基于此来计算统计指标
+    # 3：'FILE' 类型的数据必须是本地存在的文件路径，例 {'A': {'data': '/Users/jian/Downloads/blog.css', 'type': 'FILE'}}，
+    #    'JSON' 类型的数据必须是可以序列化的数据，例 {'B': {'data': {'a': 'a', 'b':'b'}, 'type': 'JSON'}}
+    #    'SCALAR'类型数据必须是标量数据，例 {'C': {'data': 0.23, 'type': 'SCALAR'}}
+    #    'STRING'类型的数据必须是字符串，例 {'D': {'data': 'hello the world', 'type': 'STRING'}}
+    #    'IMAGE'类型数据必须是HWC格式的uint8或float，例 {'E': {'data': np.random.randint(0, 255, (255, 255)).astype(np.uint8), 'type': 'IMAGE'}}
+    #    'VIDEO'类型的数据必须是列表其中元素是HWC格式的uint8或float, 例 {'F': {'data': [np.random.randint(0, 255, (255, 255)).astype(np.uint8) for _ in range(100)], 'type': 'VIDEO', 'fps': 30}}
+    result = {'PREDICT': {
+        'data': cls_label,
+        'type': "SCALAR"
+      }
+    }
+    if len(annotation) > 0 and 'category_id' in annotation:
+      result.update({
+        'GT': {
+          'data': {'category_id': annotation['category_id'], 'id': annotation['id']}
+        }
+      })
 
-  trainer = TFGANTrainer(dump_dir, is_training=False)
-  trainer.deploy(model)
+    ctx.recorder.record(result)
 
-  ##iterate run for method 1
-  #for batch_data in batch_data_source.iterator_value():
-  #  fake_imgs = trainer.run(...=batch_data)
-  #  fake_imgs = np.split(fake_imgs, ctx.params.batch_size, 0)
-  #  # post process fake_imgs
-  #  # record
-  #  ctx.recorder.record([{'RESULT': fake_img} for fake_img in fake_imgs])
-
-  rounds = data_source.size // ctx.params.batch_size + 1
-  for _ in range(rounds):
-    fake_imgs = trainer.run()
-    fake_imgs = np.split(fake_imgs, ctx.params.batch_size, 0)
-
-    # post process fake_imgs
-
-    # record
-    ctx.recorder.record([{'RESULT': fake_img} for fake_img in fake_imgs])
-  {% else %}
-  # 1.step build model and trainer
-  model = {{ModelName}}Model(data_source)
-
-  trainer = TFTrainer(dump_dir, is_training=False)
-  trainer.deploy(model)
-
-  # # iterate run for method 1
-  # while True:
-  #   try:
-  #     input_name = ''         # input_name is your defined input name in your model
-  #     input_binded_index = 0  # input_binded_index is binded index in your data source
-  #
-  #     label_name = ''         # label_name is your defined groundtruth name in your model
-  #     label_binded_index = 1  # label_binded_index is binded index in your data source
-  #     predict = trainer.run(batch_data_source.iterator_value(),
-  #                               binds={input_name:input_binded_index, label_name:label_binded_index})
-  #   except:
-  #     break
-
-  rounds = data_source.size // ctx.params.batch_size + 1
-  for _ in range(rounds):
-    # run model inference
-    predict = trainer.run()
-    # post process predict result
-    # ...
-    predict = predict.tolist()
-
-    # record
-    ctx.recorder.record([{'RESULT': result} for result in predict])
-
-  {% endif %}
-  {% else %}
-  pass
-  {% endif %}
 
 ###################################################
 ####### 5.step link training and infer ############

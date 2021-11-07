@@ -5,14 +5,13 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.utils.serialize import loads, dumps
+from antgo.utils.serialize import load, dump
 import numpy as np
 import os
 import traceback
 import sys
 import yaml
-from antgo import config
-import antgo.utils.pickledb as pickledb
+import json
 from contextlib import contextmanager
 from antgo.utils import logger
 
@@ -24,17 +23,38 @@ class Sample(object):
   def serialize(self):
     return self.data
 
-  @staticmethod
-  def unserialize(bytes_data):
-    return loads(bytes_data)
+  def unserialize(self, bytes_data):
+    return bytes_data
+
+
+class _DB(object):
+  def __init__(self):
+    self.data = {}
+
+  def get(self, key):
+    if key in self.data:
+      return self.data[key]
+
+    return None
+
+  def set(self, key, val):
+    self.data[key] = val
+
+  def load(self, db_path):
+    with open(db_path, 'rb') as fp:
+      self.data = load(fp)
+
+  def dump(self, dp_path):
+    with open(dp_path, 'wb') as fp:
+      dump(self.data, fp)
 
 
 class RecordWriter(object):
   def __init__(self, record_path):
     self._record_path = os.path.join(record_path, 'data.db')
-    
+    self._db = _DB()
+
     try:
-      self._db = pickledb.load(self._record_path, False)
       count = self._db.get(str('attrib-count'))
       if count is None:
         self._db.set(str('attrib-count'), str(0))
@@ -43,7 +63,7 @@ class RecordWriter(object):
       logger.error('Couldnt open db')
     
   def close(self):
-    self._db.dump()
+    self._db.dump(self._record_path)
 
   def write(self, sample, sample_index=-1):
     count = self._db.get(str('attrib-count'))
@@ -60,7 +80,7 @@ class RecordWriter(object):
     
   def bind_attrs(self, **kwargs):
     # bind extra db attributes
-    for k,v in kwargs.items():
+    for k, v in kwargs.items():
       self._db.set(str('attrib-%s'%k), str('attrib-%s'%v))
   
   @property
@@ -72,6 +92,7 @@ class RecordWriter(object):
     count = int(count)
     return count
 
+
 @contextmanager
 def safe_recorder_manager(recorder):
   try:
@@ -80,6 +101,7 @@ def safe_recorder_manager(recorder):
   except:
     traceback.print_exc()
     raise sys.exc_info()[0]
+
 
 @contextmanager
 def safe_manager(handler):
@@ -97,9 +119,10 @@ class RecordReader(object):
       record_path = os.path.join(record_path, 'record')
 
     self._record_path = os.path.join(record_path, 'data.db')
+    self._db = _DB()
 
     try:
-      self._db = pickledb.load(self._record_path, False)
+      self._db.load(self._record_path)
       # db attributes
       self._db_attrs = {}
       self.count = self._db.get('attrib-count')
@@ -152,7 +175,6 @@ class RecordReader(object):
   def read(self, index, *args):
     try:
       data = self._db.get(str(index))
-      # data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for k, v in data.items():
@@ -171,7 +193,6 @@ class RecordReader(object):
   def iterate_read(self, *args):
     for k in range(int(self.count)):
       data = self._db.get(str(k))
-      # data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for data_key, data_val in data.items():
@@ -188,7 +209,6 @@ class RecordReader(object):
   def iterate_sampling_read(self, index, *args):
     for i in index:
       data = self._db.get(str(i))
-      # data = Sample.unserialize(ss)
       sample = []
       if len(args) == 0:
         for data_key, data_val in data.items():

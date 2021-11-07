@@ -691,11 +691,11 @@ class AntTrain(AntBase):
             print(e)
             traceback.print_exc()
 
-      self.context.from_experiment = dump_dir
+      self.context.from_experiment = os.path.join(self.ant_dump_dir, now_time)
     
     logger.info("Infer process.")
     self.context.recorder = RecorderNode2()
-    intermediate_dump_dir = os.path.join(self.ant_dump_dir, dump_dir, 'record')
+    intermediate_dump_dir = os.path.join(self.ant_dump_dir, now_time, 'record')
     
     with safe_recorder_manager(self.context.recorder):
       with performance_statistic_region(self.ant_name):

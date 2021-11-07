@@ -14,6 +14,7 @@ from io import BytesIO
 import numpy as np
 import cv2
 
+
 class QueueDataset(Dataset):
   def __init__(self, queue=None):
     super(QueueDataset, self).__init__('test', '', None)
@@ -22,10 +23,67 @@ class QueueDataset(Dataset):
 
   @property
   def size(self):
-    return sys.maxsize
+    return None
 
   def at(self, id):
-    raise NotImplementedError
+    # 忽略id
+    data_pack = self.queue.get()
+    if type(data_pack) == list and \
+        (type(data_pack[0]) == list or type(data_pack[0]) == tuple):
+      # multi-data
+      for single_pack in data_pack:
+        data, data_type, request_param = single_pack
+        response_data = self._parse_data(data, data_type, request_param)
+        if response_data is None:
+          # 解析数据有误，不进行处理
+          return None, {}
+
+        # annotation
+        self.annotation = response_data[1]
+        return response_data
+    else:
+      # single-data
+      data, data_type, request_param = data_pack
+      if data_type == 'VIDEO':
+        # 解析视频文件
+        try:
+          cap = cv2.VideoCapture(data)
+
+          if request_param is None:
+            request_param = {}
+
+          # 视频fps
+          fps = cap.get(5)
+          request_param.update({'fps': fps})
+
+          # 视频帧数
+          frame_num = cap.get(7)
+          request_param.update({'frame_num': (int)(frame_num)})
+
+          frame_index = 0
+          while True:
+            ret, frame = cap.read()
+            if not ret:
+              break
+
+            request_param.update({'frame_index': frame_index})
+            self.annotation = request_param
+            return (frame, {}) if request_param is None else (frame, request_param)
+            frame_index += 1
+            if frame_index == (int)(frame_num):
+              break
+        except:
+          # 解析视频有误，不进行处理
+          return None, {}
+      else:
+        response_data = self._parse_data(data, data_type, request_param)
+        if response_data is None:
+          # 解析数据有误，不进行处理
+          return None, {}
+
+        # annotation
+        self.annotation = response_data[1]
+        return response_data
 
   def now(self):
     return self.annotation

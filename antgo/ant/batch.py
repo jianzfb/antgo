@@ -29,7 +29,9 @@ class AntBatch(AntBase):
                  token,
                  data_factory,
                  ant_dump_dir,
-                 ant_task_config, **kwargs):
+                 ant_task_config,
+                 dataset,
+                 **kwargs):
         super(AntBatch, self).__init__(ant_name, ant_context, token)
 
         self.ant_data_source = data_factory
@@ -41,6 +43,7 @@ class AntBatch(AntBase):
         self.restore_experiment = kwargs.get('restore_experiment', None)
         self.host_ip = ant_host_ip
         self.host_port = ant_host_port
+        self.dataset = dataset
         self.rpc = None
         self.command_queue = None
 
@@ -158,7 +161,16 @@ class AntBatch(AntBase):
             else:
                 dataset_name = running_ant_task.dataset_name
                 selected_dataset_stages = ['test']
-            
+
+            if self.dataset is not None and self.dataset != '':
+                logger.info('')
+                if len(self.dataset.split('/')) == 2:
+                    dataset_name, dataset_stage = self.dataset.split('/')
+                    selected_dataset_stages.append(dataset_stage)
+                else:
+                    dataset_name = self.dataset
+                    selected_dataset_stages = ['test']
+
             logger.info('Using dataset %s/%s'%(dataset_name, selected_dataset_stages[0]))
 
             # 5.step prepare ablation blocks

@@ -116,11 +116,52 @@ class SpiderDataset(Dataset):
     return self.waiting_process_queue.qsize()
 
   def at(self, id):
-    raise NotImplemented
-  
+    # 忽略 id
+    self.count = 0
+    while True:
+      try:
+        # 1.step 接受爬虫目标指令
+        data_pack = self.command_queue.get()
+        _, config = data_pack
+        self.__spider_data_source(config)
+
+        # 2.step 读取等待处理文件
+        image_file = self.waiting_process_queue.get()
+        if image_file is None:
+          continue
+
+        while True:
+          try:
+            # read image
+            image = cv2.imread(image_file)
+            if image is None:
+              logger.error("Fail to parse %s" % image_file)
+              # get next image file
+              image_file = self.waiting_process_queue.get()
+              if image_file is None:
+                break
+
+              continue
+          except:
+            logger.error("Fail to parse %s" % image_file)
+            # get next image file
+            image_file = self.waiting_process_queue.get()
+            if image_file is None:
+              break
+
+            continue
+
+          # increment 1
+          self.count += 1
+
+          # return data
+          return image, {}
+      except:
+        logger.error('Fail receive data info.')
+
   def split(self, split_params={}, split_method='holdout'):
     raise NotImplemented
 
   @property
   def size(self):
-    return 10000000
+    return None

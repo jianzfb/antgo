@@ -165,7 +165,7 @@ class AntDemo(AntBase):
                 
             self.rpc.response.post(response=json.dumps(record_content))
                     
-        self.context.recorder =  LocalRecorderNodeV2(_callback_func)
+        self.context.recorder = LocalRecorderNodeV2(_callback_func)
         self.context.call_infer_process(demo_dataset, dump_dir=infer_dump_dir)
       except Exception as e:
         print(e)
