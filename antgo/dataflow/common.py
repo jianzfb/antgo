@@ -724,13 +724,3 @@ class MultiThreadPipe(Node):
   #     self._evt.set()
   #   for p in self._threads:
   #     p.join()
-
-
-class ActionDataset(Node):
-  def __init__(self, name, func, input):
-    super(ActionDataset, self).__init__(name, func, input)
-    self.dataset = input[0][0]
-
-  @property
-  def size(self):
-    return self.dataset.size

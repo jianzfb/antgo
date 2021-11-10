@@ -17,6 +17,7 @@ import requests
 import json
 from jinja2 import Environment, FileSystemLoader
 import traceback
+import threading
 
 class BrowserDataRecorder(object):
   def __init__(self, maxsize=30):
@@ -334,11 +335,12 @@ class AntBrowser(AntBase):
     def _run_datagenerator_process():
       try:
         count = 0
-        for data in self.context.data_processor(train_dataset):
+        for data in self.context.data_processor.iterator(train_dataset):
           logger.info('Record data %d for browser.' % count)
           self.context.recorder.record(data)
           count += 1
-      except:
+      except Exception as e:
+        traceback.print_exc()
         logger.info('Finish all records in browser %s dataset.' % dataset_flag)
 
     process = threading.Thread(target=_run_datagenerator_process)

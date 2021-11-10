@@ -17,7 +17,6 @@ from google.protobuf import text_format
 from tensorflow.core.framework import graph_pb2
 from tensorflow.python.platform import gfile
 from antgo.utils.serialize import *
-from antgo.utils.dht import *
 
 import numpy as np
 # from antgo.utils.net import *

@@ -22,6 +22,8 @@ from antgo.measures import *
 from antgo.measures.yesno_crowdsource import *
 import traceback
 import zlib
+from antgo.dataflow.dataset.proxy_dataset import *
+
 
 class AntChallenge(AntBase):
   def __init__(self, ant_context,
@@ -130,9 +132,15 @@ class AntChallenge(AntBase):
       running_ant_task.config(dataset_name=self.ant_dataset)
 
     logger.info('Loading test dataset %s.'%running_ant_task.dataset_name)
-    ant_test_dataset = running_ant_task.dataset('test',
-                                                os.path.join(self.ant_data_source, running_ant_task.dataset_name),
-                                                running_ant_task.dataset_params)
+
+    ant_test_dataset = None
+    if self.context.register_at('test') is not None:
+      ant_test_dataset = ProxyDataset('test')
+      ant_test_dataset.register(test=self.context.register_at('test'))
+    else:
+      ant_test_dataset = running_ant_task.dataset('test',
+                                                  os.path.join(self.ant_data_source, running_ant_task.dataset_name),
+                                                  running_ant_task.dataset_params)
 
     with safe_manager(ant_test_dataset):
       self.context.recorder = RecorderNode2()

@@ -14,6 +14,7 @@ import yaml
 import json
 from contextlib import contextmanager
 from antgo.utils import logger
+import shutil
 
 
 class Sample(object):
@@ -138,7 +139,7 @@ class RecordReader(object):
       #     self._db_attrs[key] = value
       #     setattr(self, key, value)
     except:
-      logger.error('couldnt open rocksdb')
+      logger.error('couldnt open db')
 
   def close(self):
     pass

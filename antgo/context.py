@@ -59,16 +59,28 @@ class _Block(object):
   
   def __exit__(self, exc_type, exc_val, exc_tb):
     pass
-  
+
+
+class _DataProcessor(object):
+  def __init__(self):
+    self.processor_sequence = []
+
+  def add(self, *args):
+    self.processor_sequence.extend(args)
+
+  def iterator(self, source):
+    upper = source
+    for processor_cls in self.processor_sequence:
+      upper = processor_cls(Node.inputs(upper))
+
+    return upper.iterator_value()
 
 class Context(object):
   def __init__(self):
     global global_context
-    # assert(global_context == None)
-
     self.training_process_callback = None
     self.infer_process_callback = None
-    self._data_processor = None
+    self._data_processor = _DataProcessor()
     self.running_recorder = None
     self.context_params = None
     
@@ -99,6 +111,8 @@ class Context(object):
     self._data_factory = None
     self._main_folder = None
     self._experiment_uuid = None
+    # 注册用户数据
+    self.register_obj = {}
 
   def wait_until_clear(self):
     for stoppable_thread in self._stoppable_threads:
@@ -168,6 +182,12 @@ class Context(object):
   def model(self, val):
     self._model = val
 
+  def register(self, **kwargs):
+    self.register_obj.update(kwargs)
+
+  def register_at(self, key):
+    return self.register_obj.get(key, None)
+
   @property
   def training_process(self):
     return self.training_process_callback
@@ -221,10 +241,6 @@ class Context(object):
   @property
   def data_processor(self):
     return self._data_processor
-
-  @data_processor.setter
-  def data_processor(self, g):
-    self._data_processor = g
 
   @property
   def recorder(self):

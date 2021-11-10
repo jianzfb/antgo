@@ -12,7 +12,6 @@ from antgo.dataflow.basic import *
 import numpy as np
 import copy
 import time
-from antgo.utils.dht import *
 import multiprocessing
 
 class Standard(Dataset):
