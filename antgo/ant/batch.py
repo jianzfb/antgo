@@ -18,6 +18,7 @@ from antgo.crowdsource.batch_server import *
 from antvis.client.httprpc import *
 import json
 import traceback
+from antgo.dataflow.dataset.proxy_dataset import *
 
 
 class AntBatch(AntBase):
@@ -193,10 +194,14 @@ class AntBatch(AntBase):
                         SpiderDataset(self.command_queue,
                                         os.path.join(self.ant_data_source, dataset_name), None)
                 else:
-                    ant_test_dataset = \
-                        running_ant_task.dataset(dataset_stage,
-                                                    os.path.join(self.ant_data_source, dataset_name),
-                                                    running_ant_task.dataset_params)
+                    if self.context.register_at(dataset_stage) is not None:
+                        ant_test_dataset = ProxyDataset(dataset_stage)
+                        ant_test_dataset.register(**{dataset_stage:self.context.register_at(dataset_stage)})
+                    else:
+                        ant_test_dataset = \
+                            running_ant_task.dataset(dataset_stage,
+                                                        os.path.join(self.ant_data_source, dataset_name),
+                                                        running_ant_task.dataset_params)
 
                 # using unlabel
                 if self.unlabel:

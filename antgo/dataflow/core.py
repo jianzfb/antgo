@@ -449,3 +449,10 @@ class Node(BaseNode):
   def __lt__(self, other):
     return self.name < other.name
 
+
+class ActionNode(Node):
+  def __init__(self, inputs=None):
+    super(ActionNode, self).__init__(name=None, action=self.action, inputs=inputs)
+
+  def action(self, *args, **kwargs):
+    raise NotImplementedError

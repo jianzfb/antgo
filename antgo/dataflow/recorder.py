@@ -158,9 +158,11 @@ class RecorderNode2(object):
     gts = []
     if type(val) == list or type(val) == tuple:
       for a in val:
+        assert('PREDICT' in a and 'GT' in a)
         predicts.append(a['PREDICT']['data'])
         gts.append(a['GT']['data'])
     else:
+      assert('PREDICT' in val and 'GT' in val)
       predicts = [val['PREDICT']['data']]
       gts = [val['GT']['data']]
 

@@ -5,11 +5,11 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-import imp
+import importlib
+import os
 import sys
 from antgo.measures import *
 from antgo.dataflow.dataset import *
-import socket
 
 
 def main_context(main_file, source_paths):
@@ -20,9 +20,10 @@ def main_context(main_file, source_paths):
   if dot_pos != -1:
     key_model = key_model[0:dot_pos]
 
+  key_model = os.path.normpath(key_model)
+  key_model = key_model.replace('/', '.')
   sys.path.append(source_paths)
-  f, p, d = imp.find_module(key_model, [source_paths])
-  module = imp.load_module('mm', f, p, d)
+  module = importlib.import_module(key_model)
 
   for k, v in module.__dict__.items():
     # 2.step check user custom measure method

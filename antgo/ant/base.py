@@ -23,7 +23,6 @@ from antgo.ant.utils import *
 import yaml
 from antgo.utils.utils import *
 from datetime import datetime
-from antgo.ant.warehouse import *
 from antgo.context import *
 import socket
 
@@ -221,56 +220,6 @@ class AntBase(object):
   @property
   def running_platform(self):
     return self.context.params.system['running_platform']
-
-  def package_codebase(self, prefix='qiniu', target_path='', signature='123'):
-    logger.info('package code envoriment')
-    if self.app_token is None:
-      if not os.path.exists(os.path.join(self.main_folder, FLAGS.task())):
-        shutil.copy(os.path.join(Config.task_factory, FLAGS.task()), os.path.join(self.main_folder))
-
-    tar_shell = 'tar -czf - * | openssl enc -e -aes256 -out %s.tar.gz -k %s' % (self.name, signature)
-    subprocess.call(tar_shell, shell=True, cwd=self.main_folder)
-
-    # logger.info('finish package')
-    # if prefix == 'qiniu':
-    #   logger.info('upload codebase package')
-    #   qiniu_address = qiniu_upload(os.path.join(self.main_folder, '%s.tar.gz'%self.name),
-    #                                bucket='experiment',
-    #                                max_size=100)
-    #   # clear
-    #   os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
-    #   return qiniu_address
-    # elif prefix == 'ipfs':
-    #   pass
-    # elif prefix == 'baidu':
-    #   pass
-    # elif prefix.startswith('ssh') or prefix.startswith('scp'):
-    #   nodes = prefix.replace('scp:', '')
-    #   node_ip_list = nodes.split(',')
-    #   for ip in node_ip_list:
-    #     if ip=='127.0.0.1' or ip=='localhost':
-    #       continue
-    #
-    #     logger.info('deploy code at %s'%ip)
-    #     try:
-    #       cmd_str = 'ssh %s %s' % (ip, 'mkdir -p %s'%target_path)
-    #       logger.info('execute %s' % cmd_str)
-    #       subprocess.call(cmd_str, shell=True)
-    #     except:
-    #       pass
-    #
-    #     try:
-    #       cmd_str = 'scp %s %s:%s' % (os.path.join(self.main_folder, '%s.tar.gz' % self.name), ip, target_path)
-    #       logger.info('execute %s' % cmd_str)
-    #       subprocess.call(cmd_str, shell=True)
-    #     except:
-    #       logger.error('couldnt distribute code base to %s' % ip)
-    #       exit(-1)
-    #
-    #   # clear
-    #   os.remove(os.path.join(self.main_folder, '%s.tar.gz' % self.name))
-
-    return '%s.tar.gz' % self.name
 
   def download(self, source_path, target_path=None, target_name=None, archive=None):
     if target_path is None:

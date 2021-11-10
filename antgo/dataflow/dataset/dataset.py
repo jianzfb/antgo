@@ -19,7 +19,6 @@ import tarfile
 import zipfile
 from antgo import config
 import subprocess
-from antgo.utils.dht import *
 from antgo.utils.serialize import *
 import copy
 import cv2
@@ -353,9 +352,19 @@ class Dataset(BaseNode):
   def __iter__(self):
     return self.iterator_value()
 
+  def __len__(self):
+    return self.size
+
+  def __getitem__(self, index):
+    return self.at(index)
+
   def at(self, id):
     return None
-  
+
+  @property
+  def size(self):
+    raise NotImplementedError
+
   @property
   def rng(self):
     if self._is_data_rng:
