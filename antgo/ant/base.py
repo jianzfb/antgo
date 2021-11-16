@@ -66,10 +66,9 @@ def _pick_idle_port(from_port=40000, check_count=100):
 
   return check_port
 
+
 class AntBase(object):
   def __init__(self, ant_name, ant_context=None, ant_token=None, **kwargs):
-    self.server_ip = getattr(Config, 'server_ip', 'www.mltalker.com')
-    self.http_port = getattr(Config, 'server_port', '80')
     self.user_token = getattr(Config, 'server_user_token', '')
     self.http_prefix = 'http'
     self.ant_name = ant_name
@@ -310,16 +309,3 @@ class AntBase(object):
         ctx.from_experiment = self.context.from_experiment
       
       self.context = ctx
-
-      # 3.step update dashboard configure
-      # self.context.dashboard.configure(dashboard_ip=self.server_ip,
-      #                                  dashboard_port=int(self.http_port),
-      #                                  token=self.app_token,
-      #                                  experiment_uuid=self.experiment_uuid,
-      #                                  experiment_name=self.ant_name,
-      #                                  server=self.app_server)
-      # mlogger.config(ip=self.server_ip,
-      #                port=int(self.http_port),
-      #                token=self.app_token,
-      #                )
-      # mlogger.activate(project='', experiment='')

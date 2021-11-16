@@ -14,7 +14,7 @@ from tornado import web, gen
 from tornado import httpclient
 import tornado.web
 import json
-
+from tornado.escape import json_decode
 
 # error code
 class RESPONSE_STATUS_CODE:
@@ -92,6 +92,16 @@ class BaseHandler(tornado.web.RequestHandler):
   @property
   def response_queue(self):
     return self.settings.get('response_queue', None)
+
+  def get_json_argument(self, name, default=None):
+    args = json_decode(self.request.body)
+    # name = to_unicode(name)
+    if name in args:
+      return args[name]
+    elif default is not None:
+      return default
+    else:
+      raise tornado.web.MissingArgumentError(name)
 
   def response(self, status_code=RESPONSE_STATUS_CODE.SUCCESS, message='', content={}, status=None):
     self.set_status(status_code)
