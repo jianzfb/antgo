@@ -15,6 +15,7 @@ from antgo.ant.challenge import *
 from antgo.ant.browser import *
 from antgo.ant.batch import *
 from antgo.ant.activelearning import *
+from antgo.ant.ensemble import *
 from antgo.ant import activelearning_api
 from antgo.ant import spider_api
 from antgo.ant.utils import *
@@ -43,6 +44,7 @@ _ant_support_commands = ["train",
                          "activelearning",
                          "dataset",
                          "predict",
+                         "ensemble",
                          "demo",
                          "spider",
                          "browser",
@@ -217,7 +219,6 @@ def main():
         return
 
       func()
-    return
 
   if ant_cmd == 'startproject':
     project_name = FLAGS.name()
@@ -518,6 +519,27 @@ def main():
                                   data_factory,
                                   dataset,
                                   dump_dir)
+      running_process.start()
+    except Exception as e:
+      print(e)
+      traceback.print_exc()
+  elif ant_cmd == 'ensemble':
+    assert(ant_cmd_api in ['train', 'merge', 'release'])
+    try:
+      running_process = AntEnsemble(ant_context,
+                                    name,
+                                    data_factory,
+                                    dump_dir,
+                                    token,
+                                    task,
+                                    dataset,
+                                    ant_cmd_api,
+                                    main_file=main_file,
+                                    main_folder=main_folder,
+                                    main_param=main_param,
+                                    time_stamp=time_stamp,
+                                    skip_training=FLAGS.skip_training(),
+                                    running_platform=FLAGS.running_platform())
       running_process.start()
     except Exception as e:
       print(e)

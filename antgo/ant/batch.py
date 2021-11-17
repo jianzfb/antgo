@@ -19,6 +19,7 @@ from antvis.client.httprpc import *
 import json
 import traceback
 from antgo.dataflow.dataset.proxy_dataset import *
+import threading
 
 
 class AntBatch(AntBase):
@@ -254,7 +255,7 @@ class AntBatch(AntBase):
                         with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'w') as fp:
                             json.dump(history_running_info, fp)
 
-                self.context.recorder =  LocalRecorderNodeV2(_callback_func if is_launch_web_server else None)
+                self.context.recorder = LocalRecorderNodeV2(_callback_func if is_launch_web_server else None)
                 with safe_recorder_manager(self.context.recorder):
                     # 完成推断过程
                     try:
