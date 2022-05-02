@@ -508,6 +508,7 @@ class LocalRecorderNodeV2(object):
       file_name = '%d_%d_%s.png'%(count, index, name)
       # scipy.misc.imsave(os.path.join(self.dump_dir, file_name), transfer_result)
       # imageio.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
+      print(self._dump_dir)
       cv2.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
       return file_name
     elif data_type == 'VIDEO':
@@ -582,6 +583,14 @@ class LocalRecorderNodeV2(object):
           else:
             data[data_name]['data'] = value['DATA']
             value.pop('DATA')
+
+        if 'id' in value or 'ID' in value:
+          if 'id' in value:
+            data[data_name]['id'] = value['id']
+            value.pop('id')
+          else:
+            data[data_name]['id'] = value['ID']
+            value.pop('ID')
 
         # 将value中的其它作为params
         data[data_name]['params'] = value

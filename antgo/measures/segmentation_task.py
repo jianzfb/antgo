@@ -12,7 +12,6 @@ import numpy as np
 from antgo.task.task import *
 from antgo.measures.base import *
 from antgo.dataflow.common import *
-from antgo.utils._resize import *
 from scipy import signal
 from scipy import ndimage
 from scipy.sparse import csr_matrix

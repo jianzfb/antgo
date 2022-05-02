@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import numpy as np
-from antgo.utils._resize import *
 from antgo.utils.encode import *
 import base64
 import copy

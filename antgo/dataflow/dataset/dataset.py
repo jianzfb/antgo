@@ -7,7 +7,6 @@ from __future__ import unicode_literals
 
 import os
 import random
-import scipy.misc
 import numpy as np
 from antgo.utils import get_rng
 from antgo.dataflow.core import *
@@ -40,7 +39,6 @@ def imwrite(file, img):
 
 
 def imresize(image, size):
-  # return scipy.misc.imresize(image, size)
   return cv2.resize(image, (size[1],size[0]))
 
 
@@ -359,7 +357,13 @@ class Dataset(BaseNode):
     return self.at(index)
 
   def at(self, id):
-    return None
+    raise NotImplementedError
+
+  def sample(self, id):
+    image, annotation = self.at(id)
+    sample = copy.deepcopy(annotation)
+    sample['image'] = image
+    return sample
 
   @property
   def size(self):

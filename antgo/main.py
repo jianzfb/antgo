@@ -7,8 +7,6 @@ from __future__ import print_function
 from __future__ import unicode_literals
 import sys
 from typing import NamedTuple
-sys.path.append('/workspace/workspace/portrait_code/tool/antgo')
-sys.path.append('/workspace/workspace/portrait_code/tool/antgo/antgo')
 from antgo.ant.demo import *
 from antgo.ant.train import *
 from antgo.ant.challenge import *
@@ -424,11 +422,9 @@ def main():
                                   main_folder=main_folder,
                                   main_param=main_param,
                                   time_stamp=time_stamp,
-                                  skip_training=FLAGS.skip_training(),
                                   running_platform=FLAGS.running_platform(),
                                   proxy=FLAGS.proxy(),
-                                  signature=FLAGS.signature(),
-                                  devices=FLAGS.devices())
+                                  signature=FLAGS.signature())
         running_process.start()
     except Exception as e:
       print(e)
@@ -452,8 +448,7 @@ def main():
                                       main_folder=main_folder,
                                       main_param=main_param,
                                       time_stamp=time_stamp,
-                                      running_platform=FLAGS.running_platform(),
-                                      devices=FLAGS.devices())
+                                      running_platform=FLAGS.running_platform())
         running_process.start()
     except Exception as e:
       print(e)
@@ -466,8 +461,6 @@ def main():
                                 token,
                                 task,
                                 html_template=FLAGS.html_template(),
-                                ip=FLAGS.host_ip(),
-                                port=FLAGS.host_port(),
                                 time_stamp=time_stamp,
                                 devices=FLAGS.devices())
 
@@ -479,8 +472,6 @@ def main():
     try:
       running_process = AntBatch(ant_context,
                                 name,
-                                FLAGS.host_ip(),
-                                FLAGS.host_port(),
                                 token,
                                 data_factory,
                                 dump_dir,
@@ -514,8 +505,6 @@ def main():
       running_process = AntBrowser(ant_context,
                                   name,
                                   token,
-                                  FLAGS.host_ip(),
-                                  FLAGS.host_port(),
                                   data_factory,
                                   dataset,
                                   dump_dir)

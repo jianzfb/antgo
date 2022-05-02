@@ -75,8 +75,9 @@ class _DataProcessor(object):
 
     return upper.iterator_value()
 
+
 class Context(object):
-  def __init__(self):
+  def __init__(self, interact_mode=False):
     global global_context
     self.training_process_callback = None
     self.infer_process_callback = None
@@ -111,8 +112,13 @@ class Context(object):
     self._data_factory = None
     self._main_folder = None
     self._experiment_uuid = None
+    self._is_interact_mode = interact_mode
+
     # 注册用户数据
     self.register_obj = {}
+
+  def is_interact_mode(self):
+    return self._is_interact_mode
 
   def wait_until_clear(self):
     for stoppable_thread in self._stoppable_threads:

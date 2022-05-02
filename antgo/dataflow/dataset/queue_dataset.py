@@ -13,13 +13,14 @@ from antgo.utils.serialize import *
 from io import BytesIO
 import numpy as np
 import cv2
+from antgo.utils import logger
+from antgo.utils.utils import *
 
 
 class QueueDataset(Dataset):
   def __init__(self, queue=None):
     super(QueueDataset, self).__init__('test', '', None)
     self.queue = queue
-    self.annotation = {}
 
   @property
   def size(self):
@@ -38,8 +39,6 @@ class QueueDataset(Dataset):
           # 解析数据有误，不进行处理
           return None, {}
 
-        # annotation
-        self.annotation = response_data[1]
         return response_data
     else:
       # single-data
@@ -67,7 +66,6 @@ class QueueDataset(Dataset):
               break
 
             request_param.update({'frame_index': frame_index})
-            self.annotation = request_param
             return (frame, {}) if request_param is None else (frame, request_param)
             frame_index += 1
             if frame_index == (int)(frame_num):
@@ -81,31 +79,26 @@ class QueueDataset(Dataset):
           # 解析数据有误，不进行处理
           return None, {}
 
-        # annotation
-        self.annotation = response_data[1]
         return response_data
-
-  def now(self):
-    return self.annotation
 
   def _parse_data(self, data, data_type, request_param):
     assert(data_type not in ['VIDEO'])
     try:
       if data_type == 'IMAGE':
         img_data = cv2.imread(data)
-        return (img_data,{}) if request_param is None else (img_data, request_param)
+        return (img_data, {}) if request_param is None else (img_data, request_param)
       if data_type == 'IMAGE_MEMORY':
         img_data = cv2.imread(BytesIO(data))
-        return (img_data,{}) if request_param is None else (img_data, request_param)
+        return (img_data, {}) if request_param is None else (img_data, request_param)
       elif data_type == 'FILE':
         with open(data, 'r') as fp:
           return (fp.read(),{}) if request_param is None else (fp.read(), request_param)
       elif data_type == 'STRING':
-        return (data,{}) if request_param is None else (data, request_param)
+        return (data, {}) if request_param is None else (data, request_param)
       elif data_type == 'JSON':
-        return (data,{}) if request_param is None else (data, request_param)
+        return (data, {}) if request_param is None else (data, request_param)
       else:
-        return (None,{})
+        return (None, {})
     except:
       return None
 
@@ -122,8 +115,6 @@ class QueueDataset(Dataset):
             # 解析数据有误，不进行处理
             continue
 
-          # annotation
-          self.annotation = response_data[1]
           yield response_data
       else:
         # single-data
@@ -141,7 +132,7 @@ class QueueDataset(Dataset):
             request_param.update({'fps': fps})
 
             # 视频帧数
-            frame_num=cap.get(7)
+            frame_num = cap.get(7)
             request_param.update({'frame_num': (int)(frame_num)})
 
             frame_index = 0       
@@ -149,22 +140,21 @@ class QueueDataset(Dataset):
               ret, frame = cap.read()
               if not ret:
                 break
-              
+
               request_param.update({'frame_index': frame_index})
-              self.annotation = request_param
               yield (frame, {}) if request_param is None else (frame, request_param)
               frame_index += 1              
               if frame_index == (int)(frame_num):
                 break
           except:
             # 解析视频有误，不进行处理
+            logger.error("Failed to parse video.")
             continue
         else:
           response_data = self._parse_data(data, data_type, request_param)
           if response_data is None:
             # 解析数据有误，不进行处理
+            logger.error("Failed to parse data.")
             continue
 
-          # annotation
-          self.annotation = response_data[1]
           yield response_data

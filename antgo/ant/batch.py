@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from cv2 import log
 from antgo.dataflow.dataset.spider_dataset import SpiderDataset
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
@@ -26,8 +25,6 @@ class AntBatch(AntBase):
     def __init__(self,
                  ant_context,
                  ant_name,
-                 ant_host_ip,
-                 ant_host_port,
                  token,
                  data_factory,
                  ant_dump_dir,
@@ -43,11 +40,13 @@ class AntBatch(AntBase):
         self.ant_task_config = ant_task_config
         self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
         self.restore_experiment = kwargs.get('restore_experiment', None)
-        self.host_ip = ant_host_ip
-        self.host_port = ant_host_port
+        self.host_ip = self.context.params.system.get('ip', '127.0.0.1')
+        self.host_port = self.context.params.system.get('port', -1)
         self.dataset = dataset
         self.rpc = None
         self.command_queue = None
+        self._running_dataset = None
+        self._running_task = None
 
     def ping_until_ok(self):
         while True:
@@ -56,6 +55,14 @@ class AntBatch(AntBase):
                 break
             # 暂停5秒钟，再进行尝试
             time.sleep(5)
+
+    @property
+    def running_dataset(self):
+        return self._running_dataset
+
+    @property
+    def running_task(self):
+        return self._running_task
 
     def start(self):
         # 1.step 加载挑战任务
@@ -94,6 +101,7 @@ class AntBatch(AntBase):
             running_ant_task = custom_task
 
         assert (running_ant_task is not None)
+        self._running_task = running_ant_task
 
         # 2.step 获得实验ID
         experiment_uuid = self.context.experiment_uuid
@@ -126,6 +134,16 @@ class AntBatch(AntBase):
 
             # 命令队列
             self.command_queue = queue.Queue()
+
+            # 启动服务器
+            p = multiprocessing.Process(target=batch_server_start,
+                                        args=(experiment_dump_dir, self.host_port, self.command_queue))
+            p.daemon = True
+            p.start()
+
+        if self.context.is_interact_mode:
+          logger.info('Running on interact mode.')
+          return
 
         # 数据标签
         batch_params = getattr(self.context.params, 'predict', None)
@@ -255,6 +273,7 @@ class AntBatch(AntBase):
                         with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'w') as fp:
                             json.dump(history_running_info, fp)
 
+                self._running_dataset = ant_test_dataset
                 self.context.recorder = LocalRecorderNodeV2(_callback_func if is_launch_web_server else None)
                 with safe_recorder_manager(self.context.recorder):
                     # 完成推断过程
@@ -269,14 +288,4 @@ class AntBatch(AntBase):
             return
 
         # 5.step 启动bach server
-        if is_launch_web_server:
-            # 在独立线程中启动预测
-            process = threading.Thread(target=_run_batch_process)
-            process.daemon = True
-            process.start()
-            
-            # 主线程中启动web服务
-            batch_server_start(experiment_dump_dir, self.host_port, self.command_queue)
-        else:
-            # 启动预测
-            _run_batch_process()
+        _run_batch_process()

@@ -30,7 +30,7 @@ class AntDatasetFactory(object):
     elif name.lower().startswith('video'):
       return SimpleVideos
 
-    return Standard
+    return AntDatasetFactory.factory_dataset['EmptyDataset']
 
   @staticmethod
   def add_custom_dataset(custom_dataset):

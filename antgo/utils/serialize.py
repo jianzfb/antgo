@@ -7,8 +7,8 @@ from __future__ import unicode_literals
 from __future__ import print_function
 import importlib
 import msgpack
-import msgpack_numpy
-msgpack_numpy.patch()
+# import msgpack_numpy
+# msgpack_numpy.patch()
 
 import json
 __all__ = ['loads', 'dumps', 'Encoder', 'Decoder']

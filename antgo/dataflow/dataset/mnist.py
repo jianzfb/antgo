@@ -139,12 +139,16 @@ class Mnist(Dataset):
       return self.data_samples[id]
 
     if self.train_or_test == 'train':
-      img = self.train.images[id].reshape((28, 28))
+      img = self.train.images[id].reshape((28, 28,1))
+      img = np.concatenate([img,img,img],-1)
+      img = img.astype(np.uint8)
       label = self.train.labels[id]
 
       return img, {'id': id, 'category_id': label}
     else:
-      img = self.test.images[id].reshape((28, 28))
+      img = self.test.images[id].reshape((28, 28,1))
+      img = np.concatenate([img, img, img], -1)
+      img = img.astype(np.uint8)
       label = self.test.labels[id]
 
       return img, {'id': id, 'category_id': label}

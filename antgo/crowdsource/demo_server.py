@@ -29,6 +29,9 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 import functools
 import base64
+import threading
+import time
+from antgo.utils.utils import *
 try:
     import queue
 except:
@@ -36,8 +39,15 @@ except:
 
 
 class BaseHandler(tornado.web.RequestHandler):
-  waiting_queue = {}
   executor = ThreadPoolExecutor(10)
+
+  @property
+  def response_dict(self):
+    return self.settings.get('response_dict')
+
+  @property
+  def response_cond(self):
+    return self.settings.get('response_cond')
 
   @property
   def demo_name(self):
@@ -127,41 +137,48 @@ class BaseHandler(tornado.web.RequestHandler):
     return demo_response
 
   @run_on_executor
-  def waitingResponse(self, data_id):
-    if data_id in BaseHandler.waiting_queue:
-      # 阻塞等待响应
-      try:
-        response_data = BaseHandler.waiting_queue[data_id].get(timeout=self.request_waiting_time)
-      except:
-        # 空队列，直接返回空
-        BaseHandler.waiting_queue.pop(data_id)
-        return {}
+  def waitingResponse(self, data_id, time_stamp):
+    self.response_cond.acquire()
+    data_response = None
+    while True:
+      for k, v in self.response_dict.items():
+        if k == data_id:
+          data_response = v
+          break
 
-      # 清空等待队列s
-      BaseHandler.waiting_queue.pop(data_id)
+      if data_response is not None:
+        break
+      else:
+        current_time = time.time()
+        if current_time > time_stamp + self.request_waiting_time:
+          break
 
-      if response_data is None:
-        return {}
+        self.response_cond.wait(current_time - time_stamp)
 
-      processed_data = response_data['data']
-      if len(processed_data) == 0:
-        return {}
+    if data_response is not None:
+      self.response_dict.pop(data_id)
+    self.response_cond.release()
 
-      # build output folder (static/output)
-      if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
-        os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
+    if data_response is None:
+      return {}
 
-      demo_response = {'DATA': {}}
-      demo_response = {'DATA': {'RESULT': {'DATA':'', 'TYPE': 'STRING'}}}
-      for data in processed_data[0]:
-        item_type = data['type']
-        item_data = data['data']
-        item_title = data['title']
-        
-        demo_response = self._transfer(item_title, item_data, item_type, demo_response)
-      return demo_response
+    processed_data = data_response['data']
+    if len(processed_data) == 0:
+      return {}
 
-    return {}
+    # build output folder (static/output)
+    if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
+      os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
+
+    demo_response = {'DATA': {}}
+    demo_response = {'DATA': {'RESULT': {'DATA': '', 'TYPE': 'STRING'}}}
+    for data in processed_data[0]:
+      item_type = data['type']
+      item_data = data['data']
+      item_title = data['title']
+
+      demo_response = self._transfer(item_title, item_data, item_type, demo_response)
+    return demo_response
 
   @run_on_executor
   def asynProcess(self, preprocess_type, data):
@@ -225,7 +242,7 @@ class BaseHandler(tornado.web.RequestHandler):
         if 'file_size' in self.demo_constraint:
           max_file_size = self.demo_constraint['file_size']
           fsize = os.path.getsize(file_path) / float(1024 * 1024)
-          if round(fsize,2) > max_file_size:
+          if round(fsize, 2) > max_file_size:
             return {'status': 400,
                       'code': 'InvalidImageSize', 
                       'message': 'The input file size is too large (>%f MB)'%float(max_file_size)}
@@ -291,9 +308,11 @@ class BaseHandler(tornado.web.RequestHandler):
         'data': {'image': image_b, 'params': data['params']}
       }
 
+
 class IndexHandler(BaseHandler):
   def get(self):
     image_history_data = []
+
     history_folder = os.path.join(self.demo_dump, 'static', 'input')
     if os.path.exists(history_folder):
       for f in os.listdir(history_folder):
@@ -344,7 +363,7 @@ class ClientQueryHandler(BaseHandler):
 
     # 1.step parse query data
     model_datas = []
-    model_data_names = []
+    model_names = []
     model_data_types = []
     request_param = None
 
@@ -370,11 +389,11 @@ class ClientQueryHandler(BaseHandler):
           self.write(json.dumps(result))
           return
         
-        model_data, model_data_name, model_data_type = result['data']
+        model_data, model_name, model_data_type = result['data']
 
         # 保存
         model_datas.append(model_data)
-        model_data_names.append(model_data_name)
+        model_names.append(model_name)
         model_data_types.append(model_data_type)
     else:
       if len(self.request.files) == 0:
@@ -415,9 +434,9 @@ class ClientQueryHandler(BaseHandler):
         self.write(json.dumps(result))
         return
       
-      model_data, model_data_name, model_data_type = result['data']
+      model_data, model_name, model_data_type = result['data']
       model_datas.append(model_data)
-      model_data_names.append(model_data_name)
+      model_names.append(model_name)
       model_data_types.append(model_data_type)
 
       request_param = self.get_argument('params', None)
@@ -426,27 +445,24 @@ class ClientQueryHandler(BaseHandler):
 
     if request_param is None:
       request_param = {}
-      
+
     request_param.update({
-      'id': model_data_names[0]
+      'id': model_names[0]
     })
     
     # push to backend
     model_input = (model_datas[0], model_data_types[0], request_param)
 
-    # 设置等待队列
-    BaseHandler.waiting_queue[model_data_names[0]] = queue.Queue()
-
     # 发送到处理队列
     self.dataset_queue.put(model_input)
     
     # 异步等待响应(设置等待队列，并在异步线程中等待)
-    data_response = yield self.waitingResponse(model_data_names[0])
+    data_response = yield self.waitingResponse(model_names[0], time.time())
 
     # 绑定输入数据,返回
     data_response['INPUT_TYPE'] = model_data_types[0]
     if model_data_types[0] in ['FILE', 'IMAGE', 'AUDIO', 'VIDEO']:
-      data_response['INPUT'] = '/static/input/%s' % model_data_names[0]
+      data_response['INPUT'] = f'/static/input/{model_names[0]}'
     else:
       data_response['INPUT'] = model_datas[0]
 
@@ -487,14 +503,11 @@ class ClientCliQueryHandler(BaseHandler):
     # push to backend
     model_input = (image, 'IMAGE_MEMORY', request_param)
 
-    # 设置等待队列
-    BaseHandler.waiting_queue[data_id] = queue.Queue()
-
     # 发送到处理队列
     self.dataset_queue.put(model_input)
     
     # 异步等待响应(设置等待队列，并在异步线程中等待)
-    data_response = yield self.waitingResponse(data_id)
+    data_response = yield self.waitingResponse(data_id, time.time())
 
     # 返回成功
     self.write(json.dumps(data_response))
@@ -512,12 +525,12 @@ class ClientResponseHandler(BaseHandler):
       return
     
     response_data = json.loads(response_data)
-    id = response_data['id']
-    if id not in BaseHandler.waiting_queue:
-      return
-    
-    # 
-    BaseHandler.waiting_queue[id].put(response_data)
+
+    # 添加进入结果池
+    self.response_cond.acquire()
+    self.response_dict[response_data['id']] = response_data
+    self.response_cond.notify_all()
+    self.response_cond.release()
 
 
 class ClientFileUploadAndProcessHandler(BaseHandler):
@@ -547,6 +560,7 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
     file_paths = []
     file_names = []
     for meta in file_metas:
+      # 对上传的文件创建唯一标识名字
       _file_name = '%s_%s'%(str(uuid.uuid4()), meta['filename'])
       _file_path = os.path.join(upload_path, _file_name)
 
@@ -588,14 +602,11 @@ class ClientFileUploadAndProcessHandler(BaseHandler):
     request_param = {'id': model_data_names[0]}
     model_input = (model_datas[0], model_data_types[0], request_param)
 
-    # 设置等待队列
-    BaseHandler.waiting_queue[model_data_names[0]] = queue.Queue()
-
     # 发送到处理队列
     self.dataset_queue.put(model_input)
     
     # 异步等待响应(设置等待队列，并在异步线程中等待)
-    data_response = yield self.waitingResponse(model_data_names[0])
+    data_response = yield self.waitingResponse(model_data_names[0], time.time())
 
     # 绑定输入数据,返回
     data_response['INPUT_TYPE'] = model_data_types[0]
@@ -631,7 +642,6 @@ class GracefulExitException(Exception):
 def demo_server_start(demo_name,
                       demo_type,
                       demo_config,
-                      parent_id,
                       dataset_queue,
                       request_waiting_time=30):
   # register sig
@@ -670,6 +680,7 @@ def demo_server_start(demo_name,
       shutil.copy(html_template, demo_tempate_dir)
 
     tornado.options.parse_command_line()
+    response_dict = {}
     settings = {
       'template_path': demo_tempate_dir,
       'static_path': demo_static_dir,
@@ -684,7 +695,9 @@ def demo_server_start(demo_name,
       'support_user_interaction': demo_config['interaction']['support_user_interaction'],
       'support_user_constraint': demo_config['interaction']['support_user_constraint'],
       'dataset_queue': dataset_queue,
-      'request_waiting_time': request_waiting_time
+      'request_waiting_time': request_waiting_time,
+      'response_dict': response_dict,
+      'response_cond': threading.Condition()
     }
     app = tornado.web.Application(handlers=[(r"/", IndexHandler),
                                             (r"/demo", IndexHandler),
@@ -704,6 +717,4 @@ def demo_server_start(demo_name,
   except GracefulExitException:
     logger.info('demo server exit')
     sys.exit(0)
-  except KeyboardInterrupt:
-    os.kill(parent_id, signal.SIGKILL)
-    
+

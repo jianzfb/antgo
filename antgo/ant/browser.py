@@ -21,7 +21,7 @@ import threading
 
 class BrowserDataRecorder(object):
   def __init__(self, maxsize=30):
-    self.queue = queue.Queue()  # 不设置队列最大缓冲
+    self.queue = multiprocessing.Queue()              # 不设置队列最大缓冲
     self.prepare_queue = queue.Queue(maxsize=maxsize)
     self.dump_dir = ''
     self.dataset_flag = 'TRAIN'
@@ -172,8 +172,6 @@ class AntBrowser(AntBase):
                ant_context,
                ant_name,
                ant_token,
-               ant_host_ip,
-               ant_host_port,
                ant_data_folder,
                ant_dataset,
                ant_dump_dir,
@@ -182,9 +180,19 @@ class AntBrowser(AntBase):
     self.ant_data_source = ant_data_folder
     self.dataset_name = ant_dataset
     self.dump_dir = ant_dump_dir
-    self.host_ip = ant_host_ip
-    self.host_port = ant_host_port
+    self.host_ip = self.context.params.system['ip']
+    self.host_port = self.context.params.system['port']
     self.rpc = None
+    self._running_dataset = None
+    self._running_task = None
+
+  @property
+  def running_dataset(self):
+    return self._running_dataset
+
+  @property
+  def running_task(self):
+    return self._running_task
 
   def start(self):
     # 1.step 获得数据集解析
@@ -215,6 +223,7 @@ class AntBrowser(AntBase):
         logger.error('unknow error')
         exit(-1)
 
+    self._running_task = running_ant_task
     if running_ant_task is not None:
       self.dataset_name = running_ant_task.dataset_name
 
@@ -304,21 +313,22 @@ class AntBrowser(AntBase):
         dataset_flag = self.context.params.browser['dataset_flag'].lower()
 
     train_dataset = dataset_cls(dataset_flag, os.path.join(self.ant_data_source, self.dataset_name))
+    self._running_dataset = train_dataset
+
     self.context.recorder.dataset_flag = dataset_flag.upper()
     self.context.recorder.dataset_size = train_dataset.size
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
+    if not os.path.exists(self.context.recorder.dump_dir):
+      os.makedirs(self.context.recorder.dump_dir)
     self.context.recorder.tag_dir = os.path.join(self.dump_dir, 'record')
+    if not os.path.exists(self.context.recorder.tag_dir):
+      os.makedirs(self.context.recorder.tag_dir)
 
     sample_offset = train_offset
     if dataset_flag == 'test':
       sample_offset = test_offset
     elif dataset_flag == 'val':
       sample_offset = val_offset
-
-    if train_dataset.size == 0:
-      logger.warn("Dont have waiting browser dataset(%s)."%dataset_flag)
-      return
-
     logger.info('Browser %s dataset.' % dataset_flag)
 
     # 设置数据基本信息
@@ -331,33 +341,39 @@ class AntBrowser(AntBase):
     # 设置记录器偏移
     self.context.recorder.sample_index = sample_offset
 
-    # 3.3.step 在线程中启动数据处理
-    def _run_datagenerator_process():
-      try:
-        count = 0
-        for data in self.context.data_processor.iterator(train_dataset):
-          logger.info('Record data %d for browser.' % count)
-          self.context.recorder.record(data)
-          count += 1
-      except Exception as e:
-        traceback.print_exc()
-        logger.info('Finish all records in browser %s dataset.' % dataset_flag)
-
-    process = threading.Thread(target=_run_datagenerator_process)
-    process.daemon = True
-    process.start()
-
-    # 3.4.step 启动web服务
+    # 在独立进程中启动webserver
     browser_mode = 'browser'
     if self.context.params.browser is not None and \
         'mode' in self.context.params.browser:
       browser_mode = self.context.params.browser['mode']
 
-    browser_server_start(os.path.join(self.ant_data_source, self.dataset_name),
-                         self.dump_dir,
-                         self.context.recorder.queue,
-                         tags,
-                         self.host_port,
-                         offset_configs,
-                         profile_config,
-                         browser_mode)
+    p = \
+      multiprocessing.Process(
+        target=browser_server_start,
+        args=(os.path.join(self.ant_data_source, self.dataset_name),
+              self.dump_dir,
+              self.context.recorder.queue,
+              tags,
+              self.host_port,
+              offset_configs,
+              profile_config,
+              browser_mode))
+    p.start()
+
+    if self.context.is_interact_mode:
+      return
+
+    # 3.3.step 启动数据处理
+    try:
+      count = 0
+      for data in self.context.data_processor.iterator(train_dataset):
+        logger.info('Record data %d for browser.' % count)
+        self.context.recorder.record(data)
+        count += 1
+    except Exception as e:
+      traceback.print_exc()
+      logger.info('Finish all records in browser %s dataset.' % dataset_flag)
+
+    # 不结束webserver
+    p.join()
+    logger.info('Stop Browser.')

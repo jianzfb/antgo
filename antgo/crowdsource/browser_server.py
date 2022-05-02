@@ -516,5 +516,3 @@ def browser_server_start(data_path,
     sys.exit(0)
   except KeyboardInterrupt:
     pass
-
-# browser_server_start()

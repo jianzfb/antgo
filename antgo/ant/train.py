@@ -49,8 +49,15 @@ class AntTrain(AntBase):
     self.ant_context.ant = self
     self.ant_task_config = ant_task_config
     self.ant_dataset = ant_dataset
+
     self.skip_training = kwargs.get('skip_training', False)
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
+
+    self.skip_training = self.context.params.system['skip_training']
+    self.context.devices = self.context.params.system['devices']
+
+    self._running_dataset = None
+    self._running_task = None
 
   def error_analysis(self, running_ant_task, running_ant_dataset, task_running_statictic):
     # error analysis
@@ -318,6 +325,14 @@ class AntTrain(AntBase):
       task_running_statictic[self.ant_name]['eye'][measure_name] = eye_analysis_error
     return task_running_statictic
 
+  @property
+  def running_dataset(self):
+    return self._running_dataset
+
+  @property
+  def running_task(self):
+    return self._running_task
+
   def start(self):
     # 1.step 加载训练任务
     running_ant_task = None
@@ -354,6 +369,7 @@ class AntTrain(AntBase):
         running_ant_task = custom_task
 
     assert (running_ant_task is not None)
+    self._running_task = running_ant_task
 
     # 2.step 注册实验
     experiment_uuid = self.context.experiment_uuid
@@ -449,6 +465,11 @@ class AntTrain(AntBase):
         ant_train_dataset = CandidateDataset(ant_train_dataset)
 
     assert(ant_train_dataset is not None)
+    self._running_dataset = ant_train_dataset
+
+    if self.context.is_interact_mode:
+      logger.info('Running on interact mode.')
+      return
 
     # 7.step 模型训练实验
     with safe_manager(ant_train_dataset):

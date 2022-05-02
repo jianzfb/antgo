@@ -10,7 +10,6 @@ from antgo.ant.base import *
 from antgo.dataflow.common import *
 from antgo.dataflow.recorder import *
 from antvis.client.httprpc import *
-from multiprocessing import Process, Queue
 from antgo.task.task import *
 import traceback
 import subprocess
@@ -23,14 +22,24 @@ import multiprocessing
 from antgo.crowdsource.ensemble_server import *
 from antgo.dataflow.dataset.proxy_dataset import *
 import requests
+from io import BytesIO
 import numpy as np
 import msgpack
-import msgpack_numpy
-msgpack_numpy.patch()
+import msgpack_numpy as ms
 
 
 class EnsembleMergeRecorder(object):
-    def __init__(self, role='master', ip='', port='', experiment_uuid='', dump_dir='', ensemble_method='', dataset_name='', dataset_flag='train', dataset_num=0):
+    def __init__(self, role='master',
+                 ip='', port='',
+                 experiment_uuid='',
+                 dump_dir='',
+                 ensemble_method='',
+                 dataset_name='',
+                 dataset_flag='train',
+                 dataset_num=0,
+                 model_weight=1.0,
+                 prefix='',
+                 feedback=True):
         self.role = role        # master, worker
         self._dump_dir = ''
         self.url = 'http://%s:%s'%(ip, (str)(port))
@@ -42,6 +51,10 @@ class EnsembleMergeRecorder(object):
         self.dataset_flag = dataset_flag
         self.ensemble_method = ensemble_method
         self.dump_dir = dump_dir
+        self.model_weight = model_weight
+        self.feedback = feedback
+        self.prefix = prefix
+        self.worker_number = f'{uuid.uuid4()}'
 
     def avg(self, data):
         assert('id' in data)
@@ -53,19 +66,41 @@ class EnsembleMergeRecorder(object):
             if type(v['data']) != np.ndarray:
                 continue
 
-            kwargs = {
-                'id': id,
-                'name': k,
-                'value': v['data'].tolist()
-            }
-
             proxies = {
                 "http": None,
                 'https': None
             }
-            response = requests.post('%s/ensemble-api/avg/'%(self.url), json=kwargs, proxies=proxies)
-            v = json.loads(response.content)['content']['data']
-            result[k] = np.array(v)
+
+            # 将数据以文件流模式上传
+            data = msgpack.packb(v['data'], default=ms.encode)
+            response = \
+                requests.post('%s/ensemble-api/avg/'%(self.url),
+                              headers={'file_id': f'{id}',
+                                       'worker_number': self.worker_number,
+                                       'worker_prefix': f'{self.prefix}',
+                                       'id': f'{id}',
+                                       'name': f'{k}',
+                                       'weight': f"{self.model_weight}",
+                                       'feedback': f"{self.feedback}"},
+                              data=data,
+                              proxies=proxies, stream=True)
+
+            if response.status_code != 200:
+                continue
+
+            result[k] = {
+                'data': None
+            }
+            if self.feedback:
+                with BytesIO() as pdf:
+                    for chunk in response.iter_content(chunk_size=1024*1024):
+                        if chunk:
+                            pdf.write(chunk)
+                    data = msgpack.unpackb(pdf.getvalue(), object_hook=ms.decode)
+
+                result[k] = {
+                    'data': data,
+                }
 
         return result
 
@@ -102,9 +137,13 @@ class EnsembleMergeRecorder(object):
                     os.makedirs(os.path.join(self.dump_dir, '%s/%s'%(self.experiment_uuid, id)))
 
                 with open(os.path.join(self.dump_dir, key), 'wb') as fp:
-                    fp.write(msgpack.dumps(value))
+                    fp.write(msgpack.packb(value, default=ms.encode))
 
     def close(self):
+        if self.experiment_uuid == '':
+            logger.error('No experiment uuid, couldnt upload result.')
+            return
+
         # 提交完成 ensemble 模型创建
         # 变量列表，样本数，数据类型(train,val,test)，方法
         record_sample_num = len(self.record_sample_list)
@@ -228,7 +267,8 @@ class EnsembleReleaseRecorder(object):
                 data = mlogger.file.download('ensemble/variable', key, model_developer)
                 if data is None:
                     continue
-                data = msgpack.loads(data)
+                data = msgpack.unpackb(data, object_hook=ms.decode)
+
                 # data_collect.append({
                 #     'data': data,
                 #     'weight': model_weight
@@ -277,6 +317,7 @@ class AntEnsemble(AntBase):
         self.ant_task_config = ant_task_config
         self.ant_data_source = ant_data_folder
         self.dataset = dataset
+        self.model_weight = 1.0
 
     def start(self):
         # 1.step 加载训练任务
@@ -321,7 +362,11 @@ class AntEnsemble(AntBase):
             server_ip = self.context.params.system['ip']
             server_port = (int)(self.context.params.system['port'])
             p = multiprocessing.Process(target=ensemble_server_start,
-                                        args=(self.ant_dump_dir, server_port, worker_num))
+                                        args=(self.ant_dump_dir,
+                                              server_port,
+                                              worker_num,
+                                              self.context.params.ensemble.get('uncertain_vote', None),
+                                              self.context.params.ensemble.get('enable_data_record', False)))
             p.daemon = True
             p.start()
 
@@ -375,6 +420,10 @@ class AntEnsemble(AntBase):
             else:
                 dataset_flag = 'train'
 
+        # 模型权重
+        if 'weight' in self.context.params.ensemble:
+            self.model_weight = self.context.params.ensemble['weight']
+
         logger.info('Using dataset %s/%s.'%(dataset_name, dataset_flag))
 
         ant_dataset = None
@@ -404,7 +453,13 @@ class AntEnsemble(AntBase):
                                       ensemble_method=self.method,
                                       dataset_name=dataset_name,
                                       dataset_flag=dataset_flag,
-                                      dataset_num=ant_dataset.size)
+                                      dataset_num=ant_dataset.size,
+                                      prefix=f"{self.ant_name}-{self.context.params.ensemble.get('model_name', 'model')}",
+                                      feedback=self.context.params.ensemble['feedback'])
+
+            if self.context.is_interact_mode:
+                return
+
             with safe_recorder_manager(self.context.recorder):
                 try:
                     self.context.call_infer_process(ant_dataset, dump_dir)
@@ -420,6 +475,10 @@ class AntEnsemble(AntBase):
             logger.info('Start ensemble release process.')
             ensemble_uuid = self.context.params.ensemble['uuid'] if 'uuid' in self.context.params.ensemble else ''
             self.context.recorder = EnsembleReleaseRecorder(ensemble_uuid)
+
+            if self.context.is_interact_mode:
+                return
+
             with safe_recorder_manager(self.context.recorder):
                 try:
                     self.context.call_infer_process(ant_dataset, dump_dir)
@@ -434,6 +493,9 @@ class AntEnsemble(AntBase):
                 os.makedirs(dump_dir)
 
             logger.info('Start ensemble train process.')
+            if self.context.is_interact_mode:
+                return
+
             try:
                 self.context.call_training_process(ant_dataset, dump_dir)
             except Exception as e:

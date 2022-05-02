@@ -201,6 +201,14 @@ class AntBase(object):
         logger.warn("Now is in local mode. Please set user token in config file, enjoy experiment manage!")
 
   @property
+  def running_dataset(self):
+    raise NotImplementedError
+
+  @property
+  def running_task(self):
+    raise NotImplementedError
+
+  @property
   def pid(self):
     return self._pid
 
