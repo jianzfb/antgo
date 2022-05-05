@@ -193,14 +193,14 @@ class EnsembleReleaseRecorder(object):
                     root['experiment_url']):
                 data.append({
                     'experiment_uuid': model,
-                    'experiment_weight': weight * root_weight,
+                    'experiment_weight': (float)(weight) * (float)(root_weight),
                     'experiment_user': developer,
                     'experiment_url': server_url
                 })
             return
 
         for model, weight, developer in zip(root['ensemble_uuid'], root['ensemble_weight'], root['ensemble_user']):
-            self.recursive_parse(model, weight, developer, data)
+            self.recursive_parse(model, (float)(weight), developer, data)
 
     def parse_ensemble_model(self, content):
         # {'experiment_uuid': [], 'experiment_weight': []}
@@ -212,7 +212,7 @@ class EnsembleReleaseRecorder(object):
                     content['experiment_url']):
                 data.append({
                     'experiment_uuid': model,
-                    'experiment_weight': weight,
+                    'experiment_weight': (float)(weight),
                     'experiment_user': developer,
                     'experiment_url': serve_url
                 })
@@ -222,7 +222,7 @@ class EnsembleReleaseRecorder(object):
         data = []
         for model, weight, developer in \
             zip(content['ensemble_uuid'], content['ensemble_weight'], content['ensemble_user']):
-            self.recursive_parse(model, weight, developer, data)
+            self.recursive_parse(model, (float)(weight), developer, data)
         return data
 
     def get(self, kwargs):
@@ -234,7 +234,8 @@ class EnsembleReleaseRecorder(object):
         for k, v in kwargs.items():
             name = k
 
-            merge_data = None
+            merge_data = 0.0
+            merge_weight = 0.0
             for ensemble_mode in self.ensemble_models:
                 experiment_uuid = ensemble_mode['experiment_uuid']
                 experiment_url = ensemble_mode['experiment_url']
@@ -250,17 +251,11 @@ class EnsembleReleaseRecorder(object):
                     continue
                 data = msgpack.unpackb(data, object_hook=ms.decode)
 
-                # data_collect.append({
-                #     'data': data,
-                #     'weight': model_weight
-                # })
-                if merge_data is None:
-                    merge_data = data * model_weight
-                else:
-                    merge_data = merge_data + data * model_weight
+                merge_data += data * model_weight
+                merge_weight += model_weight
 
             result[k] = {
-                'data': merge_data
+                'data': merge_data / merge_weight
             }
 
         return result
