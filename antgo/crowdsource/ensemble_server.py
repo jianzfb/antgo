@@ -232,6 +232,34 @@ class AverageApiHandler(BaseHandler):
     return self.settings.get('data_record', False)
 
 
+@tornado.web.stream_request_body
+class DataApiHandler(BaseHandler):
+  @property
+  def dump_dir(self):
+    return self.settings.get('dump_dir', None)
+
+  @gen.coroutine
+  def get(self, file_name):
+    # 提供变量数据服务
+    #   ave_result = msgpack.packb(ave_result, default=ms.encode)
+    file_name = file_name[1:]
+    file_path = os.path.join(self.dump_dir, 'ensemble', 'merge', file_name)
+    if not os.path.exists(file_path):
+      self.set_status(404)
+      return
+
+    self.set_header('Content-Type', 'application/octet-stream')
+    self.set_header('Content-Disposition', f'attachment; filename={file_name}')
+    with open(file_path, 'rb') as f:
+      while True:
+        data = f.read(MB)
+        if not data:
+            break
+        self.write(data)
+
+    self.finish()
+
+
 class LiveApiHandler(BaseHandler):
   @gen.coroutine
   def get(self):
@@ -262,6 +290,7 @@ def ensemble_server_start(dump_dir, server_port, worker_num, uncertain_vote_cfg=
     db = {}
     settings = {
       'static_path': os.path.join(static_dir, 'static'),
+      'dump_dir': dump_dir,
       'port': server_port,
       'cookie_secret': str(uuid.uuid4()),
       'worker_num': worker_num,
@@ -273,7 +302,8 @@ def ensemble_server_start(dump_dir, server_port, worker_num, uncertain_vote_cfg=
     }
 
     app = tornado.web.Application(handlers=[(r"/ensemble-api/avg/", AverageApiHandler),
-                                            (r"/ensemble-api/live/", LiveApiHandler)],
+                                            (r"/ensemble-api/live/", LiveApiHandler),
+                                            (r"/ensemble-api/data/(.*)", DataApiHandler)],
                                   **settings)
     http_server = tornado.httpserver.HTTPServer(app)
     http_server.listen(options.port)

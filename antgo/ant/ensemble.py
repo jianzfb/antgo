@@ -61,7 +61,7 @@ class EnsembleMergeRecorder(object):
         id = data['id']['data']
         data.pop('id')
 
-        result = {}
+        result = {'id':{'data': id}}
         for k, v in data.items():
             if type(v['data']) != np.ndarray:
                 continue
@@ -105,75 +105,46 @@ class EnsembleMergeRecorder(object):
         return result
 
     def record(self, data):
-        if self.role == 'master':
-            assert('id' in data)
-            id = str(data['id']['data'])
-            data.pop('id')
+        assert('id' in data)
+        id = str(data['id']['data'])
+        data.pop('id')
 
-            # 记录样本ID
-            if id not in self.record_sample_list:
-                self.record_sample_list[id] = {}
+        # 记录样本ID
+        if id not in self.record_sample_list:
+            self.record_sample_list[id] = {}
 
-            # 记录样本记录的数据
-            for k in data.keys():
-                if k not in self.record_variable_name:
-                    self.record_variable_name.append(k)
-                if k not in self.record_sample_list[id]:
-                    self.record_sample_list[id][k] = 0
+        # 记录样本记录的数据
+        for k in data.keys():
+            if k not in self.record_variable_name:
+                self.record_variable_name.append(k)
+            if k not in self.record_sample_list[id]:
+                self.record_sample_list[id][k] = 0
 
-                self.record_sample_list[id][k] += 1
+            self.record_sample_list[id][k] += 1
 
-            # 记录样本
-            for k, v in data.items():
-                name = k
-                value = v['data']
-                if type(value) != np.ndarray:
-                    logger.warn('Record %s only support numpy array.'%name)
-                    continue
+        # 记录样本
+        for k, v in data.items():
+            name = k
+            value = v['data']
+            if type(value) != np.ndarray:
+                logger.warn('Record %s only support numpy array.'%name)
+                continue
 
-                # 本地保存数据
-                key = '%s/%s/%s.data'%(self.experiment_uuid, id, name)
-                if not os.path.exists(os.path.join(self.dump_dir, '%s/%s'%(self.experiment_uuid, id))):
-                    os.makedirs(os.path.join(self.dump_dir, '%s/%s'%(self.experiment_uuid, id)))
+            # 本地保存数据
+            key = '%s.%s.%s.data'%(self.experiment_uuid, id, name)
+            # if not os.path.exists(os.path.join(self.dump_dir, '%s/%s'%(self.experiment_uuid, id))):
+            #     os.makedirs(os.path.join(self.dump_dir, '%s/%s'%(self.experiment_uuid, id)))
 
-                with open(os.path.join(self.dump_dir, key), 'wb') as fp:
-                    fp.write(msgpack.packb(value, default=ms.encode))
+            with open(os.path.join(self.dump_dir, key), 'wb') as fp:
+                fp.write(msgpack.packb(value, default=ms.encode))
 
     def close(self):
-        if self.experiment_uuid == '':
-            logger.error('No experiment uuid, couldnt upload result.')
+        if len(self.record_sample_list) == 0:
             return
 
         # 提交完成 ensemble 模型创建
-        # 变量列表，样本数，数据类型(train,val,test)，方法
         record_sample_num = len(self.record_sample_list)
         dataset_sample_num = self.dataset_num
-        # 检查记录的样本数是否一致
-        if record_sample_num != dataset_sample_num:
-            logger.error("Record sample number not equal to dataset sample number")
-            return
-        # 检查样本的变量是否一致
-        is_ok = True
-        for index in range(record_sample_num):
-            if len(self.record_sample_list[str(index)]) != len(self.record_variable_name):
-                is_ok = False
-                break
-        if not is_ok:
-            logger.error("Record sample missing variables.")
-            return
-
-        # 上传数据（COS）
-        logger.info('Upload ensemble model data.')
-        finish_num = 0
-        for key, key_content in self.record_sample_list.items():
-            sample_id = key
-            for sample_attr in key_content.keys():
-                key = '%s/%s/%s.data' % (self.experiment_uuid, sample_id, sample_attr)
-                sample_attr_file = os.path.join(self.dump_dir, key)
-                mlogger.file.upload('ensemble/variable', key, sample_attr_file, is_file=True)
-            finish_num += 1
-            if finish_num % 100 == 0:
-                logger.info('Finish %d/%d'%(finish_num, record_sample_num))
 
         # 记录信息（MLTALKER）
         logger.info('Update ensemble experiment record.')
@@ -183,7 +154,8 @@ class EnsembleMergeRecorder(object):
             'dataset_name': self.dataset_name,
             'dataset_flag': self.dataset_flag,
             'ensemble_method': self.ensemble_method,
-            'record_variable_name': self.record_variable_name
+            'record_variable_name': self.record_variable_name,
+            'ensemble_url': self.url            # 记录在平台，聚合数据URL
         }
 
         response = mlogger.info.ensemble.merge.post(info=json.dumps(info))
@@ -209,18 +181,21 @@ class EnsembleReleaseRecorder(object):
         # 获得实验列表
         response = mlogger.info.ensemble.release.get(ensemble_uuid=ensemble_uuid)
         content = response['content']
-        # [{'experiment_uuid': '', 'experiment_weight': 1.0, 'experiment_user'},{}]
+        # [{'experiment_uuid': '', 'experiment_weight': 1.0, 'experiment_user': , 'experiment_url': },{}]
         self.ensemble_models = self.parse_ensemble_model(content)
 
         self._dump_dir = ''
 
     def recursive_parse(self, root, root_weight, root_developer, data):
         if 'experiment_uuid' in root:
-            for model, weight, developer in zip(root['experiment_uuid'], root['experiment_weight'], root['experiment_user']):
+            for model, weight, developer, server_url in \
+                zip(root['experiment_uuid'], root['experiment_weight'], root['experiment_user'],
+                    root['experiment_url']):
                 data.append({
                     'experiment_uuid': model,
                     'experiment_weight': weight * root_weight,
-                    'experiment_user': developer
+                    'experiment_user': developer,
+                    'experiment_url': server_url
                 })
             return
 
@@ -232,25 +207,27 @@ class EnsembleReleaseRecorder(object):
         # {'ensemble_uuid': [{'ensemble_uuid':[], 'ensemble_weight': []}], 'ensemble_weight': [1.0]}
         if 'experiment_uuid' in content:
             data = []
-            for model, weight, developer in zip(content['experiment_uuid'],
-                                                content['experiment_weight'],
-                                                content['experiment_user']):
+            for model, weight, developer, serve_url in \
+                zip(content['experiment_uuid'], content['experiment_weight'], content['experiment_user'],
+                    content['experiment_url']):
                 data.append({
                     'experiment_uuid': model,
                     'experiment_weight': weight,
-                    'experiment_user': developer
+                    'experiment_user': developer,
+                    'experiment_url': serve_url
                 })
 
             return data
 
         data = []
-        for model, weight, developer in zip(content['ensemble_uuid'], content['ensemble_weight'], content['ensemble_user']):
+        for model, weight, developer in \
+            zip(content['ensemble_uuid'], content['ensemble_weight'], content['ensemble_user']):
             self.recursive_parse(model, weight, developer, data)
         return data
 
-    def get(self, **kwargs):
+    def get(self, kwargs):
         assert ('id' in kwargs)
-        id = str(kwargs['id'])
+        id = str(kwargs['id']['data'])
         kwargs.pop('id')
 
         result = {}
@@ -260,11 +237,15 @@ class EnsembleReleaseRecorder(object):
             merge_data = None
             for ensemble_mode in self.ensemble_models:
                 experiment_uuid = ensemble_mode['experiment_uuid']
+                experiment_url = ensemble_mode['experiment_url']
                 model_developer = ensemble_mode['experiment_user']
                 model_weight = ensemble_mode['experiment_weight']
 
-                key = '%s/%s/%s.data' % (experiment_uuid, id, name)
-                data = mlogger.file.download('ensemble/variable', key, model_developer)
+                key = '%s.%s.%s.data' % (experiment_uuid, id, name)
+                data = mlogger.file.download(None,
+                                             key,
+                                             None,
+                                             f'{experiment_url}/ensemble-api/data/')
                 if data is None:
                     continue
                 data = msgpack.unpackb(data, object_hook=ms.decode)
@@ -278,9 +259,14 @@ class EnsembleReleaseRecorder(object):
                 else:
                     merge_data = merge_data + data * model_weight
 
-            result[name] = merge_data
+            result[k] = {
+                'data': merge_data
+            }
 
         return result
+
+    def record(self, data):
+        pass
 
     def close(self):
         pass
@@ -357,21 +343,25 @@ class AntEnsemble(AntBase):
         assert (running_ant_task is not None)
 
         # 启动服务器
-        if self.context.params.ensemble['role'] == 'master':
+        background_server_process = None
+        if self.ensemble_stage == 'merge' and self.context.params.ensemble['role'] == 'master':
             worker_num = (int)(self.context.params.ensemble['worker'])
             server_ip = self.context.params.system['ip']
             server_port = (int)(self.context.params.system['port'])
-            p = multiprocessing.Process(target=ensemble_server_start,
+            background_server_process = \
+                multiprocessing.Process(target=ensemble_server_start,
                                         args=(self.ant_dump_dir,
                                               server_port,
                                               worker_num,
                                               self.context.params.ensemble.get('uncertain_vote', None),
                                               self.context.params.ensemble.get('enable_data_record', False)))
-            p.daemon = True
-            p.start()
+            if not self.context.params.ensemble.get('background', False):
+                # 后台服务
+                background_server_process.daemon = True
+            background_server_process.start()
 
         # 等待master服务开启
-        while True:
+        while self.ensemble_stage == 'merge':
             try:
                 server_ip = self.context.params.system['ip']
                 server_port = (int)(self.context.params.system['port'])
@@ -455,9 +445,12 @@ class AntEnsemble(AntBase):
                                       dataset_flag=dataset_flag,
                                       dataset_num=ant_dataset.size,
                                       prefix=f"{self.ant_name}-{self.context.params.ensemble.get('model_name', 'model')}",
+                                      model_weight=self.model_weight,
                                       feedback=self.context.params.ensemble['feedback'])
 
             if self.context.is_interact_mode:
+                if self.context.params.ensemble.get('background', False):
+                    self.context.registry_clear_callback(lambda : background_server_process.join())
                 return
 
             with safe_recorder_manager(self.context.recorder):
@@ -467,6 +460,10 @@ class AntEnsemble(AntBase):
                     if type(e.__cause__) != StopIteration:
                         print(e)
                         traceback.print_exc()
+
+            if self.context.params.ensemble.get('background', False):
+                background_server_process.join()
+
         elif self.ensemble_stage == 'release':
             dump_dir = os.path.join(self.ant_dump_dir, 'ensemble', 'release')
             if not os.path.exists(dump_dir):
@@ -502,3 +499,4 @@ class AntEnsemble(AntBase):
                 if type(e.__cause__) != StopIteration:
                     print(e)
                     traceback.print_exc()
+

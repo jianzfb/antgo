@@ -53,8 +53,7 @@ class AntTask(object):
     self._dataset_params['dataset_name'] = dataset_name
 
     # dataset class
-    if dataset_name is not None and dataset_name != '':
-      self._ant_dataset = AntDatasetFactory.dataset(dataset_name)
+    self._ant_dataset = AntDatasetFactory.dataset(dataset_name)
 
     # related evaluation measures
     self._ant_measures = AntMeasuresFactory(self)

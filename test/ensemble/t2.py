@@ -30,13 +30,13 @@ def main():
       'weight': 1.0,
       'uncertain_vote': {
         'axis': 1,
-        'thres': 2.31
+        'thres': -1
       },
-      'enable_data_record': True,
+      'enable_data_record': False,
       'model_name': 'r50',
       'feedback': False
     }
-  }, 'merge', dataset='T') as ensemble:
+  }, 'merge', dataset='T', token='5dff9aaf18774b688221eedef367dc31') as ensemble:
     for i in range(10):
       # data = np.random.random((10, 10))
       data = np.random.random((1,11,720,1280))

@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
-# @Time    : 2022/4/20 17:53
-# @File    : t1.py
+# @Time    : 2022/4/20 17:54
+# @File    : t2.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -25,7 +25,7 @@ def main():
       'method': 'bagging',
       'mode': 'online',
       'role': 'master',
-      'worker': 1,
+      'worker': 2,
       'dataset': '',
       'weight': 1.0,
       'uncertain_vote': {
@@ -33,30 +33,22 @@ def main():
         'thres': -1
       },
       'enable_data_record': False,
-      'model_name': 'Swin',
-      'feedback': True,
-      'background': True
+      'model_name': 'r50',
+      'feedback': False,
+      'uuid': 'b2f5cbb9-6efd-4878-8496-0955acbd4e3d'
     }
-  }, 'merge', dataset='T', token='8d05781fad92480486812bbb75fd2fd7') as ensemble:
+  }, 'release', dataset='T', token='5dff9aaf18774b688221eedef367dc31') as ensemble:
     for i in range(10):
-      # data = np.random.random((10, 10))
-      data = np.random.random((1,11,720,1280))
-      data = softmax(data, 1)
-      online_fusion_A = ctx.recorder.avg({
+      result = ctx.recorder.get({
         'id': {
           'data': i
         },
         'A': {
-          'data': data
+          'data': None
         }
       })
 
-      print(online_fusion_A)
-      # 保存结果
-      ctx.recorder.record(online_fusion_A)
-
-
-
+      print(result)
 
 if __name__ == '__main__':
   main()

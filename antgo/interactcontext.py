@@ -53,7 +53,7 @@ class InteractContext(Context):
     self.name = name
     self.data_factory = Config.data_factory
     self.task_factory = Config.task_factory
-    self.api_token = Config.server_user_token
+    self.api_token = kwargs.get('token', Config.server_user_token)
     logger.info(f'Use experiment data_factory {self.data_factory}')
     logger.info(f'Use experiment task_factory {self.task_factory}')
     logger.info(f'Use experiment api token {self.api_token}')
@@ -160,6 +160,9 @@ class InteractContext(Context):
 
       # 日志更新
       mlogger.update()
+
+      # 环境回收
+      train.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -185,6 +188,9 @@ class InteractContext(Context):
 
       # 日志更新
       mlogger.update()
+
+      # 环境回收
+      challenge.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -208,6 +214,9 @@ class InteractContext(Context):
 
       # 日志更新
       mlogger.update()
+
+      # 环境回收
+      predict.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -231,8 +240,14 @@ class InteractContext(Context):
       ensemble_handler.start()
       yield ensemble_handler
 
+      # 关闭recorder
+      ensemble_handler.context.recorder.close()
+
       # 日志更新
       mlogger.update()
+
+      # 环境回收
+      ensemble_handler.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -256,6 +271,9 @@ class InteractContext(Context):
 
       # 日志更新
       mlogger.update()
+
+      # 环境回收
+      demo.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -278,10 +296,15 @@ class InteractContext(Context):
 
       # 日志更新
       mlogger.update()
+
+      # 环境回收
+      browser.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
 
   @contextmanager
   def Activelearning(self):
-    yield
+    pass
+
+

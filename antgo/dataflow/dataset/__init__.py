@@ -15,6 +15,9 @@ class AntDatasetFactory(object):
 
   @staticmethod
   def dataset(name, parse_flag=''):
+    if name is None or name == '':
+      return AntDatasetFactory.factory_dataset['EmptyDataset']
+
     if name in AntDatasetFactory.factory_dataset:
       return AntDatasetFactory.factory_dataset[name]
 
