@@ -359,11 +359,20 @@ class Dataset(BaseNode):
   def at(self, id):
     raise NotImplementedError
 
+  def get_ann_info(self, idx=None):
+    return None
+    
+  def get_cat_ids(self, idx):
+    return None
+  
   def sample(self, id):
     image, annotation = self.at(id)
-    sample = copy.deepcopy(annotation)
-    sample['image'] = image
-    return sample
+    if image is not None:
+      annotation['image'] = image
+    return annotation
+
+  def evaluate(self, preds, **kwargs):
+    raise NotImplementedError
 
   @property
   def size(self):

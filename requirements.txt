@@ -13,7 +13,6 @@ requests
 tornado
 beautifulsoup4
 imageio
-pycryptodome
 sklearn
 matplotlib
 prettytable
@@ -21,3 +20,6 @@ opencv-python
 antvis
 gitpython
 qiniu
+pycocotools
+addict
+yapf

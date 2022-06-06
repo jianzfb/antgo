@@ -8,4 +8,5 @@
 dist
 build
 example/dump
-./test/
+test
+dump
