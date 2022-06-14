@@ -3,7 +3,7 @@ from .alexnet import AlexNet
 # yapf: disable
 from .bricks import (ACTIVATION_LAYERS, CONV_LAYERS, NORM_LAYERS,
                      PADDING_LAYERS, PLUGIN_LAYERS, UPSAMPLE_LAYERS,
-                     ContextBlock, Conv2d, Conv3d, ConvAWS2d, ConvModule,
+                     ContextBlock, Conv2d, Conv3d, ConvAWS2d, ConvModule, InvertedResidual,
                      ConvTranspose2d, ConvTranspose3d, ConvWS2d,
                      DepthwiseSeparableConvModule, GeneralizedAttention,
                      HSigmoid, HSwish, Linear, MaxPool2d, MaxPool3d,
@@ -26,7 +26,7 @@ __all__ = [
     'AlexNet', 'VGG', 'make_vgg_layer', 'ResNet', 'make_res_layer',
     'constant_init', 'xavier_init', 'normal_init', 'trunc_normal_init',
     'uniform_init', 'kaiming_init', 'caffe2_xavier_init',
-    'bias_init_with_prob', 'ConvModule', 'build_activation_layer',
+    'bias_init_with_prob', 'ConvModule', 'build_activation_layer','InvertedResidual',
     'build_conv_layer', 'build_norm_layer', 'build_padding_layer',
     'build_upsample_layer', 'build_plugin_layer', 'is_norm', 'NonLocal1d',
     'NonLocal2d', 'NonLocal3d', 'ContextBlock', 'HSigmoid', 'Swish', 'HSwish',

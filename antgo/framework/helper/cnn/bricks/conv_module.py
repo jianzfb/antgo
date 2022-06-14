@@ -2,7 +2,6 @@
 import warnings
 
 import torch.nn as nn
-
 from antgo.framework.helper.utils import _BatchNorm, _InstanceNorm
 from ..utils import constant_init, kaiming_init
 from .activation import build_activation_layer

@@ -100,6 +100,10 @@ class InterHand26M(Dataset):
                 self.datalist_sh.append(data)
             else:
                 self.datalist_ih.append(data)
+            
+            if len(self.datalist_sh) > 100:
+                break
+            
             if seq_name not in self.sequence_names:
                 self.sequence_names.append(seq_name)
 
@@ -147,7 +151,6 @@ class InterHand26M(Dataset):
         inputs = {'image': img}
         targets = {'joint_coord': joint_coord, 'rel_root_depth': rel_root_depth, 'hand_type': hand_type}
         meta_info = {'joint_valid': joint_valid, 'root_valid': root_valid, 'hand_type_valid': hand_type_valid, 'inv_trans': inv_trans, 'capture': int(data['capture']), 'cam': int(data['cam']), 'frame': int(data['frame'])}
-        meta_info.update({'TID': int(idx)})
         annotation = {}
         annotation.update(inputs)
         annotation.update(targets)
@@ -178,7 +181,7 @@ class InterHand26M(Dataset):
         mpjpe_sh = [[] for _ in range(self.joint_num*2)]
         mpjpe_ih = [[] for _ in range(self.joint_num*2)]
         mrrpe = []
-        acc_hand_cls = 0; hand_cls_cnt = 0;
+        acc_hand_cls = 0; hand_cls_cnt = 0
         for n in range(sample_num):
             data = gts[n]
             bbox, cam_param, joint, gt_hand_type, hand_type_valid = data['bbox'], data['cam_param'], data['joint'], data['hand_type'], data['hand_type_valid']

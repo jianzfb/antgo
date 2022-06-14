@@ -5,6 +5,7 @@ from .dataset_wrappers import (ClassBalancedDataset, ConcatDataset,
 from .samplers import DistributedGroupSampler, DistributedSampler, GroupSampler
 from .pipelines import *
 from antgo.dataflow.dataset.interhand26M import InterHand26M
+from antgo.dataflow.dataset.imagenet import ImageNet
 from antgo.framework.helper.reader import *
 
 @DATASETS.register_module()
@@ -36,6 +37,34 @@ class InterHand26MReader(Reader):
             ), 
             pipeline=pipeline, 
             inputs_def=inputs_def)
+
+
+@DATASETS.register_module()
+class ImageNetReader(Reader):
+    def __init__(self, 
+                    train_or_test, 
+                    dir='',
+                    data_prefix= '', 
+                    ann_file = None, 
+                    classes = None, 
+                    extensions = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif'),
+                    pipeline=None,
+                    inputs_def=None, **kwargs):
+
+        super().__init__(        
+            ImageNet(
+                train_or_test, 
+                dir , 
+                params={
+                    'data_prefix': data_prefix,
+                    'ann_file': ann_file,
+                    'classes': classes,
+                    'extensions': extensions
+                }
+            ), 
+            pipeline=pipeline, 
+            inputs_def=inputs_def)
+
 
 __all__ = [
     'DATASETS','build_dataloader','build_dataset','ClassBalancedDataset','ConcatDataset','MultiImageMixDataset','RepeatDataset',
