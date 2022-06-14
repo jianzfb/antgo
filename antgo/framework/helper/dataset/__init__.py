@@ -44,7 +44,6 @@ class ImageNetReader(Reader):
     def __init__(self, 
                     train_or_test, 
                     dir='',
-                    data_prefix= '', 
                     ann_file = None, 
                     classes = None, 
                     extensions = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif'),
@@ -56,7 +55,7 @@ class ImageNetReader(Reader):
                 train_or_test, 
                 dir , 
                 params={
-                    'data_prefix': data_prefix,
+                    'data_prefix': dir,
                     'ann_file': ann_file,
                     'classes': classes,
                     'extensions': extensions

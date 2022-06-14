@@ -6,9 +6,9 @@ from os import PathLike
 from typing import List
 from io import StringIO
 import numpy as np
+from numbers import Number
 # from mmcls.core.evaluation import precision_recall_f1, support
 # from mmcls.models.losses import accuracy
-# from .pipelines import Compose
 from antgo.dataflow.dataset import Dataset
 
 
@@ -65,6 +65,115 @@ def list_from_file(filename,
             item_list.append(prefix + line.rstrip('\n\r'))
             cnt += 1
     return item_list
+
+def accuracy_numpy(pred, target, topk=(1, ), thrs=0.):
+    if isinstance(thrs, Number):
+        thrs = (thrs, )
+        res_single = True
+    elif isinstance(thrs, tuple):
+        res_single = False
+    else:
+        raise TypeError(
+            f'thrs should be a number or tuple, but got {type(thrs)}.')
+
+    res = []
+    maxk = max(topk)
+    num = pred.shape[0]
+
+    static_inds = np.indices((num, maxk))[0]
+    pred_label = pred.argpartition(-maxk, axis=1)[:, -maxk:]
+    pred_score = pred[static_inds, pred_label]
+
+    sort_inds = np.argsort(pred_score, axis=1)[:, ::-1]
+    pred_label = pred_label[static_inds, sort_inds]
+    pred_score = pred_score[static_inds, sort_inds]
+
+    for k in topk:
+        correct_k = pred_label[:, :k] == target.reshape(-1, 1)
+        res_thr = []
+        for thr in thrs:
+            # Only prediction values larger than thr are counted as correct
+            _correct_k = correct_k & (pred_score[:, :k] > thr)
+            _correct_k = np.logical_or.reduce(_correct_k, axis=1)
+            res_thr.append((_correct_k.sum() * 100. / num))
+        if res_single:
+            res.append(res_thr[0])
+        else:
+            res.append(res_thr)
+    return res
+
+
+def accuracy_numpy(pred, target, topk=(1, ), thrs=0.):
+    if isinstance(thrs, Number):
+        thrs = (thrs, )
+        res_single = True
+    elif isinstance(thrs, tuple):
+        res_single = False
+    else:
+        raise TypeError(
+            f'thrs should be a number or tuple, but got {type(thrs)}.')
+
+    res = []
+    maxk = max(topk)
+    num = pred.shape[0]
+
+    static_inds = np.indices((num, maxk))[0]
+    pred_label = pred.argpartition(-maxk, axis=1)[:, -maxk:]
+    pred_score = pred[static_inds, pred_label]
+
+    sort_inds = np.argsort(pred_score, axis=1)[:, ::-1]
+    pred_label = pred_label[static_inds, sort_inds]
+    pred_score = pred_score[static_inds, sort_inds]
+
+    for k in topk:
+        correct_k = pred_label[:, :k] == target.reshape(-1, 1)
+        res_thr = []
+        for thr in thrs:
+            # Only prediction values larger than thr are counted as correct
+            _correct_k = correct_k & (pred_score[:, :k] > thr)
+            _correct_k = np.logical_or.reduce(_correct_k, axis=1)
+            res_thr.append((_correct_k.sum() * 100. / num))
+        if res_single:
+            res.append(res_thr[0])
+        else:
+            res.append(res_thr)
+    return res
+
+
+def accuracy(pred, target, topk=1, thrs=0.):
+    """Calculate accuracy according to the prediction and target.
+
+    Args:
+        pred (torch.Tensor | np.array): The model prediction.
+        target (torch.Tensor | np.array): The target of each prediction
+        topk (int | tuple[int]): If the predictions in ``topk``
+            matches the target, the predictions will be regarded as
+            correct ones. Defaults to 1.
+        thrs (Number | tuple[Number], optional): Predictions with scores under
+            the thresholds are considered negative. Default to 0.
+
+    Returns:
+        torch.Tensor | list[torch.Tensor] | list[list[torch.Tensor]]: Accuracy
+            - torch.Tensor: If both ``topk`` and ``thrs`` is a single value.
+            - list[torch.Tensor]: If one of ``topk`` or ``thrs`` is a tuple.
+            - list[list[torch.Tensor]]: If both ``topk`` and ``thrs`` is a \
+              tuple. And the first dim is ``topk``, the second dim is ``thrs``.
+    """
+    assert isinstance(topk, (int, tuple))
+    if isinstance(topk, int):
+        topk = (topk, )
+        return_single = True
+    else:
+        return_single = False
+
+    if not isinstance(pred, np.ndarray):
+        pred = pred.cpu().numpy()
+    
+    if not isinstance(target, np.ndarray):
+        target = target.cpu().numpy()
+
+    res = accuracy_numpy(pred, target, topk, thrs)
+    return res[0] if return_single else res
 
 
 class ClsDataset(Dataset, metaclass=ABCMeta):
@@ -139,7 +248,7 @@ class ClsDataset(Dataset, metaclass=ABCMeta):
         return len(self.data_infos)
 
     def at(self, idx):
-        return self.prepare_data(idx)
+        return None, self.prepare_data(idx)
 
     def data_pool(self):
         for index in range(self.size):
@@ -204,7 +313,7 @@ class ClsDataset(Dataset, metaclass=ABCMeta):
             'accuracy', 'precision', 'recall', 'f1_score'
         ]
         eval_results = {}
-        results = np.vstack(results)
+        results = np.vstack([v['pred'] for v in results])
         gt_labels = self.get_gt_labels()
         if indices is not None:
             gt_labels = gt_labels[indices]
@@ -242,24 +351,5 @@ class ClsDataset(Dataset, metaclass=ABCMeta):
                 eval_results.update(
                     {k: v.item()
                      for k, v in eval_results_.items()})
-
-        precision_recall_f1_keys = ['precision', 'recall', 'f1_score']
-        if len(set(metrics) & set(precision_recall_f1_keys)) != 0:
-            if thrs is not None:
-                precision_recall_f1_values = precision_recall_f1(
-                    results, gt_labels, average_mode=average_mode, thrs=thrs)
-            else:
-                precision_recall_f1_values = precision_recall_f1(
-                    results, gt_labels, average_mode=average_mode)
-            for key, values in zip(precision_recall_f1_keys,
-                                   precision_recall_f1_values):
-                if key in metrics:
-                    if isinstance(thrs, tuple):
-                        eval_results.update({
-                            f'{key}_thr_{thr:.2f}': value
-                            for thr, value in zip(thrs, values)
-                        })
-                    else:
-                        eval_results[key] = values
 
         return eval_results

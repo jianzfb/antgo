@@ -1050,7 +1050,8 @@ class ImageNet(CustomClsDataset):
         super().__init__(
             train_or_test,
             dir,
-            params=params)
+            params=params
+        )
 
 
 if __name__ == '__main__':

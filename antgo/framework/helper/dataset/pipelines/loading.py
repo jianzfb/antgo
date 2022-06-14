@@ -1,4 +1,4 @@
-from antgo.antgo.dataflow.imgaug.operators import DecodeImage
+from antgo.dataflow.imgaug.operators import DecodeImage
 from ..builder import PIPELINES
 import torchvision.transforms as transforms
 from antgo.dataflow.imgaug.operators import *
