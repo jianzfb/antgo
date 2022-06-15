@@ -931,3 +931,4 @@ class ToGray(object):
             image = results[key]
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             results[key] = np.expand_dims(gray, -1)
+        return results

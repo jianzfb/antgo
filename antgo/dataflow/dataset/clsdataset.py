@@ -276,6 +276,8 @@ class ClsDataset(Dataset, metaclass=ABCMeta):
             class_names = list_from_file(expanduser(classes))
         elif isinstance(classes, (tuple, list)):
             class_names = classes
+        elif type(classes) == int:
+            class_names = [(str(i),i) for i in range(classes)]
         else:
             raise ValueError(f'Unsupported type {type(classes)} of classes.')
 
