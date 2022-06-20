@@ -8,7 +8,6 @@ from collections import defaultdict
 import numpy as np
 from antgo.framework.helper.utils import build_from_cfg, print_log
 from torch.utils.data.dataset import ConcatDataset as _ConcatDataset
-
 from .builder import DATASETS, PIPELINES
 
 
@@ -25,7 +24,7 @@ class ConcatDataset(_ConcatDataset):
 
     def __init__(self, datasets):
         super(ConcatDataset, self).__init__(datasets)
-        self.CLASSES = datasets[0].CLASSES
+        self.CLASSES = getattr(datasets[0], 'CLASSES', None)
         self.PALETTE = getattr(datasets[0], 'PALETTE', None)
 
         if hasattr(datasets[0], 'flag'):
@@ -96,7 +95,7 @@ class RepeatDataset:
     def __init__(self, dataset, times):
         self.dataset = dataset
         self.times = times
-        self.CLASSES = dataset.CLASSES
+        self.CLASSES = getattr(dataset, 'CLASSES', None)
         self.PALETTE = getattr(dataset, 'PALETTE', None)
         if hasattr(self.dataset, 'flag'):
             self.flag = np.tile(self.dataset.flag, times)
@@ -177,7 +176,7 @@ class ClassBalancedDataset:
         self.dataset = dataset
         self.oversample_thr = oversample_thr
         self.filter_empty_gt = filter_empty_gt
-        self.CLASSES = dataset.CLASSES
+        self.CLASSES = getattr(dataset, 'CLASSES', None)
         self.PALETTE = getattr(dataset, 'PALETTE', None)
 
         repeat_factors = self._get_repeat_factors(dataset, oversample_thr)
@@ -317,7 +316,7 @@ class MultiImageMixDataset:
                 raise TypeError('pipeline must be a dict')
 
         self.dataset = dataset
-        self.CLASSES = dataset.CLASSES
+        self.CLASSES = getattr(dataset, 'CLASSES', None)
         self.PALETTE = getattr(dataset, 'PALETTE', None)
         if hasattr(self.dataset, 'flag'):
             self.flag = dataset.flag

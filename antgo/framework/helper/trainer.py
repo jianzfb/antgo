@@ -20,6 +20,7 @@ from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import get_dist_info, init_dist
 from antgo.framework.helper.runner.builder import *
 from antgo.framework.helper.utils.setup_env import *
+from antgo.framework.helper.models.builder import *
 import torch.distributed as dist
 from contextlib import contextmanager
 import json
@@ -157,7 +158,10 @@ class Trainer(object):
         # prepare network
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
-        model = model_builder()
+        if model_builder is not None:
+            model = model_builder()
+        else:
+            model = build_model(self.cfg.model)
 
         if self.distributed:
             find_unused_parameters = self.cfg.get('find_unused_parameters', False)

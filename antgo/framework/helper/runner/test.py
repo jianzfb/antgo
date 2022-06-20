@@ -29,6 +29,9 @@ def single_gpu_test(model, data_loader):
     dataset = data_loader.dataset
     prog_bar = ProgressBar(len(dataset))
     for data in data_loader:
+        data.update({
+            'return_loss': False
+        })
         with torch.no_grad():
             if type(data) == list or type(data) == tuple:
                 result = model(*data)

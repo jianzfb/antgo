@@ -63,8 +63,7 @@ def build_dataset(cfg, default_args=None):
         dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
     elif cfg['type'] == 'ConcatDataset':
         dataset = ConcatDataset(
-            [build_dataset(c, default_args) for c in cfg['datasets']],
-            cfg.get('separate_eval', True))
+            [build_dataset(c, default_args) for c in cfg['datasets']])
     elif cfg['type'] == 'RepeatDataset':
         dataset = RepeatDataset(
             build_dataset(cfg['dataset'], default_args), cfg['times'])
@@ -94,6 +93,7 @@ def build_dataloader(dataset,
                      runner_type='EpochBasedRunner',
                      persistent_workers=False,
                      class_aware_sampler=None,
+                     ignore_stack=[],
                      **kwargs):
     """Build PyTorch DataLoader.
 
@@ -198,7 +198,7 @@ def build_dataloader(dataset,
         sampler=sampler,
         num_workers=num_workers,
         batch_sampler=batch_sampler,
-        collate_fn=partial(collate, samples_per_gpu=samples_per_gpu),
+        collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
         pin_memory=kwargs.pop('pin_memory', False),
         worker_init_fn=init_fn,
         **kwargs)

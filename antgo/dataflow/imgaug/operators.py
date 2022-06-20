@@ -105,9 +105,9 @@ class DecodeImage(BaseOperator):
             raise TypeError("{}: input type is invalid.".format(self))
 
     def __call__(self, sample, context=None):
-        """ load image if 'im_file' field is not empty but 'image' is"""
+        """ load image if 'image_file' field is not empty but 'image' is"""
         if 'image' not in sample or sample['image'] is None:
-            with open(sample['im_file'], 'rb') as f:
+            with open(sample['image_file'], 'rb') as f:
                 sample['image'] = f.read()
 
         im = sample['image']
@@ -624,8 +624,8 @@ class ResizeImage(BaseOperator):
         im = sample['image']
         if not isinstance(im, np.ndarray):
             raise TypeError("{}: image type is not numpy.".format(self))
-        if len(im.shape) != 3:
-            raise ImageError('{}: image is not 3-dimensional.'.format(self))
+        if len(im.shape) != 3 and len(im.shape) != 2:
+            raise ImageError('{}: image is not 3/2-dimensional.'.format(self))
         im_shape = im.shape
         im_size_min = np.min(im_shape[0:2])
         im_size_max = np.max(im_shape[0:2])
@@ -1156,10 +1156,17 @@ class RandomDistort(BaseOperator):
 
     def __call__(self, sample, context=None):
         """random distort the image"""
-        ops = [
-            self.random_brightness, self.random_contrast,
-            self.random_saturation, self.random_hue
-        ]
+        ops = []
+        if self.brightness_prob > 0:
+            ops.append(self.random_brightness)
+        if self.contrast_prob > 0:
+            ops.append(self.random_contrast)
+        if self.saturation_prob > 0:
+            ops.append(self.random_saturation)
+        if self.hue_prob > 0:
+            ops.append(self.random_hue)
+        count = min(self.count, len(ops))
+
         if self.is_order:
             prob = np.random.uniform(0, 1)
             if prob < 0.5:
@@ -1170,11 +1177,11 @@ class RandomDistort(BaseOperator):
                     self.random_contrast,
                 ]
         else:
-            ops = random.sample(ops, self.count)
+            ops = random.sample(ops, count)
         assert 'image' in sample, "image data not found"
         im = sample['image']
         im = Image.fromarray(im)
-        for id in range(self.count):
+        for id in range(count):
             im = ops[id](im)
         im = np.asarray(im)
         sample['image'] = im
@@ -1279,7 +1286,7 @@ class CropImage(BaseOperator):
         self.satisfy_all = satisfy_all
         self.avoid_no_bbox = avoid_no_bbox
 
-    def __call__(self, sample, context):
+    def __call__(self, sample):
         """
         Crop the image and modify bounding box.
         Operators:
@@ -1759,7 +1766,7 @@ class Resize(BaseOperator):
             'random' (for randomized interpolation).
             default to `cv2.INTER_LINEAR`.
     """
-            # The interpolation mode
+    # The interpolation mode
     interp_dict = {
         'NEAREST': cv2.INTER_NEAREST,
         'LINEAR': cv2.INTER_LINEAR,
@@ -1781,8 +1788,8 @@ class Resize(BaseOperator):
         self.interp = interp  # 'RANDOM' for yolov3
 
     def __call__(self, sample, context=None):
-        w = sample['w']
-        h = sample['h']
+        w = sample['image'].shape[1]
+        h = sample['image'].shape[0]
 
         if self.interp == "RANDOM":
             interp = random.choice(list(self.interp_dict.keys()))
@@ -1832,6 +1839,9 @@ class Resize(BaseOperator):
         sample['h'] = resize_h
         sample['w'] = resize_w
 
+        if 'image_metas' in sample:
+            sample['image_metas']['image_shape'] = (resize_h, resize_w)
+            sample['image_metas']['scale_factor'] =  sample['scale_factor']
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
         return sample
@@ -2254,8 +2264,7 @@ class RandomCrop(BaseOperator):
         if 'gt_bbox' in sample and len(sample['gt_bbox']) == 0:
             return sample
 
-        h = sample['h']
-        w = sample['w']
+        h,w = sample['image'].shape[:2]
         gt_bbox = sample['gt_bbox']
 
         # NOTE Original method attempts to generate one candidate for each
@@ -2345,20 +2354,22 @@ class RandomCrop(BaseOperator):
                 # valid_ids 记录box索引
                 sample['gt_bbox'] = np.take(cropped_box, valid_ids, axis=0)
                 sample['gt_class'] = np.take(sample['gt_class'], valid_ids, axis=0)
-                invers_id_map = {}
-                for ii in range(len(valid_ids)):
-                    invers_id_map[valid_ids[ii]] = ii
+                
+                if 'gt_keypoint' in sample:
+                    invers_id_map = {}
+                    for ii in range(len(valid_ids)):
+                        invers_id_map[valid_ids[ii]] = ii
 
-                remain_from_box_id = []
-                remain_keypoint_id = []
-                for ii in range(len(sample['gt_keypoint_from_bbox_i'])):
-                    from_box_id = sample['gt_keypoint_from_bbox_i'][ii]
-                    if from_box_id in invers_id_map:
-                        remain_from_box_id.append(invers_id_map[from_box_id])
-                        remain_keypoint_id.append(ii)
+                    remain_from_box_id = []
+                    remain_keypoint_id = []
+                    for ii in range(len(sample['gt_keypoint_from_bbox_i'])):
+                        from_box_id = sample['gt_keypoint_from_bbox_i'][ii]
+                        if from_box_id in invers_id_map:
+                            remain_from_box_id.append(invers_id_map[from_box_id])
+                            remain_keypoint_id.append(ii)
 
-                sample['gt_keypoint_from_bbox_i'] = np.array(remain_from_box_id)
-                sample['gt_keypoint'] = np.take(sample['gt_keypoint'], remain_keypoint_id, axis=0)
+                    sample['gt_keypoint_from_bbox_i'] = np.array(remain_from_box_id)
+                    sample['gt_keypoint'] = np.take(sample['gt_keypoint'], remain_keypoint_id, axis=0)
 
                 if 'gt_score' in sample:
                     sample['gt_score'] = np.take(
@@ -2417,7 +2428,7 @@ class RandomCrop(BaseOperator):
 
     def _crop_image(self, img, crop):
         x1, y1, x2, y2 = crop
-        return img[y1:y2, x1:x2, :]
+        return img[y1:y2, x1:x2]
 
 
 

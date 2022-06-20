@@ -367,11 +367,9 @@ class EvalHook(Hook):
             eval_res = self.dataloader.dataset.evaluate(
                 results, logger=runner.logger, **self.eval_kwargs)
         else:
-            gts = self.dataloader.dataset.get_ann_info(None)
-            if gts is None:
-                gts = []
-                for gt_i in len(self.dataloader.dataset):
-                    gts.append(self.dataloader.dataset.sample(gt_i))
+            gts = []
+            for gt_i in range(len(self.dataloader.dataset)):
+                gts.append(self.dataloader.dataset.get_ann_info(gt_i))
 
             eval_res = self.metric_func(results, gts)
 

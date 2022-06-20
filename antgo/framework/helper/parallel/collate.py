@@ -8,7 +8,7 @@ from torch.utils.data.dataloader import default_collate
 from .data_container import DataContainer
 
 
-def collate(batch, samples_per_gpu=1):
+def collate(batch, samples_per_gpu=1, level=0, stack=True, ignore_stack=[]):
     """Puts each data field into a tensor/DataContainer with outer dimension
     batch size.
 
@@ -75,10 +75,16 @@ def collate(batch, samples_per_gpu=1):
     elif isinstance(batch[0], Sequence):
         transposed = zip(*batch)
         return [collate(samples, samples_per_gpu) for samples in transposed]
-    elif isinstance(batch[0], Mapping):
+    elif isinstance(batch[0], Mapping) and level == 0:
         return {
-            key: collate([d[key] for d in batch], samples_per_gpu)
+            key: collate([d[key] for d in batch], samples_per_gpu, level+1, stack=key not in ignore_stack)
             for key in batch[0]
         }
+    elif isinstance(batch[0], Mapping):
+        return [d for d in batch]
+    elif not stack:
+        # for gt bboxes tensors
+        return [torch.from_numpy(d) for d in batch]
     else:
+        # for image tensors
         return default_collate(batch)
