@@ -101,9 +101,6 @@ class InterHand26M(Dataset):
             else:
                 self.datalist_ih.append(data)
             
-            if len(self.datalist_sh) > 100:
-                break
-            
             if seq_name not in self.sequence_names:
                 self.sequence_names.append(seq_name)
 

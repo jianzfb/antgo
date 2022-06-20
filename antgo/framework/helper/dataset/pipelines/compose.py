@@ -15,7 +15,7 @@ class TorchVisionCompose(transforms.Compose):
     
     def __call__(self, sample):
         image = sample['image']
-        sample['image'] = super(Compose, self).__call__(image)
+        sample['image'] = super(TorchVisionCompose, self).__call__(image)
         return sample
 
 
