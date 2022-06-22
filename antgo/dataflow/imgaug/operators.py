@@ -1819,6 +1819,7 @@ class Resize(BaseOperator):
             y2 = sample['gt_bbox'][:, 3:4]
             y2 = np.clip(y2, 0, resize_h-1)
             sample['gt_bbox'] = np.concatenate([x1, y1, x2, y2], axis=-1)
+        
         if 'gt_keypoint' in sample and len(sample['gt_keypoint']) > 0:
             scale_array = np.array([scale_x, scale_y, 1], dtype=np.float32)
             sample['gt_keypoint'] = sample['gt_keypoint'] * scale_array
@@ -1844,6 +1845,15 @@ class Resize(BaseOperator):
             sample['image_metas']['scale_factor'] =  sample['scale_factor']
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
+        
+        # for bi in range(len(sample['gt_bbox'])):
+        #     x0,y0,x1,y1 = sample['gt_bbox'][bi]
+        #     x0=(int)(x0)
+        #     y0=(int)(y0)
+        #     x1=(int)(x1)
+        #     y1=(int)(y1)
+        #     cv2.rectangle(sample['image'], (x0,y0),(x1,y1), (255,0,0), 4)
+        # cv2.imwrite("./show.png", sample['image'])
         return sample
 
 
