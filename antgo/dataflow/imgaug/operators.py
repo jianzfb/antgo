@@ -2272,6 +2272,7 @@ class RandomCrop(BaseOperator):
 
     def __call__(self, sample, context=None):
         if 'gt_bbox' in sample and len(sample['gt_bbox']) == 0:
+            # compatible with no bbox
             return sample
 
         h,w = sample['image'].shape[:2]
@@ -2360,11 +2361,15 @@ class RandomCrop(BaseOperator):
                         sample['gt_poly'] = valid_polys
                     else:
                         sample['gt_poly'] = crop_polys
+                
+                # before_img = cv2.rectangle(sample['image'], ((int)(sample['gt_bbox'][0,0]),(int)(sample['gt_bbox'][0,1])),((int)(sample['gt_bbox'][0,2]),(int)(sample['gt_bbox'][0,3])), (255,0,0), 5)
+                # cv2.imwrite("./before.png", before_img)
                 sample['image'] = self._crop_image(sample['image'], crop_box)
-                # valid_ids 记录box索引
                 sample['gt_bbox'] = np.take(cropped_box, valid_ids, axis=0)
                 sample['gt_class'] = np.take(sample['gt_class'], valid_ids, axis=0)
-                
+                # after_img = cv2.rectangle(sample['image'], ((int)(sample['gt_bbox'][0,0]),(int)(sample['gt_bbox'][0,1])),((int)(sample['gt_bbox'][0,2]),(int)(sample['gt_bbox'][0,3])), (255,0,0), 5)
+                # cv2.imwrite("./after.png", after_img)
+
                 if 'gt_keypoint' in sample:
                     invers_id_map = {}
                     for ii in range(len(valid_ids)):
@@ -2391,7 +2396,12 @@ class RandomCrop(BaseOperator):
 
                 sample['w'] = crop_box[2] - crop_box[0]
                 sample['h'] = crop_box[3] - crop_box[1]
-
+                if 'image_metas' in sample:
+                    # image_metas 保存sample相关信息
+                    # 'image_shape','scale_factor','pad_shape'
+                    sample['image_metas']['image_shape'] = (sample['h'], sample['w'])
+                    sample['image_metas']['pad_shape'] = (sample['h'], sample['w'])
+                    
                 if 'gt_keypoint' in sample:
                     sample_gt_keypoint = sample['gt_keypoint']
                     if len(sample_gt_keypoint) > 0:

@@ -158,7 +158,7 @@ def collect_results_cpu(result_part, size, tmpdir=None):
         if rank == 0:
             # mmcv.mkdir_or_exist('.dist_test')
             if not os.path.exists('.dist_test'):
-                os.makedirs('.dist_test')
+                os.makedirs('.dist_test', exist_ok=True)
 
             tmpdir = tempfile.mkdtemp(dir='.dist_test')
             tmpdir = torch.tensor(
@@ -168,7 +168,7 @@ def collect_results_cpu(result_part, size, tmpdir=None):
         tmpdir = dir_tensor.cpu().numpy().tobytes().decode().rstrip()
     else:
         if not os.path.exists(tmpdir):
-            os.makedirs(tmpdir)
+            os.makedirs(tmpdir, exist_ok=True)
 
     # dump the part result to the dir
     # mmcv.dump(result_part, osp.join(tmpdir, f'part_{rank}.pkl'))
