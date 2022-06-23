@@ -29,13 +29,13 @@ def single_gpu_test(model, data_loader):
     dataset = data_loader.dataset
     prog_bar = ProgressBar(len(dataset))
     for data in data_loader:
-        data.update({
-            'return_loss': False
-        })
         with torch.no_grad():
             if type(data) == list or type(data) == tuple:
-                result = model(*data)
+                result = model(*data, return_loss=False)
             else:
+                data.update({
+                    'return_loss': False
+                })
                 result = model(**data)
 
         # result is dict
@@ -91,14 +91,14 @@ def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
     if rank == 0:
         prog_bar = ProgressBar(len(dataset))
     time.sleep(2)  # This line can prevent deadlock problem in some cases.
-    for i, data in enumerate(data_loader):
-        data.update({
-            'return_loss': False
-        })        
+    for i, data in enumerate(data_loader): 
         with torch.no_grad():
-            if type(data) == list or type(data) == tuple:
-                result = model(*data)
+            if type(data) == list or type(data) == tuple:         
+                result = model(*data, return_loss=False)
             else:
+                data.update({
+                    'return_loss': False
+                })                       
                 result = model(**data)
 
         # result is dict
