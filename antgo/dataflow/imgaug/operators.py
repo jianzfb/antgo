@@ -475,6 +475,8 @@ class Rotation(BaseOperator):
                 borderValue=self._label_border_value)
             sample['semantic'] = label
 
+        sample['h'] = image_rotated.shape[0]
+        sample['w'] = image_rotated.shape[1]
         sample['image'] = image_rotated
         return sample
 

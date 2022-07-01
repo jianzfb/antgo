@@ -1,6 +1,8 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+from antgo.framework.helper.models.proxy_module import ProxyModule
+from antgo.framework.helper.runner.test import single_gpu_test
 
 import os
 import os.path as osp
@@ -8,7 +10,7 @@ import math
 import time
 import glob
 import abc
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, dataloader
 import torch.optim
 import torchvision.transforms as transforms
 from torch.nn.parallel.data_parallel import DataParallel
@@ -21,9 +23,27 @@ from antgo.framework.helper.runner import get_dist_info, init_dist
 from antgo.framework.helper.runner.builder import *
 from antgo.framework.helper.utils.setup_env import *
 from antgo.framework.helper.models.builder import *
+from antgo.framework.helper.utils import *
+from antgo.framework.helper.models.dummy_module import *
+from antgo.framework.helper.models.proxy_module import *
+from thop import profile
+
 import torch.distributed as dist
 from contextlib import contextmanager
 import json
+
+try:
+    from aimet_common.defs import QuantScheme
+    from aimet_torch import bias_correction
+    from aimet_torch.quantsim import QuantParams, QuantizationSimModel
+    from aimet_torch.cross_layer_equalization import equalize_model
+    from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+    from aimet_torch.batch_norm_fold import fold_all_batch_norms
+    from aimet_torch.onnx_utils import OnnxExportApiArgs
+    from aimet_torch.model_preparer import prepare_model
+except:
+    print('Dont support aimet.')
+    pass
 
 '''
 cfg_dict = dict(
@@ -88,6 +108,92 @@ cfg_dict = dict(
     evaluation=dict(out_dir='./out')
 )
 '''
+def _default_forward_pass_callback(model, data_loader):
+    # switch to eval state
+    model.eval()
+
+    iteration = 10
+    prog_bar = ProgressBar(iteration)
+    count = 0
+    for data in data_loader:
+        data = data.to('cuda')
+        with torch.no_grad():
+            model(data)
+
+        prog_bar.update()
+        count += 1
+        if count >= iteration:
+            break
+
+def apply_cross_layer_equalization(model, input_shape):
+    """
+    Applies CLE on the model and calculates model accuracy on quantized simulator
+    Applying CLE on the model inplace consists of:
+        Batch Norm Folding
+        Cross Layer Scaling
+        High Bias Fold
+    Converts any ReLU6 into ReLU.
+    :param model: the loaded model
+    :param input_shape: the shape of the input to the model
+    :return:
+    """
+
+    equalize_model(model, input_shape)
+
+
+def apply_bias_correction(model, data_loader):
+    """
+    Applies Bias-Correction on the model.
+    :param model: The model to quantize
+    :param dataloader: DataLoader used during quantization
+    :param logdir: Log directory used for storing log files
+    :return: None
+    """
+    # Rounding mode can be 'nearest' or 'stochastic'
+    rounding_mode = 'nearest'
+
+    # Number of samples used during quantization
+    num_quant_samples = 256*20
+
+    # Number of samples used for bias correction
+    num_bias_correct_samples = 256*20
+
+    params = QuantParams(weight_bw=8, act_bw=8, round_mode=rounding_mode, quant_scheme='tf_enhanced')
+
+    # Perform Bias Correction
+    bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=num_quant_samples,
+                                 data_loader=data_loader, num_bias_correct_samples=num_bias_correct_samples)
+
+
+def calculate_quantsim(model, val_dataloader, dummy_input, use_cuda, path, prefix):
+    """
+    Calculates model accuracy on quantized simulator and returns quantized model with accuracy.
+    :param model: the loaded model
+    :param evaluator: the Eval function to use for evaluation
+    :param iterations: No of batches to use in computing encodings.
+                       Not used in image net dataset
+    :param num_val_samples_per_class: No of samples to use from every class in
+                                      computing encodings. Not used in pascal voc
+                                      dataset
+    :param use_cuda: the cuda device.
+    :return: a tuple of quantsim and accuracy of model on this quantsim
+    """
+    # Number of batches to use for computing encodings
+    # Only 5 batches are used here to speed up the process, also the
+    # number of images in these 5 batches should be sufficient for
+    # compute encodings
+    quantsim = QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
+                                    dummy_input=dummy_input, rounding_mode='nearest',
+                                    default_output_bw=8, default_param_bw=8, in_place=False)
+
+    quantsim.compute_encodings(forward_pass_callback=_default_forward_pass_callback,
+                               forward_pass_callback_args=val_dataloader)
+
+    if not os.path.exists(path):
+        os.makedirs(path)
+    quantsim.export(path=path, filename_prefix=prefix, dummy_input=dummy_input.cpu())
+    return quantsim
+
 class Trainer(object):
     def __init__(self, cfg_dict, work_dir="./", device='cuda', distributed=False, diff_seed=True, deterministic=True):
         self.cfg = Config.fromstring(json.dumps(cfg_dict), '.json')
@@ -154,7 +260,7 @@ class Trainer(object):
             val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
             self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
 
-    def make_model(self, model_builder=None, resume_from=None, load_from=None):
+    def make_model(self, model_builder=None, resume_from=None, load_from=None, dummy_input=None):
         # prepare network
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
@@ -162,6 +268,12 @@ class Trainer(object):
             model = model_builder()
         else:
             model = build_model(self.cfg.model)
+        
+        # 统计FLOPS,参数量
+        if (not self.distributed or (self.distributed and get_dist_info()[0] == 0)) and dummy_input is not None:
+            flops, params = profile(DummyModelWarp(model), inputs=dummy_input)
+            print('FLOPs = ' + str(flops/1000**3) + 'G')
+            print('Params = ' + str(params/1000**2) + 'M')
 
         if self.distributed:
             find_unused_parameters = self.cfg.get('find_unused_parameters', False)
@@ -229,7 +341,7 @@ class Trainer(object):
             self.runner.resume(resume_from)
         elif load_from is not None:
             self.runner.load_checkpoint(load_from)
-    
+
     @contextmanager
     def train_context(self, max_epochs):
         self.runner._max_epochs = max_epochs
@@ -244,3 +356,243 @@ class Trainer(object):
 
     def run_on_val(self, **kwargs):
         self.runner.val(self.val_dataloader, **kwargs)
+    
+    def apply_ada_quant(self, dummy_input, checkpoint, model_builder=None, num_batches=4, default_num_iterations=10000, filename_prefix='quant', path='./'):
+        assert(self.val_dataloader is not None)
+        eval_cfg = self.cfg.get('evaluation', {})
+        metric_func = None
+        if 'metric' in eval_cfg:
+            metric_func = build_measure(eval_cfg['metric'])
+
+        print('load model and checkpoint.')
+        if model_builder is not None:
+            f32_model = model_builder()
+        else:
+            f32_model = build_model(self.cfg.model)
+
+        ckpt = torch.load(checkpoint, map_location=torch.device('cpu'))
+        f32_model.load_state_dict(ckpt['state_dict'], strict=True)
+
+        # 计算浮点模型精度
+        print('computing float model accuray.')
+        results = single_gpu_test(f32_model, self.val_dataloader)
+        eval_res = {}
+        if metric_func is None:
+            eval_res = self.val_dataloader.dataset.evaluate(results, logger=None)
+        else:
+            gts = []
+            for gt_i in range(len(self.val_dataloader.dataset)):
+                gts.append(self.val_dataloader.dataset.get_ann_info(gt_i))
+
+            eval_res = metric_func(results, gts)        
+        print(eval_res)
+
+        # 开始量化分析
+        print('starting ada process.')
+        # fold bn
+        model = DummyModelWarp(f32_model)        
+        _ = fold_all_batch_norms(model, input_shapes=dummy_input.shape)
+        model = model.to(self.device)
+        prepared_model = prepare_model(model)
+        quant_train_loader = \
+            torch.utils.data.DataLoader(UnlabeledDatasetWrapper(self.train_generator.dataset, 'image'),
+                                        batch_size=32, 
+                                        shuffle=True)
+        quant_val_loader =  \
+            torch.utils.data.DataLoader(UnlabeledDatasetWrapper(self.val_dataloader.dataset, 'image'),
+                                        batch_size=4, 
+                                        shuffle=True)
+
+        params = AdaroundParameters(data_loader=quant_train_loader, 
+                                    num_batches=32, 
+                                    default_num_iterations=default_num_iterations,
+                                    default_reg_param=0.01, default_beta_range=(20, 2))
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+        # Returns model with adarounded weights and their corresponding encodings
+        adarounded_model = Adaround.apply_adaround(
+                                        prepared_model, dummy_input, params, 
+                                        path=path,
+                                        filename_prefix=filename_prefix, 
+                                        default_param_bw=8,
+                                        default_quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                        default_config_file=None)
+
+        sim = QuantizationSimModel(adarounded_model, 
+                                    quant_scheme=QuantScheme.post_training_tf_enhanced, 
+                                    default_param_bw=8,
+                                    default_output_bw=8, 
+                                    dummy_input=dummy_input)
+
+        # Set and freeze encodings to use same quantization grid and then invoke compute encodings
+        sim.set_and_freeze_param_encodings(encoding_path=os.path.join(path, f'{filename_prefix}.encodings'))
+
+        # compute encodings on val
+        sim.compute_encodings(_default_forward_pass_callback, 
+                              forward_pass_callback_args=quant_val_loader) 
+
+        # 输出量化模型
+        print('export quant model.')
+        self.export(path, filename_prefix, dummy_input, quant_sim=sim)
+
+        # 计算量化模型精度
+        print('computing quant model accuray.')
+        f32_model.set_extract_feat_func(sim.model)
+        quant_model = build_dp(f32_model, self.device, device_ids=self.cfg.gpu_ids)
+        results = single_gpu_test(quant_model, self.val_dataloader)
+        eval_res = {}
+        if metric_func is None:
+            eval_res = self.val_dataloader.dataset.evaluate(results, logger=None)
+        else:
+            gts = []
+            for gt_i in range(len(self.val_dataloader.dataset)):
+                gts.append(self.val_dataloader.dataset.get_ann_info(gt_i))
+
+            eval_res = metric_func(results, gts)        
+        print(eval_res)
+
+    def apply_qat_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
+        ###############################     STEP - 0    ###############################
+        # 计算浮点模型
+        logger = get_logger('qat', log_level=self.cfg.log_level)
+        if model_builder is not None:
+            f32_model = model_builder()
+        else:
+            f32_model = build_model(self.cfg.model)
+
+        assert(dummy_input is not None)
+        # 加载checkpoint
+        ckpt = torch.load(checkpoint, map_location='cpu')
+        f32_model.load_state_dict(ckpt['state_dict'], strict=True)
+
+        # 计算浮点模型精度
+        print('Computing Float Model Accuray.')
+        eval_cfg = self.cfg.get('evaluation', {})
+        metric_func = None
+        if 'metric' in eval_cfg:
+            metric_func = build_measure(eval_cfg['metric'])
+
+        warp_model = build_dp(f32_model, self.device, device_ids=self.cfg.gpu_ids)  
+        results = single_gpu_test(warp_model, self.val_dataloader)    
+        eval_res = {}
+        if metric_func is None:
+            eval_res = self.val_dataloader.dataset.evaluate(results, logger=None)
+        else:
+            gts = []
+            for gt_i in range(len(self.val_dataloader.dataset)):
+                gts.append(self.val_dataloader.dataset.get_ann_info(gt_i))
+
+            eval_res = metric_func(results, gts)                 
+        print(eval_res)
+
+        # Quantize the model using AIMET QAT (quantization aware training) and calculate accuracy on Quant Simulator
+        ###############################     STEP - 1    ###############################
+        print('Computing Naive Quantizing Progress.')
+        model = DummyModelWarp(f32_model)        
+        model = model.to(self.device)
+        quant_val_loader =  \
+            torch.utils.data.DataLoader(UnlabeledDatasetWrapper(self.val_dataloader.dataset, 'image'),
+                                        batch_size=128, 
+                                        shuffle=True)     
+        dummy_input = dummy_input.to(self.device)
+        quant_sim = calculate_quantsim(model, quant_val_loader, dummy_input,True, os.path.join(path, 'NAIVE'), prefix)
+
+        print("Naive Quantized Model performance")
+        # self.cfg.qat.update(dict(feature_func=quant_sim.model))
+        # warp_model = build_model(self.cfg.qat) 
+        head_cfg = None
+        for k in self.cfg.model.keys():
+            if 'head' in k:
+                head_cfg = self.cfg.model[k]
+        assert(head_cfg is not None)
+        proxy_model_cfg = self.cfg['proxy_model'] if 'proxy_model' in self.cfg.keys() else {}
+        warp_model = ProxyModule(quant_sim.model, head_cfg, init_cfg=proxy_model_cfg['init_cfg'] if 'init_cfg' in proxy_model_cfg else None)
+        warp_model = build_dp(warp_model, self.device, device_ids=self.cfg.gpu_ids)        
+        results = single_gpu_test(warp_model, self.val_dataloader)            
+        eval_res = {}
+        if metric_func is None:
+            eval_res = self.val_dataloader.dataset.evaluate(results, logger=None)
+        else:
+            gts = []
+            for gt_i in range(len(self.val_dataloader.dataset)):
+                gts.append(self.val_dataloader.dataset.get_ann_info(gt_i))
+
+            eval_res = metric_func(results, gts)                 
+        print(eval_res)        
+        
+        ###############################     STEP - 2    ###############################
+        # For good initialization apply, apply Post Training Quantization (PTQ) methods
+        # such as Cross Layer Equalization (CLE) and Bias Correction (BC) (optional)
+        print('Computing PTQ(CLE and BC) Quantizing Progress.')
+        apply_cross_layer_equalization(model=model, input_shape=dummy_input.shape)
+        apply_bias_correction(model=model, 
+                              data_loader=torch.utils.data.DataLoader(LabeledDatasetWrapper(self.val_dataloader.dataset, 'image'), batch_size=256, shuffle=True))
+        dummy_input = dummy_input.to(self.device)
+        quant_sim = calculate_quantsim(model, quant_val_loader, dummy_input, True, os.path.join(path, 'PTQ'), prefix)
+        
+        print('Post Training Quantization (PTQ) Complete')
+        # self.cfg.qat.update(dict(feature_func=quant_sim.model))
+        # warp_model = build_model(self.cfg.qat) 
+        warp_model = ProxyModule(quant_sim.model, head_cfg, init_cfg=proxy_model_cfg['init_cfg'] if 'init_cfg' in proxy_model_cfg else None)
+        warp_model = build_dp(warp_model, self.device, device_ids=self.cfg.gpu_ids)
+        results = single_gpu_test(warp_model, self.val_dataloader)  
+        eval_res = {}
+        if metric_func is None:
+            eval_res = self.val_dataloader.dataset.evaluate(results, logger=None)
+        else:
+            gts = []
+            for gt_i in range(len(self.val_dataloader.dataset)):
+                gts.append(self.val_dataloader.dataset.get_ann_info(gt_i))
+
+            eval_res = metric_func(results, gts)                 
+        print(eval_res)           
+        
+        ###############################     STEP - 3    ###############################
+        # Finetune the quantized model
+        print('Starting Model Finetune')
+        # build optimizer
+        optimizer = build_optimizer(warp_model, self.cfg.optimizer)
+
+        # build training strategy
+        self.runner = build_runner(
+            dict(type='EpochBasedRunner', max_epochs=1),        # 忽略max_epochs，开发者控制最大epoch
+            default_args=dict(
+                model=warp_model,
+                optimizer=optimizer,
+                work_dir=self.work_dir,
+                logger=logger,
+                meta=self.meta))
+
+        # an ugly workaround to make .log and .log.json filenames the same
+        self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+
+        optimizer_config = self.cfg.optimizer_config
+        self.runner.register_training_hooks(
+            self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等
+            optimizer_config,                                       # 优化器的相关后处理，比如限制梯度操作等
+            self.cfg.checkpoint_config,                             # checkpoint相关处理
+            self.cfg.log_config,                                         
+            self.cfg.get('momentum_config', None),                       
+            custom_hooks_config=self.cfg.get('custom_hooks', None))
+
+        # 配置验证方法
+        eval_cfg = self.cfg.get('evaluation', {})
+        eval_cfg['by_epoch'] = True
+        if 'interval' not in eval_cfg:
+            eval_cfg['interval'] = 1
+
+        if 'metric' in eval_cfg:
+            metric = build_measure(eval_cfg['metric'])
+            eval_cfg['metric'] = metric
+        self.runner.register_hook(
+            EvalHook(self.val_dataloader, **eval_cfg), priority='LOW')
+
+        with self.train_context(15) as runner:
+            for _ in range(0, runner._max_epochs):
+                self.run_on_train()
+
+        # Save the quantized model
+        if not os.path.exists(os.path.join(path, 'QAT')):
+            os.makedirs(os.path.join(path, 'QAT'))
+        quant_sim.export(path=os.path.join(path, 'QAT'), filename_prefix=prefix, dummy_input=dummy_input.cpu())

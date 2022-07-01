@@ -113,7 +113,9 @@ class CheckpointHook(Hook):
                 f'Saving checkpoint at {runner.epoch + 1} epochs')
             if self.sync_buffer:
                 allreduce_params(runner.model.buffers())
+            runner.logger.info("after allreduce_params")
             self._save_checkpoint(runner)
+            runner.logger.info("after save checkpoint")
 
     @master_only
     def _save_checkpoint(self, runner):

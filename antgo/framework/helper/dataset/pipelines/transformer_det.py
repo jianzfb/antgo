@@ -21,3 +21,8 @@ class RandomDistortP(RandomDistort):
 class RandomCropP(RandomCrop):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+
+@PIPELINES.register_module()
+class RandomRotationP(Rotation):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)

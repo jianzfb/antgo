@@ -51,10 +51,10 @@ class OptimizerHook(Hook):
 
     def after_train_iter(self, runner):
         runner.optimizer.zero_grad()
-        if self.detect_anomalous_params:
+        if True:
             self.detect_anomalous_parameters(runner.outputs['loss'], runner)
-        runner.outputs['loss'].backward()
 
+        runner.outputs['loss'].backward()
         if self.grad_clip is not None:
             grad_norm = self.clip_grads(runner.model.parameters())
             if grad_norm is not None:
