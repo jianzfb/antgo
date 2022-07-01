@@ -287,7 +287,7 @@ class InterHand26M(Dataset):
         print('MPJPE for all hand sequences: %.2f' % (np.mean(tot_err)))
         print()
         dict_err = {}
-        dict_err['MPJPE_ALL'] = np.mean(tot_err)
+        dict_err['MPJPE_ALL'] = (float)(np.mean(tot_err))
 
         eval_summary = 'MPJPE for each joint: \n'
         for j in range(self.joint_num*2):
@@ -297,7 +297,7 @@ class InterHand26M(Dataset):
         print(eval_summary)
         print('MPJPE for single hand sequences: %.2f' % (np.mean(mpjpe_sh)))
         print()
-        dict_err['MPJPE_SINGLE'] = np.mean(mpjpe_sh)
+        dict_err['MPJPE_SINGLE'] = (float)(np.mean(mpjpe_sh))
 
         eval_summary = 'MPJPE for each joint: \n'
         for j in range(self.joint_num*2):
@@ -306,7 +306,7 @@ class InterHand26M(Dataset):
             eval_summary += (joint_name + ': %.2f, ' % mpjpe_ih[j])
         print(eval_summary)
         print('MPJPE for interacting hand sequences: %.2f' % (np.mean(mpjpe_ih)))
-        dict_err['MPJPE_INTERACT'] = np.mean(mpjpe_ih)
+        dict_err['MPJPE_INTERACT'] = (float)(np.mean(mpjpe_ih))
         return dict_err
 
 
