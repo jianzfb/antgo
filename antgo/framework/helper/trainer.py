@@ -269,6 +269,9 @@ class Trainer(object):
         else:
             model = build_model(self.cfg.model)
         
+        # 模型初始化
+        model.init_weights()
+
         # 统计FLOPS,参数量
         if (not self.distributed or (self.distributed and get_dist_info()[0] == 0)) and dummy_input is not None:
             flops, params = profile(DummyModelWarp(model), inputs=dummy_input)

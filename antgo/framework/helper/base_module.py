@@ -96,8 +96,8 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         logger_names = list(logger_initialized.keys())
         logger_name = logger_names[0] if logger_names else 'mmcv'
 
-        from .cnn import initialize
-        from .cnn.utils.weight_init import update_init_info
+        from antgo.framework.helper.cnn import initialize
+        from antgo.framework.helper.cnn.utils.weight_init import update_init_info
         module_name = self.__class__.__name__
         if not self._is_init:
             if self.init_cfg:

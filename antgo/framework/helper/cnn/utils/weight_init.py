@@ -481,7 +481,7 @@ class PretrainedInit(object):
         self.map_location = map_location
 
     def __call__(self, module):
-        from mmcv.runner import (_load_checkpoint_with_prefix, load_checkpoint,
+        from antgo.framework.helper.runner import (_load_checkpoint_with_prefix, load_checkpoint,
                                  load_state_dict)
         logger = get_logger('mmcv')
         if self.prefix is None:

@@ -2,9 +2,9 @@
 from antgo.framework.helper.base_module import BaseModule, ModuleDict, ModuleList, Sequential
 from .base_runner import BaseRunner
 from .builder import RUNNERS, build_runner
-# from .checkpoint import (CheckpointLoader, _load_checkpoint,
-#                          _load_checkpoint_with_prefix, load_checkpoint,
-#                          load_state_dict, save_checkpoint, weights_to_cpu)
+from .checkpoint import (CheckpointLoader, _load_checkpoint,
+                         _load_checkpoint_with_prefix, load_checkpoint,
+                         load_state_dict, save_checkpoint, weights_to_cpu)
 from .default_constructor import DefaultRunnerConstructor
 from .dist_utils import (allreduce_grads, allreduce_params, get_dist_info,
                          init_dist, master_only)
@@ -62,5 +62,7 @@ __all__ = [
     'allreduce_params', 'LossScaler', 'BaseModule', 'EvalHook', 'DistEvalHook', 'Sequential',
     'ModuleDict', 'ModuleList', 'GradientCumulativeOptimizerHook',
     'GradientCumulativeFp16OptimizerHook', 'DefaultRunnerConstructor',
-    'LinearAnnealingMomentumUpdaterHook', 'LinearAnnealingLrUpdaterHook'
+    'LinearAnnealingMomentumUpdaterHook', 'LinearAnnealingLrUpdaterHook',
+    'CheckpointLoader', '_load_checkpoint', '_load_checkpoint_with_prefix', 
+    'load_checkpoint', 'load_state_dict', 'save_checkpoint', 'weights_to_cpu'
 ]
