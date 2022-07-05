@@ -11,7 +11,6 @@ import abc
 from torch.utils.data import DataLoader
 import torch.optim
 import torchvision.transforms as transforms
-from timer import Timer
 from torch.nn.parallel.data_parallel import DataParallel
 from antgo.framework.helper.utils.config import Config
 from antgo.framework.helper.apis.train import *
@@ -20,6 +19,7 @@ from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, 
 from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import get_dist_info, init_dist
 from antgo.framework.helper.runner.builder import *
+from antgo.framework.helper.models.builder import *
 import torch.distributed as dist
 from contextlib import contextmanager
 from antgo.framework.helper.utils.setup_env import *
@@ -65,7 +65,11 @@ class Tester(object):
 
     def make_model(self, model_builder=None, checkpoint='', fuse_conv_bn=False):
         # build the model and load checkpoint
-        self.model = model_builder()
+        if model_builder is not None:
+            self.model = model_builder()
+        else:
+            self.model = build_model(self.cfg.model)
+
         if checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
         checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu')
@@ -87,6 +91,7 @@ class Tester(object):
     def evaluate(self):
         rank, _ = get_dist_info()        
         # allows not to create
+        json_file = './result.json'
         if self.cfg.work_dir is not None and rank == 0:
             if not os.path.exists(osp.abspath(self.cfg.work_dir)):
                 os.makedirs(osp.abspath(self.cfg.work_dir))
@@ -100,22 +105,21 @@ class Tester(object):
 
         if rank == 0:
             metric_func = None
-            if 'metric' in self.cfg:
-                metric_func = build_measure(self.cfg['metric'])         
+            eval_cfg = self.cfg.get('evaluation', {}).copy()
+            if 'metric' in eval_cfg:
+                metric_func = build_measure(eval_cfg['metric'])         
 
-            eval_kwargs = self.cfg.get('evaluation', {}).copy()  
             if metric_func is None:
                 metric = self.dataset.evaluate(
-                    outputs, **eval_kwargs)
+                    outputs, **eval_cfg)
             else:
-                gts = self.dataset.get_ann_info(None)
-                if gts is None:
-                    gts = []
-                    for gt_i in len(self.dataset):
-                        gts.append(self.dataset.sample(gt_i))
+                gts = []
+                for gt_i in range(len(self.dataset)):
+                    gts.append(self.dataset.get_ann_info(gt_i))
                 metric = metric_func(outputs, gts)
 
             print(metric)
             metric_dict = dict(metric=metric)
             if self.cfg.work_dir is not None and rank == 0:
-                json.dump(metric_dict, json_file)
+                with open(json_file, 'w') as fp:
+                    json.dump(metric_dict, fp)
