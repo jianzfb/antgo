@@ -260,7 +260,7 @@ class Trainer(object):
             val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
             self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
 
-    def make_model(self, model_builder=None, resume_from=None, load_from=None, dummy_input=None):
+    def make_model(self, model_builder=None, resume_from=None, load_from=None):
         # prepare network
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
@@ -271,12 +271,6 @@ class Trainer(object):
         
         # 模型初始化
         model.init_weights()
-
-        # 统计FLOPS,参数量
-        if (not self.distributed or (self.distributed and get_dist_info()[0] == 0)) and dummy_input is not None:
-            flops, params = profile(DummyModelWarp(model), inputs=dummy_input)
-            print('FLOPs = ' + str(flops/1000**3) + 'G')
-            print('Params = ' + str(params/1000**2) + 'M')
 
         if self.distributed:
             find_unused_parameters = self.cfg.get('find_unused_parameters', False)
@@ -455,6 +449,40 @@ class Trainer(object):
             eval_res = metric_func(results, gts)        
         print(eval_res)
 
+    def export(self, dummy_input, checkpoint=None, model_builder=None, path='./', prefix='model'):
+        f32_model = None
+        if model_builder is not None:
+            f32_model = model_builder()
+        else:
+            f32_model = build_model(self.cfg.model)
+
+        # 加载checkpoint
+        if checkpoint is not None:
+            ckpt = torch.load(checkpoint, map_location='cpu')
+            f32_model.load_state_dict(ckpt['state_dict'], strict=True)
+
+        # 获得浮点模型的 FLOPS、PARAMS
+        model = DummyModelWarp(f32_model)        
+        model = model.to('cpu')
+        dummy_input = dummy_input.to('cpu')
+        flops, params = profile(model, inputs=(dummy_input,))
+        print('FLOPs = ' + str(flops/1000**3) + 'G')
+        print('Params = ' + str(params/1000**2) + 'M')
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        # Export the model
+        torch.onnx.export(
+                model,                                      # model being run
+                dummy_input,                                # model input (or a tuple for multiple inputs)
+                os.path.join(path, f'{prefix}.onnx'),       # where to save the model (can be a file or file-like object)
+                export_params=True,                         # store the trained parameter weights inside the model file
+                opset_version=11,                           # the ONNX version to export the model to
+                do_constant_folding=True,                   # whether to execute constant folding for optimization
+                input_names = ['input'],                    # the model's input names
+        )
+
     def apply_qat_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
         # 计算浮点模型
@@ -489,17 +517,37 @@ class Trainer(object):
             eval_res = metric_func(results, gts)                 
         print(eval_res)
 
+        # 获得浮点模型的 FLOPS、PARAMS
+        model = DummyModelWarp(f32_model)        
+        model = model.to('cpu')
+        dummy_input = dummy_input.to('cpu')
+        flops, params = profile(model, inputs=(dummy_input,))
+        print('FLOPs = ' + str(flops/1000**3) + 'G')
+        print('Params = ' + str(params/1000**2) + 'M')
+
+        if not os.path.exists(os.path.join(path, 'float')):
+            os.makedirs(os.path.join(path, 'float'))
+        # Export the model
+        torch.onnx.export(
+                model,                                      # model being run
+                dummy_input,                                # model input (or a tuple for multiple inputs)
+                os.path.join(path, 'float', 'model.onnx'),  # where to save the model (can be a file or file-like object)
+                export_params=True,                         # store the trained parameter weights inside the model file
+                opset_version=11,                           # the ONNX version to export the model to
+                do_constant_folding=True,                   # whether to execute constant folding for optimization
+                input_names = ['input'],   # the model's input names
+        )
+
         # Quantize the model using AIMET QAT (quantization aware training) and calculate accuracy on Quant Simulator
         ###############################     STEP - 1    ###############################
         print('Computing Naive Quantizing Progress.')
-        model = DummyModelWarp(f32_model)        
         model = model.to(self.device)
         quant_val_loader =  \
             torch.utils.data.DataLoader(UnlabeledDatasetWrapper(self.val_dataloader.dataset, 'image'),
                                         batch_size=128, 
                                         shuffle=True)     
         dummy_input = dummy_input.to(self.device)
-        quant_sim = calculate_quantsim(model, quant_val_loader, dummy_input,True, os.path.join(path, 'NAIVE'), prefix)
+        quant_sim = calculate_quantsim(model, quant_val_loader, dummy_input, True, os.path.join(path, 'NAIVE'), prefix)
 
         print("Naive Quantized Model performance")
         # self.cfg.qat.update(dict(feature_func=quant_sim.model))
