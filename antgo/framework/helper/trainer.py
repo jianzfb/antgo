@@ -27,6 +27,7 @@ from antgo.framework.helper.utils import *
 from antgo.framework.helper.models.dummy_module import *
 from antgo.framework.helper.models.proxy_module import *
 from thop import profile
+import copy
 
 import torch.distributed as dist
 from contextlib import contextmanager
@@ -41,6 +42,8 @@ try:
     from aimet_torch.batch_norm_fold import fold_all_batch_norms
     from aimet_torch.onnx_utils import OnnxExportApiArgs
     from aimet_torch.model_preparer import prepare_model
+    from aimet_common.utils import start_bokeh_server_session
+    from aimet_torch import visualize_model
 except:
     print('Dont support aimet.')
     pass
@@ -463,6 +466,7 @@ class Trainer(object):
 
         # 获得浮点模型的 FLOPS、PARAMS
         model = DummyModelWarp(f32_model)        
+        model = model.eval()
         model = model.to('cpu')
         dummy_input = dummy_input.to('cpu')
         flops, params = profile(model, inputs=(dummy_input,))
@@ -483,7 +487,15 @@ class Trainer(object):
                 input_names = ['input'],                    # the model's input names
         )
 
-    def apply_qat_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
+        # 模型可视化
+        if not os.path.exists(os.path.join(path, 'visualization')):
+            os.makedirs(os.path.join(path, 'visualization'))
+        visualization_dir = os.path.join(path, 'visualization')
+        visualize_model.visualize_weight_ranges(model, visualization_dir)
+        visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, visualization_dir)
+
+
+    def apply_qat_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant', need_finetune=False):
         ###############################     STEP - 0    ###############################
         # 计算浮点模型
         logger = get_logger('qat', log_level=self.cfg.log_level)
@@ -599,6 +611,9 @@ class Trainer(object):
             eval_res = metric_func(results, gts)                 
         print(eval_res)           
         
+        if not need_finetune:
+            return
+
         ###############################     STEP - 3    ###############################
         # Finetune the quantized model
         print('Starting Model Finetune')
