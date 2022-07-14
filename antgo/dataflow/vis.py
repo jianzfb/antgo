@@ -92,10 +92,54 @@ def vis_keypoints(img, kps, score, skeleton, filename, score_thr=0.4, line_width
     _img.save(osp.join(save_path, filename))
 
 
-def vis_3d_keypoints(kps_3d, score, skeleton, filename, score_thr=0.4, line_width=3, circle_rad=3, save_path='./'):
+def __render_2d_xyz(kps_3d,score, skeleton, ax, rgb_dict, score_thr=0.4, axis='x'):
+    kps_3d = kps_3d.copy()
 
+    kps_2d = np.zeros((kps_3d.shape[0], 2))
+    a_name = 'x'
+    b_name = 'y'
+    if axis == 'x':
+        # show y,z
+        kps_2d[:,0] = kps_3d[:,2]
+        kps_2d[:,1] = -kps_3d[:,1]
+        a_name = 'z'
+        b_name = 'y'
+    elif axis == 'y':
+        # show x,z
+        kps_2d[:,0] = kps_3d[:,0]
+        kps_2d[:,1] = kps_3d[:,2]
+        a_name = 'x'
+        b_name = 'z'
+    else:
+        # show x,y
+        kps_2d[:,0] = kps_3d[:,0]
+        kps_2d[:,1] = -kps_3d[:,1]
+        a_name = 'x'
+        b_name = 'y'
+    ax.set_title(f'show {a_name}-{b_name} plane')
+    ax.set_xlabel(a_name)
+    ax.set_ylabel(b_name)    
+    for i in range(len(skeleton)):
+        joint_name = skeleton[i]['name']
+        pid = skeleton[i]['parent_id']
+        parent_joint_name = skeleton[pid]['name']
+
+        a = np.array([kps_2d[i,0], kps_2d[pid,0]])
+        b = np.array([kps_2d[i,1], kps_2d[pid,1]])
+
+        if score[i] > score_thr and score[pid] > score_thr and pid != -1:
+            ax.plot(a,b, c = np.array(rgb_dict[parent_joint_name])/255., linewidth = 3)
+
+        if score[i] > score_thr:
+            ax.scatter(kps_2d[i,0], kps_2d[i,1], c = np.array(rgb_dict[joint_name]).reshape(1,3)/255., marker='o')
+        if score[pid] > score_thr and pid != -1:
+            ax.scatter(kps_2d[pid,0], kps_2d[pid,1], c = np.array(rgb_dict[parent_joint_name]).reshape(1,3)/255., marker='o')
+
+
+def vis_3d_keypoints(kps_3d, score, skeleton, filename, score_thr=0.4, line_width=3, circle_rad=3, save_path='./'):
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    fig.subplots_adjust(wspace=0.3, hspace=0.4)
+    ax = fig.add_subplot(221, projection='3d')
     rgb_dict = get_keypoint_rgb(skeleton)
     
     for i in range(len(skeleton)):
@@ -113,6 +157,19 @@ def vis_3d_keypoints(kps_3d, score, skeleton, filename, score_thr=0.4, line_widt
             ax.scatter(kps_3d[i,0], kps_3d[i,2], -kps_3d[i,1], c = np.array(rgb_dict[joint_name]).reshape(1,3)/255., marker='o')
         if score[pid] > score_thr and pid != -1:
             ax.scatter(kps_3d[pid,0], kps_3d[pid,2], -kps_3d[pid,1], c = np.array(rgb_dict[parent_joint_name]).reshape(1,3)/255., marker='o')
+
+    # x 方向
+    ax = fig.add_subplot(222)
+    __render_2d_xyz(kps_3d,score, skeleton, ax, rgb_dict,score_thr, axis='x')
+
+    # y
+    ax = fig.add_subplot(223)
+    __render_2d_xyz(kps_3d,score, skeleton, ax, rgb_dict,score_thr, axis='y')
+
+    # z
+    ax = fig.add_subplot(224)
+    __render_2d_xyz(kps_3d,score, skeleton, ax, rgb_dict,score_thr, axis='z')
+
 
     #plt.show()
     #cv2.waitKey(0)
