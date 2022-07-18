@@ -494,8 +494,7 @@ class Trainer(object):
         visualize_model.visualize_weight_ranges(model, visualization_dir)
         visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, visualization_dir)
 
-
-    def apply_qat_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant', need_finetune=False):
+    def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
         # 计算浮点模型
         logger = get_logger('qat', log_level=self.cfg.log_level)
@@ -610,21 +609,81 @@ class Trainer(object):
 
             eval_res = metric_func(results, gts)                 
         print(eval_res)           
-        
-        if not need_finetune:
-            return
 
-        ###############################     STEP - 3    ###############################
+    def apply_qat_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
+        logger = get_logger('qat', log_level=self.cfg.log_level)
+        if model_builder is not None:
+            f32_model = model_builder()
+        else:
+            f32_model = build_model(self.cfg.model)
+
+        assert(dummy_input is not None)
+        # 加载checkpoint
+        ckpt = torch.load(checkpoint, map_location='cpu')
+        f32_model.load_state_dict(ckpt['state_dict'], strict=True)
+
+        model = DummyModelWarp(f32_model)        
+        model = model.to(self.device)
+        quant_val_loader =  \
+            torch.utils.data.DataLoader(
+                UnlabeledDatasetWrapper(self.val_dataloader.dataset, 'image'),batch_size=128, 
+                                        shuffle=False)    
+
+        ###############################     STEP - 0    ###############################
+        # For good initialization apply, apply Post Training Quantization (PTQ) methods
+        # such as Cross Layer Equalization (CLE) and Bias Correction (BC) (optional)
+        if not self.distributed or (get_dist_info()[0] == 0):
+            print('Computing PTQ(CLE and BC) Quantizing Progress.')
+        apply_cross_layer_equalization(model=model, input_shape=dummy_input.shape)
+        apply_bias_correction(model=model, 
+                              data_loader=torch.utils.data.DataLoader(
+                                  LabeledDatasetWrapper(self.val_dataloader.dataset, 'image'), 
+                                  batch_size=256, 
+                                  shuffle=True))
+        dummy_input = dummy_input.to(self.device)
+        quant_sim = calculate_quantsim(model, quant_val_loader, dummy_input, True, os.path.join(path, 'PTQ'), prefix)
+
+        # 删除原始模型      
+        del model
+
+        if not self.distributed or (get_dist_info()[0] == 0):
+            print('Post Training Quantization (PTQ) Complete')
+        head_cfg = None
+        for k in self.cfg.model.keys():
+            if 'head' in k:
+                head_cfg = self.cfg.model[k]
+        assert(head_cfg is not None)            
+        proxy_model_cfg = self.cfg['proxy_model'] if 'proxy_model' in self.cfg.keys() else {}        
+        model = ProxyModule(quant_sim.model, head_cfg, init_cfg=proxy_model_cfg['init_cfg'] if 'init_cfg' in proxy_model_cfg else None)
+        
+        if self.distributed:
+            find_unused_parameters = self.cfg.get('find_unused_parameters', False)
+            # Sets the `find_unused_parameters` parameter in
+            # torch.nn.parallel.DistributedDataParallel
+            model = build_ddp(
+                model,
+                self.device,
+                device_ids=[int(os.environ['LOCAL_RANK'])],
+                broadcast_buffers=False,
+                find_unused_parameters=find_unused_parameters)
+        else:
+            model = build_dp(model, self.device, device_ids=self.cfg.gpu_ids)
+
+        # 自动调整单设备下的学习率到多设备下的学习率
+        auto_scale_lr(self.cfg, self.distributed, logger)
+
+        ###############################     STEP - 1    ###############################
         # Finetune the quantized model
-        print('Starting Model Finetune')
-        # build optimizer
-        optimizer = build_optimizer(warp_model, self.cfg.optimizer)
+        if not self.distributed or (get_dist_info()[0] == 0):        
+            print('Starting Model Finetune')
+        # build optimizer        
+        optimizer = build_optimizer(model, self.cfg.optimizer)
 
         # build training strategy
         self.runner = build_runner(
             dict(type='EpochBasedRunner', max_epochs=1),        # 忽略max_epochs，开发者控制最大epoch
             default_args=dict(
-                model=warp_model,
+                model=model,
                 optimizer=optimizer,
                 work_dir=self.work_dir,
                 logger=logger,
@@ -634,6 +693,9 @@ class Trainer(object):
         self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
         optimizer_config = self.cfg.optimizer_config
+        if self.distributed and 'type' not in self.cfg.optimizer_config:
+            optimizer_config = OptimizerHook(**self.cfg.optimizer_config)
+
         self.runner.register_training_hooks(
             self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等
             optimizer_config,                                       # 优化器的相关后处理，比如限制梯度操作等
@@ -642,23 +704,32 @@ class Trainer(object):
             self.cfg.get('momentum_config', None),                       
             custom_hooks_config=self.cfg.get('custom_hooks', None))
 
+        if self.distributed:
+            if isinstance(self.runner, EpochBasedRunner):
+                self.runner.register_hook(DistSamplerSeedHook())
+
         # 配置验证方法
         eval_cfg = self.cfg.get('evaluation', {})
         eval_cfg['by_epoch'] = True
         if 'interval' not in eval_cfg:
             eval_cfg['interval'] = 1
 
+        eval_hook = DistEvalHook if self.distributed else EvalHook
+
         if 'metric' in eval_cfg:
             metric = build_measure(eval_cfg['metric'])
             eval_cfg['metric'] = metric
         self.runner.register_hook(
-            EvalHook(self.val_dataloader, **eval_cfg), priority='LOW')
+            eval_hook(self.val_dataloader, **eval_cfg), priority='LOW')
 
+        # 训练
         with self.train_context(15) as runner:
             for _ in range(0, runner._max_epochs):
                 self.run_on_train()
 
         # Save the quantized model
-        if not os.path.exists(os.path.join(path, 'QAT')):
-            os.makedirs(os.path.join(path, 'QAT'))
-        quant_sim.export(path=os.path.join(path, 'QAT'), filename_prefix=prefix, dummy_input=dummy_input.cpu())
+        # only on rank=0 node
+        if not self.distributed or (get_dist_info()[0] == 0):
+            if not os.path.exists(os.path.join(path, 'QAT')):
+                os.makedirs(os.path.join(path, 'QAT'))
+            quant_sim.export(path=os.path.join(path, 'QAT'), filename_prefix=prefix, dummy_input=dummy_input.cpu())
