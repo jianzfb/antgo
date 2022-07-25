@@ -26,3 +26,13 @@ class RandomCropP(RandomCrop):
 class RandomRotationP(Rotation):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+@PIPELINES.register_module()
+class CutmixImageP(CutmixImage):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+@PIPELINES.register_module()
+class MixupImageP(MixupImage):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)

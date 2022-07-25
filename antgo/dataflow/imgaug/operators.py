@@ -1631,20 +1631,22 @@ class MixupImage(BaseOperator):
         gt_class2 = sample['mixup']['gt_class']
         gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
 
-        gt_score1 = sample['gt_score']
-        gt_score2 = sample['mixup']['gt_score']
-        gt_score = np.concatenate(
-            (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
+        if 'gt_score' in sample:
+            gt_score1 = sample['gt_score']
+            gt_score2 = sample['mixup']['gt_score']
+            gt_score = np.concatenate(
+                (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
+            sample['gt_score'] = gt_score
 
-        is_crowd1 = sample['is_crowd']
-        is_crowd2 = sample['mixup']['is_crowd']
-        is_crowd = np.concatenate((is_crowd1, is_crowd2), axis=0)
+        if 'is_crowd' in sample:
+            is_crowd1 = sample['is_crowd']
+            is_crowd2 = sample['mixup']['is_crowd']
+            is_crowd = np.concatenate((is_crowd1, is_crowd2), axis=0)
+            sample['is_crowd'] = is_crowd            
 
         sample['image'] = im
         sample['gt_bbox'] = gt_bbox
-        sample['gt_score'] = gt_score
         sample['gt_class'] = gt_class
-        sample['is_crowd'] = is_crowd
         sample['h'] = im.shape[0]
         sample['w'] = im.shape[1]
         sample.pop('mixup')
@@ -1652,7 +1654,7 @@ class MixupImage(BaseOperator):
 
 
 class CutmixImage(BaseOperator):
-    def __init__(self, alpha=1.5, beta=1.5, inputs=None):
+    def __init__(self, prob=0.5, alpha=1.5, beta=1.5, around_obj_size=True, mix_ann=False, avoid_overlap=True, inputs=None):
         """ 
         CutMix: Regularization Strategy to Train Strong Classifiers with Localizable Features, see https://https://arxiv.org/abs/1905.04899
         Cutmix image and gt_bbbox/gt_score
@@ -1663,69 +1665,161 @@ class CutmixImage(BaseOperator):
         super(CutmixImage, self).__init__(inputs=inputs)
         self.alpha = alpha
         self.beta = beta
+        self.around_obj_size = around_obj_size  # 如何设置融合区域的大小
+        self.mix_ann = mix_ann                  # 是否允许两张图的目标解析的合并（合并后，两张图上的目标都作为GT）
+        self.avoid_overlap = avoid_overlap      # 是否允许对img1上目标区域的覆盖
+        self.prob = prob
         if self.alpha <= 0.0:
             raise ValueError("alpha shold be positive in {}".format(self))
         if self.beta <= 0.0:
             raise ValueError("beta shold be positive in {}".format(self))
 
-        def _rand_bbox(self, img1, img2, factor):
-            """ _rand_bbox """
-            h = max(img1.shape[0], img2.shape[0])
-            w = max(img1.shape[1], img2.shape[1])
-            cut_rat = np.sqrt(1. - factor)
+    def _rand_bbox(self, img1, img2, bbox1, bbox2, factor):
+        """ _rand_bbox """
+        h = min(img1.shape[0], img2.shape[0])
+        w = min(img1.shape[1], img2.shape[1])
 
-            cut_w = np.int(w * cut_rat)
-            cut_h = np.int(h * cut_rat)
+        # 默认选择mix区域
+        cut_rat = np.sqrt(1. - factor)
+        
+        cut_w = np.int(w * cut_rat)
+        cut_h = np.int(h * cut_rat)
 
-            # uniform
-            cx = np.random.randint(w)
-            cy = np.random.randint(h)
+        # uniform
+        cx = np.random.randint(w)
+        cy = np.random.randint(h)
 
-            bbx1 = np.clip(cx - cut_w // 2, 0, w)
-            bby1 = np.clip(cy - cut_h // 2, 0, h)
-            bbx2 = np.clip(cx + cut_w // 2, 0, w)
-            bby2 = np.clip(cy + cut_h // 2, 0, h)
+        bbx1 = np.clip(cx - cut_w // 2, 0, w)
+        bby1 = np.clip(cy - cut_h // 2, 0, h)
+        bbx2 = np.clip(cx + cut_w // 2, 0, w)
+        bby2 = np.clip(cy + cut_h // 2, 0, h)
 
-            img_1 = np.zeros((h, w, img1.shape[2]), 'float32')
-            img_1[:img1.shape[0], :img1.shape[1], :] = \
-                img1.astype('float32')
-            img_2 = np.zeros((h, w, img2.shape[2]), 'float32')
-            img_2[:img2.shape[0], :img2.shape[1], :] = \
-                img2.astype('float32')
-            img_1[bby1:bby2, bbx1:bbx2, :] = img2[bby1:bby2, bbx1:bbx2, :]
-            return img_1
+        img_1 = np.zeros((h, w, img1.shape[2]), 'float32')
+        img_1[:img1.shape[0], :img1.shape[1], :] = \
+            img1.astype('float32')
+        img_2 = np.zeros((h, w, img2.shape[2]), 'float32')
+        img_2[:img2.shape[0], :img2.shape[1], :] = \
+            img2.astype('float32')
+        img_1[bby1:bby2, bbx1:bbx2, :] = img2[bby1:bby2, bbx1:bbx2, :]
+        return img_1
 
-        def __call__(self, sample, context=None):
-            if 'cutmix' not in sample:
-                return sample
-            factor = np.random.beta(self.alpha, self.beta)
-            factor = max(0.0, min(1.0, factor))
-            if factor >= 1.0:
-                sample.pop('cutmix')
-                return sample
-            if factor <= 0.0:
-                return sample['cutmix']
-            img1 = sample['image']
-            img2 = sample['cutmix']['image']
-            img = self._rand_bbox(img1, img2, factor)
-            gt_bbox1 = sample['gt_bbox']
-            gt_bbox2 = sample['cutmix']['gt_bbox']
-            gt_bbox = np.concatenate((gt_bbox1, gt_bbox2), axis=0)
-            gt_class1 = sample['gt_class']
-            gt_class2 = sample['cutmix']['gt_class']
-            gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
-            gt_score1 = sample['gt_score']
-            gt_score2 = sample['cutmix']['gt_score']
-            gt_score = np.concatenate(
-                (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
-            sample['image'] = img
-            sample['gt_bbox'] = gt_bbox
-            sample['gt_score'] = gt_score
-            sample['gt_class'] = gt_class
-            sample['h'] = img.shape[0]
-            sample['w'] = img.shape[1]
+    def _rand_bbox_around_obj_size(self, img1, img2, bbox1, bbox2, factor):
+        h = min(img1.shape[0], img2.shape[0])
+        w = min(img1.shape[1], img2.shape[1])
+        cut_rat = np.sqrt(1. - factor)
+        
+        # 选择混合区域大小
+        cut_w = np.int(w * cut_rat)
+        cut_h = np.int(h * cut_rat)            
+        if self.around_obj_size and bbox1.shape[0] > 0:
+            box_w = (bbox1[:,2] - bbox1[:,0]).mean()
+            box_h = (bbox1[:,3] - bbox1[:,1]).mean()
+
+            cut_w = min(np.int(box_w * (np.random.random() * 2 + 1.0)), w) # 1.0 ~ 5.0
+            cut_h = min(np.int(box_h * (np.random.random() * 2 + 1.0)), h) # 1.0 ~ 5.0
+
+        # 选择混合区域位置
+        # uniform
+        cx_in_1 = np.random.randint(w)
+        cy_in_1 = np.random.randint(h)
+
+        cx_in_2 = np.random.randint(w)
+        cy_in_2 = np.random.randint(h)
+
+        # in 1
+        bbx1_in_1 = np.clip(cx_in_1 - cut_w // 2, 0, w)
+        bby1_in_1 = np.clip(cy_in_1 - cut_h // 2, 0, h)
+        bbx2_in_1 = np.clip(cx_in_1 + cut_w // 2, 0, w)
+        bby2_in_1 = np.clip(cy_in_1 + cut_h // 2, 0, h)
+
+        # in 2
+        bbx1_in_2 = np.clip(cx_in_2 - cut_w // 2, 0, w)
+        bby1_in_2 = np.clip(cy_in_2 - cut_h // 2, 0, h)
+        bbx2_in_2 = np.clip(cx_in_2 + cut_w // 2, 0, w)
+        bby2_in_2 = np.clip(cy_in_2 + cut_h // 2, 0, h)
+
+        adjust_bb_w = min((bbx2_in_1-bbx1_in_1), (bbx2_in_2-bbx1_in_2))
+        adjust_bb_h = min((bby2_in_1-bby1_in_1), (bby2_in_2-bby1_in_2))
+        bbx2_in_1 = bbx1_in_1 + adjust_bb_w
+        bbx2_in_2 = bbx1_in_2 + adjust_bb_w
+
+        bby2_in_1 = bby1_in_1 + adjust_bb_h
+        bby2_in_2 = bby1_in_2 + adjust_bb_h
+
+        # img_1 = np.zeros((h, w, img1.shape[2]), 'float32')
+        # img_1[:img1.shape[0], :img1.shape[1], :] = \
+        #     img1.astype('float32')
+        # img_2 = np.zeros((h, w, img2.shape[2]), 'float32')
+        # img_2[:img2.shape[0], :img2.shape[1], :] = \
+        #     img2.astype('float32')
+        img1_c = img1.copy()
+        # 避免img2中的目标，进入
+        for bb in bbox2:
+            x1,y1,x2,y2 = bb.astype(np.int32)
+            img2[y1:y2,x1:x2] = np.random.randint(0,255)
+        img1_c[bby1_in_1:bby2_in_1, bbx1_in_1:bbx2_in_1] = img2[bby1_in_2:bby2_in_2, bbx1_in_2:bbx2_in_2]      
+
+        if self.avoid_overlap:
+            for bb in bbox1:
+                x1,y1,x2,y2 = bb.astype(np.int32)
+                img1_c[y1:y2,x1:x2] = img1[y1:y2,x1:x2]
+
+        return img1_c
+
+    def __call__(self, sample, context=None):
+        if 'cutmix' not in sample or np.random.random() > self.prob:
+            return sample
+        factor = np.random.beta(self.alpha, self.beta)
+        factor = max(0.0, min(1.0, factor))
+        if factor >= 1.0:
             sample.pop('cutmix')
             return sample
+        if factor <= 0.0:
+            return sample['cutmix']
+        img1 = sample['image']
+        img2 = sample['cutmix']['image']
+
+        gt_bbox1 = sample['gt_bbox']
+        gt_bbox2 = sample['cutmix']['gt_bbox']
+        img = None
+        if self.mix_ann:
+            # ignore avoid_overlap, around_obj_size
+            img = self._rand_bbox(img1, img2, gt_bbox1, gt_bbox2, factor)
+        else:
+            img = self._rand_bbox_around_obj_size(img1, img2, gt_bbox1, gt_bbox2, factor)
+
+        gt_bbox = gt_bbox1
+        if gt_bbox2.shape[0] != 0 and self.mix_ann:
+            gt_bbox = np.concatenate((gt_bbox1, gt_bbox2), axis=0)
+
+        # gt_bbox = np.concatenate((gt_bbox1, gt_bbox2), axis=0)
+        # gt_class1 = sample['gt_class']
+        # gt_class2 = sample['cutmix']['gt_class']
+        # gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
+        # gt_score1 = sample['gt_score']
+        # gt_score2 = sample['cutmix']['gt_score']
+        # gt_score = np.concatenate(
+        #     (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
+        gt_class1 = sample['gt_class']
+        gt_class = gt_class1
+        # gt_score1 = sample['gt_score']
+        # gt_score = gt_score1
+        if gt_bbox2.shape[0] != 0 and self.mix_ann:
+            gt_class2 = sample['cutpaste']['gt_class']
+            gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
+
+            # gt_score2 = sample['cutpaste']['gt_score']
+            # gt_score = np.concatenate(
+            #     (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
+
+        sample['image'] = img
+        sample['gt_bbox'] = gt_bbox
+        # sample['gt_score'] = gt_score
+        sample['gt_class'] = gt_class
+        sample['h'] = img.shape[0]
+        sample['w'] = img.shape[1]
+        sample.pop('cutmix')
+        return sample
 
 
 class RandomInterpImage(BaseOperator):

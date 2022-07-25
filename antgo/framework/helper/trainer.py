@@ -267,13 +267,22 @@ class Trainer(object):
         # prepare network
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
-        if model_builder is not None:
-            model = model_builder()
+
+        distiller_cfg = self.cfg.get('distiller',None)
+        if distiller_cfg is None:
+            if model_builder is not None:
+                model = model_builder()
+            else:
+                model = build_model(self.cfg.model)
+            
+            # 模型初始化
+            model.init_weights()
         else:
-            model = build_model(self.cfg.model)
-        
-        # 模型初始化
-        model.init_weights()
+            teacher_cfg = Config.fromfile(self.cfg.teacher_cfg)
+            student_cfg = Config.fromfile(self.cfg.student_cfg)
+
+            # 构建蒸馏模型
+            model = build_distiller(self.cfg.distiller, teacher_cfg, student_cfg)
 
         if self.distributed:
             find_unused_parameters = self.cfg.get('find_unused_parameters', False)
@@ -292,7 +301,10 @@ class Trainer(object):
         auto_scale_lr(self.cfg, self.distributed, logger)
 
         # build optimizer
-        optimizer = build_optimizer(model, self.cfg.optimizer)
+        if distiller_cfg is None:
+            optimizer = build_optimizer(model, self.cfg.optimizer)
+        else:
+            optimizer = build_optimizer(model.module.base_parameters(), self.cfg.optimizer)
 
         # build training strategy
         self.runner = build_runner(
@@ -465,11 +477,13 @@ class Trainer(object):
             f32_model.load_state_dict(ckpt['state_dict'], strict=True)
 
         # 获得浮点模型的 FLOPS、PARAMS
-        model = DummyModelWarp(f32_model)        
-        model = model.eval()
-        model = model.to('cpu')
+        # model = DummyModelWarp(f32_model)        
+        # model = model.eval()
+        f32_model.eval()
+        f32_model.forward = f32_model.onnx_export
+        f32_model = f32_model.to('cpu')
         dummy_input = dummy_input.to('cpu')
-        flops, params = profile(model, inputs=(dummy_input,))
+        flops, params = profile(f32_model, inputs=(dummy_input,))
         print('FLOPs = ' + str(flops/1000**3) + 'G')
         print('Params = ' + str(params/1000**2) + 'M')
 
@@ -478,7 +492,7 @@ class Trainer(object):
 
         # Export the model
         torch.onnx.export(
-                model,                                      # model being run
+                f32_model,                                      # model being run
                 dummy_input,                                # model input (or a tuple for multiple inputs)
                 os.path.join(path, f'{prefix}.onnx'),       # where to save the model (can be a file or file-like object)
                 export_params=True,                         # store the trained parameter weights inside the model file
@@ -491,8 +505,8 @@ class Trainer(object):
         if not os.path.exists(os.path.join(path, 'visualization')):
             os.makedirs(os.path.join(path, 'visualization'))
         visualization_dir = os.path.join(path, 'visualization')
-        visualize_model.visualize_weight_ranges(model, visualization_dir)
-        visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, visualization_dir)
+        visualize_model.visualize_weight_ranges(f32_model, visualization_dir)
+        visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(f32_model, visualization_dir)
 
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
