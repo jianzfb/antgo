@@ -426,8 +426,7 @@ class Rotation(BaseOperator):
                 src=im,
                 M=rot_mat,
                 dsize=im.shape[1::-1],
-                flags=cv2.INTER_AREA,
-                borderMode=cv2.BORDER_REFLECT)
+                flags=cv2.INTER_AREA)
 
         if 'gt_bbox' in sample:
             gt_bbox = sample['gt_bbox']
@@ -446,6 +445,11 @@ class Rotation(BaseOperator):
                     ymin = np.min(coor_new[1, :]) + np.abs(angle/margin)
                     xmax = np.max(coor_new[0, :]) - np.abs(angle/margin)
                     ymax = np.max(coor_new[1, :]) - np.abs(angle/margin)
+                    
+                xmin = np.clip(xmin, 0, image_rotated.shape[1]-1)
+                ymin = np.clip(ymin, 0, image_rotated.shape[0]-1)
+                xmax = np.clip(xmax, 0, image_rotated.shape[1]-1)
+                ymax = np.clip(ymax, 0, image_rotated.shape[0]-1)
                 gt_bbox[i, 0] = xmin
                 gt_bbox[i, 1] = ymin
                 gt_bbox[i, 2] = xmax
@@ -1589,7 +1593,7 @@ class Permute(BaseOperator):
 
 
 class MixupImage(BaseOperator):
-    def __init__(self, alpha=1.5, beta=1.5, inputs=None):
+    def __init__(self, prob=0.5, alpha=1.5, beta=1.5, inputs=None):
         """ Mixup image and gt_bbbox/gt_score
         Args:
             alpha (float): alpha parameter of beta distribute
@@ -1598,6 +1602,7 @@ class MixupImage(BaseOperator):
         super(MixupImage, self).__init__(inputs=inputs)
         self.alpha = alpha
         self.beta = beta
+        self.prob = prob
         if self.alpha <= 0.0:
             raise ValueError("alpha shold be positive in {}".format(self))
         if self.beta <= 0.0:
@@ -1606,16 +1611,23 @@ class MixupImage(BaseOperator):
     def _mixup_img(self, img1, img2, factor):
         h = max(img1.shape[0], img2.shape[0])
         w = max(img1.shape[1], img2.shape[1])
-        img = np.zeros((h, w, img1.shape[2]), 'float32')
-        img[:img1.shape[0], :img1.shape[1], :] = \
+        if len(img1.shape) > 2:
+            img = np.zeros((h, w, img1.shape[2]), 'float32')
+        else:
+            img = np.zeros((h, w), 'float32')
+        img[:img1.shape[0], :img1.shape[1]] = \
             img1.astype('float32') * factor
-        img[:img2.shape[0], :img2.shape[1], :] += \
+        img[:img2.shape[0], :img2.shape[1]] += \
             img2.astype('float32') * (1.0 - factor)
         return img.astype('uint8')
 
     def __call__(self, sample, context=None):
         if 'mixup' not in sample:
             return sample
+        if np.random.random() > self.prob:
+            sample.pop('mixup')
+            return sample
+        
         factor = np.random.beta(self.alpha, self.beta)
         factor = max(0.0, min(1.0, factor))
         if factor >= 1.0:
@@ -1626,16 +1638,23 @@ class MixupImage(BaseOperator):
         im = self._mixup_img(sample['image'], sample['mixup']['image'], factor)
         gt_bbox1 = sample['gt_bbox']
         gt_bbox2 = sample['mixup']['gt_bbox']
-        gt_bbox = np.concatenate((gt_bbox1, gt_bbox2), axis=0)
+        gt_bbox = gt_bbox1
+        if gt_bbox2.shape[0] > 0:
+            gt_bbox = np.concatenate((gt_bbox1, gt_bbox2), axis=0)
+
         gt_class1 = sample['gt_class']
         gt_class2 = sample['mixup']['gt_class']
-        gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
+        gt_class = gt_class1
+        if gt_bbox2.shape[0] > 0:
+            gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
 
         if 'gt_score' in sample:
             gt_score1 = sample['gt_score']
             gt_score2 = sample['mixup']['gt_score']
-            gt_score = np.concatenate(
-                (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
+            gt_score = gt_score1
+            if gt_bbox2.shape[0] > 0:
+                gt_score = np.concatenate(
+                    (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
             sample['gt_score'] = gt_score
 
         if 'is_crowd' in sample:
@@ -1650,6 +1669,9 @@ class MixupImage(BaseOperator):
         sample['h'] = im.shape[0]
         sample['w'] = im.shape[1]
         sample.pop('mixup')
+
+        if 'cutmix' in sample:
+            sample.pop('cutmix')
         return sample
 
 
@@ -1715,8 +1737,8 @@ class CutmixImage(BaseOperator):
             box_w = (bbox1[:,2] - bbox1[:,0]).mean()
             box_h = (bbox1[:,3] - bbox1[:,1]).mean()
 
-            cut_w = min(np.int(box_w * (np.random.random() * 2 + 1.0)), w) # 1.0 ~ 5.0
-            cut_h = min(np.int(box_h * (np.random.random() * 2 + 1.0)), h) # 1.0 ~ 5.0
+            cut_w = min(np.int(box_w * (np.random.random() * 2 + 1.0)), w) # 1.0 ~ 3.0
+            cut_h = min(np.int(box_h * (np.random.random() * 2 + 1.0)), h) # 1.0 ~ 3.0
 
         # 选择混合区域位置
         # uniform
@@ -1767,8 +1789,12 @@ class CutmixImage(BaseOperator):
         return img1_c
 
     def __call__(self, sample, context=None):
-        if 'cutmix' not in sample or np.random.random() > self.prob:
+        if 'cutmix' not in sample:
             return sample
+        if np.random.random() > self.prob:
+            sample.pop('cutmix')
+            return sample
+
         factor = np.random.beta(self.alpha, self.beta)
         factor = max(0.0, min(1.0, factor))
         if factor >= 1.0:
@@ -1814,11 +1840,13 @@ class CutmixImage(BaseOperator):
 
         sample['image'] = img
         sample['gt_bbox'] = gt_bbox
-        # sample['gt_score'] = gt_score
         sample['gt_class'] = gt_class
         sample['h'] = img.shape[0]
         sample['w'] = img.shape[1]
         sample.pop('cutmix')
+
+        if 'mixup' in sample:
+            sample.pop('mixup')
         return sample
 
 

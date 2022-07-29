@@ -82,7 +82,7 @@ class Reader(torch.utils.data.Dataset):
 
 
 class ObjDetReader(Reader):
-    def __init__(self, dataset, pipeline, inputs_def, enable_mixup=False, enable_cutmix=True, class_aware_sampling=False, num_classes=1, cache_size=0, file_loader=None):
+    def __init__(self, dataset, pipeline, inputs_def, enable_mixup=True, enable_cutmix=True, class_aware_sampling=False, num_classes=1, cache_size=0, file_loader=None):
         super().__init__(dataset, pipeline=pipeline, inputs_def=inputs_def)
         # TODO, support class aware sampling
         self.class_aware_sampling = class_aware_sampling
@@ -135,7 +135,8 @@ class ObjDetReader(Reader):
                 sample['mixup'] = self.cache_mixup[mix_idx]
                 if 'image_file' in sample['mixup']:
                     sample['mixup']['image'] = self.file_loader(sample['mixup']['image_file'])
-        elif self.enable_cutmix:
+        
+        if self.enable_cutmix:
             # 仅负责cutmix的数据准备
             if self.cache_size <= 0:
                 num = self.proxy_dataset.size
@@ -151,8 +152,10 @@ class ObjDetReader(Reader):
         for (transform, transform_type) in zip(self.pipeline, self.pipeline_types):
             try:
                 sample = transform(sample)
-            except:
-                print(f'transform error{transform_type}')
+            except Exception as e:
+                print(f'{transform_type}')
+                print(e)
+                raise e
         
         # arange warp
         sample = self._arrange(sample, self._fields)

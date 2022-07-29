@@ -79,4 +79,4 @@ def build_distiller(cfg, teacher_cfg, student_cfg):
 
 def build_distill_loss(cfg):
     """Build distill loss."""
-    return DISTILL_LOSSES(cfg)
+    return DISTILL_LOSSES.build(cfg)
