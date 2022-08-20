@@ -3,6 +3,7 @@ from .checkpoint import CheckpointHook
 from .closure import ClosureHook
 from .ema import EMAHook
 from .evaluation import DistEvalHook, EvalHook
+from .submodules_evaluation import SubModulesDistEvalHook, SubModulesEvalHook
 from .hook import HOOKS, Hook
 from .iter_timer import IterTimerHook
 from .logger import ( LoggerHook, NeptuneLoggerHook, TextLoggerHook)
@@ -26,6 +27,8 @@ from .profiler import ProfilerHook
 from .sampler_seed import DistSamplerSeedHook
 from .sync_buffer import SyncBuffersHook
 from .metrics import COCOBboxEval
+from .mean_teacher import MeanTeacher
+from .weight_adjust import Weighter
 
 __all__ = [
     'HOOKS', 'Hook', 'CheckpointHook', 'ClosureHook', 'LrUpdaterHook',
@@ -42,5 +45,6 @@ __all__ = [
     'SyncBuffersHook', 'EMAHook', 'EvalHook', 'DistEvalHook', 'ProfilerHook',
     'GradientCumulativeOptimizerHook', 'GradientCumulativeFp16OptimizerHook',
     'SegmindLoggerHook', 'LinearAnnealingLrUpdaterHook',
-    'LinearAnnealingMomentumUpdaterHook', 'ClearMLLoggerHook'
+    'LinearAnnealingMomentumUpdaterHook', 'ClearMLLoggerHook', 'MeanTeacher', 'Weighter',
+    'SubModulesDistEvalHook', 'SubModulesEvalHook'
 ]

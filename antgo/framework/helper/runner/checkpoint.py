@@ -9,6 +9,7 @@ import warnings
 from collections import OrderedDict
 from importlib import import_module
 from tempfile import TemporaryDirectory
+from numpy import mod
 
 import torch
 import torchvision
@@ -597,6 +598,14 @@ def load_checkpoint(model,
     state_dict._metadata = metadata
 
     # load state_dict
+    module = model
+    if is_module_wrapper(module):
+        module = module.module    
+    if getattr(module, "load_state_dict", None) is not None:
+        result = module.load_state_dict(state_dict)
+        if result:
+            return checkpoint
+
     load_state_dict(model, state_dict, strict, logger)
     return checkpoint
 

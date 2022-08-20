@@ -249,10 +249,13 @@ class ClsDataset(Dataset, metaclass=ABCMeta):
 
     def at(self, idx):
         return None, self.prepare_data(idx)
-
+       
     def data_pool(self):
         for index in range(self.size):
             yield self.at(index)
+
+    def get_ann_info(self, idx):
+        return self.prepare_data(idx)
 
     @classmethod
     def get_classes(cls, classes=None):

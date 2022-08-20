@@ -797,7 +797,7 @@ class Resize(object):
                     height = target_size
                     width = int(target_size * w / h)
             else:
-                height, width = self.size
+               width, height = self.size
             if not ignore_resize:
                 img = cv2.resize(
                     img,
@@ -816,6 +816,14 @@ class Resize(object):
         repr_str += f'interpolation={self.interpolation})'
         return repr_str
 
+    def reset(self, target_dim):
+        if type(target_dim) == list or type(target_dim) == tuple:
+            self.size = target_dim
+        else:
+            self.size = [target_dim, target_dim]  # w,h
+
+    def get(self):
+        return self.size
 
 @PIPELINES.register_module()
 class CenterCrop(object):

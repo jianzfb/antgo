@@ -19,6 +19,7 @@ from antgo.framework.helper.apis.train import *
 from antgo.framework.helper.dataset import (build_dataloader, build_dataset)
 from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, get_device
 from antgo.framework.helper.utils import get_logger
+from antgo.framework.helper.runner import *
 from antgo.framework.helper.runner import get_dist_info, init_dist
 from antgo.framework.helper.runner.builder import *
 from antgo.framework.helper.utils.setup_env import *
@@ -26,6 +27,9 @@ from antgo.framework.helper.models.builder import *
 from antgo.framework.helper.utils import *
 from antgo.framework.helper.models.dummy_module import *
 from antgo.framework.helper.models.proxy_module import *
+from antgo.framework.helper.models.distillation import *
+from antgo.framework.helper.models.semi import *
+from antgo.framework.helper.runner.hooks.hook import *
 from thop import profile
 import copy
 
@@ -246,6 +250,15 @@ class Trainer(object):
             **train_dataloader_default_args,
             **self.cfg.data.get('train_dataloader', {})
         }
+        semi_cfg = self.cfg.get('semi',None)
+        if semi_cfg is not None:
+            # 半监督加载策略，仅在训练时使用
+            semi_loader_strategy = semi_cfg.get('strategy', {'labeled': 1,'unlabeled': 1})
+            train_loader_cfg.update({
+                'semi': {
+                    'strategy': semi_loader_strategy
+                }
+            })
         self.train_generator = build_dataloader(dataset, **train_loader_cfg)
         
         if with_validate:
@@ -268,21 +281,13 @@ class Trainer(object):
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
 
-        distiller_cfg = self.cfg.get('distiller',None)
-        if distiller_cfg is None:
-            if model_builder is not None:
-                model = model_builder()
-            else:
-                model = build_model(self.cfg.model)
-            
-            # 模型初始化
-            model.init_weights()
+        if model_builder is not None:
+            model = model_builder()
         else:
-            teacher_cfg = Config.fromfile(self.cfg.teacher_cfg)
-            student_cfg = Config.fromfile(self.cfg.student_cfg)
-
-            # 构建蒸馏模型
-            model = build_distiller(self.cfg.distiller, teacher_cfg, student_cfg)
+            model = build_model(self.cfg.model)
+        
+        # 模型初始化
+        model.init_weights()
 
         if self.distributed:
             find_unused_parameters = self.cfg.get('find_unused_parameters', False)
@@ -301,14 +306,12 @@ class Trainer(object):
         auto_scale_lr(self.cfg, self.distributed, logger)
 
         # build optimizer
-        if distiller_cfg is None:
-            optimizer = build_optimizer(model, self.cfg.optimizer)
-        else:
-            optimizer = build_optimizer(model.module.base_parameters(), self.cfg.optimizer)
+        optimizer = build_optimizer(model, self.cfg.optimizer)
 
         # build training strategy
+        custom_runner = self.cfg.get('custom_runner', dict(type='EpochBasedRunner', max_epochs=1))
         self.runner = build_runner(
-            dict(type='EpochBasedRunner', max_epochs=1),        # 忽略max_epochs，开发者控制最大epoch
+            custom_runner,        # 忽略max_epochs，开发者控制最大epoch
             default_args=dict(
                 model=model,
                 optimizer=optimizer,
@@ -319,9 +322,16 @@ class Trainer(object):
         # an ugly workaround to make .log and .log.json filenames the same
         self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
-        optimizer_config = self.cfg.optimizer_config
-        if self.distributed and 'type' not in self.cfg.optimizer_config:
-            optimizer_config = OptimizerHook(**self.cfg.optimizer_config)
+        optimizer_config = self.cfg.get('optimizer_config', {})
+        if 'type' not in optimizer_config:
+            optimizer_config = OptimizerHook(**optimizer_config)
+
+        custom_hooks = self.cfg.get('custom_hooks', None)
+        semi_cfg = self.cfg.get('semi',None)
+        if semi_cfg is not None and semi_cfg.get('hooks', None):
+            if custom_hooks is None:
+                custom_hooks = []
+            custom_hooks.extend(semi_cfg.get('hooks'))
 
         self.runner.register_training_hooks(
             self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等
@@ -329,7 +339,7 @@ class Trainer(object):
             self.cfg.checkpoint_config,                             # checkpoint相关处理
             self.cfg.log_config,                                         
             self.cfg.get('momentum_config', None),                       
-            custom_hooks_config=self.cfg.get('custom_hooks', None))
+            custom_hooks_config=custom_hooks)
 
         if self.distributed:
             if isinstance(self.runner, EpochBasedRunner):
@@ -341,13 +351,22 @@ class Trainer(object):
             if 'interval' not in eval_cfg:
                 eval_cfg['interval'] = 1
 
-            eval_hook = DistEvalHook if self.distributed else EvalHook
-
             if 'metric' in eval_cfg:
                 metric = build_measure(eval_cfg['metric'])
                 eval_cfg['metric'] = metric
-            self.runner.register_hook(
-                eval_hook(self.val_dataloader, **eval_cfg), priority='LOW')
+
+            if 'type' not in eval_cfg:
+                eval_hook = DistEvalHook if self.distributed else EvalHook
+                if semi_cfg is not None:
+                    eval_hook = SubModulesDistEvalHook if self.distributed else SubModulesEvalHook
+
+                self.runner.register_hook(
+                    eval_hook(self.val_dataloader, **eval_cfg), priority='LOW')
+            else:
+                eval_cfg['dataloader'] = self.val_dataloader
+                self.runner.register_hook(
+                    build_from_cfg(eval_cfg, HOOKS), priority='LOW'
+                )
 
         if resume_from is not None:
             self.runner.resume(resume_from)
@@ -369,101 +388,6 @@ class Trainer(object):
     def run_on_val(self, **kwargs):
         self.runner.val(self.val_dataloader, **kwargs)
     
-    def apply_ada_quant(self, dummy_input, checkpoint, model_builder=None, num_batches=4, default_num_iterations=10000, filename_prefix='quant', path='./'):
-        assert(self.val_dataloader is not None)
-        eval_cfg = self.cfg.get('evaluation', {})
-        metric_func = None
-        if 'metric' in eval_cfg:
-            metric_func = build_measure(eval_cfg['metric'])
-
-        print('load model and checkpoint.')
-        if model_builder is not None:
-            f32_model = model_builder()
-        else:
-            f32_model = build_model(self.cfg.model)
-
-        ckpt = torch.load(checkpoint, map_location=torch.device('cpu'))
-        f32_model.load_state_dict(ckpt['state_dict'], strict=True)
-
-        # 计算浮点模型精度
-        print('computing float model accuray.')
-        results = single_gpu_test(f32_model, self.val_dataloader)
-        eval_res = {}
-        if metric_func is None:
-            eval_res = self.val_dataloader.dataset.evaluate(results, logger=None)
-        else:
-            gts = []
-            for gt_i in range(len(self.val_dataloader.dataset)):
-                gts.append(self.val_dataloader.dataset.get_ann_info(gt_i))
-
-            eval_res = metric_func(results, gts)        
-        print(eval_res)
-
-        # 开始量化分析
-        print('starting ada process.')
-        # fold bn
-        model = DummyModelWarp(f32_model)        
-        _ = fold_all_batch_norms(model, input_shapes=dummy_input.shape)
-        model = model.to(self.device)
-        prepared_model = prepare_model(model)
-        quant_train_loader = \
-            torch.utils.data.DataLoader(UnlabeledDatasetWrapper(self.train_generator.dataset, 'image'),
-                                        batch_size=32, 
-                                        shuffle=True)
-        quant_val_loader =  \
-            torch.utils.data.DataLoader(UnlabeledDatasetWrapper(self.val_dataloader.dataset, 'image'),
-                                        batch_size=4, 
-                                        shuffle=True)
-
-        params = AdaroundParameters(data_loader=quant_train_loader, 
-                                    num_batches=32, 
-                                    default_num_iterations=default_num_iterations,
-                                    default_reg_param=0.01, default_beta_range=(20, 2))
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-        # Returns model with adarounded weights and their corresponding encodings
-        adarounded_model = Adaround.apply_adaround(
-                                        prepared_model, dummy_input, params, 
-                                        path=path,
-                                        filename_prefix=filename_prefix, 
-                                        default_param_bw=8,
-                                        default_quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                        default_config_file=None)
-
-        sim = QuantizationSimModel(adarounded_model, 
-                                    quant_scheme=QuantScheme.post_training_tf_enhanced, 
-                                    default_param_bw=8,
-                                    default_output_bw=8, 
-                                    dummy_input=dummy_input)
-
-        # Set and freeze encodings to use same quantization grid and then invoke compute encodings
-        sim.set_and_freeze_param_encodings(encoding_path=os.path.join(path, f'{filename_prefix}.encodings'))
-
-        # compute encodings on val
-        sim.compute_encodings(_default_forward_pass_callback, 
-                              forward_pass_callback_args=quant_val_loader) 
-
-        # 输出量化模型
-        print('export quant model.')
-        self.export(path, filename_prefix, dummy_input, quant_sim=sim)
-
-        # 计算量化模型精度
-        print('computing quant model accuray.')
-        f32_model.set_extract_feat_func(sim.model)
-        quant_model = build_dp(f32_model, self.device, device_ids=self.cfg.gpu_ids)
-        results = single_gpu_test(quant_model, self.val_dataloader)
-        eval_res = {}
-        if metric_func is None:
-            eval_res = self.val_dataloader.dataset.evaluate(results, logger=None)
-        else:
-            gts = []
-            for gt_i in range(len(self.val_dataloader.dataset)):
-                gts.append(self.val_dataloader.dataset.get_ann_info(gt_i))
-
-            eval_res = metric_func(results, gts)        
-        print(eval_res)
-
     def export(self, dummy_input, checkpoint=None, model_builder=None, path='./', prefix='model'):
         f32_model = None
         if model_builder is not None:

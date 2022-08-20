@@ -6,6 +6,7 @@ import warnings
 from functools import partial
 
 import numpy as np
+from numpy.random.mtrand import sample
 import torch
 from antgo.framework.helper.parallel import collate
 from antgo.framework.helper.runner import get_dist_info
@@ -14,7 +15,7 @@ from torch.utils.data import DataLoader
 
 from .samplers import (ClassAwareSampler, DistributedGroupSampler,
                        DistributedSampler, GroupSampler, InfiniteBatchSampler,
-                       InfiniteGroupBatchSampler)
+                       InfiniteGroupBatchSampler, SemiSampler, DistributedSemiSampler)
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973
@@ -125,6 +126,12 @@ def build_dataloader(dataset,
     """
     rank, world_size = get_dist_info()
 
+    semi_config = kwargs.get('semi', None)
+    semi_loader_strategy = None
+    if semi_config is not None:
+        semi_loader_strategy = semi_config['strategy']
+        kwargs.pop('semi')
+
     if dist:
         # When model is :obj:`DistributedDataParallel`,
         # `batch_size` of :obj:`dataloader` is the
@@ -171,14 +178,24 @@ def build_dataloader(dataset,
             # DistributedGroupSampler will definitely shuffle the data to
             # satisfy that images on each GPU are in the same group
             if shuffle:
-                sampler = DistributedGroupSampler(
-                    dataset, samples_per_gpu, world_size, rank, seed=seed)
+                if semi_loader_strategy is None:
+                    sampler = DistributedGroupSampler(
+                        dataset, samples_per_gpu, world_size, rank, seed=seed)
+                else:
+                    sampler = DistributedSemiSampler(
+                        dataset, samples_per_gpu, world_size, rank, seed=seed, strategy=semi_loader_strategy
+                    )
             else:
                 sampler = DistributedSampler(
                     dataset, world_size, rank, shuffle=False, seed=seed)
         else:
-            sampler = GroupSampler(dataset,
-                                   samples_per_gpu) if shuffle else None
+            if semi_loader_strategy is None:
+                sampler = GroupSampler(dataset,
+                                    samples_per_gpu) if shuffle else None
+            else:
+                assert(shuffle)
+                sampler = SemiSampler(dataset, samples_per_gpu, semi_loader_strategy)
+
         batch_sampler = None
 
     init_fn = partial(

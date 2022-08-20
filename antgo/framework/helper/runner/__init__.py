@@ -13,6 +13,7 @@ from .fp16_utils import LossScaler, auto_fp16, force_fp32, wrap_fp16_model
 from .hooks import (HOOKS, CheckpointHook, ClosureHook,
                     DistEvalHook, DistSamplerSeedHook, 
                     EMAHook, EvalHook, Fp16OptimizerHook,
+                    SubModulesDistEvalHook, SubModulesEvalHook,
                     GradientCumulativeFp16OptimizerHook,
                     GradientCumulativeOptimizerHook, Hook, IterTimerHook,
                     LoggerHook, NeptuneLoggerHook,
@@ -64,5 +65,6 @@ __all__ = [
     'GradientCumulativeFp16OptimizerHook', 'DefaultRunnerConstructor',
     'LinearAnnealingMomentumUpdaterHook', 'LinearAnnealingLrUpdaterHook',
     'CheckpointLoader', '_load_checkpoint', '_load_checkpoint_with_prefix', 
-    'load_checkpoint', 'load_state_dict', 'save_checkpoint', 'weights_to_cpu'
+    'load_checkpoint', 'load_state_dict', 'save_checkpoint', 'weights_to_cpu',
+    'SubModulesEvalHook', 'SubModulesDistEvalHook'
 ]

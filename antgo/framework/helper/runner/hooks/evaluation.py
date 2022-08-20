@@ -516,7 +516,7 @@ class DistEvalHook(EvalHook):
             gpu_collect=False)
 
         if runner.rank == 0:
-            # 尽在master节点进行统计模型分数
+            # 仅在master节点进行统计模型分数
             print('\n')
             runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
             key_score = self.evaluate(runner, results)

@@ -269,6 +269,8 @@ class CustomClsDataset(ClsDataset):
                 info['image_file'] = os.path.join(self.data_prefix, self.train_or_test, filename)            
             
             info['gt_label'] = np.array(gt_label, dtype=np.int64)
+            info['category_id'] = np.array(gt_label, dtype=np.int64)
+            info['id'] = len(data_infos)
             data_infos.append(info)
         return data_infos
 

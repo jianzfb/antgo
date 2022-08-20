@@ -80,9 +80,33 @@ class Reader(torch.utils.data.Dataset):
     def evaluate(self, preds,**kwargs):
         return self.proxy_dataset.evaluate(preds, **kwargs)
 
+    def set_active_target_size(self, target_size):
+        # 从pipeline中，发现resize处理器
+        for processor, processor_type in zip(self.pipeline[::-1], self.pipeline_types[::-1]):
+            if processor_type.startswith('Resize'):
+                processor.reset(target_size)
+
+    def get_active_target_size(self):
+        # 从pipeline中，发现resize处理器
+        target_size = None
+        for processor, processor_type in zip(self.pipeline[::-1], self.pipeline_types[::-1]):
+            if processor_type.startswith('Resize'):
+                target_size = processor.get()
+        
+        return target_size
 
 class ObjDetReader(Reader):
-    def __init__(self, dataset, pipeline, inputs_def, enable_mixup=True, enable_cutmix=True, class_aware_sampling=False, num_classes=1, cache_size=0, file_loader=None):
+    def __init__(
+        self, 
+        dataset, 
+        pipeline, 
+        inputs_def, 
+        enable_mixup=True, 
+        enable_cutmix=True, 
+        class_aware_sampling=False, 
+        num_classes=1, 
+        cache_size=0, 
+        file_loader=None):
         super().__init__(dataset, pipeline=pipeline, inputs_def=inputs_def)
         # TODO, support class aware sampling
         self.class_aware_sampling = class_aware_sampling
@@ -119,7 +143,7 @@ class ObjDetReader(Reader):
                     cutmix_sample.pop('image')
 
                 if len(self.cache_cutmix) > self.cache_max_size:
-                    random_i = np.random.randint(0, len(self.cache_mixup))
+                    random_i = np.random.randint(0, len(self.cache_cutmix))
                     self.cache_cutmix[random_i] = cutmix_sample
                 else:
                     self.cache_cutmix.append(cutmix_sample)
@@ -157,6 +181,144 @@ class ObjDetReader(Reader):
                 print(e)
                 raise e
         
+        if self._fields is None:
+            return sample
+
         # arange warp
         sample = self._arrange(sample, self._fields)
         return sample
+
+
+class SemiReader(torch.utils.data.Dataset):
+    def __init__(self, reader_cls, dataset, pipeline_teacher, pipeline_student, inputs_def, strategy=None, **kwargs):
+        self.reader_base = reader_cls(dataset, None, None, **kwargs)
+        self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
+
+        # 读取策略 
+        # {'labeled': 1, 'unlabeled': 1}
+        self.strategy = strategy
+
+        self.teacher_pipeline_types = []
+        self.teacher_pipeline = []
+        if pipeline_teacher is not None:
+            from antgo.framework.helper.dataset import PIPELINES
+            self.teacher_pipeline = [None for _ in range(len(pipeline_teacher))]
+            self.teacher_pipeline_types =  [None for _ in range(len(pipeline_teacher))]
+
+            for teacher_i in range(len(pipeline_teacher)):
+                tt = []
+                tt_types = []
+                for transform in pipeline_teacher[teacher_i]:
+                    if isinstance(transform, dict):
+                        tt_types.append(transform['type'])
+                        transform = build_from_cfg(transform, PIPELINES)
+                        tt.append(transform)
+                    else:
+                        raise TypeError('teacher pipeline must be a dict')
+                
+                self.teacher_pipeline[teacher_i] = tt
+                self.teacher_pipeline_types[teacher_i] = tt_types
+
+        self.student_pipeline_types = []
+        self.student_pipeline = [] 
+        if pipeline_student is not None:
+            from antgo.framework.helper.dataset import PIPELINES
+            for transform in pipeline_student:
+                if isinstance(transform, dict):
+                    self.student_pipeline_types.append(transform['type'])
+                    transform = build_from_cfg(transform, PIPELINES)
+                    self.student_pipeline.append(transform)
+                else:
+                    raise TypeError('student pipeline must be a dict')
+        
+        self.flag = np.zeros(len(self), dtype=np.int32)
+        if hasattr(self.reader_base, 'flag'):
+            self.flag = self.reader_base.flag
+
+        self.CLASSES = 1
+        if hasattr(self.reader_base, 'CLASSES'):
+            self.CLASSES = self.reader_base.CLASSES
+
+    def _arrange(self, sample, fields):
+        if type(fields[0]) == list or type(fields[0]) == tuple:
+            warp_ins = []
+            for field in fields:
+                one_ins = {}
+                for ff in field:
+                    one_ins[ff] = sample[ff]
+                
+                warp_ins.append(one_ins)
+            return warp_ins
+        
+        warp_ins = {}
+        for field in fields:
+            warp_ins[field] = sample[field]
+
+        return warp_ins
+
+    def __len__(self):
+        return len(self.reader_base)
+    
+    def __getitem__(self, idx):
+        sample = self.reader_base[idx]
+
+        # 为teacher构建数据
+        teacher_samples = []
+        for pipeline_i in range(len(self.teacher_pipeline)):
+            teacher_sample = copy.deepcopy(sample)
+            for (transform, transform_type) in zip(self.teacher_pipeline[pipeline_i], self.teacher_pipeline_types[pipeline_i]):
+                try:
+                    teacher_sample = transform(teacher_sample)
+                except Exception as e:
+                    print(f'{transform_type}')
+                    print(e)
+                    raise e
+            
+            # arange warp
+            teacher_sample = self._arrange(teacher_sample, self._fields)
+            teacher_samples.append(teacher_sample)
+
+        # 为student构建数据
+        student_sample = copy.deepcopy(sample)
+        for (transform, transform_type) in zip(self.student_pipeline, self.student_pipeline_types):
+            try:
+                student_sample = transform(student_sample)
+            except Exception as e:
+                print(f'{transform_type}')
+                print(e)
+                raise e
+
+        # arange warp
+        student_sample = self._arrange(student_sample, self._fields)
+
+        semi_sample = {
+            'image': student_sample['image'],
+            'image_metas': student_sample['image_metas'],
+        }
+        semi_sample['image_metas'].update({
+            'fields': self._fields
+        })
+
+        if sample['image_metas']['labeled']:
+            semi_sample.update({
+                'labeled': student_sample,
+            })
+
+        if not sample['image_metas']['labeled']:
+            semi_sample.update({
+                'unlabeled': {
+                    'teacher': teacher_samples,
+                    'student': student_sample
+                }
+            })
+        
+        return semi_sample
+    
+    def get_cat_ids(self, idx):
+        return self.reader_base.get_cat_ids(idx)
+
+    def get_ann_info(self, idx):
+        return self.reader_base.get_ann_info(idx)
+
+    def evaluate(self, preds,**kwargs):
+        return self.reader_base.evaluate(preds, **kwargs)

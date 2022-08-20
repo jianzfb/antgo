@@ -21,6 +21,7 @@ import numpy as np
 import random
 import math
 import cv2
+from numpy.random.mtrand import sample
 
 
 def meet_emit_constraint(src_bbox, sample_bbox):
@@ -84,9 +85,9 @@ def filter_and_process(sample_bbox, bboxes, labels, scores=None,
         new_bbox = clip_bbox(new_bbox)
         if bbox_area(new_bbox) > 0:
             new_bboxes.append(new_bbox)
-            new_labels.append([labels[i][0]])
+            new_labels.append([labels[i]])
             if scores is not None:
-                new_scores.append([scores[i][0]])
+                new_scores.append([scores[i]])
             if keypoints is not None:
                 sample_keypoint = keypoints[0][i]
                 for j in range(len(sample_keypoint)):
@@ -143,7 +144,7 @@ def generate_sample_bbox(sampler):
     ymax = ymin + bbox_height
     sampled_bbox = [xmin, ymin, xmax, ymax]
     return sampled_bbox
-
+    
 
 def generate_sample_bbox_square(sampler, image_width, image_height):
     scale = np.random.uniform(sampler[2], sampler[3])

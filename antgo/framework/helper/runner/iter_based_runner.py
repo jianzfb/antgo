@@ -217,6 +217,8 @@ class IterBasedRunner(BaseRunner):
         if create_symlink:
             dst_file = osp.join(out_dir, 'latest.pth')
             if platform.system() != 'Windows':
+                if os.path.exists(dst_file):
+                    os.remove(dst_file)                
                 os.symlink(filename, dst_file)
             else:
                 shutil.copy(filepath, dst_file)

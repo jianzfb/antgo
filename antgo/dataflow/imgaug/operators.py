@@ -1076,7 +1076,6 @@ class NormalizeImage(BaseOperator):
             samples = samples[0]
         return samples
 
-
 class RandomDistort(BaseOperator):
     # FINISH CORRET (JIAN)
     def __init__(self,
@@ -1268,7 +1267,8 @@ class ExpandImage(BaseOperator):
 
 
 class CropImage(BaseOperator):
-    def __init__(self, batch_sampler, satisfy_all=False, avoid_no_bbox=True, inputs=None):
+    # 已经完成验证
+    def __init__(self, prob, batch_sampler, satisfy_all=False, avoid_no_bbox=True, inputs=None):
         """
         Args:
             batch_sampler (list): Multiple sets of different
@@ -1291,6 +1291,51 @@ class CropImage(BaseOperator):
         self.batch_sampler = batch_sampler
         self.satisfy_all = satisfy_all
         self.avoid_no_bbox = avoid_no_bbox
+        self.prob = prob
+
+    def rotate_2d(self, pt_2d, rot_rad):
+        x = pt_2d[0]
+        y = pt_2d[1]
+        sn, cs = np.sin(rot_rad), np.cos(rot_rad)
+        xx = x * cs - y * sn
+        yy = x * sn + y * cs
+        return np.array([xx, yy], dtype=np.float32)
+
+    def gen_trans_from_bbox(self, c_x, c_y, src_width, src_height, dst_width, dst_height, scale, rot, inv=False):
+        # augment size with scale
+        src_w = src_width * scale
+        src_h = src_height * scale
+        src_center = np.array([c_x, c_y], dtype=np.float32)
+
+        # augment rotation
+        rot_rad = np.pi * rot / 180
+        src_downdir = self.rotate_2d(np.array([0, src_h * 0.5], dtype=np.float32), rot_rad)
+        src_rightdir = self.rotate_2d(np.array([src_w * 0.5, 0], dtype=np.float32), rot_rad)
+
+        dst_w = dst_width
+        dst_h = dst_height
+        dst_center = np.array([dst_w * 0.5, dst_h * 0.5], dtype=np.float32)
+        dst_downdir = np.array([0, dst_h * 0.5], dtype=np.float32)
+        dst_rightdir = np.array([dst_w * 0.5, 0], dtype=np.float32)
+
+        src = np.zeros((3, 2), dtype=np.float32)
+        src[0, :] = src_center
+        src[1, :] = src_center + src_downdir
+        src[2, :] = src_center + src_rightdir
+
+        dst = np.zeros((3, 2), dtype=np.float32)
+        dst[0, :] = dst_center
+        dst[1, :] = dst_center + dst_downdir
+        dst[2, :] = dst_center + dst_rightdir
+        
+        if inv:
+            trans = cv2.getAffineTransform(np.float32(dst), np.float32(src))
+        else:
+            trans = cv2.getAffineTransform(np.float32(src), np.float32(dst))
+
+        trans = trans.astype(np.float32)
+        return trans
+
 
     def __call__(self, sample):
         """
@@ -1303,46 +1348,84 @@ class CropImage(BaseOperator):
         Returns:
             sample: the image, bounding box are replaced.
         """
+        if np.random.random() > self.prob:
+            return sample
+
         assert 'image' in sample, "image data not found"
         im = sample['image']
         gt_bbox = sample['gt_bbox']
         gt_class = sample['gt_class']
-        im_width = sample['w']
-        im_height = sample['h']
+        im_height, im_width = im.shape[:2]
         gt_score = None
         if 'gt_score' in sample:
             gt_score = sample['gt_score']
         sampled_bbox = []
-        gt_bbox = gt_bbox.tolist()
         for sampler in self.batch_sampler:
             found = 0
             for i in range(sampler[1]):
                 if found >= sampler[0]:
                     break
                 sample_bbox = generate_sample_bbox(sampler)
-                if satisfy_sample_constraint(sampler, sample_bbox, gt_bbox,
-                                             self.satisfy_all):
+                if gt_bbox.shape[0] == 0:
                     sampled_bbox.append(sample_bbox)
                     found = found + 1
+                    break
+
+                if satisfy_sample_constraint(
+                    sampler, 
+                    sample_bbox, 
+                    gt_bbox/np.array([[im_width, im_height, im_width, im_height]]),
+                    self.satisfy_all
+                ):
+                    sampled_bbox.append(sample_bbox)
+                    found = found + 1
+
         im = np.array(im)
         while sampled_bbox:
             idx = int(np.random.uniform(0, len(sampled_bbox)))
             sample_bbox = sampled_bbox.pop(idx)
             sample_bbox = clip_bbox(sample_bbox)
             crop_bbox, crop_class, crop_score = \
-                filter_and_process(sample_bbox, gt_bbox, gt_class, scores=gt_score)
+                filter_and_process(
+                    sample_bbox, 
+                    gt_bbox/np.array([[im_width, im_height, im_width, im_height]]) if gt_bbox.shape[0] > 0 else gt_bbox, 
+                    gt_class, scores=gt_score)
             if self.avoid_no_bbox:
                 if len(crop_bbox) < 1:
                     continue
+
             xmin = int(sample_bbox[0] * im_width)
             xmax = int(sample_bbox[2] * im_width)
             ymin = int(sample_bbox[1] * im_height)
             ymax = int(sample_bbox[3] * im_height)
-            im = im[ymin:ymax, xmin:xmax]
+            im = im[ymin:ymax, xmin:xmax].copy()
             sample['image'] = im
+            if crop_bbox.shape[0] > 0:
+                crop_bbox *= np.array([[im.shape[1], im.shape[0], im.shape[1], im.shape[0]]])
             sample['gt_bbox'] = crop_bbox
-            sample['gt_class'] = crop_class
-            sample['gt_score'] = crop_score
+            sample['gt_class'] = crop_class[:,0]
+            if 'gt_score' in sample:
+                sample['gt_score'] = crop_score[:,0]
+
+            if 'image_metas' in sample and 'transform_matrix' in sample['image_metas']:
+                base_trans = sample['image_metas']['transform_matrix']
+                crop_trans = self.gen_trans_from_bbox((xmin+xmax)/2.0, (ymin+ymax)/2.0, im_width, im_height, im.shape[1], im.shape[0], 1.0, 0.0, inv=False)
+                crop_trans = np.matmul(crop_trans, base_trans)
+                sample['image_metas']['transform_matrix'] = crop_trans
+
+            # # 测试可视化
+            # for bi in range(len(crop_bbox)):
+            #     x0,y0,x1,y1 = sample['gt_bbox'][bi]
+            #     cls_label = crop_class[bi]
+            #     x0=(int)(x0)
+            #     y0=(int)(y0)
+            #     x1=(int)(x1)
+            #     y1=(int)(y1)
+            #     color_v = (255,0,0)
+            #     if cls_label == 0:
+            #         color_v = (0,0,255)
+            #     cv2.rectangle(im, (x0,y0),(x1,y1), color_v, 4)
+            # cv2.imwrite("./crop_show.png", im)
             return sample
         return sample
 
@@ -1980,6 +2063,14 @@ class Resize(BaseOperator):
         # cv2.imwrite("./show.png", sample['image'])
         return sample
 
+    def reset(self, target_dim):
+        if type(target_dim) == list or type(target_dim) == tuple:
+            self.target_dim = target_dim                # w,h
+        else:
+            self.target_dim = [target_dim, target_dim]  # w,h
+
+    def get(self):
+        return self.target_dim
 
 class ColorDistort(BaseOperator):
     """Random color distortion.

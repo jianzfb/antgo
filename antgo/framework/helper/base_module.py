@@ -300,6 +300,30 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
 
         return outputs
 
+    def forward(self, image, return_loss=True, **kwargs):
+        """Calls either :func:`forward_train` or :func:`forward_test` depending
+        on whether ``return_loss`` is ``True``.
+
+        Note this setting will change the expected inputs. When
+        ``return_loss=True``, img and img_meta are single-nested (i.e. Tensor
+        and List[dict]), and when ``resturn_loss=False``, img and img_meta
+        should be double nested (i.e.  List[Tensor], List[List[dict]]), with
+        the outer list indicating test time augmentations.
+        """
+        if return_loss:
+            return self.forward_train(image, **kwargs)
+        else:
+            return self.forward_test(image, **kwargs)
+
+    def forward_train(self, image, **kwargs):
+        raise NotImplementedError
+
+    def forward_test(self, image, **kwargs):
+        raise NotImplementedError
+    
+    def load_state_dict(self, *args, **kwargs):
+        return False
+
     def __repr__(self):
         s = super().__repr__()
         if self.init_cfg:

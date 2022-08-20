@@ -53,7 +53,6 @@ class EpochBasedRunner(BaseRunner):
             self.call_hook('after_train_iter')
             self._iter += 1
 
-        print('run after train')
         self.call_hook('after_train_epoch')
         self._epoch += 1
 
