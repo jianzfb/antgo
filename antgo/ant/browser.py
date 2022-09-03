@@ -19,14 +19,16 @@ from jinja2 import Environment, FileSystemLoader
 import traceback
 import threading
 
+
 class BrowserDataRecorder(object):
-  def __init__(self, maxsize=30):
-    self.queue = multiprocessing.Queue()              # 不设置队列最大缓冲
+  def __init__(self, rpc, maxsize=30):
+    # self.queue = multiprocessing.Queue()              # 不设置队列最大缓冲
     self.prepare_queue = queue.Queue(maxsize=maxsize)
     self.dump_dir = ''
     self.dataset_flag = 'TRAIN'
     self.dataset_size = 0
     self.tag_dir = ''
+    self.rpc = rpc
 
     # 5个线程，等待处理
     for _ in range(1):
@@ -72,6 +74,11 @@ class BrowserDataRecorder(object):
       data = {}
       id = None
       for key, value in val.items():
+        if type(value) != dict:
+          if key.lower() == 'id' or key.lower() == 'image_file':
+            id = value
+          continue
+
         data_name = key
         if data_name not in data:
           data[data_name] = {}
@@ -79,13 +86,8 @@ class BrowserDataRecorder(object):
         if 'data' in value or 'DATA' in value:
           if 'data' in value:
             data[data_name]['data'] = value['data']
-            if data_name == 'id' or data_name == 'ID':
-              id = value['data']
           else:
             data[data_name]['data'] = value['DATA']
-            if data_name == 'id' or data_name == 'ID':
-              id = value['data']
-
         if 'type' in value or 'TYPE' in value:
           if 'type' in value:
             data[data_name]['type'] = value['type']
@@ -106,6 +108,13 @@ class BrowserDataRecorder(object):
 
         data[data_name]['title'] = data_name
 
+      if id is None:
+        logger.error('Missing id flag, please return {"id": ...}')
+        continue
+
+      for k, v in data.items():
+        v['id'] = id
+
       # 转换数据到适合web
       web_data = []
       for name, body in data.items():
@@ -125,47 +134,11 @@ class BrowserDataRecorder(object):
         body['dataset_size'] = self.dataset_size
         web_data.append(body)
 
-      # 如果从指定实验加载，则找寻是否存在以筛选标记
-      if id is None:
-        logger.error('Missing id flag, please return {"id": {"data": ...}}')
-        continue
-
-      if os.path.exists(os.path.join(self.tag_dir, self.dataset_flag, '%s.json' % str(id))):
-        # 加载json文件
-        logger.info('Load record json from %s/%s'%(self.dataset_flag, '%s.json.' % str(id)))
-        with open(os.path.join(self.tag_dir, self.dataset_flag, '%s.json' % str(id)), 'r') as fp:
-          annotation = json.load(fp)
-          # 确保标注数量和数据数量是一致的
-          assert (len(web_data) == len(annotation))
-
-          for a in web_data:
-            is_update = False
-            for b in annotation:
-              # 检测数据和标注是否对应
-              is_consistent = b['title'] == a['title']
-              if 'id' in b:
-                is_consistent = is_consistent and (a['id'] == b['id'])
-
-                if not (a['id'] == b['id']):
-                  logger.warn('Please whether data and record are consistent.')
-
-              if is_consistent:
-                a['tag'] = b['tag']
-                is_update = True
-                break
-
-            if not is_update:
-              if 'id' in a:
-                logger.info('Annotation and data not consistence for %s.'%a['id'])
-              else:
-                logger.info('Annotation and data not consistence for %s.' % a['data'])
-
-      # 加入队列，如果队列满，将阻塞
-      self.queue.put(web_data)
+      self.rpc.browser.sample.fresh.post(samples=json.dumps([web_data]))
 
   def record(self, val):
     self.prepare_queue.put(val)
-    
+
 
 class AntBrowser(AntBase):
   def __init__(self,
@@ -180,8 +153,8 @@ class AntBrowser(AntBase):
     self.ant_data_source = ant_data_folder
     self.dataset_name = ant_dataset
     self.dump_dir = ant_dump_dir
-    self.host_ip = self.context.params.system['ip']
-    self.host_port = self.context.params.system['port']
+    self.host_ip = self.context.params.system.get('ip', '127.0.0.1')
+    self.host_port = self.context.params.system.get('port', 8901)
     self.rpc = None
     self._running_dataset = None
     self._running_task = None
@@ -193,6 +166,14 @@ class AntBrowser(AntBase):
   @property
   def running_task(self):
     return self._running_task
+
+  def ping_until_ok(self):
+    while True:
+      content = self.rpc.ping.get()
+      if content['status'] != 'ERROR':
+          break
+      # 暂停5秒钟，再进行尝试
+      time.sleep(5)
 
   def start(self):
     # 1.step 获得数据集解析
@@ -228,14 +209,14 @@ class AntBrowser(AntBase):
       self.dataset_name = running_ant_task.dataset_name
 
     parse_flag = ''
-    dataset_cls = AntDatasetFactory.dataset(self.dataset_name, parse_flag)
-
-    if dataset_cls is None:
-      logger.error('Couldnt find dataset parse class.')
-      return
+    dataset_cls = None
+    if self.dataset_name != '':
+      dataset_cls = AntDatasetFactory.dataset(self.dataset_name, parse_flag)
 
     # 2.step 配置记录器
-    self.context.recorder = BrowserDataRecorder()
+    self.rpc = HttpRpc("v1", "antgo/api", self.host_ip, self.host_port)
+    self.context.recorder = \
+      BrowserDataRecorder(rpc=self.rpc)
 
     # 3.step 启动浏览web服务
     browser_params = getattr(self.context.params, 'browser', None)
@@ -245,15 +226,14 @@ class AntBrowser(AntBase):
 
     # 3.1.step 准备web服务资源
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
-    browser_static_dir = os.path.join(self.dump_dir, 'browser')
+    browser_static_dir = os.path.join(self.dump_dir, 'browser', 'static')
     if os.path.exists(browser_static_dir):
       shutil.rmtree(browser_static_dir)
 
-    shutil.copytree(os.path.join(static_folder, 'resource', 'browser'), browser_static_dir)
+    shutil.copytree(os.path.join(static_folder, 'resource', 'dist'), browser_static_dir)
 
     # 3.2.step 准备有效端口
     self.host_port = _pick_idle_port(self.host_port)
-    self.rpc = HttpRpc("v1", "browser-api", "127.0.0.1", self.host_port)
 
     # base_url = '{}:{}'.format(self.host_ip, self.host_port)
     #
@@ -272,35 +252,35 @@ class AntBrowser(AntBase):
     offset_configs = [{
       'dataset_flag': 'TRAIN',
       'dataset_offset': train_offset
-    },{
+    }, {
       'dataset_flag': 'VAL',
       'dataset_offset': val_offset
-    },{
+    }, {
       'dataset_flag': 'TEST',
       'dataset_offset': test_offset
     }]
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser:
-      if 'TRAIN' in self.context.params.browser['offset']:
-        train_offset = self.context.params.browser['offset']['TRAIN']
+    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+      if 'TRAIN' in self.context.params.browser.offset.keys():
+        train_offset = self.context.params.browser.offset.TRAIN
         offset_config = {
           'dataset_flag': 'TRAIN',
           'dataset_offset': train_offset
         }
         offset_configs[0] = offset_config
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser:
-      if 'VAL' in self.context.params.browser['offset']:
-        val_offset = self.context.params.browser['offset']['VAL']
+    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+      if 'VAL' in self.context.params.browser.offset:
+        val_offset = self.context.params.browser.offset.VAL
         offset_config = {
           'dataset_flag': 'VAL',
           'dataset_offset': val_offset
         }
         offset_configs[1] = offset_config
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser:
-      if 'TEST' in self.context.params.browser['offset']:
-        test_offset = self.context.params.browser['offset']['TEST']
+    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+      if 'TEST' in self.context.params.browser.offset:
+        test_offset = self.context.params.browser.offset.TEST
         offset_config = {
           'dataset_flag': 'TEST',
           'dataset_offset': test_offset
@@ -308,15 +288,20 @@ class AntBrowser(AntBase):
         offset_configs[2] = offset_config
 
     dataset_flag = 'train'
-    if self.context.params.browser is not None and 'dataset_flag' in self.context.params.browser:
-      if self.context.params.browser['dataset_flag'].lower() in ['train', 'val', 'test']:
-        dataset_flag = self.context.params.browser['dataset_flag'].lower()
+    if self.context.params.browser is not None and \
+        'dataset_flag' in self.context.params.browser.keys():
+      if self.context.params.browser.dataset_flag.lower() in ['train', 'val', 'test']:
+        dataset_flag = \
+          self.context.params.browser.dataset_flag.lower()
 
-    train_dataset = dataset_cls(dataset_flag, os.path.join(self.ant_data_source, self.dataset_name))
-    self._running_dataset = train_dataset
+    if dataset_cls is not None:
+      train_dataset = \
+        dataset_cls(dataset_flag, os.path.join(self.ant_data_source, self.dataset_name))
+      self._running_dataset = train_dataset
 
     self.context.recorder.dataset_flag = dataset_flag.upper()
-    self.context.recorder.dataset_size = train_dataset.size
+    self.context.recorder.dataset_size = \
+      self.running_dataset.size if self.running_dataset is not None else self.context.params.browser.size
     self.context.recorder.dump_dir = os.path.join(self.dump_dir, 'browser', 'static', 'data')
     if not os.path.exists(self.context.recorder.dump_dir):
       os.makedirs(self.context.recorder.dump_dir)
@@ -334,31 +319,30 @@ class AntBrowser(AntBase):
     # 设置数据基本信息
     profile_config = {
       'dataset_flag': dataset_flag.upper(),
-      'samples_num': train_dataset.size,
+      'samples_num': self.running_dataset.size if self.running_dataset is not None else self.context.params.browser.size,
       'samples_num_checked': sample_offset
     }
 
     # 设置记录器偏移
     self.context.recorder.sample_index = sample_offset
 
+    white_users = self.context.params.browser.white_users
     # 在独立进程中启动webserver
-    browser_mode = 'browser'
-    if self.context.params.browser is not None and \
-        'mode' in self.context.params.browser:
-      browser_mode = self.context.params.browser['mode']
-
     p = \
       multiprocessing.Process(
         target=browser_server_start,
-        args=(os.path.join(self.ant_data_source, self.dataset_name),
-              self.dump_dir,
-              self.context.recorder.queue,
+        args=(self.dump_dir,
               tags,
               self.host_port,
               offset_configs,
               profile_config,
-              browser_mode))
+              [],
+              white_users)
+      )
     p.start()
+
+    # 等待直到http服务开启
+    self.ping_until_ok()
 
     if self.context.is_interact_mode:
       return
@@ -366,7 +350,7 @@ class AntBrowser(AntBase):
     # 3.3.step 启动数据处理
     try:
       count = 0
-      for data in self.context.data_processor.iterator(train_dataset):
+      for data in self.context.data_processor.iterator(self.running_dataset):
         logger.info('Record data %d for browser.' % count)
         self.context.recorder.record(data)
         count += 1

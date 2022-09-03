@@ -6,6 +6,8 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import os
+
 from antgo.dataflow.dataset.spider_dataset import SpiderDataset
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
@@ -38,13 +40,11 @@ class AntBatch(AntBase):
         self.ant_context.ant = self
         self.unlabel = kwargs.get('unlabel', False)
         self.ant_task_config = ant_task_config
-        self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
         self.restore_experiment = kwargs.get('restore_experiment', None)
         self.host_ip = self.context.params.system.get('ip', '127.0.0.1')
         self.host_port = self.context.params.system.get('port', -1)
         self.dataset = dataset
         self.rpc = None
-        self.command_queue = None
         self._running_dataset = None
         self._running_task = None
 
@@ -114,52 +114,108 @@ class AntBatch(AntBase):
             os.makedirs(os.path.join(self.ant_dump_dir, experiment_uuid))
         experiment_dump_dir = os.path.join(self.ant_dump_dir, experiment_uuid)
 
-        # 4.step 配置web服务基本信息
+        # 获得是否加载web server标记
         is_launch_web_server = True
         if self.host_port < 0:
             is_launch_web_server = False
 
-        if is_launch_web_server:
-            # 选择端口
-            self.host_port = _pick_idle_port(self.host_port)
-
-            # 配置调用
-            self.rpc = HttpRpc("v1", "batch-api", "127.0.0.1", self.host_port)
-
-            # 准备素材资源
-            static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
-            batch_static_dir = os.path.join(experiment_dump_dir, 'batch')
-            if not os.path.exists(batch_static_dir):
-                shutil.copytree(os.path.join(static_folder, 'resource', 'batch'), batch_static_dir)
-
-            # 命令队列
-            self.command_queue = queue.Queue()
-
-            # 启动服务器
-            p = multiprocessing.Process(target=batch_server_start,
-                                        args=(experiment_dump_dir, self.host_port, self.command_queue))
-            p.daemon = True
-            p.start()
-
-        if self.context.is_interact_mode:
-          logger.info('Running on interact mode.')
-          return
-
+        # 4.step 设置记录器
+        # 设置记录器
         # 数据标签
         batch_params = getattr(self.context.params, 'predict', None)
         tags = []
         if batch_params is not None:
             tags = batch_params.get('tags', [])
 
+        def _callback_func(dataset_stage, data):
+            record_content = {
+                'experiment_uuid': experiment_uuid,
+                'dataset': {
+                    dataset_stage: [{'data': single_d, 'tag': []} for single_d in data]
+                },
+                'tags': tags
+            }
+            for data_group in record_content['dataset'][dataset_stage]:
+                for item in data_group['data']:
+                    if item['type'] in ['IMAGE', 'VIDEO', 'FILE']:
+                        item['data'] = 'static/data/%s/record/%s' % (dataset_stage, item['data'])
+
+            # 添加当前进度
+            record_content['waiting'] = \
+                self.running_dataset.waiting_process_num() if self.running_dataset is not None else \
+                    self.context.params.predict.get('size', 0)
+            record_content['finished'] = \
+                self.running_dataset.finish_process_num() if self.running_dataset is not None else 0
+            self.rpc.predict.config.post(config_data=json.dumps(record_content))
+
+            # 保存执行信息
+            # 每执行完一次预测并记录，会将结果同时记录到json中
+            if not os.path.exists(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid)):
+                with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'w') as fp:
+                    json.dump(record_content, fp)
+            else:
+                history_running_info = {}
+                with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'r') as fp:
+                    history_running_info = json.load(fp)
+                history_running_info['dataset'][dataset_stage].extend(record_content['dataset'][dataset_stage])
+
+                with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'w') as fp:
+                    json.dump(history_running_info, fp)
+
+        output_dir = experiment_dump_dir
+        if is_launch_web_server:
+            output_dir = \
+                os.path.join(experiment_dump_dir, 'predict', 'static', 'data', 'test')
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+        self.context.recorder = \
+            LocalRecorderNodeV2(lambda data: _callback_func('test', data) if is_launch_web_server else None)
+        self.context.recorder.dump_dir = os.path.join(output_dir, 'record')
+        if not os.path.exists(self.context.recorder.dump_dir):
+            os.makedirs(self.context.recorder.dump_dir)
+
+        # 4.step 配置web服务基本信息
+        if is_launch_web_server:
+            # 选择端口
+            self.host_port = _pick_idle_port(self.host_port)
+
+            # 配置调用
+            self.rpc = HttpRpc("v1", "antgo/api", self.host_ip, self.host_port)
+
+            # 准备素材资源
+            static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
+            batch_static_dir = os.path.join(experiment_dump_dir, 'predict', 'static')
+            if os.path.exists(batch_static_dir):
+                shutil.rmtree(batch_static_dir)
+
+            shutil.copytree(os.path.join(static_folder, 'resource', 'dist'), batch_static_dir)
+            # 启动服务器
+            white_users = self.context.params.predict.get('white_users', None)
+            p = \
+                multiprocessing.Process(
+                    target=batch_server_start,
+                    args=(
+                        experiment_dump_dir,
+                        self.host_port,
+                        None,
+                        white_users
+                    ))
+            p.start()
+
+            # 等待web服务启动
+            self.ping_until_ok()
+
+        if self.context.is_interact_mode:
+          logger.info('Running on interact mode.')
+          return
+
         # 5.step 配置运行
         def _run_batch_process():
-            # 等待web服务启动
-            if is_launch_web_server:
-                self.ping_until_ok()
-
             # 是否来自已有实验
             if self.restore_experiment is not None and \
-                os.path.exists(os.path.join(experiment_dump_dir, '%s.json' % self.restore_experiment)):
+                os.path.exists(
+                    os.path.join(experiment_dump_dir, '%s.json' % self.restore_experiment)):
                 # 加载保存的执行信息
                 running_info = {}
                 with open(os.path.join(experiment_dump_dir, '%s.json' % self.restore_experiment), 'r') as fp:
@@ -167,7 +223,7 @@ class AntBatch(AntBase):
 
                 # 更新web页面
                 if is_launch_web_server:
-                    self.rpc.config.post(config_data=json.dumps(running_info))
+                    self.rpc.predict.config.post(config_data=json.dumps(running_info))
                 return
 
             # 4.step load dataset
@@ -176,7 +232,8 @@ class AntBatch(AntBase):
             dataset_name = ''
             selected_dataset_stages = []
             if len(running_ant_task.dataset_name.split('/')) == 2:
-                dataset_name, dataset_stage = running_ant_task.dataset_name.split('/')
+                dataset_name, dataset_stage = \
+                    running_ant_task.dataset_name.split('/')
                 selected_dataset_stages.append(dataset_stage)
             else:
                 dataset_name = running_ant_task.dataset_name
@@ -232,49 +289,20 @@ class AntBatch(AntBase):
                         ant_test_dataset.unlabeled_list_file = self.context.params.system['ext_params']['unlabeled_list_file']
                     ant_test_dataset = UnlabeledDataset(ant_test_dataset)
 
-                    print('unlabel size')
-                    print(ant_test_dataset.size)
-
+                # 重新设置输出目录
                 output_dir = experiment_dump_dir
                 if is_launch_web_server:
-                    output_dir = os.path.join(experiment_dump_dir, 'batch', 'static', 'data', dataset_stage)
+                    output_dir = \
+                        os.path.join(experiment_dump_dir, 'predict', 'static', 'data', dataset_stage)
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
 
-                # 设置记录器
-                def _callback_func(data):
-                    record_content = {
-                        'experiment_uuid': experiment_uuid, 
-                        'dataset': {
-                            dataset_stage: [{'data':single_d, 'tag':[]} for single_d in data]
-                        },
-                        'tags': tags
-                    }
-                    for data_group in record_content['dataset'][dataset_stage]:
-                        for item in data_group['data']:
-                            if item['type'] in ['IMAGE','VIDEO','FILE']:
-                                item['data'] = 'static/data/%s/record/%s' % (dataset_stage, item['data'])
+                # 重新设置记录器
+                self.context.recorder = \
+                    LocalRecorderNodeV2(lambda data: _callback_func(dataset_stage, data) if is_launch_web_server else None)
 
-                    # 添加当前进度
-                    record_content['waiting'] = ant_test_dataset.waiting_process_num()
-                    record_content['finished'] = ant_test_dataset.finish_process_num()
-                    self.rpc.config.post(config_data=json.dumps(record_content))
-                    
-                    # 保存执行信息
-                    if not os.path.exists(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid)):
-                        with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'w') as fp:
-                            json.dump(record_content, fp)
-                    else:
-                        history_running_info = {}
-                        with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'r') as fp:
-                            history_running_info = json.load(fp)
-                        history_running_info['dataset'][dataset_stage].extend(record_content['dataset'][dataset_stage])
-
-                        with open(os.path.join(experiment_dump_dir, '%s.json' % experiment_uuid), 'w') as fp:
-                            json.dump(history_running_info, fp)
-
+                # 调用预测的回调函数
                 self._running_dataset = ant_test_dataset
-                self.context.recorder = LocalRecorderNodeV2(_callback_func if is_launch_web_server else None)
                 with safe_recorder_manager(self.context.recorder):
                     # 完成推断过程
                     try:

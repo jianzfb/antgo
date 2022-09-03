@@ -15,6 +15,8 @@ from tornado import httpclient
 import tornado.web
 import json
 from tornado.escape import json_decode
+import time
+
 
 # error code
 class RESPONSE_STATUS_CODE:
@@ -35,11 +37,11 @@ class BaseHandler(tornado.web.RequestHandler):
   """Base Handler class with access to common methods and properties."""
 
   def set_default_headers(self):
-    self.set_header("Access-Control-Allow-Origin", "*")
+    self.set_header("Access-Control-Allow-Origin", "http://localhost:8080")
     self.set_header('Access-Control-Allow-Headers', '*')
     self.set_header("Access-Control-Allow-Methods", "POST,GET,PUT,DELETE,PATCH,OPTIONS")
     self.set_header("Access-Control-Expose-Headers", "Content-Disposition")
-    # self.set_header("Access-Control-Allow-Credentials", "true")
+    self.set_header("Access-Control-Allow-Credentials", "true")
 
   @property
   def name(self):
@@ -103,6 +105,9 @@ class BaseHandler(tornado.web.RequestHandler):
     else:
       raise tornado.web.MissingArgumentError(name)
 
+  def timestamp_2_str(self, now_time):
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_time))
+
   def response(self, status_code=RESPONSE_STATUS_CODE.SUCCESS, message='', content={}, status=None):
     self.set_status(status_code)
 
@@ -116,3 +121,72 @@ class BaseHandler(tornado.web.RequestHandler):
       'message': message,
       'content': content
     }))
+
+  def set_login_cookie(self, user):
+    """Set login cookies for the Hub and single-user server."""
+
+    # create and set a new cookie token for the hub
+    # if not self.get_current_user_cookie():
+    self._set_user_cookie(user, 'antgo')
+
+  def _set_user_cookie(self, user, server):
+    # tornado <4.2 have a bug that consider secure==True as soon as
+    # 'secure' kwarg is passed to set_secure_cookie
+    if self.request.protocol == 'https':
+      kwargs = {'secure': True}
+    else:
+      kwargs = {}
+    # if self.subdomain_host:
+    #     kwargs['domain'] = self.domain
+
+    # self.log.debug("Setting cookie for %s: %s, %s", user.name, server, json.dumps(kwargs))
+    self.set_secure_cookie(
+      server,
+      user['cookie_id'],
+      **kwargs
+    )
+
+  def get_current_user_cookie(self):
+    """get_current_user from a cookie token"""
+    return self._user_for_cookie("antgo")
+
+  def get_current_user(self):
+    """get current username"""
+    # 判断是否使用白盒用户验证机制
+    if self.db.get('white_users', None) is None:
+      default_user = {
+        'full_name': 'ANTGO',
+        'short_name': 'A',
+        'labeling_sample': -1,
+        'start_time': -1
+      }
+      return default_user
+    user = self.get_current_user_cookie()
+    return user
+
+  def _user_for_cookie(self, cookie_name, cookie_value=None):
+    """Get the User for a given cookie, if there is one"""
+    # cookie_id = self.get_secure_cookie(
+    #     cookie_name,
+    #     cookie_value,
+    #     max_age_days=self.cookie_max_age_days,
+    # )
+    cookie_id = self.get_secure_cookie(
+      cookie_name,
+      cookie_value
+    )
+
+    def clear():
+      self.clear_cookie(cookie_name, path='/')
+
+    if cookie_id is None:
+      if self.get_cookie(cookie_name):
+        clear()
+      return
+
+    cookie_id = cookie_id.decode('utf8', 'replace')
+    # u = self.db.query(orm.User).filter(orm.User.cookie_id == cookie_id).first()
+    if cookie_id not in self.db['users']:
+      return None
+
+    return self.db['users'][cookie_id]

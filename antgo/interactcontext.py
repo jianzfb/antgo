@@ -12,6 +12,7 @@ from antgo.ant.demo import *
 from antgo.ant.browser import *
 from antgo.ant.batch import *
 from antgo.ant.ensemble import *
+from antgo.ant.activelearning_v2 import *
 
 
 class InteractContext(Context):
@@ -66,31 +67,29 @@ class InteractContext(Context):
     self.params = {}
     if type(param) == str:
       param = yaml.load(open(param, 'r'))
-      self.params = param
-    else:
-      self.params = param
 
-    if 'system' not in self.params._params:
-      self.params._params.update({'system': {}})
-    if 'research' not in self.params._params['system']:
-      self.params._params['system']['research'] = ''
-    if 'skip_training' not in self.params._params['system']:
-      self.params._params['system']['skip_training'] = False
-    if 'ip' not in self.params._params['system']:
-      self.params._params['system']['ip'] = '127.0.0.1'
-    if 'port' not in self.params._params['system']:
-      self.params._params['system']['port'] = 8901
-    if 'devices' not in self.params._params['system']:
-      self.params._params['system']['devices'] = ''
-    if 'running_platform' not in self.params._params['system']:
-      self.params._params['system']['running_platform'] = ''
-    if 'unlabel' not in self.params._params['system']:
-      self.params._params['system']['unlabel'] = False
-    if 'candidate' not in self.params._params['system']:
-      self.params._params['system']['candidate'] = False
-    if 'ext_params' not in self.params._params['system']:
-      self.params._params['system']['ext_params'] = {}
+    if 'system' not in param:
+      param.update({'system': {}})
+    if 'research' not in param['system']:
+      param['system']['research'] = ''
+    if 'skip_training' not in param['system']:
+      param['system']['skip_training'] = False
+    if 'ip' not in param['system']:
+      param['system']['ip'] = '127.0.0.1'
+    if 'port' not in param['system']:
+      param['system']['port'] = 8901
+    if 'devices' not in param['system']:
+      param['system']['devices'] = ''
+    if 'running_platform' not in param['system']:
+      param['system']['running_platform'] = ''
+    if 'unlabel' not in param['system']:
+      param['system']['unlabel'] = False
+    if 'candidate' not in param['system']:
+      param['system']['candidate'] = False
+    if 'ext_params' not in param['system']:
+      param['system']['ext_params'] = {}
 
+    self.params = param
     # 2.step 设置来自实验名称
     self.dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
     if not os.path.exists(self.dump_dir):
@@ -118,7 +117,7 @@ class InteractContext(Context):
       else:
         task = os.path.join(self.main_folder, task)
 
-    dataset = kwargs.get('dataset', None)
+    dataset = kwargs.get('dataset', '')
     if task is None and dataset is not None:
       # build default task
       with open(os.path.join(self.task_factory, '%s.xml' % name), 'w') as fp:
@@ -130,7 +129,7 @@ class InteractContext(Context):
                        '<evaluation_measures><evaluation_measure>%s</evaluation_measure></evaluation_measures>' \
                        '</input>' \
                        '</task>' % (
-                       name, '', 0, 0,dataset, '', '')
+                       name, '', 0, 0, dataset, '', '')
         fp.write(task_content)
       task = os.path.join(self.task_factory, '%s.xml' % name)
 
@@ -200,6 +199,13 @@ class InteractContext(Context):
     # 1.step 配置基本信息
     self.__prepare_context(exp_name, exp_param, **kwargs)
 
+    if 'predict' in kwargs:
+      params = self.params._params
+      params.update({
+        'predict': kwargs['predict']
+      })
+      self.params = params
+
     try:
       predict =\
         AntBatch(self,
@@ -225,6 +231,13 @@ class InteractContext(Context):
   def Ensemble(self, exp_name, exp_param, stage, **kwargs):
     # 1.step 配置基本信息
     self.__prepare_context(exp_name, exp_param, **kwargs)
+
+    if 'ensemble' in kwargs:
+      params = self.params._params
+      params.update({
+        'ensemble': kwargs['ensemble']
+      })
+      self.params = params
 
     try:
       ensemble_handler = \
@@ -257,6 +270,13 @@ class InteractContext(Context):
     # 1.step 配置基本信息
     self.__prepare_context(exp_name, exp_param, **kwargs)
 
+    if 'demo' in kwargs:
+      params = self.params._params
+      params.update({
+        'demo': kwargs['demo']
+      })
+      self.params = params
+
     try:
       demo = AntDemo(self,
                      exp_name,
@@ -279,9 +299,16 @@ class InteractContext(Context):
       raise sys.exc_info()[0]
 
   @contextmanager
-  def Browser(self, exp_name, exp_param, ip=None, port=10000, **kwargs):
+  def Browser(self, exp_name, exp_param, **kwargs):
     # 1.step 配置基本信息
     self.__prepare_context(exp_name, exp_param, **kwargs)
+
+    if 'browser' in kwargs:
+      params = self.params._params
+      params.update({
+        'browser': kwargs['browser']
+      })
+      self.params = params
 
     try:
       browser = AntBrowser(self,
@@ -304,7 +331,38 @@ class InteractContext(Context):
       raise sys.exc_info()[0]
 
   @contextmanager
-  def Activelearning(self):
-    pass
+  def Activelearning(self, exp_name, exp_param, **kwargs):
+    # 1.step 配置基本信息
+    self.__prepare_context(exp_name, exp_param, **kwargs)
+
+    if 'activelearning' in kwargs:
+      params = self.params._params
+      params.update({
+        'activelearning': kwargs['activelearning']
+      })
+      self.params = params
+
+    # print(self.params.system)
+    # print(self.params.activelearning)
+    try:
+      activelearning = AntActiveLearningV2(
+        self,
+        exp_name,
+        self.data_factory,
+        self.dump_dir,
+        self.api_token,
+        self.task)
+      # 浏览控制
+      activelearning.start()
+      yield activelearning
+
+      # 日志更新
+      mlogger.update()
+
+      # 环境回收
+      activelearning.context.wait_until_clear()
+    except:
+      traceback.print_exc()
+      raise sys.exc_info()[0]
 
 

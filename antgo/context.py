@@ -8,22 +8,37 @@ import antvis.client.mlogger as mlogger
 
 class Params(object):
   def __init__(self, params={}):
-    if params is not None:
-      for k, v in params.items():
-        if k != 'self':
-          setattr(self, k, v)
-
+    assert(type(params) == dict)
+    # if params is not None:
+    #   for k, v in params.items():
+    #     if k != 'self':
+    #       setattr(self, k, v)
+    # self.__dict__.update(params)
     self._params = params
 
   def define(self, k, v=None):
-    setattr(self, k, v)
+    # setattr(self, k, v)
     self._params[k] = v
 
-  def __getattr__(self, item):
-    if item not in object.__dict__:
-      return None
+  def get(self, item=None, default=None):
+    if item is None:
+      return self._params
 
-    return object.__dict__[item]
+    if item not in self._params:
+      return default
+
+    return self._params[item]
+
+  def __getattr__(self, item):
+    if item not in self._params:
+      return None
+    if type(self._params[item]) == dict:
+      return Params(self._params[item])
+
+    return self._params[item]
+
+  def keys(self):
+    return self._params.keys()
 
   def items(self):
     return self._params.items()

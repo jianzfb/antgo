@@ -508,7 +508,8 @@ class LocalRecorderNodeV2(object):
       file_name = '%d_%d_%s.png'%(count, index, name)
       # scipy.misc.imsave(os.path.join(self.dump_dir, file_name), transfer_result)
       # imageio.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
-      print(self._dump_dir)
+      if not os.path.exists(self.dump_dir):
+        os.makedirs(self.dump_dir)
       cv2.imwrite(os.path.join(self.dump_dir, file_name), transfer_result)
       return file_name
     elif data_type == 'VIDEO':
@@ -615,14 +616,9 @@ class LocalRecorderNodeV2(object):
         self._callback([group])
       
       # 针对保留字段，进行特殊处理
-      GT = {}
-      if 'PREDICT' in data:
-        if self._record_writer is None:
-          self._record_writer = RecordWriter(self._dump_dir)
-        
-        if 'GT' in data:
-          GT = data['GT']['data']          
-        self._record_writer.write(Sample(groundtruth=GT, predict=data['PREDICT']['data']))
+      if self._record_writer is not None:
+        if 'PREDICT' in data and 'GT' in data:
+          self._record_writer.write(Sample(groundtruth=data['GT']['data'], predict=data['PREDICT']['data']))
 
     self._count += 1
 

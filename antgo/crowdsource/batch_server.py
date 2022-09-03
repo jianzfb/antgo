@@ -22,11 +22,17 @@ import uuid
 import json
 import time
 import math
+import base64
 
 
 class EntryApiHandler(BaseHandler):
   @gen.coroutine
   def get(self, *args, **kwargs):
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
     content = self.db['content']
     if content is None:
       self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
@@ -60,7 +66,7 @@ class EntryApiHandler(BaseHandler):
     start_index = 0 * num_in_page
     start_index = start_index if start_index < result_num else result_num-1
     end_index = 1 * num_in_page
-    end_inidex = end_index if end_index < result_num else result_num
+    end_index = end_index if end_index < result_num else result_num
 
     sample_num_in_dataset = {}
     for dataset_name in dataset_names:
@@ -81,6 +87,7 @@ class EntryApiHandler(BaseHandler):
       'spider': self.db['spider'] if 'spider' in self.db else 'BAIDU'
     }
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
+
 
 class TagChangeApiHandler(BaseHandler):
   @gen.coroutine
@@ -109,6 +116,11 @@ class TagChangeApiHandler(BaseHandler):
 class SearchApiHandler(BaseHandler):
   @gen.coroutine
   def post(self, *args, **kwargs):
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
     web_url = self.get_argument('url', None)
     keyword = self.get_argument('keyword', None)
     if web_url.lower().startswith('baidu'):
@@ -121,16 +133,21 @@ class SearchApiHandler(BaseHandler):
     # 记录当前spider
     self.db['spider'] = web_url.upper()
 
-    # 通知爬虫
-    self.db['command_queue'].put((
-      'baidu', {'datasource_address': web_url, 'datasource_keywards': keyword}
-    ))
+    # # 通知爬虫
+    # self.db['command_queue'].put((
+    #   'baidu', {'datasource_address': web_url, 'datasource_keywards': keyword}
+    # ))
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
 class PageApiHandler(BaseHandler):
   @gen.coroutine
   def get(self, *args, **kwargs):
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
     page_index = self.get_argument('page_index', None)
     page_index = int(page_index)
     dataet_name = self.get_argument('dataset_name', None)
@@ -209,13 +226,88 @@ class PingApiHandler(BaseHandler):
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
+class LoginHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+    user_name = self.get_argument('user_name', None)
+    user_password = self.get_argument('user_password', None)
+    if user_name is None or user_password is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    white_users = self.db['white_users']
+    if white_users is None:
+      # 无需登录
+      self.response(RESPONSE_STATUS_CODE.SUCCESS)
+      return
+
+    if user_name not in white_users:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    if user_password != self.db['white_users'][user_name]['password']:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    cookie_id = str(uuid.uuid4())
+    self.db['users'].update({
+      cookie_id: {
+        "full_name": user_name,
+        'short_name': user_name[0].upper(),
+      }
+    })
+    self.set_login_cookie({'cookie_id': cookie_id})
+    self.response(RESPONSE_STATUS_CODE.SUCCESS)
+
+
+class LogoutHandler(BaseHandler):
+  @gen.coroutine
+  def post(self):
+    self.clear_cookie('antgo')
+
+
+class UserInfoHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+    # 获取当前用户名
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    statistic_info = {
+    }
+
+    self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+      'user_name': user['full_name'],
+      'short_name': user['short_name'],
+      'task_name': 'DEFAULT',
+      'task_type': 'DEFAULT',
+      'project_type': 'PREDICT',
+      'statistic_info': statistic_info
+    })
+
+
+class ProjectInfoHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+
+    self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+      'project_type': 'PREDICT',
+      'project_state': {
+
+      }
+    })
+    return
+
+
 class GracefulExitException(Exception):
   @staticmethod
   def sigterm_handler(signum, frame):
     raise GracefulExitException()
 
 
-def batch_server_start(batch_dump_dir, server_port, command_queue):
+def batch_server_start(dump_dir, server_port, samples=None, white_users=None):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
 
@@ -224,35 +316,93 @@ def batch_server_start(batch_dump_dir, server_port, command_queue):
 
   try:
     # 静态资源目录
-    batch_static_dir = os.path.join(batch_dump_dir, 'batch')
+    batch_dir = os.path.join(dump_dir, 'predict')
+    static_dir = os.path.join(batch_dir, 'static')
+    if not os.path.exists(static_dir):
+      os.makedirs(static_dir)
 
     # 2.step launch web server
-    db = {'content': {}, 'command_queue': command_queue}
+    # cookie
+    cookie_secret = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
+
+    db = {'content': {}, 'users': {}}
+    if samples is not None:
+      db['content'] = samples
+      db['waiting'] = samples['waiting']
+      db['finished'] = samples['finished']
+
+    # 设置白盒用户
+    db['white_users'] = white_users
+
     settings = {
-      'static_path': os.path.join(batch_static_dir, 'static'),
+      'static_path': static_dir,
       'port': server_port,
-      'cookie_secret': str(uuid.uuid4()),
+      'cookie_secret': cookie_secret,
       'db': db,
     }
 
-    app = tornado.web.Application(handlers=[(r"/batch-api/entry/", EntryApiHandler),
-                                            (r"/batch-api/dataset/", EntryApiHandler),
-                                            (r"/batch-api/page/", PageApiHandler),
-                                            (r"/batch-api/config/", ConfigApiHandler),
-                                            (r"/batch-api/ping/", PingApiHandler),
-                                            (r"/batch-api/tag/", TagChangeApiHandler),
-                                            (r"/batch-api/search/", SearchApiHandler),
+    app = tornado.web.Application(handlers=[(r"/antgo/api/predict/entry/", EntryApiHandler),
+                                            (r"/antgo/api/predict/dataset/", EntryApiHandler),
+                                            (r"/antgo/api/predict/page/", PageApiHandler),
+                                            (r"/antgo/api/predict/config/", ConfigApiHandler),
+                                            (r"/antgo/api/predict/tag/", TagChangeApiHandler),
+                                            (r"/antgo/api/predict/search/", SearchApiHandler),
+                                            (r"/antgo/api/user/login/", LoginHandler),    # 登录，仅支持预先指定用户
+                                            (r"/antgo/api/user/logout/", LogoutHandler),  # 退出
+                                            (r"/antgo/api/user/info/", UserInfoHandler),  # 获得用户信息
+                                            (r"/antgo/api/ping/", PingApiHandler),        # ping 服务
+                                            (r"/antgo/api/info/", ProjectInfoHandler),
                                             (r'/(.*)', tornado.web.StaticFileHandler,
-                                             {"path": batch_static_dir, "default_filename": "index.html"}),],
+                                             {"path": static_dir, "default_filename": "index.html"}),],
                                   **settings)
     http_server = tornado.httpserver.HTTPServer(app)
     http_server.listen(options.port)
 
-    logger.info('demo is providing server on port %d' % server_port)
+    logger.info('predict is providing server on port %d' % server_port)
     tornado.ioloop.IOLoop.instance().start()
-    logger.info('demo stop server')
+    logger.info('predict stop server')
   except GracefulExitException:
-    logger.info('demo server exit')
+    logger.info('predict server exit')
     sys.exit(0)
   except KeyboardInterrupt:
     pass
+
+
+if __name__ == '__main__':
+  dump_dir = '/Users/jian/Downloads/BB'
+  white_users = {
+    'jian@baidu.com':{
+      'password': '112233'
+    }
+  }
+
+  samples = {
+    'waiting': 0,
+    'finished': 2000,
+    'experiment_uuid': '112233445566',
+    'dataset': {
+      'train': []
+    },
+    'tags': ['1','2','3','4']
+  }
+
+  for _ in range(2000):
+    samples['dataset']['train'].append(
+      {
+        'data': [
+          {
+            'type': 'IMAGE',
+            'data': '/static/data/1.jpeg',
+            'width': 1200 // 4,
+            'height': 800 // 4,
+          },
+          {
+            'type': 'STRING',
+            'data': 'AABBCC',
+          }
+        ],
+        'tag': []
+      },
+    )
+
+  batch_server_start(dump_dir, 9000, samples=samples, white_users=white_users)

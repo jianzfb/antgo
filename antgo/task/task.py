@@ -304,7 +304,9 @@ def create_task_from_xml(task_config_xml, ant_context):
           if input_item.tag == 'source_data':
             for data_item in input_item:
               if data_item.tag == 'data_set_name':
-                dataset_name = data_item.text.strip()
+                dataset_name = ''
+                if data_item.text is not None:
+                  dataset_name = data_item.text.strip()
               elif data_item.tag == 'data_set_params':
                 for parameter in data_item:
                   key = parameter[0].text.strip() if parameter[0].tag == 'name' else parameter[1].text.strip()

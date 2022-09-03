@@ -24,3 +24,6 @@ pycocotools
 addict
 yapf
 timer
+thop
+torch
+imagesize

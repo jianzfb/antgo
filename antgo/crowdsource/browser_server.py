@@ -5,6 +5,9 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+
+import copy
+
 import tornado.httpserver
 import tornado.ioloop
 import tornado.options
@@ -22,80 +25,74 @@ import sys
 import uuid
 import json
 import time
+import base64
+# # 新用户，从队列中获取新数据并加入用户队列中
+# self.db['data'].append({
+#   'value': self.response_queue.get(),
+#   'status': False,
+#   'time': time.time()
+# })
+
+class FreshApiHandler(BaseHandler):
+  @gen.coroutine
+  def post(self):
+    # 添加样本记录
+    samples = self.get_argument('samples', None)
+    if samples is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    # 解析json
+    samples = json.loads(samples)
+
+    is_replace = self.get_argument('is_replace', None)
+    if is_replace:
+      self.db['data'] = []
+
+    for sample_i, sample in enumerate(samples):
+      for data in sample:
+        if data['type'] == 'IMAGE':
+          large_size = max(data['width'], data['height'])
+          scale = large_size / 400
+          if scale > 1.0:
+            data['width'] = (int)(data['width'] / scale)
+            data['height'] = (int)(data['height'] / scale)
+
+      self.db['data'].append({
+        'value': sample,
+        'status': False,
+        'time': time.time()
+      })
+
+    self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
 class EntryApiHandler(BaseHandler):
   @gen.coroutine
   def get(self, *args, **kwargs):
-    # notify backend and waiting response
-    session_id = self.get_cookie('sessionid')
-    if session_id is None:
-      session_id = str(uuid.uuid4())
-      self.set_secure_cookie('sessionid', session_id)
-
-    if session_id not in self.db['user']:
-      self.db['user'][session_id] = []
-
-    # browser/screening
-    if self.settings['browser_mode'] == 'browser':
-      # 浏览模式
-      if len(self.db['user'][session_id]) == 0:
-        if len(self.db['data']) == 0:
-          if self.response_queue.empty():
-            # 无新数据，直接返回
-            self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
-            return
-
-          # 从队列取出，加入数据库
-          self.db['data'].append({
-            'value': self.response_queue.get(),
-            'status': False,
-            'time': time.time()
-          })
-
-        self.db['user'][session_id].append(0)
-
-      # 获得当前用户浏览位置
-      entry_id = self.db['user'][session_id][-1]
-
-      # 构建返回数据
-      response_content = {
-        'value': self.db['data'][entry_id]['value'],
-        'step': len(self.db['user'][session_id]) - 1,
-        'tags': self.settings.get('tags', []),
-        'operator': [],
-        'dataset_flag': self.db['state'],
-        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-      }
-
-      self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
       return
 
-    # 审查模式
-    if len(self.db['user'][session_id]) == 0:
-      if self.response_queue.empty():
-        # 无新数据，直接返回
-        self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
-        return
+    if len(self.db['data']) == 0:
+      # 当前无数据，直接返回
+      self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
+      return
 
-      # 新用户，从队列中获取新数据并加入用户队列中
-      self.db['data'].append({
-        'value': self.response_queue.get(),
-        'status': False,
-        'time': time.time()
-      })
+    user_name = user['full_name']
+    if user_name not in self.db['user_record']:
+      self.db['user_record'][user_name] = []
+    if len(self.db['user_record'][user_name]) == 0:
+      self.db['user_record'][user_name].append(0)
 
-      latest_id = len(self.db['data']) - 1
-      self.db['user'][session_id].append(latest_id)
-
-    # 获得当前用户待审查数据ID
-    entry_id = self.db['user'][session_id][-1]
+    # 获得当前用户浏览位置
+    entry_id = self.db['user_record'][user_name][-1]
 
     # 构建返回数据
     response_content = {
       'value': self.db['data'][entry_id]['value'],
-      'step': len(self.db['user'][session_id]) - 1,
+      'step': len(self.db['user_record'][user_name]) - 1,
       'tags': self.settings.get('tags', []),
       'operator': [],
       'dataset_flag': self.db['state'],
@@ -104,34 +101,34 @@ class EntryApiHandler(BaseHandler):
     }
 
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
+    return
 
 
 class PrevApiHandler(BaseHandler):
   @gen.coroutine
-  def post(self):
+  def get(self):
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
     step = self.get_argument('step', None)
     data = self.get_argument("data", None)
     if step is None or data is None:
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
       return
 
-    session_id = self.get_cookie('sessionid')
-    if session_id is None:
-      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
-      return
-
-    if session_id not in self.db['user']:
-      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
-      return
-
+    user_name = user['full_name']
+    if user_name not in self.db['user_record']:
+      self.db['user_record'] = []
     step = int(step)
-    if step < 0 or step >= len(self.db['user'][session_id]):
+    if step < 0 or step >= len(self.db['user_record'][user_name]):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
       return
 
     # 保存当前修改到内存
     data = json.loads(data)
-    entry_id = self.db['user'][session_id][step]
+    entry_id = self.db['user_record'][user_name][step]
     self.db['data'][entry_id] = {'value': data, 'status': True, 'time': time.time()}
 
     # 保存当前修改到文件
@@ -164,7 +161,7 @@ class PrevApiHandler(BaseHandler):
       return
 
     pre_step = step - 1
-    pre_entry_id = self.db['user'][session_id][pre_step]
+    pre_entry_id = self.db['user_record'][user_name][pre_step]
     response_content = {
       'value': self.db['data'][pre_entry_id]['value'],
       'step': pre_step,
@@ -179,30 +176,29 @@ class PrevApiHandler(BaseHandler):
 
 class NextApiHandler(BaseHandler):
   @gen.coroutine
-  def post(self):
+  def get(self):
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
     step = self.get_argument("step", None)
     data = self.get_argument("data", None)
     if step is None or data is None:
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
       return
 
-    session_id = self.get_cookie('sessionid')
-    if session_id is None:
-      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
-      return
-
-    if session_id not in self.db['user']:
-      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'cookie invalid')
-      return
-
+    user_name = user['full_name']
+    if user_name not in self.db['user_record']:
+      self.db['user_record'] = []
     step = int(step)
-    if step < 0 or step >= len(self.db['user'][session_id]):
+    if step < 0 or step >= len(self.db['user_record'][user_name]):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
       return
 
     # 保存当前修改到内存
     data = json.loads(data)
-    entry_id = self.db['user'][session_id][step]
+    entry_id = self.db['user_record'][user_name][step]
     if not self.db['data'][entry_id]['status']:
       self.db['dataset'][self.db['state']]['samples_num_checked'] += 1
 
@@ -222,10 +218,10 @@ class NextApiHandler(BaseHandler):
         if item['title'] == 'ID':
           data_id = str(item['data'])
       if data_id is None:
-        data_id = str(entry_id+offset)
+        data_id = str(entry_id + offset)
 
-      with open(os.path.join(self.dump_folder, state, '%s.json'%data_id), "w") as file_obj:
-        json.dump(data, file_obj)
+      with open(os.path.join(self.dump_folder, state, '%s.json' % data_id), "w") as fp:
+        json.dump(data, fp)
     except Exception as e:
       print('str(Exception):\t', str(Exception))
       print('str(e):\t\t', str(e))
@@ -233,9 +229,9 @@ class NextApiHandler(BaseHandler):
       print('e.message:\t', e.message)
 
     # 获得用户下一步数据
-    if step < len(self.db['user'][session_id]) - 1:
+    if step < len(self.db['user_record'][user_name]) - 1:
       next_step = step + 1
-      next_entry_id = self.db['user'][session_id][next_step]
+      next_entry_id = self.db['user_record'][user_name][next_step]
       response_content = {
         'value': self.db['data'][next_entry_id]['value'],
         'step': next_step,
@@ -248,60 +244,17 @@ class NextApiHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
       return
 
-    if self.settings['browser_mode'] == 'browser':
-      # 浏览模式
-      if len(self.db['data']) == len(self.db['user'][session_id]):
-        if self.response_queue.empty():
-          # 无新数据，直接返回
-          self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
-            'value': self.db['data'][self.db['user'][session_id][-1]]['value'],
-            'step': len(self.db['user'][session_id]) - 1,
-            'tags': self.settings.get('tags', []),
-            'operator': [],
-            'state': self.db['state'],
-            'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-            'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-          })
-          return
-
-        # 加入新数据
-        self.db['data'].append({'value': self.response_queue.get(),
-                                'status': False,
-                                'time': time.time()})
-
-      # 为当前用户分配下一个浏览数据
-      next_entry_id = len(self.db['user'][session_id])
-      self.db['user'][session_id].append(next_entry_id)
-
-      self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
-        'value': self.db['data'][next_entry_id]['value'],
-        'step': len(self.db['user'][session_id]) - 1,
-        'tags': self.settings.get('tags', []),
-        'operator': [],
-        'state': self.db['state'],
-        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-      })
-
-      return
-
-    # 审查模式
-    # 当前已经到达用户最后一张图，下一张图必须从队列中获取
-    # 新数据来源（1，之前分配给某个用户，但一直没有收到反馈；2，新产生的数据）
-    # 1. 之前分配给某个用户，但一直没有收到反馈
+    # 发下下一个还没有进行审核的样本
     next_entry_id = -1
-    now_time = time.time()
-    for sample_i, sample in enumerate(self.db['data']):
-      if not sample['status'] and (now_time - sample['time']) > 60:
-        next_entry_id = sample_i
+    for id in range(len(self.db['data'])):
+      if 'status' not in self.db['data'][id] or not self.db['data'][id]['status']:
+        next_entry_id = id
         break
 
-    # 2. 新产生的数据
-    if self.response_queue.empty():
-      # 无新数据，直接返回
+    if next_entry_id == -1:
       self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
-        'value': self.db['data'][self.db['user'][session_id][-1]]['value'],
-        'step': len(self.db['user'][session_id]) - 1,
+        'value': self.db['data'][self.db['user_record'][user_name][-1]]['value'],
+        'step': len(self.db['user_record'][user_name]) - 1,
         'tags': self.settings.get('tags', []),
         'operator': [],
         'state': self.db['state'],
@@ -310,17 +263,13 @@ class NextApiHandler(BaseHandler):
       })
       return
 
-    if next_entry_id == -1:
-      self.db['data'].append({'value': self.response_queue.get(), 'status': False, 'time': time.time()})
-      next_entry_id = len(self.db['data']) - 1
-
     # 为当前用户分配下一个审查数据
-    self.db['user'][session_id].append(next_entry_id)
+    self.db['user_record'][user_name].append(next_entry_id)
 
     #
     response_content = {
       'value': self.db['data'][next_entry_id]['value'],
-      'step': len(self.db['user'][session_id]) - 1,
+      'step': len(self.db['user_record'][user_name]) - 1,
       'tags': self.settings.get('tags', []),
       'operator': [],
       'state': self.db['state'],
@@ -328,8 +277,8 @@ class NextApiHandler(BaseHandler):
       'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
     }
 
-    #
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
+    return
 
 
 class FileApiHandler(BaseHandler):
@@ -445,6 +394,86 @@ class ConfigApiHandler(BaseHandler):
       # train,val or test
       self.db['state'] = state
 
+class LoginHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+    user_name = self.get_argument('user_name', None)
+    user_password = self.get_argument('user_password', None)
+    if user_name is None or user_password is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    white_users = self.db['white_users']
+    if white_users is None:
+      # 无需登录
+      self.response(RESPONSE_STATUS_CODE.SUCCESS)
+      return
+
+    if user_name not in white_users:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    if user_password != self.db['white_users'][user_name]['password']:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    cookie_id = str(uuid.uuid4())
+    self.db['users'].update({
+      cookie_id: {
+        "full_name": user_name,
+        'short_name': user_name[0].upper(),
+      }
+    })
+    self.set_login_cookie({'cookie_id': cookie_id})
+    self.response(RESPONSE_STATUS_CODE.SUCCESS)
+
+
+class LogoutHandler(BaseHandler):
+  @gen.coroutine
+  def post(self):
+    self.clear_cookie('antgo')
+
+
+class UserInfoHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+    # 获取当前用户名
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    # 遍历所有样本获得本轮，当前用户的标注记录
+    statistic_info = {
+    }
+
+    self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+      'user_name': user['full_name'],
+      'short_name': user['short_name'],
+      'task_name': 'DEFAULT',
+      'task_type': 'DEFAULT',
+      'project_type': 'BROWSER',
+      'statistic_info': statistic_info
+    })
+
+
+class ProjectInfoHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+
+    self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+      'project_type': 'BROWSER',
+      'project_state': {
+
+      }
+    })
+    return
+
+class PingApiHandler(BaseHandler):
+  @gen.coroutine
+  def get(self, *args, **kwargs):
+    self.response(RESPONSE_STATUS_CODE.SUCCESS)
+
 
 class GracefulExitException(Exception):
   @staticmethod
@@ -452,14 +481,13 @@ class GracefulExitException(Exception):
     raise GracefulExitException()
 
 
-def browser_server_start(data_path,
-                         browser_dump_dir,
-                         response_queue,
+def browser_server_start(browser_dump_dir,
                          tags,
                          server_port,
                          offset_configs,
                          profile_config,
-                         browser_mode='screening'):
+                         samples=[],
+                         white_users=None):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
 
@@ -468,51 +496,134 @@ def browser_server_start(data_path,
 
   try:
     # 静态资源目录
-    browser_static_dir = os.path.join(browser_dump_dir, 'browser')
+    browser_dir = os.path.join(browser_dump_dir, 'browser')
+    static_dir = os.path.join(browser_dir, 'static')
+    if not os.path.exists(static_dir):
+      os.makedirs(static_dir)
+
     # 数据数据目录
     browser_dump_dir = os.path.join(browser_dump_dir, 'record')
     if not os.path.exists(browser_dump_dir):
       os.makedirs(browser_dump_dir)
 
     # 2.step launch web server
-    db = {'data': [], 'user': {}, 'dataset': {}}
-    for offset_config in offset_configs:
-      db['dataset'][offset_config['dataset_flag']] = {'offset':offset_config['dataset_offset']}
+    db = {'data': [], 'users': {}, 'dataset': {}, 'user_record': {}}
+    if samples is not None:
+      for sample in samples:
+        db['data'].append({
+          'value': sample,
+          'status': False,
+          'time': time.time()
+        })
 
-    db['dataset'][profile_config['dataset_flag']]['samples_num'] = profile_config['samples_num']
-    db['dataset'][profile_config['dataset_flag']]['samples_num_checked'] = profile_config['samples_num_checked']
+    # 设置白盒用户
+    db['white_users'] = white_users
+
+    for offset_config in offset_configs:
+      db['dataset'][offset_config['dataset_flag']] = {
+        'offset': offset_config['dataset_offset']
+      }
+
+    db['dataset'][profile_config['dataset_flag']]['samples_num'] = \
+      profile_config['samples_num']
+    db['dataset'][profile_config['dataset_flag']]['samples_num_checked'] = \
+      profile_config['samples_num_checked']
     db['state'] = profile_config['dataset_flag']
 
+    # cookie
+    cookie_secret = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
+
     settings = {
-      'static_path': os.path.join(browser_static_dir, 'static'),
+      'static_path': os.path.join(browser_dir, 'static'),
       'dump_path': browser_dump_dir,
       'port': server_port,
-      'response_queue': response_queue,
       'tags': tags,
-      'data_folder': data_path,
-      'cookie_secret': str(uuid.uuid4()),
+      'cookie_secret': cookie_secret,
+      'cookie_max_age_days': 30,
+      'Content-Security-Policy': "frame-ancestors 'self' {}".format('http://localhost:8080/'),
       'db': db,
-      'browser_mode': browser_mode
     }
 
-    app = tornado.web.Application(handlers=[(r"/browser-api/prev/", PrevApiHandler),
-                                            (r"/browser-api/next/", NextApiHandler),
-                                            (r"/browser-api/operator/", OperatorApiHandler),
-                                            (r"/browser-api/entry/", EntryApiHandler),
-                                            (r"/browser-api/file/", FileApiHandler),
-                                            (r"/browser-api/download/", DownloadApiHandler),
-                                            (r"/browser-api/config/", ConfigApiHandler),
+    app = tornado.web.Application(handlers=[(r"/antgo/api/browser/sample/prev/", PrevApiHandler),
+                                            (r"/antgo/api/browser/sample/next/", NextApiHandler),
+                                            (r'/antgo/api/browser/sample/fresh/', FreshApiHandler),
+                                            (r"/antgo/api/browser/sample/entry/", EntryApiHandler),
+                                            (r"/antgo/api/browser/operator/", OperatorApiHandler),
+                                            (r"/antgo/api/browser/file/", FileApiHandler),
+                                            (r"/antgo/api/browser/download/", DownloadApiHandler),
+                                            (r"/antgo/api/browser/config/", ConfigApiHandler),
+                                            (r"/antgo/api/ping/", PingApiHandler),
+                                            (r"/antgo/api/user/login/", LoginHandler),  # 登录，仅支持预先指定用户
+                                            (r"/antgo/api/user/logout/", LogoutHandler),  # 退出
+                                            (r"/antgo/api/user/info/", UserInfoHandler),  # 获得用户信息
+                                            (r"/antgo/api/info/", ProjectInfoHandler),
                                             (r'/(.*)', tornado.web.StaticFileHandler,
-                                             {"path": browser_static_dir, "default_filename": "index.html"}),],
+                                             {"path": static_dir, "default_filename": "index.html"}),],
                                   **settings)
     http_server = tornado.httpserver.HTTPServer(app)
     http_server.listen(options.port)
 
-    logger.info('demo is providing server on port %d' % server_port)
+    logger.info('browser is providing server on port %d' % server_port)
     tornado.ioloop.IOLoop.instance().start()
-    logger.info('demo stop server')
+    logger.info('browser stop server')
   except GracefulExitException:
-    logger.info('demo server exit')
+    logger.info('browser server exit')
     sys.exit(0)
   except KeyboardInterrupt:
     pass
+
+
+if __name__ == '__main__':
+  data_path = ''
+  browser_dump_dir = '/Users/jian/Downloads/BB'
+  tags = ['A','B','D']
+  server_port = 9000
+  offset_configs = [{
+    'dataset_flag': 'TRAIN',
+    'dataset_offset': 0
+  }, {
+    'dataset_flag': 'VAL',
+    'dataset_offset': 0
+  }, {
+    'dataset_flag': 'TEST',
+    'dataset_offset': 0
+  }]
+  profile_config = {
+    'dataset_flag': 'TRAIN',
+    'samples_num': 10,
+    'samples_num_checked': 0
+  }
+  white_users = {
+    'jian@baidu.com':{
+      'password': '112233'
+    }
+  }
+  samples=[]
+  for _ in range(10):
+    temp = [
+      {
+        'type': 'IMAGE',
+        'data': '/static/data/1.jpeg',
+        'width': 1200//4,
+        'height': 800//4,
+        'tag': ['A'],
+        'title': 'MIAO'
+      },
+      {
+        'type': 'STRING',
+        'data': 'AABBCC',
+        'tag': ['B'],
+        'title': 'H'
+      }
+    ]
+
+    samples.append(copy.deepcopy(temp))
+
+  browser_server_start(
+    browser_dump_dir,
+    tags,
+    server_port,
+    offset_configs,
+    profile_config,
+    white_users=white_users,
+    samples=samples)
