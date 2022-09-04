@@ -315,21 +315,31 @@ class BaseHandler(tornado.web.RequestHandler):
     elif preprocess_type == 'API_QUERY':
       # 1.step base64解码
       # format {'image': '', 'video': None, 'params': [{'data': ,'type': , 'name': ,},{}]}
-      image_str = None
-      if 'image' in data:
-        image_str = data['image']
+      data_list = data
+      if type(data_list) == dict:
+        data_list = [data_list]
 
-      if image_str is None:
-        return {
-          'status': 400,
-          'code': 'InvalidData', 
-          'message': 'Missing query data'}
+      multi_images = []
+      for data in data_list:
+        image_str = None
+        if 'image' in data:
+          image_str = data['image']
 
-      image_b = base64.b64decode(image_str)
+        if image_str is None or image_str == '':
+          return {
+            'status': 400,
+            'code': 'InvalidData',
+            'message': 'Missing query data'}
+
+        image_b = base64.b64decode(image_str)
+        multi_images.append(image_b)
+
+      if len(multi_images) == 1:
+        multi_images = multi_images[0]
       params = data.get('params', {})
       return {
         'status': 200,
-        'data': {'image': image_b, 'params': params}
+        'data': {'image': multi_images, 'params': params}
       }
 
 
@@ -525,7 +535,10 @@ class ClientCliQueryHandler(BaseHandler):
     request_param.update(result['data']['params'])
 
     # push to backend
-    model_input = (image, 'IMAGE_MEMORY', request_param)
+    data_type = 'IMAGE_MEMORY'
+    if type(image) == list:
+      data_type = 'IMAGE_MULTI_MEMORY'
+    model_input = (image, data_type, request_param)
 
     # 发送到处理队列
     self.dataset_queue.put(model_input)

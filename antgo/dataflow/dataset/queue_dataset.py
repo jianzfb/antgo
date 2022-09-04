@@ -91,6 +91,11 @@ class QueueDataset(Dataset):
         # img_data = cv2.imread(BytesIO(data))
         img_data = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
         return (img_data, {}) if request_param is None else (img_data, request_param)
+      if data_type == 'IMAGE_MULTI_MEMORY':
+        img_data = []
+        for d in data:
+          img_data.append(cv2.imdecode(np.frombuffer(d, np.uint8), cv2.IMREAD_COLOR))
+        return (img_data, {}) if request_param is None else (img_data, request_param)
       elif data_type == 'FILE':
         with open(data, 'r') as fp:
           return (fp.read(),{}) if request_param is None else (fp.read(), request_param)

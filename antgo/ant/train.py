@@ -53,8 +53,8 @@ class AntTrain(AntBase):
     self.skip_training = kwargs.get('skip_training', False)
     self.context.devices = [int(d) for d in kwargs.get('devices', '').split(',') if d != '']
 
-    self.skip_training = self.context.params.system['skip_training']
-    self.context.devices = self.context.params.system['devices']
+    self.skip_training = self.context.params.system.skip_training
+    self.context.devices = self.context.params.system.devices
 
     self._running_dataset = None
     self._running_task = None
@@ -377,13 +377,13 @@ class AntTrain(AntBase):
     # 3.step 分析消除配置
     # analyze ablation blocks
     # user custom devices
-    apply_devices = getattr(self.context.params, 'devices', [])
+    apply_devices = self.context.params.system.get('devices', [])
     if apply_devices is None:
       apply_devices = []
 
     # ablation experiment
-    ablation_blocks = getattr(self.context.params, 'ablation', None)
-    ablation_method = getattr(self.context.params, 'ablation_method', 'regular')
+    ablation_blocks = self.context.params.system.get('ablation', None)
+    ablation_method = self.context.params.system.get('ablation_method', 'regular')
     if ablation_method is None:
       ablation_method = 'regular'
     assert(ablation_method in ['regular', 'inregular', 'accumulate', 'any', 'fixed'])
@@ -451,17 +451,22 @@ class AntTrain(AntBase):
     ant_train_dataset = None
     if self.context.register_at('train') is not None:
       ant_train_dataset = ProxyDataset('train')
-      ant_train_dataset.register(train=self.context.register_at('train'), val=self.context.register_at('val'))
+      ant_train_dataset.register(
+        train=self.context.register_at('train'),
+        val=self.context.register_at('val'))
     else:
-      ant_train_dataset = running_ant_task.dataset('train',
-                                                   os.path.join(self.ant_data_source, running_ant_task.dataset_name),
-                                                   running_ant_task.dataset_params)
+      ant_train_dataset = \
+        running_ant_task.dataset(
+          'train',
+          os.path.join(self.ant_data_source, running_ant_task.dataset_name),
+          running_ant_task.dataset_params
+        )
 
       # 5.1.step 检查设置候选数据
-      if self.context.params.system['candidate']:
-        if 'candidate_file' in self.context.params.system['ext_params']:
-          logger.info('Using candidate file %s'%self.context.params.system['ext_params']['candidate_file'])
-          ant_train_dataset.candidate_file = self.context.params.system['ext_params']['candidate_file']
+      if self.context.params.system.get('candidate', None):
+        if 'candidate_file' in self.context.params.system.ext_params.keys():
+          logger.info('Using candidate file %s'%self.context.params.system.ext_params.candidate_file)
+          ant_train_dataset.candidate_file = self.context.params.system.ext_params.candidate_file
         ant_train_dataset = CandidateDataset(ant_train_dataset)
 
     assert(ant_train_dataset is not None)
@@ -487,7 +492,8 @@ class AntTrain(AntBase):
         evaluation_measures = running_ant_task.evaluation_measures
 
         if estimation_procedure == 'holdout':
-          evaluation_statistic = self._holdout_validation(ant_train_dataset, running_ant_task, experiment_uuid)
+          evaluation_statistic = \
+            self._holdout_validation(ant_train_dataset, running_ant_task, experiment_uuid)
           
           if evaluation_statistic is not None and len(evaluation_statistic) > 0:
             logger.info('Generate model evaluation report.')
@@ -507,9 +513,12 @@ class AntTrain(AntBase):
           is_stratified_sampling = True   # default value
           split_ratio = 0.7               # default value (andrew ng, machine learning yearning)
           if estimation_procedure_params is not None:
-            number_repeats = int(estimation_procedure_params.get('number_repeats', number_repeats))
-            is_stratified_sampling = int(estimation_procedure_params.get('stratified_sampling', is_stratified_sampling))
-            split_ratio = float(estimation_procedure_params.get('split_ratio', split_ratio))
+            number_repeats = \
+              int(estimation_procedure_params.get('number_repeats', number_repeats))
+            is_stratified_sampling = \
+              int(estimation_procedure_params.get('stratified_sampling', is_stratified_sampling))
+            split_ratio = \
+              float(estimation_procedure_params.get('split_ratio', split_ratio))
 
           # start model estimation procedure
           evaluation_statistic = self._repeated_holdout_validation(number_repeats,
