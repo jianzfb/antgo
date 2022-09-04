@@ -228,7 +228,7 @@ class InteractContext(Context):
       raise sys.exc_info()[0]
 
   @contextmanager
-  def Ensemble(self, exp_name, exp_param, stage, **kwargs):
+  def Ensemble(self, exp_name, exp_param, **kwargs):
     # 1.step 配置基本信息
     self.__prepare_context(exp_name, exp_param, **kwargs)
 
@@ -248,7 +248,7 @@ class InteractContext(Context):
                     self.api_token,
                     self.task,
                     self.dataset,
-                    stage)
+                    kwargs.get('stage', 'merge'))
       # 准备ensemble控制
       ensemble_handler.start()
       yield ensemble_handler

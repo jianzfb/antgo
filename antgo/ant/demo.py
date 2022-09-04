@@ -35,7 +35,7 @@ class AntDemo(AntBase):
     self.ant_task_config = ant_task_config
 
     self.html_template = kwargs.get('html_template', None)
-    self.demo_port = self.context.params.system['port']
+    self.demo_port = self.context.params.system.port
     self.demo_port = int(self.demo_port) if self.demo_port is not None else None
 
     # self.support_user_upload = kwargs.get('support_user_upload', False)
@@ -117,12 +117,12 @@ class AntDemo(AntBase):
     logger.info('Demo prepare using port %d.'%self.demo_port)
 
     # 后台api调用
-    self.rpc = HttpRpc("v1", "api", "127.0.0.1", self.demo_port)
+    self.rpc = HttpRpc("v1", "antgo/api", "127.0.0.1", self.demo_port)
 
     demo_name = running_ant_task.task_name
     demo_type = running_ant_task.task_type
     demo_config = {
-      'interaction':{
+      'interaction': {
         'support_user_upload': True,
         'support_user_input': True,
         'support_user_interaction': False,
@@ -136,24 +136,31 @@ class AntDemo(AntBase):
 
     request_waiting_time = 30
     if self.context.params.demo is not None:
-      if 'support_user_upload' in self.context.params.demo:
-        demo_config['interaction']['support_user_upload'] = self.context.params.demo['support_user_upload']
+      if 'support_user_upload' in self.context.params.demo.keys():
+        demo_config['interaction']['support_user_upload'] = self.context.params.demo.support_user_upload
 
-      if 'support_user_input' in self.context.params.demo:
-        demo_config['interaction']['support_user_input'] = self.context.params.demo['support_user_input']
+      if 'support_user_input' in self.context.params.demo.keys():
+        demo_config['interaction']['support_user_input'] = self.context.params.demo.support_user_input
 
-      if 'support_user_interaction' in self.context.params.demo:
-        demo_config['interaction']['support_user_interaction'] = self.context.params.demo['support_user_interaction']
+      if 'support_user_interaction' in self.context.params.demo.keys():
+        demo_config['interaction']['support_user_interaction'] = self.context.params.demo.support_user_interaction
 
-      if 'support_user_constraint' in self.context.params.demo:
-        demo_config['interaction']['support_user_constraint'] = self.context.params.demo['support_user_constraint']
+      if 'support_user_constraint' in self.context.params.demo.keys():
+        demo_config['interaction']['support_user_constraint'] = self.context.params.demo.support_user_constraint
 
-      if 'request_waiting_time' in self.context.params.demo:
-        request_waiting_time = self.context.params.demo['request_waiting_time']
+      if 'request_waiting_time' in self.context.params.demo.keys():
+        request_waiting_time = self.context.params.demo.request_waiting_time
 
     # 在独立进程中启动webserver
-    p = multiprocessing.Process(target=demo_server_start,
-                                args=(demo_name, demo_type, demo_config, self._running_dataset.queue, request_waiting_time))
+    p = multiprocessing.Process(
+      target=demo_server_start,
+      args=(
+        demo_name,
+        demo_type,
+        demo_config,
+        self._running_dataset.queue,
+        request_waiting_time)
+    )
     p.start()
 
     # 5.step 启动运行预测过程
@@ -178,7 +185,7 @@ class AntDemo(AntBase):
             if item['type'] in ['IMAGE', 'VIDEO', 'FILE']:
               item['data'] = '%s/record/%s' % (infer_dump_dir, item['data'])
 
-        self.rpc.response.post(response=json.dumps(record_content))
+        self.rpc.demo.response.post(response=json.dumps(record_content))
 
       self.context.recorder = LocalRecorderNodeV2(_callback_func)
       if self.context.is_interact_mode:

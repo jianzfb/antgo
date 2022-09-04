@@ -161,7 +161,7 @@ function LayoutTable(id, rows, cols){
 }
 
 function demoUserBrowser(ok_callback, bind_elem, file_filter){
-    var browser_str = '<form id="demo_browser_form" name="form" action="/submit/" method="POST" enctype="multipart/form-data"> <input id="demo_file_browser" name="file" type="file" accept="{0}"></form>'.format(file_filter)
+    var browser_str = '<form id="demo_browser_form" name="form" action="/antgo/api/demo/submit/" method="POST" enctype="multipart/form-data"> <input id="demo_file_browser" name="file" type="file" accept="{0}"></form>'.format(file_filter)
     $("body").append($(browser_str))
 
     $('#demo_file_browser').change(function(e){
@@ -194,7 +194,7 @@ function demoUserBrowser(ok_callback, bind_elem, file_filter){
 }
 
 function demoMultiUserBrowser(ok_callback, trigger_elem, bind_elems, file_filters){
-    var browser_str = '<form id="demo_browser_form_{0}" name="form" action="/submit/" method="POST" enctype="multipart/form-data"></form>'.format(trigger_elem);
+    var browser_str = '<form id="demo_browser_form_{0}" name="form" action="/antgo/api/demo/submit/" method="POST" enctype="multipart/form-data"></form>'.format(trigger_elem);
     var browser_obj = $(browser_str)
     $("body").append(browser_obj)
     for(var elem_index in bind_elems){
@@ -228,7 +228,7 @@ function demoMultiUserBrowser(ok_callback, trigger_elem, bind_elems, file_filter
 
         $('#demo_browser_form_'+trigger_elem).ajaxSubmit({
             type:'post',
-            url: "/submit/",
+            url: "/antgo/api/demo/submit/",
             success: function(data){
                 if(ok_callback != null){
                     ok_callback(data)
@@ -263,7 +263,7 @@ function demoUserInput(ok_callback){
             query_data['DATA_TYPE'] = 'STRING';
         }
 
-        $.post('/api/query/', query_data, function(data, status){
+        $.post('/antgo/api/demo/query/', query_data, function(data, status){
             if(ok_callback != null){
                 if(status == 'success'){
                     ok_callback(data)

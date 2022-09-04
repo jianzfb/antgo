@@ -15,7 +15,6 @@ import traceback
 import subprocess
 import os
 import socket
-import requests
 import json
 import zipfile
 import multiprocessing
@@ -57,13 +56,21 @@ class EnsembleMergeRecorder(object):
         self.worker_number = f'{uuid.uuid4()}'
 
     def avg(self, data):
-        assert('id' in data)
-        id = data['id']['data']
-        data.pop('id')
+        assert('id' in data or 'image_file' in data)
+        id = ''
+        result = {}
+        if 'id' in data:
+            id = data['id']
+            data.pop('id')
+            result = {'id': id}
+        if 'image_file' in data:
+            id = data['image_file']
+            data.pop('image_file')
+            result = {'image_file': id}
 
-        result = {'id':{'data': id}}
         for k, v in data.items():
             if type(v['data']) != np.ndarray:
+                print('Only support np.ndarray.')
                 continue
 
             proxies = {
@@ -74,7 +81,7 @@ class EnsembleMergeRecorder(object):
             # 将数据以文件流模式上传
             data = msgpack.packb(v['data'], default=ms.encode)
             response = \
-                requests.post('%s/ensemble-api/avg/'%(self.url),
+                requests.post('%s/antgo/api/ensemble/avg/'%(self.url),
                               headers={'file_id': f'{id}',
                                        'worker_number': self.worker_number,
                                        'worker_prefix': f'{self.prefix}',
@@ -105,9 +112,14 @@ class EnsembleMergeRecorder(object):
         return result
 
     def record(self, data):
-        assert('id' in data)
-        id = str(data['id']['data'])
-        data.pop('id')
+        assert('id' in data or 'image_file' in data)
+        id = ''
+        if 'id' in data:
+            id = data['id']
+            data.pop('id')
+        if 'image_file' in data:
+            id = data['image_file']
+            data.pop('image_file')
 
         # 记录样本ID
         if id not in self.record_sample_list:
@@ -291,8 +303,8 @@ class AntEnsemble(AntBase):
         self.ensemble_stage = ensemble_stage            # train, merge, release
         assert(self.ensemble_stage in ['train', 'merge', 'release'])
 
-        self.mode = self.context.params.ensemble['mode']       # online/offline
-        self.method = self.context.params.ensemble['method']   # bagging,stacking,blending,bosting
+        self.mode = self.context.params.ensemble.mode      # online/offline
+        self.method = self.context.params.ensemble.method   # bagging,stacking,blending,bosting
         self.ant_dump_dir = ant_dump_dir
 
         self.ant_task_config = ant_task_config
@@ -339,10 +351,10 @@ class AntEnsemble(AntBase):
 
         # 启动服务器
         background_server_process = None
-        if self.ensemble_stage == 'merge' and self.context.params.ensemble['role'] == 'master':
-            worker_num = (int)(self.context.params.ensemble['worker'])
-            server_ip = self.context.params.system['ip']
-            server_port = (int)(self.context.params.system['port'])
+        if self.ensemble_stage == 'merge' and self.context.params.ensemble.role == 'master':
+            worker_num = (int)(self.context.params.ensemble.worker)
+            server_ip = self.context.params.system.ip
+            server_port = (int)(self.context.params.system.port)
             background_server_process = \
                 multiprocessing.Process(target=ensemble_server_start,
                                         args=(self.ant_dump_dir,
@@ -350,7 +362,7 @@ class AntEnsemble(AntBase):
                                               worker_num,
                                               self.context.params.ensemble.get('uncertain_vote', None),
                                               self.context.params.ensemble.get('enable_data_record', False)))
-            if not self.context.params.ensemble.get('background', False):
+            if not self.context.params.ensemble.get('background', True):
                 # 后台服务
                 background_server_process.daemon = True
             background_server_process.start()
@@ -358,13 +370,13 @@ class AntEnsemble(AntBase):
         # 等待master服务开启
         while self.ensemble_stage == 'merge':
             try:
-                server_ip = self.context.params.system['ip']
-                server_port = (int)(self.context.params.system['port'])
+                server_ip = self.context.params.system.ip
+                server_port = (int)(self.context.params.system.port)
                 proxies = {
                     "http": None,
                     'https': None
                 }
-                result = requests.get('http://%s:%d/ensemble-api/live/'%(server_ip, server_port), proxies=proxies)
+                result = requests.get('http://%s:%d/antgo/api/ping/'%(server_ip, server_port), proxies=proxies)
                 if result.status_code == 200:
                     break
             except:
@@ -386,11 +398,11 @@ class AntEnsemble(AntBase):
                     dataset_flag = 'test'
                 else:
                     dataset_flag = 'train'
-        elif 'dataset' in self.context.params.ensemble:
-            if len(self.context.params.ensemble['dataset'].split('/')) == 2:
-                dataset_name, dataset_flag = self.context.params.ensemble['dataset'].split('/')
+        elif 'dataset' in self.context.params.ensemble.keys():
+            if len(self.context.params.ensemble.dataset.split('/')) == 2:
+                dataset_name, dataset_flag = self.context.params.ensemble.dataset.split('/')
             else:
-                dataset_name = self.context.params.ensemble['dataset']
+                dataset_name = self.context.params.ensemble.dataset
                 if self.ensemble_stage in ['merge', 'release']:
                     dataset_flag = 'test'
                 else:
@@ -406,8 +418,8 @@ class AntEnsemble(AntBase):
                 dataset_flag = 'train'
 
         # 模型权重
-        if 'weight' in self.context.params.ensemble:
-            self.model_weight = self.context.params.ensemble['weight']
+        if 'weight' in self.context.params.ensemble.keys():
+            self.model_weight = self.context.params.ensemble.weight
 
         logger.info('Using dataset %s/%s.'%(dataset_name, dataset_flag))
 
@@ -430,9 +442,9 @@ class AntEnsemble(AntBase):
 
             logger.info('Start ensemble merge process.')
             self.context.recorder = \
-                EnsembleMergeRecorder(role=self.context.params.ensemble['role'],
-                                      ip=self.context.params.system['ip'],
-                                      port=self.context.params.system['port'],
+                EnsembleMergeRecorder(role=self.context.params.ensemble.role,
+                                      ip=self.context.params.system.ip,
+                                      port=self.context.params.system.port,
                                       experiment_uuid=self.experiment_uuid,
                                       dump_dir=dump_dir,
                                       ensemble_method=self.method,
@@ -441,10 +453,10 @@ class AntEnsemble(AntBase):
                                       dataset_num=ant_dataset.size,
                                       prefix=f"{self.ant_name}-{self.context.params.ensemble.get('model_name', 'model')}",
                                       model_weight=self.model_weight,
-                                      feedback=self.context.params.ensemble['feedback'])
+                                      feedback=self.context.params.ensemble.feedback)
 
             if self.context.is_interact_mode:
-                if self.context.params.ensemble.get('background', False):
+                if self.context.params.ensemble.get('background', True):
                     self.context.registry_clear_callback(lambda : background_server_process.join())
                 return
 
@@ -456,7 +468,7 @@ class AntEnsemble(AntBase):
                         print(e)
                         traceback.print_exc()
 
-            if self.context.params.ensemble.get('background', False):
+            if self.context.params.ensemble.get('background', True):
                 background_server_process.join()
 
         elif self.ensemble_stage == 'release':
@@ -465,7 +477,7 @@ class AntEnsemble(AntBase):
                 os.makedirs(dump_dir)
 
             logger.info('Start ensemble release process.')
-            ensemble_uuid = self.context.params.ensemble['uuid'] if 'uuid' in self.context.params.ensemble else ''
+            ensemble_uuid = self.context.params.ensemble.get('uuid', '')
             self.context.recorder = EnsembleReleaseRecorder(ensemble_uuid)
 
             if self.context.is_interact_mode:

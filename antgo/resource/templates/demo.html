@@ -500,7 +500,7 @@
             $('a[name=history_demo_item]').each(function(){
                 $(this).on('click',function () {
                     var query_data = {'DATA': $(this).attr('path'), 'DATA_TYPE': 'PATH'}
-                    $.post('/api/query/', query_data, function(data, status){
+                    $.post('/antgo/api/demo/query/', query_data, function(data, status){
                         if(status == 'success'){
                             var demo_response = eval('('+data+')');
                             show_demo_response('feature-table', demo_response['DATA']);

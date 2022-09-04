@@ -109,27 +109,47 @@ class BaseHandler(tornado.web.RequestHandler):
   def request_waiting_time(self):
     return self.settings['request_waiting_time']
 
-  def _transfer(self, data_key, data_value, data_type, demo_response):
+  def _transfer(self, data_key, data_value, data_type, demo_response, is_api_call):
+    file_uuid = str(uuid.uuid4())
     if data_type == 'IMAGE':
       if os.path.exists(data_value):
         data = os.path.normpath(data_value)
-        shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output'))
-        demo_response['DATA'].update({data_key: {'DATA': '/static/output/%s' % data.split('/')[-1], 'TYPE': 'IMAGE'}})
+        file_ext = data.split('/')[-1].split('.')[-1]
+        if not is_api_call:
+          shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output', f'{file_uuid}.{file_ext}'))
+          demo_response['DATA'].update(
+            {data_key: {'DATA': '/static/output/%s' % f'{file_uuid}.{file_ext}', 'TYPE': 'IMAGE'}}
+          )
+        else:
+          with open(data, 'rb') as fp:
+            image_content = base64.b64encode(fp.read()).decode('utf-8')
+            demo_response['DATA'].update(
+              {data_key: {'DATA': image_content, 'TYPE': 'IMAGE'}}
+            )
     elif data_type == 'VIDEO':
       if os.path.exists(data_value):
         data = os.path.normpath(data_value)
-        shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output'))
-        demo_response['DATA'].update({data_key: {'DATA': '/static/output/%s' % data.split('/')[-1], 'TYPE': 'VIDEO'}})
+        file_ext = data.split('/')[-1].split('.')[-1]
+        shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output', f'{file_uuid}.{file_ext}'))
+        demo_response['DATA'].update(
+          {data_key: {'DATA': '/static/output/%s' % f'{file_uuid}.{file_ext}', 'TYPE': 'VIDEO'}}
+        )
     elif data_type == 'AUDIO':
       if os.path.exists(data_value):
         data = os.path.normpath(data_value)
-        shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output'))
-        demo_response['DATA'].update({data_key: {'DATA': '/static/output/%s' % data.split('/')[-1], 'TYPE': 'AUDIO'}})
+        file_ext = data.split('/')[-1].split('.')[-1]
+        shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output', f'{file_uuid}.{file_ext}'))
+        demo_response['DATA'].update(
+          {data_key: {'DATA': '/static/output/%s' % f'{file_uuid}.{file_ext}', 'TYPE': 'AUDIO'}}
+        )
     elif data_type == 'FILE':
       if os.path.exists(data_value):
         data = os.path.normpath(data_value)
-        shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output'))
-        demo_response['DATA'].update({data_key: {'DATA': '/static/output/%s' % data.split('/')[-1], 'TYPE': 'FILE'}})
+        file_ext = data.split('/')[-1].split('.')[-1]
+        shutil.copy(data, os.path.join(self.demo_dump, 'static', 'output', f'{file_uuid}.{file_ext}'))
+        demo_response['DATA'].update(
+          {data_key: {'DATA': '/static/output/%s' % f'{file_uuid}.{file_ext}', 'TYPE': 'FILE'}}
+        )
     else:
       # string
       demo_response['DATA'].update({data_key: {'DATA': str(data_value), 'TYPE': 'STRING'}})
@@ -137,7 +157,7 @@ class BaseHandler(tornado.web.RequestHandler):
     return demo_response
 
   @run_on_executor
-  def waitingResponse(self, data_id, time_stamp):
+  def waitingResponse(self, data_id, time_stamp, is_api_call=False):
     self.response_cond.acquire()
     data_response = None
     while True:
@@ -153,9 +173,12 @@ class BaseHandler(tornado.web.RequestHandler):
         if current_time > time_stamp + self.request_waiting_time:
           break
 
-        self.response_cond.wait(current_time - time_stamp)
+        if not self.response_cond.wait(30):
+          # 等待10s，还无法获得锁，返回无效数据
+          break
 
-    if data_response is not None:
+    # 执行到这里，存在两种情况，（1）已经获得结果；（2）已经超时，但没有获得结果
+    if data_id in self.response_dict:
       self.response_dict.pop(data_id)
     self.response_cond.release()
 
@@ -170,14 +193,13 @@ class BaseHandler(tornado.web.RequestHandler):
     if not os.path.exists(os.path.join(self.demo_dump, 'static', 'output')):
       os.makedirs(os.path.join(self.demo_dump, 'static', 'output'))
 
-    demo_response = {'DATA': {}}
-    demo_response = {'DATA': {'RESULT': {'DATA': '', 'TYPE': 'STRING'}}}
+    demo_response = {'DATA': {'RESULT': '', 'TYPE': 'STRING'}}
     for data in processed_data[0]:
       item_type = data['type']
       item_data = data['data']
       item_title = data['title']
 
-      demo_response = self._transfer(item_title, item_data, item_type, demo_response)
+      demo_response = self._transfer(item_title, item_data, item_type, demo_response, is_api_call)
     return demo_response
 
   @run_on_executor
@@ -298,14 +320,16 @@ class BaseHandler(tornado.web.RequestHandler):
         image_str = data['image']
 
       if image_str is None:
-        return {'status': 400,
+        return {
+          'status': 400,
           'code': 'InvalidData', 
           'message': 'Missing query data'}
 
       image_b = base64.b64decode(image_str)
+      params = data.get('params', {})
       return {
         'status': 200,
-        'data': {'image': image_b, 'params': data['params']}
+        'data': {'image': image_b, 'params': params}
       }
 
 
@@ -507,10 +531,39 @@ class ClientCliQueryHandler(BaseHandler):
     self.dataset_queue.put(model_input)
     
     # 异步等待响应(设置等待队列，并在异步线程中等待)
-    data_response = yield self.waitingResponse(data_id, time.time())
+    data_response = yield self.waitingResponse(data_id, time.time(), True)
 
     # 返回成功
     self.write(json.dumps(data_response))
+    self.finish()
+
+
+class ClientDownloadHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+    file_name = self.get_argument('filename', None)
+    if file_name is None:
+      return
+
+    download_path = os.path.join(self.settings.get('static_path'), 'output', file_name)
+    if not os.path.exists(download_path):
+      return
+
+    # Content-Type
+    self.set_header('Content-Type', 'application/octet-stream')
+    self.set_header('Content-Disposition', 'attachment; filename=' + file_name)
+
+    buffer_size = 64 * 1024
+    with open(download_path, 'rb') as fp:
+      content = fp.read()
+      content_size = len(content)
+      buffer_segments = content_size // buffer_size
+      for buffer_seg_i in range(buffer_segments):
+        buffer_data = content[buffer_seg_i * buffer_size: (buffer_seg_i + 1) * buffer_size]
+        yield self.write(buffer_data)
+
+      yield self.write(content[buffer_segments * buffer_size:])
+
     self.finish()
 
 
@@ -699,15 +752,16 @@ def demo_server_start(demo_name,
       'response_dict': response_dict,
       'response_cond': threading.Condition()
     }
-    app = tornado.web.Application(handlers=[(r"/", IndexHandler),
-                                            (r"/demo", IndexHandler),
-                                            (r"/api/query/", ClientQueryHandler),
-                                            (r"/api/comment/", ClientCommentHandler),
-                                            (r"/api/response/", ClientResponseHandler),
-                                            (r"/api/cli-query/", ClientCliQueryHandler),
-                                            (r"/submit/", ClientFileUploadAndProcessHandler),
-                                            (r"/.*/static/.*", PrefixRedirectHandler)],
-      **settings)
+    app = tornado.web.Application(handlers=[
+      (r"/", IndexHandler),
+      (r"/antgo/api/demo/query/", ClientQueryHandler),
+      (r"/antgo/api/demo/comment/", ClientCommentHandler),
+      (r"/antgo/api/demo/response/", ClientResponseHandler),
+      (r"/antgo/api/demo/cli_query/", ClientCliQueryHandler),
+      (r"/antgo/api/demo/download/", ClientDownloadHandler),
+      (r"/antgo/api/demo/submit/", ClientFileUploadAndProcessHandler),
+      (r"/.*/static/.*", PrefixRedirectHandler)
+    ], **settings)
     http_server = tornado.httpserver.HTTPServer(app)
     http_server.listen(options.port)
   

@@ -559,6 +559,15 @@ class LocalRecorderNodeV2(object):
       # 重新组织数据格式
       data = {}
       group = []
+      assert('id' in result or 'image_file' in result)
+      id = ''
+      if 'id' in result:
+        id = result['id']
+        result.pop('id')
+      if 'image_file' in result:
+        id = result['image_file']
+        result.pop('image_file')
+
       for key, value in result.items():
         data_name = key
         if data_name not in data:
@@ -585,16 +594,19 @@ class LocalRecorderNodeV2(object):
             data[data_name]['data'] = value['DATA']
             value.pop('DATA')
 
-        if 'id' in value or 'ID' in value:
-          if 'id' in value:
-            data[data_name]['id'] = value['id']
-            value.pop('id')
-          else:
-            data[data_name]['id'] = value['ID']
-            value.pop('ID')
+        # if 'id' in value or 'ID' in value:
+        #   if 'id' in value:
+        #     data[data_name]['id'] = value['id']
+        #     value.pop('id')
+        #   else:
+        #     data[data_name]['id'] = value['ID']
+        #     value.pop('ID')
 
         # 将value中的其它作为params
         data[data_name]['params'] = value
+
+      for key, value in data.items():
+        data[key]['id'] = id
 
       # 转换数据格式（记录到文件）
       for data_name, data_content in data.items():

@@ -272,7 +272,12 @@ class GracefulExitException(Exception):
     raise GracefulExitException()
 
 
-def ensemble_server_start(dump_dir, server_port, worker_num, uncertain_vote_cfg=None, enable_data_record=False):
+def ensemble_server_start(
+    dump_dir,
+    server_port,
+    worker_num,
+    uncertain_vote_cfg=None,
+    enable_data_record=False):
   # uncertain_vote_cfg {'axis': 1, 'thres': 0}
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
@@ -301,9 +306,9 @@ def ensemble_server_start(dump_dir, server_port, worker_num, uncertain_vote_cfg=
       'data_record': enable_data_record
     }
 
-    app = tornado.web.Application(handlers=[(r"/ensemble-api/avg/", AverageApiHandler),
-                                            (r"/ensemble-api/live/", LiveApiHandler),
-                                            (r"/ensemble-api/data/(.*)", DataApiHandler)],
+    app = tornado.web.Application(handlers=[(r"/antgo/api/ensemble/avg/", AverageApiHandler),
+                                            (r"/antgo/api/ping/", LiveApiHandler),
+                                            (r"/antgo/api/ensemble/data/(.*)", DataApiHandler)],
                                   **settings)
     http_server = tornado.httpserver.HTTPServer(app)
     http_server.listen(options.port)

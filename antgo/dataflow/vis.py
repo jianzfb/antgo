@@ -16,7 +16,9 @@ matplotlib.use('Agg')
 # matplotlib.use('TKAgg')
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.patches as patches
 from PIL import Image, ImageDraw
+
 
 def get_keypoint_rgb(skeleton):
     rgb_dict= {}
@@ -176,3 +178,29 @@ def vis_3d_keypoints(kps_3d, score, skeleton, filename, score_thr=0.4, line_widt
     
     fig.savefig(osp.join(save_path, filename), dpi=fig.dpi)
 
+
+def imshow(image, bboxes=None, keypoints=None):
+    # Create figure and axes
+    fig, ax = plt.subplots(1)
+
+    # Display the image
+    image = image.copy()
+    if keypoints is not None:
+        for k in range(keypoints.shape[0]):
+            x, y = keypoints[k]
+            image[int(y), int(x), :] = 255
+
+    ax.imshow(image)
+
+    if bboxes is not None:
+        for b in range(bboxes.shape[0]):
+            x0, y0, x1, y1 = bboxes[b]
+            width = x1 - x0
+            height = y1 - y0
+            # Create a Rectangle patch
+            rect = patches.Rectangle((x0, y0), width, height, linewidth=1, edgecolor='r', facecolor='none')
+            # Add the patch to the Axes
+            ax.add_patch(rect)
+
+    plt.show()
+    plt.waitforbuttonpress()
