@@ -230,7 +230,7 @@ class AntBrowser(AntBase):
     if os.path.exists(browser_static_dir):
       shutil.rmtree(browser_static_dir)
 
-    shutil.copytree(os.path.join(static_folder, 'resource', 'dist'), browser_static_dir)
+    shutil.copytree(os.path.join(static_folder, 'resource', 'app'), browser_static_dir)
 
     # 3.2.step 准备有效端口
     self.host_port = _pick_idle_port(self.host_port)

@@ -207,7 +207,7 @@ class AntActiveLearningV2(AntBase):
       if os.path.exists(activelearning_static_dir):
         shutil.rmtree(activelearning_static_dir)
 
-      shutil.copytree(os.path.join(static_folder, 'resource', 'dist'), activelearning_static_dir)
+      shutil.copytree(os.path.join(static_folder, 'resource', 'app'), activelearning_static_dir)
 
       # 准备有效端口
       self.host_port = _pick_idle_port(self.host_port)

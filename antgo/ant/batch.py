@@ -189,7 +189,7 @@ class AntBatch(AntBase):
             if os.path.exists(batch_static_dir):
                 shutil.rmtree(batch_static_dir)
 
-            shutil.copytree(os.path.join(static_folder, 'resource', 'dist'), batch_static_dir)
+            shutil.copytree(os.path.join(static_folder, 'resource', 'app'), batch_static_dir)
             # 启动服务器
             white_users = self.context.params.predict.get('white_users', None)
             p = \
