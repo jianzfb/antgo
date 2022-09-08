@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from core.mask.structures import BitmapMasks
+from antgo.framework.helper.models.detectors.core.mask.structures import BitmapMasks
 from torch.nn import functional as F
 
 

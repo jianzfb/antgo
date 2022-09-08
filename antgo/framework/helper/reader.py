@@ -189,7 +189,6 @@ class ObjDetReader(Reader):
         sample = self._arrange(sample, self._fields)
         return sample
 
-
 class SemiReader(torch.utils.data.Dataset):
     def __init__(self, reader_cls, dataset, pipeline_teacher, pipeline_student, inputs_def, strategy=None, **kwargs):
         self.reader_base = reader_cls(dataset, None, None, **kwargs)
