@@ -55,6 +55,7 @@ class Reader(torch.utils.data.Dataset):
         return self.proxy_dataset.size
     
     def __getitem__(self, idx):
+        sample = None
         try:
             sample = self.proxy_dataset.sample(idx)
         except:
