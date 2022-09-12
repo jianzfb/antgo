@@ -210,7 +210,7 @@ def watch_server_start(data_path,
 
     app = tornado.web.Application(handlers=[(r"/browser-api/prev/", PrevApiHandler),
                                             (r"/browser-api/next/", NextApiHandler),
-                                            (r"/browser-api/operator/", OperatorApiHandler),
+                                            (r"/browser-api/operators/", OperatorApiHandler),
                                             (r"/browser-api/entry/", EntryApiHandler),
                                             (r"/browser-api/file/", FileApiHandler),
                                             (r"/browser-api/download/", DownloadApiHandler),

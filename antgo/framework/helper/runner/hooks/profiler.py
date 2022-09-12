@@ -31,7 +31,7 @@ class ProfilerHook(Hook):
             trace and table view. Default: None.
         on_trace_ready (callable, dict): Either a handler or a dict of generate
             handler. Default: None.
-        record_shapes (bool): Save information about operator's input shapes.
+        record_shapes (bool): Save information about operators's input shapes.
             Default: False.
         profile_memory (bool): Track tensor memory allocation/deallocation.
             Default: False.

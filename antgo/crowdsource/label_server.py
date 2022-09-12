@@ -59,7 +59,7 @@ class LabelTaskHandler(BaseHandler):
       'task_type': task_type,
       'task_name': task_name,
       'label_type': label_type,
-      'operator': {
+      'operators': {
         'full_name': user['full_name'],
         'short_name': user['short_name'],
       },
@@ -180,7 +180,7 @@ class LabelFreshSampleHandler(BaseHandler):
     # 'update_time': 0,
     # 'state': 'waiting',
     # 'assigner': '',
-    # 'operator': [],
+    # 'operators': [],
     # 'label_info': [],
     # }
     #
@@ -204,7 +204,7 @@ class LabelFreshSampleHandler(BaseHandler):
       sample['update_time'] = 0
       sample['state'] = 'waiting'
       sample['assigner'] = ''
-      sample['operator'] = []
+      sample['operators'] = []
       if 'label_info' not in sample:
         sample['label_info'] = []
 
@@ -276,12 +276,12 @@ class LabelUpdateSampleHandler(BaseHandler):
 
     # 当更新后，每个样本需要记录操作者信息（名字，更新时间）
     pi = -1
-    for i, p in enumerate(self.db['samples'][sample_id]['operator']):
+    for i, p in enumerate(self.db['samples'][sample_id]['operators']):
       if p['full_name'] == user['full_name']:
         pi = i
     if pi == -1:
       # 为此样本，创建新的操作者
-      self.db['samples'][sample_id]['operator'].append({
+      self.db['samples'][sample_id]['operators'].append({
         'full_name': user['full_name'],
         'short_name': user['short_name'],
         'update_time': now_time,
@@ -289,8 +289,8 @@ class LabelUpdateSampleHandler(BaseHandler):
         'label_info': label_info
       })
     else:
-      self.db['samples'][sample_id]['operator'][pi]['update_time'] = now_time
-      self.db['samples'][sample_id]['operator'][pi]['label_info'] = label_info
+      self.db['samples'][sample_id]['operators'][pi]['update_time'] = now_time
+      self.db['samples'][sample_id]['operators'][pi]['label_info'] = label_info
 
     # finish
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
@@ -519,7 +519,7 @@ class UserInfoHandler(BaseHandler):
     }
 
     for sample in self.db['samples']:
-      for operator in sample['operator']:
+      for operator in sample['operators']:
         if operator['full_name'] == user['full_name']:
           statistic_info['sample_num'] += 1
           statistic_info['average_time'] += (sample['completed_time'] - sample['completed_time'])
@@ -557,7 +557,7 @@ class LabelExportHandler(BaseHandler):
         'annotations': []
       }
 
-      for sample_operator_i, sample_operator in enumerate(sample['operator']):
+      for sample_operator_i, sample_operator in enumerate(sample['operators']):
         temp = {
           'id': sample_operator_i,
           'completed_by': sample_operator['full_name'],
@@ -761,7 +761,7 @@ if __name__ == '__main__':
               'completed_time': 0,
               'created_time': 0,
               'update_time': 0,
-              'operator': [],
+              'operators': [],
               'assigner': '',
               'state': 'waiting',
               'label_info': [
@@ -795,7 +795,7 @@ if __name__ == '__main__':
               'completed_time': 0,
               'created_time': 0,
               'update_time': 0,
-              'operator': [],
+              'operators': [],
               'state': 'waiting',
               'assigner': '',
               'label_info': [],
@@ -810,7 +810,7 @@ if __name__ == '__main__':
               'update_time': 0,
               'state': 'waiting',
               'assigner': '',
-              'operator': [],
+              'operators': [],
               'label_info': [],
             }
           ] * 100

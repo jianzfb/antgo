@@ -181,7 +181,7 @@ class PadMultiScaleTest(BaseOperator):
 
 class Gt2YoloTarget(BaseOperator):
     """
-    Generate YOLOv3 targets by groud truth data, this operator is only used in
+    Generate YOLOv3 targets by groud truth data, this operators is only used in
     fine grained YOLOv3 loss mode
     """
 
