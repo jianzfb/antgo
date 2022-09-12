@@ -1,5 +1,6 @@
 from typing import Dict
-from models.detectors.base import BaseDetector
+from antgo.framework.helper.models.detectors.base import BaseDetector
+
 
 
 class MultiSteamDetector(BaseDetector):

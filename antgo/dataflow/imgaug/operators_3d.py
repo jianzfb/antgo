@@ -50,45 +50,83 @@ def load_skeleton(path, joint_num):
     return skeleton
 
 def get_aug_config():
-    trans_factor = 0.15
-    scale_factor = 0.25
-    rot_factor = 45
-    color_factor = 0.2
+    trans_factor = 0.08
+    scale_factor = 0.15
+    rot_factor = 60
+    color_factor = 0.1
     
-    trans = [np.random.uniform(-trans_factor, trans_factor), np.random.uniform(-trans_factor, trans_factor)]
+    trans = [
+        np.random.uniform(-trans_factor, trans_factor), 
+        np.random.uniform(-trans_factor, trans_factor)
+    ]
     scale = np.clip(np.random.randn(), -1.0, 1.0) * scale_factor + 1.0
-    rot = np.clip(np.random.randn(), -2.0,
-                  2.0) * rot_factor if random.random() <= 0.6 else 0
+    # rot = np.clip(np.random.randn(), -2.0,
+    #               2.0) * rot_factor if random.random() <= 0.6 else 0
+    rot = (np.random.random() * 2 - 1) * rot_factor if random.random() <= 0.6 else 0
     do_flip = random.random() <= 0.5
     c_up = 1.0 + color_factor
     c_low = 1.0 - color_factor
-    color_scale = np.array([random.uniform(c_low, c_up), random.uniform(c_low, c_up), random.uniform(c_low, c_up)])
+    # 仅考虑灰度图情况
+    color_scale = random.uniform(c_low, c_up)
+    color_scale = np.array([color_scale, color_scale, color_scale])
 
-    return trans, scale, rot, do_flip, color_scale
+    do_noise = np.random.random() <= 0.5
+    # do_noise = False
+    return trans, scale, rot, do_flip, color_scale, do_noise
 
-def augmentation(img, bbox, joint_coord, joint_valid, hand_type, mode, joint_type, input_img_shape):
+def augmentation(
+    img, bbox, joint_coord, joint_valid, hand_type, 
+    mode, joint_type, input_img_shape, allow_geometric_aug=True, allow_flip=True, img_process_callback=None):
     img = img.copy(); 
-    joint_coord = joint_coord.copy(); 
-    hand_type = hand_type.copy();
+    joint_coord = joint_coord.copy()
+    hand_type = hand_type.copy()
 
     original_img_shape = img.shape
     joint_num = len(joint_coord)
     
     if mode == 'train':
-        trans, scale, rot, do_flip, color_scale = get_aug_config()
+        trans, scale, rot, do_flip, color_scale, do_noise = get_aug_config()
     else:
-        trans, scale, rot, do_flip, color_scale = [0,0], 1.0, 0.0, False, np.array([1,1,1])
+        trans, scale, rot, do_flip, color_scale, do_noise = [0,0], 1.0, 0.0, False, np.array([1,1,1]), False
     
+    # TODO，考虑非刚性变形，以帮助不同手型的扩展
+
+    if not allow_geometric_aug:
+        trans, scale, rot, do_flip = [0,0], 1.0, 0.0, False
+    if not allow_flip:
+        do_flip = False
+
     bbox[0] = bbox[0] + bbox[2] * trans[0]
     bbox[1] = bbox[1] + bbox[3] * trans[1]
+    # 生成局部patch
     img, trans, inv_trans = generate_patch_image(img, bbox, do_flip, scale, rot, input_img_shape)
+
+    if img_process_callback is not None:
+        # 对局部图像进行定制化变换
+        img = img_process_callback(img)
+
+    # 颜色尺度变换
     img = np.clip(img * color_scale[None,None,:], 0, 255)
     
+    if do_noise:
+        # 加噪声
+        img = img.astype(np.float)
+        noise_delta = (np.random.random(img.shape) * 2 - 1) * 10
+        img = img + noise_delta
+        img = np.clip(img, 0, 255)
+        img = img.astype(np.uint8)
+    
     if do_flip:
+        # 加翻转
         joint_coord[:,0] = original_img_shape[1] - joint_coord[:,0] - 1
+        # 左右手坐标切换
         joint_coord[joint_type['right']], joint_coord[joint_type['left']] = joint_coord[joint_type['left']].copy(), joint_coord[joint_type['right']].copy()
+        # 左右手可见性切换
         joint_valid[joint_type['right']], joint_valid[joint_type['left']] = joint_valid[joint_type['left']].copy(), joint_valid[joint_type['right']].copy()
+        # 左右手标签切换
         hand_type[0], hand_type[1] = hand_type[1].copy(), hand_type[0].copy()
+
+    # 需要重新设置关键点的可见性
     for i in range(joint_num):
         joint_coord[i,:2] = trans_point2d(joint_coord[i,:2], trans)
         joint_valid[i] = joint_valid[i] * (joint_coord[i,0] >= 0) * (joint_coord[i,0] < input_img_shape[1]) * (joint_coord[i,1] >= 0) * (joint_coord[i,1] < input_img_shape[0])
@@ -227,6 +265,63 @@ def pixel2cam(pixel_coord, f, c):
     cam_coord = np.concatenate((x[:,None], y[:,None], z[:,None]),1)
     return cam_coord
 
+def cam2pixel_omnidir(p, cam0d_i, cam0d_mu, cam0d_d):
+    point = p.copy()
+    point = point.reshape(p.shape[0],1,3)
+    uv,_ = cv2.omnidir.projectPoints(point, np.zeros(3), np.zeros(3), cam0d_i, cam0d_mu, cam0d_d)
+
+    return uv.squeeze(1)
+
+def pixel2cam_omnidir(uv,z,K,D,xi):
+    '''
+    2.5d到3d投影
+    :param uv:  图片 uv坐标
+    :param z: 深度
+    :param K: 相机内参
+    :param D: 相机畸变
+    :param xi: omni相机 xi参数
+    :return: 3d坐标
+    '''
+    u = (uv[:, 0] - K[0, 2]) / K[0, 0]
+    v = (uv[:, 1] - K[1, 2]) / K[1, 1]
+    _u = u.copy()
+    _v = v.copy()
+
+    for i in range(20):
+        r2 = u ** 2 + v ** 2
+        r4 = r2 * r2
+        u = (_u - 2 * D[2] * u * v - D[3] * (r2 + 2 * u * u)) / (1 + D[0] * r2 + D[1] * r4)
+        v = (_v - 2 * D[3] * u * v - D[2] * (r2 + 2 * v * v)) / (1 + D[0] * r2 + D[1] * r4)
+
+    r2 = u ** 2 + v ** 2
+    a = r2 + 1
+    b = 2 * xi * r2
+    cc = r2 * xi * xi - 1
+    Zs = (-b + np.sqrt(b * b - 4 * a * cc)) / (2 * a)
+    xw = np.vstack([u * (Zs + xi), v * (Zs + xi), Zs])
+    xyz = xw*(z/xw[2])
+    xyz = np.transpose(xyz)
+    return xyz
+
+def pixel2cam_invK(pixel_coord, inv_K):
+    z = pixel_coord[:,2:]
+    uvones = pixel_coord.copy()    
+    uvones[:,2] = 1.0
+    test_tt = np.matmul(inv_K, np.transpose(uvones))
+    test_tt = np.transpose(test_tt)
+    test_tt[:,2:] = z
+    return test_tt
+
+def pixel2fisheyecam(pixel_coord, cam_param):
+    pass
+
+def fisheyecam2pixel(cam_coord, cam_param):
+    pass
+
 def world2cam(world_coord, R, T):
     cam_coord = np.dot(R, world_coord - T)
     return cam_coord
+
+def cam2world(cam_coord, inv_R, T):
+    world_coord = np.dot(inv_R, cam_coord) + T
+    return world_coord

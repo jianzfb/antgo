@@ -1,7 +1,6 @@
 from sys import maxsize
 import torch
 from torch._C import device
-from core import bbox, bbox2roi, multi_apply
 from antgo.framework.helper.models.builder import DETECTORS, build_model
 from antgo.framework.helper.models.utils.structure_utils import dict_stack, weighted_loss
 from antgo.framework.helper.models.multi_stream_detector import MultiSteamDetector
