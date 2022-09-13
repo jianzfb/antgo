@@ -2083,7 +2083,7 @@ class ColorDistort(BaseOperator):
             in [lower, upper, probability] format.
         brightness (list): brightness settings.
             in [lower, upper, probability] format.
-        random_apply (bool): whether to apply in random (yolo) or fixed (SSD)
+        random_apply (bool): whether to apply in random (yolov7) or fixed (SSD)
             order.
         hsv_format (bool): whether to convert color from BGR to HSV
         random_channel (bool): whether to swap channels randomly

@@ -62,19 +62,17 @@ class OperatorLoader:
             op_cls = ''.join(x.capitalize() or '_' for x in fname.split('_'))
 
             # module = '.'.join([module, fname, fname])
-            module = '.'.join(['towheeoperator', '{}_{}'.format(module, fname), fname])
+            module = '.'.join(['antgo.pipeline.models', '{}.{}'.format(module, fname), fname])
             op = getattr(importlib.import_module(module), op_cls)
             return self.instance_operator(op, arg, kws) if op is not None else None
         except Exception:  # pylint: disable=broad-except
-            with param_scope() as hp:
-                if hp().towhee.hub.use_pip(False):
-                    return None  # TODO: download and install pip package from hub
-                else:
-                    return None
+            # 动态查询
+            print('Install antgo.models by pip3 install antgo.models')
+            return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
         # 使用云端API
-        return
+        return None
 
     def load_operator(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
         """Attempts to load an operators from cache. If it does not exist, looks up the
@@ -93,8 +91,8 @@ class OperatorLoader:
 
         for factory in [self.load_operator_from_internal,
                         self.load_operator_from_registry,
-                        self.load_operator_from_packages,
-                        self.load_operator_from_remote]:
+                        self.load_operator_from_remote,
+                        self.load_operator_from_packages]:
             op = factory(function, arg, kws, tag)
             if op is not None:
                 return op
