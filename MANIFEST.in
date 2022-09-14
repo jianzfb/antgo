@@ -5,6 +5,7 @@ include antgo/utils/_resize.pyx
 include antgo/utils/_encode_png.pyx
 include antgo/cutils/maskApi.h
 recursive-include antgo/resource *
+recursive-include antgo/pipeline/models/cfg *
 include antgo/config.xml
 include requirements.txt
 include README.rst

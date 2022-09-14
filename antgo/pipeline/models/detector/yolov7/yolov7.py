@@ -20,13 +20,14 @@ from ..util import *
 
 
 class Model(nn.Module):
-  def __init__(self, model_name='yolov7', device='cpu', conf_thres=0.25, iou_thres=0.45):
+  def __init__(self, model_name='yolov7', device='cpu'):
     super().__init__()
     self.device = device
     model_path = torch_model_download(model_name, file_type='.pth')
 
+    pure_model_name = model_name.split('.')[0]
     model_cfg = \
-      os.path.realpath(__file__).split('/')[:-3] + ['cfg', 'detector', f'{model_name}.yaml']
+      os.path.realpath(__file__).split('/')[:-3] + ['cfg', 'detector', f'{pure_model_name}.yaml']
     model_cfg_file = '/'.join(model_cfg)
     assert(os.path.exists(model_cfg_file))
     with open(model_cfg_file) as f:
@@ -69,12 +70,18 @@ class Model(nn.Module):
 
 
 class Yolov7(object):
-  def __init__(self, model_name='yolov7', device='cpu', conf_thres=0.25, iou_thres=0.45):
+  def __init__(self, model_name='yolov7', device='cpu', conf_thres=0.25, iou_thres=0.45, dataset='coco'):
     self.device = select_device(device)
-    self.model = Model(model_name, self.device)
+    self.model = Model(f'{model_name}.{dataset.lower()}', self.device)
     self.conf_thres = conf_thres
     self.iou_thres = iou_thres
-    self.names = coco_names()     # 使用coco names
+
+    dataset_cfg = \
+      os.path.realpath(__file__).split('/')[:-3] + ['cfg', 'dataset', f'{dataset.lower()}.yaml']
+    dataset_cfg_file = '/'.join(dataset_cfg)
+    with open(dataset_cfg_file) as f:
+      self.yaml = yaml.load(f, Loader=yaml.SafeLoader)  # model dict
+    self.names = self.yaml['names']
 
   def __call__(self, *args, **kwargs):
     img0 = args[0]
