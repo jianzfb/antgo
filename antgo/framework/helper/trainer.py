@@ -259,6 +259,15 @@ class Trainer(object):
                     'strategy': semi_loader_strategy
                 }
             })
+        
+        activelearning_cfg = self.cfg.get('activelearning', None)
+        if activelearning_cfg is not None:
+            # 主动学习加载策略，仅加载有标签数据
+            train_loader_cfg.update({
+                'activelearning': {
+
+                }
+            })
         self.train_generator = build_dataloader(dataset, **train_loader_cfg)
         
         if with_validate:
@@ -332,7 +341,13 @@ class Trainer(object):
             if custom_hooks is None:
                 custom_hooks = []
             custom_hooks.extend(semi_cfg.get('hooks'))
-
+        
+        activelearning_cfg = self.cfg.get('activelearning', None)
+        if activelearning_cfg is not None and activelearning_cfg.get('hooks', None):
+            if custom_hooks is None:
+                custom_hooks = []
+            custom_hooks.extend(activelearning_cfg.get('hooks'))
+        
         self.runner.register_training_hooks(
             self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等
             optimizer_config,                                       # 优化器的相关后处理，比如限制梯度操作等
@@ -388,6 +403,12 @@ class Trainer(object):
     def run_on_val(self, **kwargs):
         self.runner.val(self.val_dataloader, **kwargs)
     
+    def run_before(self):
+        self.runner.call_hook('before_run')
+        
+    def run_after(self):
+        self.runner.call_hook('after_run')
+
     def export(self, dummy_input, checkpoint=None, model_builder=None, path='./', prefix='model'):
         f32_model = None
         if model_builder is not None:

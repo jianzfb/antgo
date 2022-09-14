@@ -4,9 +4,10 @@ from .distributed_sampler import DistributedSampler
 from .group_sampler import DistributedGroupSampler, GroupSampler
 from .infinite_sampler import InfiniteBatchSampler, InfiniteGroupBatchSampler
 from .semi_sampler import SemiSampler, DistributedSemiSampler
+from .activelearning_sampler import ActiveLearningSampler, DistributedActiveLearningSampler
 
 __all__ = [
     'DistributedSampler', 'DistributedGroupSampler', 'GroupSampler',
     'InfiniteGroupBatchSampler', 'InfiniteBatchSampler', 'ClassAwareSampler',
-    'SemiSampler', 'DistributedSemiSampler'
+    'SemiSampler', 'DistributedSemiSampler', 'ActiveLearningSampler', 'DistributedActiveLearningSampler'
 ]

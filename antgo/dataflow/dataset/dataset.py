@@ -47,7 +47,7 @@ class Dataset(BaseNode):
 
   def __init__(self, train_or_test="train", dir=None, ext_params=None, name=None):
     super(Dataset, self).__init__(name)
-    assert(train_or_test in ["train", "val", "test", "sample"])
+    assert(train_or_test in ["train", "val", "test", "sample", 'unlabeled'])
 
     # for random episodes
     self.nb_samples = 0

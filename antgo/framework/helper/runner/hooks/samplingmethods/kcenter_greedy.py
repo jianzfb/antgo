@@ -23,7 +23,7 @@ outlier datapoints.  Resulting centers are solution to multiple integer program.
 
 import numpy as np
 from sklearn.metrics import pairwise_distances
-from antgo.activelearning.samplingmethods.sampling_def import SamplingMethod
+from .sampling_def import SamplingMethod
 
 
 
@@ -36,9 +36,8 @@ class kCenterGreedy(SamplingMethod):
     self.metric = metric
     self.min_distances = None
     self.n_obs = self.X.shape[0]
-    self.already_selected = []
 
-  def update_distances(self, cluster_centers, only_new=True, reset_dist=False):
+  def update_distances(self, cluster_centers, already_selected, only_new=True, reset_dist=False):
     """Update min distances given cluster centers.
 
     Args:
@@ -52,7 +51,7 @@ class kCenterGreedy(SamplingMethod):
       self.min_distances = None
     if only_new:
       cluster_centers = [d for d in cluster_centers
-                         if d not in self.already_selected]
+                         if d not in already_selected]
     if cluster_centers:
       # Update min_distances for all examples given new cluster center.
       x = self.features[cluster_centers]
@@ -78,24 +77,16 @@ class kCenterGreedy(SamplingMethod):
       indices of points selected to minimize distance to cluster centers
     """
 
-    try:
-      # Assumes that the transform function takes in original data and not
-      # flattened data.
-      print('Getting transformed features...')
-      if model is None:
-        self.features = self.X
-      else:
-        self.features = model.transform(self.X)
-      print('Calculating distances...')
-      self.update_distances(already_selected, only_new=False, reset_dist=True)
-    except:
-      print('Using flat_X as features.')
-      self.update_distances(already_selected, only_new=True, reset_dist=False)
+    if model is None:
+      self.features = self.X
+    else:
+      self.features = model.transform(self.X)
+    # init
+    self.update_distances(None, None, only_new=False, reset_dist=True)
 
     new_batch = []
-
     for _ in range(N):
-      if self.already_selected is None:
+      if self.min_distances is None:
         # Initialize centers with a randomly selected datapoint
         ind = np.random.choice(np.arange(self.n_obs))
       else:
@@ -104,10 +95,8 @@ class kCenterGreedy(SamplingMethod):
       # should have min_distance of zero to a cluster center.
       assert ind not in already_selected
 
-      self.update_distances([ind], only_new=True, reset_dist=False)
+      self.update_distances([ind], already_selected, only_new=True, reset_dist=False)
       new_batch.append(ind)
-    print('Maximum distance from cluster centers is %0.2f'
-            % max(self.min_distances))
 
-    self.already_selected = already_selected
+    print('Maximum distance from cluster centers is %0.2f'% max(self.min_distances))
     return new_batch

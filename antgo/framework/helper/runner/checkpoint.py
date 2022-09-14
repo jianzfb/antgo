@@ -601,10 +601,10 @@ def load_checkpoint(model,
     module = model
     if is_module_wrapper(module):
         module = module.module    
-    if getattr(module, "load_state_dict", None) is not None:
-        result = module.load_state_dict(state_dict)
-        if result:
-            return checkpoint
+    # if getattr(module, "load_state_dict", None) is not None:
+    #     result = module.load_state_dict(state_dict)
+    #     if result:
+    #         return checkpoint
 
     load_state_dict(model, state_dict, strict, logger)
     return checkpoint

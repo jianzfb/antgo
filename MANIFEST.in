@@ -4,19 +4,7 @@ include antgo/utils/_nms.pyx
 include antgo/utils/_resize.pyx
 include antgo/utils/_encode_png.pyx
 include antgo/cutils/maskApi.h
-recursive-include antgo/resource/templates/ *
-include antgo/resource/static/antgo.ico
-include antgo/resource/static/antgo.js
-include antgo/resource/static/antgo.css
-include antgo/resource/static/card.png
-include antgo/resource/static/crowdsource.js
-include antgo/resource/static/register.png
-include antgo/resource/static/banner.png
-include antgo/resource/static/holder.min.js
-recursive-include antgo/resource/css/ *
-recursive-include antgo/resource/js/ *
-recursive-include antgo/resource/browser/ *
-recursive-include antgo/resource/batch/ *
+recursive-include antgo/resource *
 include antgo/config.xml
 include requirements.txt
 include README.rst

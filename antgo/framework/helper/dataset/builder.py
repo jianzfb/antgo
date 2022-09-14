@@ -15,7 +15,8 @@ from torch.utils.data import DataLoader
 
 from .samplers import (ClassAwareSampler, DistributedGroupSampler,
                        DistributedSampler, GroupSampler, InfiniteBatchSampler,
-                       InfiniteGroupBatchSampler, SemiSampler, DistributedSemiSampler)
+                       InfiniteGroupBatchSampler, SemiSampler, DistributedSemiSampler,
+                       ActiveLearningSampler, DistributedActiveLearningSampler)
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973
@@ -132,6 +133,10 @@ def build_dataloader(dataset,
         semi_loader_strategy = semi_config['strategy']
         kwargs.pop('semi')
 
+    activelearning_config = kwargs.get('activelearning', None)
+    if activelearning_config is not None:
+        kwargs.pop('activelearning')
+
     if dist:
         # When model is :obj:`DistributedDataParallel`,
         # `batch_size` of :obj:`dataloader` is the
@@ -178,23 +183,28 @@ def build_dataloader(dataset,
             # DistributedGroupSampler will definitely shuffle the data to
             # satisfy that images on each GPU are in the same group
             if shuffle:
-                if semi_loader_strategy is None:
+                if semi_loader_strategy is None and activelearning_config is None:
                     sampler = DistributedGroupSampler(
                         dataset, samples_per_gpu, world_size, rank, seed=seed)
-                else:
+                elif semi_loader_strategy is not None:
                     sampler = DistributedSemiSampler(
                         dataset, samples_per_gpu, world_size, rank, seed=seed, strategy=semi_loader_strategy
                     )
+                else:
+                    sampler = DistributedActiveLearningSampler(dataset,samples_per_gpu,world_size,rank,seed=seed)
             else:
                 sampler = DistributedSampler(
                     dataset, world_size, rank, shuffle=False, seed=seed)
         else:
-            if semi_loader_strategy is None:
+            if semi_loader_strategy is None and activelearning_config is None:
                 sampler = GroupSampler(dataset,
                                     samples_per_gpu) if shuffle else None
-            else:
+            elif semi_loader_strategy is not None:
                 assert(shuffle)
                 sampler = SemiSampler(dataset, samples_per_gpu, semi_loader_strategy)
+            else:
+                assert(shuffle)
+                sampler = ActiveLearningSampler(dataset, samples_per_gpu)
 
         batch_sampler = None
 

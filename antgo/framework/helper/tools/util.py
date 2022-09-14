@@ -72,6 +72,12 @@ def parse_args(model_name='defalut'):
         default='',
         help='checkpoint'
     ) 
+    parser.add_argument(
+        '--exp_name',
+        type=str,
+        default='',
+        help='experiment name'
+    )
     parser.add_argument('--ext-module', type=str, default='ext_module.py', help='introduce ext module py file')
 
     args = parser.parse_args()
