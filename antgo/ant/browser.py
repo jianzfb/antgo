@@ -158,6 +158,7 @@ class AntBrowser(AntBase):
     self.rpc = None
     self._running_dataset = None
     self._running_task = None
+    self.p = None
 
   @property
   def running_dataset(self):
@@ -174,6 +175,9 @@ class AntBrowser(AntBase):
           break
       # 暂停5秒钟，再进行尝试
       time.sleep(5)
+
+  def wait_until_stop(self):
+    self.p.join()
 
   def start(self):
     # 1.step 获得数据集解析
@@ -328,7 +332,7 @@ class AntBrowser(AntBase):
 
     white_users = self.context.params.browser.white_users
     # 在独立进程中启动webserver
-    p = \
+    self.p = \
       multiprocessing.Process(
         target=browser_server_start,
         args=(self.dump_dir,
@@ -339,7 +343,7 @@ class AntBrowser(AntBase):
               [],
               white_users)
       )
-    p.start()
+    self.p.start()
 
     # 等待直到http服务开启
     self.ping_until_ok()
@@ -359,5 +363,5 @@ class AntBrowser(AntBase):
       logger.info('Finish all records in browser %s dataset.' % dataset_flag)
 
     # 不结束webserver
-    p.join()
+    self.p.join()
     logger.info('Stop Browser.')

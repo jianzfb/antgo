@@ -291,7 +291,7 @@ def ensemble_server_start(
     if not os.path.exists(os.path.join(static_dir, 'static')):
       os.makedirs(os.path.join(static_dir, 'static'))
 
-    # 2.step launch web server
+    # 2.step launch show server
     db = {}
     settings = {
       'static_path': os.path.join(static_dir, 'static'),

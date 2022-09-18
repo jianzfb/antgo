@@ -11,7 +11,7 @@ from antgo.pipeline.functional.mixins import DCMixins
 from antgo.pipeline.functional.mixins.dataframe import DataFrameMixin
 from antgo.pipeline.hparam import param_scope, dynamic_dispatch
 from antgo.pipeline.functional.entity import EntityView
-
+from antgo.pipeline.functional.option import Option, Some
 
 
 class DataCollection(Iterable, DCMixins):
@@ -333,7 +333,10 @@ class DataCollection(Iterable, DCMixins):
 
     # map
     def inner(x):
-      return unary_op(x)
+      if isinstance(x, Option):
+        return x.map(unary_op)
+      else:
+        return unary_op(x)
 
     result = map(inner, self._iterable)
     return self._factory(result)
@@ -355,10 +358,10 @@ class DataCollection(Iterable, DCMixins):
     """
 
     def inner(x):
-      # if isinstance(x, Option):
-      #   if isinstance(x, Some):
-      #     return unary_op(x.get())
-      #   return not drop_empty
+      if isinstance(x, Option):
+        if isinstance(x, Some):
+          return unary_op(x.get())
+        return not drop_empty
       return unary_op(x)
 
     if hasattr(self._iterable, 'filter'):

@@ -187,7 +187,7 @@ def watch_server_start(data_path,
     if not os.path.exists(browser_dump_dir):
       os.makedirs(browser_dump_dir)
 
-    # 2.step launch web server
+    # 2.step launch show server
     db = {'data': [], 'user': {}, 'dataset': {}}
     for offset_config in offset_configs:
       db['dataset'][offset_config['dataset_flag']] = {'offset':offset_config['dataset_offset']}

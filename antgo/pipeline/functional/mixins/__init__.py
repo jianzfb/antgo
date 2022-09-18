@@ -15,7 +15,9 @@ from .list import ListMixin
 from .dataset import DatasetMixin
 from .computer_vision import ComputerVisionMixin
 from .dataframe import DataFrameMixin
-
+from .show import ShowMixin
+from .serve import ServeMixin
+from .demo import DemoMixin
 
 class DCMixins(
   DagMixin,
@@ -27,7 +29,10 @@ class DCMixins(
   ListMixin,
   DatasetMixin,
   ComputerVisionMixin,
-  DataFrameMixin):
+  DataFrameMixin,
+  ShowMixin,
+  ServeMixin,
+  DemoMixin):
 
   def __init__(self) -> None:  # pylint: disable=useless-super-delegation
     super().__init__()

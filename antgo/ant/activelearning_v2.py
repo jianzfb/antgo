@@ -13,7 +13,6 @@ import cv2
 from antgo.resource.html import *
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
-from antgo.activelearning.samplingmethods.kcenter_greedy import *
 from antgo.dataflow.common import *
 from antgo.dataflow.recorder import *
 from antvis.client.httprpc import *
@@ -126,6 +125,7 @@ class AntActiveLearningV2(AntBase):
     self.rpc = None
     self._running_dataset = None
     self._running_task = None
+    self.p = None
 
   @property
   def running_dataset(self):
@@ -142,6 +142,9 @@ class AntActiveLearningV2(AntBase):
         break
       # 暂停5秒钟，再进行尝试
       time.sleep(5)
+
+  def wait_until_stop(self):
+    self.p.join()
 
   def start(self):
     # 0.step loading challenge task
@@ -215,13 +218,14 @@ class AntActiveLearningV2(AntBase):
       # 在独立进程中启动webserver
       sample_metas = {'filters': []}
       label_metas = self.context.params.activelearning.label_metas.get()
-      white_users = self.context.params.activelearning.white_users.get()
+      white_users = self.context.params.activelearning.white_users.get() \
+        if self.context.params.activelearning.white_users is not None else None
       task_metas = {
         'task_type': self.running_task.task_type,
         'task_name': self.running_task.task_name,
         'label_type': self.context.params.activelearning.label_type
       }
-      p = \
+      self.p = \
         multiprocessing.Process(
           target=label_server_start,
           args=(os.path.join(self.ant_dump_dir, 'activelearning'),
@@ -230,10 +234,10 @@ class AntActiveLearningV2(AntBase):
                 sample_metas,
                 label_metas,
                 [],
-                {'state': 'running', 'stage': 'waiting'},
+                {'state': 'running', 'stage': self.context.params.activelearning.get('stage', 'waiting')},
                 white_users)
         )
-      p.start()
+      self.p.start()
 
       # 等待直到http服务开启
       self.ping_until_ok()
@@ -244,3 +248,4 @@ class AntActiveLearningV2(AntBase):
 
     # TODO，
     # 对于非交互模式，设置训练->测试->采样->标注，全局调度
+    self.p.join()

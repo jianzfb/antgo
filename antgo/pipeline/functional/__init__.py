@@ -92,6 +92,13 @@ def _api():
 api = dynamic_dispatch(_api)
 
 
+def _web():
+  return DataFrame.web(index=param_scope()._index)
+
+
+web = dynamic_dispatch(_web)
+
+
 def _dummy_input():
   """
   Create a dummy input.

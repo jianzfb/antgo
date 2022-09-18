@@ -321,7 +321,7 @@ def batch_server_start(dump_dir, server_port, samples=None, white_users=None):
     if not os.path.exists(static_dir):
       os.makedirs(static_dir)
 
-    # 2.step launch web server
+    # 2.step launch show server
     # cookie
     cookie_secret = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
 

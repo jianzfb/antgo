@@ -26,7 +26,7 @@ class VGGFace(Dataset):
     if not os.path.exists(os.path.join(self.dir, 'data')) or len(os.listdir(os.path.join(self.dir, 'data'))) < 500:
       if not os.path.exists(os.path.join(self.dir, 'data')):
         os.makedirs(os.path.join(self.dir, 'data'))
-      # download all images from web
+      # download all images from show
       for file in os.listdir(os.path.join(self.dir, 'vgg_face_dataset', 'files')):
         if file[0] == '.':
           continue

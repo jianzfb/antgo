@@ -191,15 +191,15 @@ def activelearning_web_server(activelearning_name,
   client_socket = None
   tornado.options.parse_command_line()
 
-  if not os.path.exists(os.path.join(main_folder, 'web', 'template')):
-    os.makedirs(os.path.join(main_folder, 'web', 'template'))
+  if not os.path.exists(os.path.join(main_folder, 'show', 'template')):
+    os.makedirs(os.path.join(main_folder, 'show', 'template'))
 
-  activelearning_server_template_dir = os.path.join(main_folder, 'web', 'template')
+  activelearning_server_template_dir = os.path.join(main_folder, 'show', 'template')
 
-  if not os.path.exists(os.path.join(main_folder, 'web', 'static')):
-    os.makedirs(os.path.join(main_folder, 'web', 'static'))
+  if not os.path.exists(os.path.join(main_folder, 'show', 'static')):
+    os.makedirs(os.path.join(main_folder, 'show', 'static'))
 
-  activelearning_server_static_dir = os.path.join(main_folder, 'web', 'static')
+  activelearning_server_static_dir = os.path.join(main_folder, 'show', 'static')
 
   static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
   for static_file in os.listdir(os.path.join(static_folder, 'resource', 'static')):
@@ -219,14 +219,14 @@ def activelearning_web_server(activelearning_name,
     shutil.copy(os.path.join(main_folder, html_template), activelearning_server_template_dir)
 
   # data folder
-  if not os.path.exists(os.path.join(main_folder, 'web', 'static', 'data')):
-    os.makedirs(os.path.join(main_folder, 'web', 'static', 'data'))
+  if not os.path.exists(os.path.join(main_folder, 'show', 'static', 'data')):
+    os.makedirs(os.path.join(main_folder, 'show', 'static', 'data'))
 
-  if not os.path.exists(os.path.join(main_folder, 'web', 'static', 'data', 'annotations')):
-    os.makedirs(os.path.join(main_folder, 'web', 'static', 'data', 'annotations'))
+  if not os.path.exists(os.path.join(main_folder, 'show', 'static', 'data', 'annotations')):
+    os.makedirs(os.path.join(main_folder, 'show', 'static', 'data', 'annotations'))
 
-  if not os.path.exists(os.path.join(main_folder, 'web', 'static', 'data', 'images')):
-    os.makedirs(os.path.join(main_folder, 'web', 'static', 'data', 'images'))
+  if not os.path.exists(os.path.join(main_folder, 'show', 'static', 'data', 'images')):
+    os.makedirs(os.path.join(main_folder, 'show', 'static', 'data', 'images'))
 
   db = {'process_state': 'UNLABEL-PREPARE', 'round': 0}
   settings = {
@@ -239,7 +239,7 @@ def activelearning_web_server(activelearning_name,
     'task_name': task.task_name,
     'task_type': task.task_type,
     'db': db,
-    'data_folder': os.path.join(main_folder, 'web', 'static', 'data', 'annotations'),
+    'data_folder': os.path.join(main_folder, 'show', 'static', 'data', 'annotations'),
     'cookie_secret': str(uuid.uuid4()),
     'request_queue': request_queue,
     'upload': upload_folder,

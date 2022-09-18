@@ -33,9 +33,15 @@ class _APIWrapper:
         if self._index is None:
             entity = x
         else:
-            if len(self._index) == 1:
+            index = self._index
+            input_selection, _ = index[0]
+            if type(input_selection) == str:
+                input_selection = [input_selection]
+
+            if len(input_selection) == 1:
                 x = (x, )
-            data = dict(zip(self._index, x))
+
+            data = dict(zip(input_selection, x))
             entity = Entity(**data)
         entity = Some(entity)
         self._queue.put(entity)

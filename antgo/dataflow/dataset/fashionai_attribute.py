@@ -18,7 +18,7 @@ class FashionAIAttribute(Dataset):
     self.train_or_test = train_or_test
     
     if self.train_or_test == 'train':
-      if not os.path.exists(os.path.join(self.dir, 'base')) or not os.path.exists(os.path.join(self.dir, 'web')):
+      if not os.path.exists(os.path.join(self.dir, 'base')) or not os.path.exists(os.path.join(self.dir, 'show')):
         logger.error('FashionAIAttribute must be download from \n https://tianchi.aliyun.com/competition/information.htm?spm=5176.100071.5678.2.778c2b9eBime0R&raceId=231649')
         sys.exit(0)
     else:
@@ -68,8 +68,8 @@ class FashionAIAttribute(Dataset):
               
           self.images.append((image_file, cloth_attrib, cloth_attrib_label, 'base'))
           content = fp.readline()
-      # 2.step parse from web folder
-      with open(os.path.join(self.dir, 'web', 'Annotations', 'skirt_length_labels.csv')) as fp:
+      # 2.step parse from show folder
+      with open(os.path.join(self.dir, 'show', 'Annotations', 'skirt_length_labels.csv')) as fp:
         content = fp.readline()
         while content:
           image_file, cloth_attrib, cloth_attrib_value = content.split(',')
@@ -84,7 +84,7 @@ class FashionAIAttribute(Dataset):
             else:
               cloth_attrib_label[i] = -1
     
-          self.images.append((image_file, cloth_attrib, cloth_attrib_label, 'web'))
+          self.images.append((image_file, cloth_attrib, cloth_attrib_label, 'show'))
           content = fp.readline()
     else:
       with open(os.path.join(self.dir, 'rank', 'Tests', 'question.csv')) as fp:

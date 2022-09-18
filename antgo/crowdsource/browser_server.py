@@ -506,7 +506,7 @@ def browser_server_start(browser_dump_dir,
     if not os.path.exists(browser_dump_dir):
       os.makedirs(browser_dump_dir)
 
-    # 2.step launch web server
+    # 2.step launch show server
     db = {'data': [], 'users': {}, 'dataset': {}, 'user_record': {}}
     if samples is not None:
       for sample in samples:

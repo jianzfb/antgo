@@ -55,6 +55,17 @@ class AntDemo(AntBase):
   def running_task(self):
     return self._running_task
 
+  def ping_until_ok(self):
+    while True:
+      content = self.rpc.ping.get()
+      if content['status'] != 'ERROR':
+          break
+      # 暂停5秒钟，再进行尝试
+      time.sleep(5)
+
+  def wait_until_stop(self):
+    self.p.join()
+
   def start(self):
     # 1.step loading demo task
     running_ant_task = None
@@ -152,7 +163,7 @@ class AntDemo(AntBase):
         request_waiting_time = self.context.params.demo.request_waiting_time
 
     # 在独立进程中启动webserver
-    p = multiprocessing.Process(
+    self.p = multiprocessing.Process(
       target=demo_server_start,
       args=(
         demo_name,
@@ -161,7 +172,10 @@ class AntDemo(AntBase):
         self._running_dataset.queue,
         request_waiting_time)
     )
-    p.start()
+    self.p.start()
+
+    if self.context.is_interact_mode:
+      return
 
     # 5.step 启动运行预测过程
     # prepare ablation blocks

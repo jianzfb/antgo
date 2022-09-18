@@ -154,13 +154,16 @@ class BaseHandler(tornado.web.RequestHandler):
     """get current username"""
     # 判断是否使用白盒用户验证机制
     if self.db.get('white_users', None) is None:
-      default_user = {
-        'full_name': 'ANTGO',
-        'short_name': 'A',
-        'labeling_sample': -1,
-        'start_time': -1
-      }
-      return default_user
+      if 'default_user' not in self.settings:
+        default_user = {
+          'full_name': 'ANTGO',
+          'short_name': 'A',
+          'labeling_sample': -1,
+          'start_time': -1
+        }
+        self.settings['default_user'] = default_user
+
+      return self.settings['default_user']
     user = self.get_current_user_cookie()
     return user
 

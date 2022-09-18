@@ -9,6 +9,8 @@ from __future__ import print_function
 from antgo.pipeline.engine import *
 import cv2
 import os
+import base64
+import numpy as np
 
 
 @register
@@ -16,6 +18,11 @@ def image_decode(x):
   image = cv2.imread(x)
   return image
 
+@register
+def image_base64_decode(x):
+  content = base64.b64decode(x)
+  image = cv2.imdecode(np.frombuffer(content, np.uint8), cv2.IMREAD_COLOR)
+  return image
 
 @register
 class image_save(object):

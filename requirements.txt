@@ -27,3 +27,5 @@ timer
 thop
 torch
 imagesize
+multipart
+fastapi

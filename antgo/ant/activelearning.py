@@ -240,34 +240,34 @@ from __future__ import print_function
 #       dataset.candidate_file = os.path.join(self.main_folder, 'candidates.txt')
   
 #     # prepare workspace
-#     if not os.path.exists(os.path.join(self.main_folder, 'web', 'static', 'data')):
-#       os.makedirs(os.path.join(self.main_folder, 'web', 'static', 'data'))
+#     if not os.path.exists(os.path.join(self.main_folder, 'show', 'static', 'data')):
+#       os.makedirs(os.path.join(self.main_folder, 'show', 'static', 'data'))
 
-#     annotation_folder = os.path.join(self.main_folder, 'web', 'static', 'data', 'annotations')
+#     annotation_folder = os.path.join(self.main_folder, 'show', 'static', 'data', 'annotations')
 #     if not os.path.exists(annotation_folder):
 #       os.makedirs(annotation_folder)
 
-#     data_folder = os.path.join(self.main_folder, 'web', 'static', 'data', 'images')
+#     data_folder = os.path.join(self.main_folder, 'show', 'static', 'data', 'images')
 #     if not os.path.exists(data_folder):
 #       os.makedirs(data_folder)
 
-#     download_folder = os.path.join(self.main_folder, 'web', 'static', 'data', 'download')
+#     download_folder = os.path.join(self.main_folder, 'show', 'static', 'data', 'download')
 #     if not os.path.exists(download_folder):
 #       os.makedirs(download_folder)
 
-#     upload_folder = os.path.join(self.main_folder, 'web', 'static', 'data', 'upload')
+#     upload_folder = os.path.join(self.main_folder, 'show', 'static', 'data', 'upload')
 #     if not os.path.exists(upload_folder):
 #       os.makedirs(upload_folder)
 
 #     # 数据队列
 #     request_queue = Queue()
 
-#     # launch web server
+#     # launch show server
 #     if self.web_server_port is None:
 #       self.web_server_port = 10000
 #     self.web_server_port = _pick_idle_port(self.web_server_port)
 
-#     logger.info('Launch active learning web server on port %d.'%self.web_server_port)
+#     logger.info('Launch active learning show server on port %d.'%self.web_server_port)
 #     process = multiprocessing.Process(target=activelearning_web_server,
 #                                       args=('activelearning',
 #                                             self.main_folder,
@@ -281,7 +281,7 @@ from __future__ import print_function
 #                                             request_queue))
 #     process.daemon = True
 #     process.start()
-#     logger.info('Waiting 5 seconds for launching web server.')
+#     logger.info('Waiting 5 seconds for launching show server.')
 #     time.sleep(5)
 
 #     self.rpc = HttpRpc('v1','activelearning','127.0.0.1',self.web_server_port)

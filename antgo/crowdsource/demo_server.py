@@ -699,6 +699,23 @@ class PrefixRedirectHandler(BaseHandler):
     self.redirect('http://127.0.0.1:%d/%s'%(self.port, path), permanent=False)
 
 
+class PingApiHandler(BaseHandler):
+  @gen.coroutine
+  def get(self, *args, **kwargs):
+    self.set_status(status_code)
+
+    if status is None:
+      status = 'OK'
+      if status_code not in [200, 201, 204]:
+        status = 'ERROR'
+
+    self.write(json.dumps({
+      'status': status,
+      'message': message,
+      'content': content
+    }))
+
+
 class GracefulExitException(Exception):
   @staticmethod
   def sigterm_handler(signum, frame):
@@ -773,6 +790,7 @@ def demo_server_start(demo_name,
       (r"/antgo/api/demo/cli_query/", ClientCliQueryHandler),
       (r"/antgo/api/demo/download/", ClientDownloadHandler),
       (r"/antgo/api/demo/submit/", ClientFileUploadAndProcessHandler),
+      (r"/antgo/api/ping/", PingApiHandler),
       (r"/.*/static/.*", PrefixRedirectHandler)
     ], **settings)
     http_server = tornado.httpserver.HTTPServer(app)

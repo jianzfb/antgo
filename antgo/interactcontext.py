@@ -218,11 +218,12 @@ class InteractContext(Context):
       predict.start()
       yield predict
 
-      # 日志更新
-      mlogger.update()
+      if kwargs.get('clear', True):
+        # 日志更新
+        mlogger.update()
 
-      # 环境回收
-      predict.context.wait_until_clear()
+        # 环境回收
+        predict.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -289,11 +290,12 @@ class InteractContext(Context):
       demo.start()
       yield demo
 
-      # 日志更新
-      mlogger.update()
+      if kwargs.get('clear', True):
+        # 日志更新
+        mlogger.update()
 
-      # 环境回收
-      demo.context.wait_until_clear()
+        # 环境回收
+        demo.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -321,11 +323,12 @@ class InteractContext(Context):
       browser.start()
       yield browser
 
-      # 日志更新
-      mlogger.update()
+      if kwargs.get('clear', True):
+        # 日志更新
+        mlogger.update()
 
-      # 环境回收
-      browser.context.wait_until_clear()
+        # 环境回收
+        browser.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]
@@ -342,8 +345,6 @@ class InteractContext(Context):
       })
       self.params = params
 
-    # print(self.params.system)
-    # print(self.params.activelearning)
     try:
       activelearning = AntActiveLearningV2(
         self,
@@ -356,11 +357,12 @@ class InteractContext(Context):
       activelearning.start()
       yield activelearning
 
-      # 日志更新
-      mlogger.update()
+      if kwargs.get('clear', True):
+        # 日志更新
+        mlogger.update()
 
-      # 环境回收
-      activelearning.context.wait_until_clear()
+        # 环境回收
+        activelearning.context.wait_until_clear()
     except:
       traceback.print_exc()
       raise sys.exc_info()[0]

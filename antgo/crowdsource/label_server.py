@@ -59,7 +59,7 @@ class LabelTaskHandler(BaseHandler):
       'task_type': task_type,
       'task_name': task_name,
       'label_type': label_type,
-      'operators': {
+      'operator': {
         'full_name': user['full_name'],
         'short_name': user['short_name'],
       },
@@ -636,7 +636,7 @@ def label_server_start(
     if not os.path.exists(static_dir):
       os.makedirs(static_dir)
 
-    # 2.step launch web server
+    # 2.step launch show server
     db = {}
     # 添加默认样本列表
     db['samples'] = samples
