@@ -28,7 +28,7 @@ import cv2
 
 
 class DemoMixin:
-  def demo(self, input=[], output=[], app=None):
+  def demo(self, input=[], output=[], app=None, default_config=None):
     if app is None:
       from fastapi import FastAPI, Request
       app = FastAPI()
@@ -41,8 +41,17 @@ class DemoMixin:
     if type(input_selection) == str:
       input_selection = [input_selection]
 
+    for ui_type in input:
+      assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select'])
+
     if type(output_selection) == str:
       output_selection = [output_selection]
+    for ui_type in output:
+      assert (ui_type in ['image', 'video', 'text', 'number'])
+
+    input_config = default_config
+    if default_config is None:
+      input_config = [{} for _ in range(len(input_selection))]
 
     dump_folder = './dump'
     if not os.path.exists(dump_folder):
@@ -79,9 +88,11 @@ class DemoMixin:
       nonlocal pipeline
       req = await _decode_content(req)
       req = json.loads(req['query'])
-      for i,b in enumerate(input):
-        if b not in ['image', 'video', 'file']:
+      for i, b in enumerate(input):
+        if b in ['image', 'video', 'file']:
           req[i] = os.path.join(dump_folder, req[i])
+        if b == 'checkbox':
+          req[i] = bool(req[i])
 
       if len(req) == 1:
         req = req[0]
@@ -92,8 +103,10 @@ class DemoMixin:
       for i, b in enumerate(output_selection):
         if output[i] in ['image', 'video', 'file']:
           value = rsp_value.__dict__[b]
-          if type(value) == 'str':
+          if type(value) == str:
             shutil.copyfile(value, os.path.join(static_folder, 'image'))
+            file_name = value.split('/')[-1]
+            value = f'image/{file_name}'
           else:
             if value.dtype == np.uint8:
               transfer_result = value
@@ -108,6 +121,13 @@ class DemoMixin:
             assert (len(value.shape) == 2 or len(value.shape) == 3)
             file_name = f'{uuid.uuid4()}.png'
             cv2.imwrite(os.path.join(static_folder, 'image', file_name), transfer_result)
+            value = f'image/{file_name}'
+
+          output_info[b] = {
+            'type': output[i],
+            'name': b,
+            'value': value
+          }
         else:
           output_info[b] = {
             'type': output[i],
@@ -159,12 +179,28 @@ class DemoMixin:
     @app.get('/antgo/api/demo/query_config/')
     async def query_config():
       input_info = []
-      for k, v in zip(input_selection, input):
-        input_info.append({
+      for k, v, config in zip(input_selection, input, input_config):
+        info = {
           'type': v,
           'name': k,
           'value': ''
-        })
+        }
+        if v == 'text':
+          info['value'] = config.get('value', '')
+        if v == 'slider':
+          info['value'] = config.get('value', 0)
+          info['min'] = config.get('min', 0)
+          info['max'] = config.get('max', 100)
+        if v == 'checkbox':
+          info['value'] = (int)(config.get('value', False))
+        if v == 'select':
+          info['value'] = config.get('value', '')
+          info['options'] = config.get('options', [])
+          assert(len(info['options']) >= 1)
+          value_list = [option['value'] for option in info['options']]
+          assert(info['value'] in value_list)
+
+        input_info.append(info)
 
       return input_info
 
