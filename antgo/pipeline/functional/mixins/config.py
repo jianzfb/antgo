@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from typing import Union, List
-from towhee.hparam import param_scope
+from antgo.pipeline.hparam import param_scope
 
 
 class ConfigMixin:

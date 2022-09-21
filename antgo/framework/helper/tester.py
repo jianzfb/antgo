@@ -25,6 +25,8 @@ from contextlib import contextmanager
 from antgo.framework.helper.utils.setup_env import *
 from antgo.framework.helper.runner.checkpoint import load_checkpoint
 from antgo.framework.helper.runner.test import multi_gpu_test, single_gpu_test
+from antgo.framework.helper.cnn.utils import fuse_conv_bn
+
 import json
 
 
@@ -63,7 +65,7 @@ class Tester(object):
         }        
         self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
 
-    def make_model(self, model_builder=None, checkpoint='', fuse_conv_bn=False):
+    def make_model(self, model_builder=None, checkpoint='', is_fuse_conv_bn=False):
         # build the model and load checkpoint
         if model_builder is not None:
             self.model = model_builder()
@@ -74,7 +76,7 @@ class Tester(object):
             checkpoint = self.cfg.get('checkpoint', checkpoint)
         checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu')
         
-        if fuse_conv_bn:
+        if is_fuse_conv_bn:
             print('use fuse conv_bn')
             self.model = fuse_conv_bn(self.model)
         

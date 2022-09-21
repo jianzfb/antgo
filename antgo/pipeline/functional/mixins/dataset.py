@@ -9,7 +9,7 @@ from __future__ import print_function
 from typing import Union
 from pathlib import Path
 
-from towhee.functional.entity import Entity
+from antgo.pipeline.functional.entity import Entity
 
 
 class DatasetMixin:

@@ -49,15 +49,15 @@ class ComputerVisionMixin:
         format:
             The format of the images loaded from video.
     """
-    from towhee.utils.av_utils import av
+    def inner():
+      cap = cv2.VideoCapture(path)
+      while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+          break
+        yield frame
 
-    vcontainer = av.open(path)
-    video_stream = vcontainer.streams.video[0]
-
-    frames = vcontainer.decode(video_stream)
-    images = (frame.to_rgb().to_ndarray(format=format) for frame in frames)
-
-    return cls(images)
+    return cls(inner())
 
   @classmethod
   def read_audio(cls, path):
@@ -99,64 +99,10 @@ class ComputerVisionMixin:
         audio_src:
             The audio to encode with the video.
     """
-    from towhee.utils.av_utils import av
-    import itertools
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 用于mp4格式的生成的参数
+    out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
 
-    output_container = av.open(output_path, 'w')
-    codec = codec if codec else template.name if isinstance(
-      template, av.video.stream.VideoStream) else None
-    rate = rate if rate else template.average_rate if isinstance(
-      template, av.video.stream.VideoStream) else None
-    width = width if width else template.width if isinstance(
-      template, av.video.stream.VideoStream) else None
-    height = height if height else template.height if isinstance(
-      template, av.video.stream.VideoStream) else None
-    format = format if format else 'rgb24'
+    for array in self:
+      out.write(array)
 
-    output_video = None
-    output_audio = None
-
-    if audio_src:
-      acontainer = av.open(audio_src)
-      audio_stream = acontainer.streams.audio[0]
-      output_audio = output_container.add_stream(
-        codec_name=audio_stream.name, rate=audio_stream.rate)
-      for aframe, array in itertools.zip_longest(
-          acontainer.decode(audio_stream), self):
-        if array is not None:
-          if not output_video:
-            height = height if height else array.shape[0]
-            width = width if width else array.shape[1]
-            output_video = output_container.add_stream(
-              codec_name=codec,
-              rate=rate,
-              width=width,
-              height=height)
-          vframe = av.VideoFrame.from_ndarray(array, format=format)
-          vpacket = output_video.encode(vframe)
-          output_container.mux(vpacket)
-        if aframe:
-          apacket = output_audio.encode(aframe)
-          output_container.mux(apacket)
-    else:
-      for array in self:
-        if not output_video:
-          height = height if height else array.shape[0]
-          width = width if width else array.shape[1]
-          output_video = output_container.add_stream(
-            codec_name=codec,
-            rate=rate,
-            width=width,
-            height=height)
-        vframe = av.VideoFrame.from_ndarray(array, format=format)
-        vpacket = output_video.encode(vframe)
-        output_container.mux(vpacket)
-
-    for vpacket in output_video.encode():
-      output_container.mux(vpacket)
-
-    if output_audio:
-      for apacket in output_audio.encode():
-        output_container.mux(apacket)
-
-    output_container.close()
+    out.release()

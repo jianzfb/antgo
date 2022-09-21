@@ -67,7 +67,6 @@ class OperatorLoader:
             return self.instance_operator(op, arg, kws) if op is not None else None
         except Exception:  # pylint: disable=broad-except
             # 动态查询
-            print('Install antgo.models by pip3 install antgo.models')
             return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:

@@ -9,6 +9,7 @@ import random
 from antgo.pipeline.engine import *
 import cv2
 
+
 def plot_one_box(x, img, color=None, label=None, line_thickness=3):
   # Plots one bounding box on image img
   tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
@@ -29,15 +30,26 @@ class plot_bbox(object):
     self.color = color
     self.line_thickness = line_thickness
 
-  def __call__(self, image, detbbox, detlabel):
-    for (*xyxy, conf, cls), label in zip(detbbox, detlabel):
-      bbox_label = str(int(cls))
-      if label != '':
-        bbox_label = label
+  def __call__(self, image, detbbox, detlabel=None):
+    assert(detbbox.shape[1] == 6 or detbbox.shape[1] == 5)
+    if detbbox.shape[1] == 6:
+      for (*xyxy, conf, cls), label in zip(detbbox, detlabel):
+        bbox_label = str(int(cls))
+        if label != '':
+          bbox_label = label
 
-      bbox_color = [random.randint(0, 255) for _ in range(3)]
-      if self.color is not None:
-        bbox_color = self.color[int(cls)]
-      plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
+        bbox_color = [random.randint(0, 255) for _ in range(3)]
+        if self.color is not None:
+          bbox_color = self.color[int(cls)]
+        plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
+    else:
+      for (*xyxy, conf), label in zip(detbbox, detlabel):
+        bbox_label = str(int(label))
+
+        bbox_color = [random.randint(0, 255) for _ in range(3)]
+        if self.color is not None:
+          bbox_color = self.color[int(label)]
+        plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
+
 
     return image

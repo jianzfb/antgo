@@ -6,8 +6,8 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from .runas_op import runas_op
-
+from .inference_op import inference_op
 
 __all__ = [
-    'runas_op'
+    'runas_op', 'inference_op'
 ]
