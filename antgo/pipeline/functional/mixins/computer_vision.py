@@ -103,6 +103,9 @@ class ComputerVisionMixin:
     out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
 
     for array in self:
+      h,w = array.shape[:2]
+      if h != height or w !=width:
+        array = cv2.resize(array, (width, height))
       out.write(array)
 
     out.release()
