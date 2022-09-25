@@ -23,8 +23,8 @@ class runas_op:
 
     Examples:
 
-    >>> from towhee.functional import DataCollection
-    >>> from towhee.functional.entity import Entity
+    >>> from antgo.pipeline.functional import DataCollection
+    >>> from antgo.pipeline.functional.entity import Entity
     >>> entities = [Entity(a=i, b=i) for i in range(5)]
     >>> dc = DataCollection(entities)
     >>> res = dc.runas_op['a', 'b'](func=lambda x: x - 1).to_list()

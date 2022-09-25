@@ -40,8 +40,8 @@ class WritableTable:
 
     def seal(self):
         # pylint: disable=protected-access
-        from towhee.utils.thirdparty.pyarrow import pa
-        from towhee.types.tensor_array import TensorArray
+        from antgo.pipeline.utils.thirdparty.pyarrow import pa
+        from antgo.pipeline.types.tensor_array import TensorArray
 
         names = list(self._buffer)
         arrays = []
@@ -112,8 +112,8 @@ class ChunkedTable:
         return self._chunks
 
     def _create_table(self, chunk, head):
-        from towhee.utils.thirdparty.pyarrow import pa
-        from towhee.types.tensor_array import TensorArray
+        from antgo.pipeline.utils.thirdparty.pyarrow import pa
+        from antgo.pipeline.types.tensor_array import TensorArray
 
         # head = []
         cols = None

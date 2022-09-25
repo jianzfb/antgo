@@ -24,7 +24,7 @@ class DataProcessingMixin:
 
         Examples:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> dc1 = DataCollection([0.8, 0.9, 8.1, 9.2])
         >>> dc2 = DataCollection([[1, 2, 0], [2, 3, 0]])
 
@@ -56,7 +56,7 @@ class DataProcessingMixin:
 
         Examples:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> dc1 = DataCollection([1,2,3,4])
         >>> dc2 = DataCollection([1,2,3,4]).map(lambda x: x+1)
         >>> dc3 = dc1.zip(dc2)
@@ -81,7 +81,7 @@ class DataProcessingMixin:
 
         Examples:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> DataCollection.range(10).head(3).to_list()
         [0, 1, 2]
         """
@@ -106,7 +106,7 @@ class DataProcessingMixin:
 
         Examples:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> dc = DataCollection(range(10000))
         >>> result = dc.sample(0.1)
         >>> ratio = len(result.to_list()) / 10000.
@@ -133,7 +133,7 @@ class DataProcessingMixin:
 
         Examples:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> dc = DataCollection(range(10))
         >>> [list(batch) for batch in dc.batch(2, raw=False)]
         [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
@@ -146,7 +146,7 @@ class DataProcessingMixin:
         >>> dc.batch(3, drop_tail=True)
         [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
 
-        >>> from towhee import Entity
+        >>> from antgo.pipeline import Entity
         >>> dc = DataCollection([Entity(a=a, b=b) for a,b in zip(['abc', 'vdfvcd', 'cdsc'], [1,2,3])])
         >>> dc.batch(2)
         [<Entity dict_keys(['a', 'b'])>, <Entity dict_keys(['a', 'b'])>]
@@ -201,7 +201,7 @@ class DataProcessingMixin:
 
         Examples:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> dc = DataCollection(range(5))
         >>> [list(batch) for batch in dc.rolling(3)]
         [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
@@ -238,7 +238,7 @@ class DataProcessingMixin:
 
         Examples:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> dc = DataCollection(range(10))
         >>> nested_dc = dc.batch(2)
         >>> nested_dc.flatten().to_list()
@@ -266,7 +266,7 @@ class DataProcessingMixin:
 
         1. Shuffle:
 
-        >>> from towhee import DataCollection
+        >>> from antgo.pipeline import DataCollection
         >>> dc = DataCollection([0, 1, 2, 3, 4])
         >>> a = dc.shuffle()
         >>> tuple(a) == tuple(range(5))

@@ -55,9 +55,43 @@ class OperatorLoader:
         op = OperatorRegistry.resolve(function)
         return self.instance_operator(op, arg, kws) if op is not None else None
 
+    def load_operator_from_mm(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
+        module, fname = function.split('/')
+        op_cls = ''.join(x.capitalize() or '_' for x in fname.split('_'))
+        module = '.'.join(['antgo.pipeline.hub.external', '{}.{}'.format(module, fname)])
+
+        try:
+            op = getattr(importlib.import_module(module), op_cls)
+        except:
+            subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'openmim'])
+            subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmengine'])
+            subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmcv-full'])
+            if fname == 'detector':
+                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmdet'])
+            elif fname == 'segmentor':
+                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmsegmentation'])
+            elif fname == 'classification':
+                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmcls'])
+            elif fname == 'ocr':
+                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmocr'])
+            elif fname == 'pose':
+                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmpose'])
+            elif fname == 'editing':
+                subprocess.check_call([sys.executable, '-m', 'git', 'clone', 'https://github.com/open-mmlab/mmediting.git'])
+                subprocess.check_call([sys.executable, '-m', 'cd', 'mmediting'])
+                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', '-e', '.'])
+
+            op = getattr(importlib.import_module(module), op_cls)
+
+        return self.instance_operator(op, arg, kws) if op is not None else None
+
     def load_operator_from_packages(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         try:
             module, fname = function.split('/')
+            load_func = getattr(self, f'load_operator_from_{module}', None)
+            if load_func is not None:
+                return load_func(function, arg, kws, tag)
+
             fname = fname.replace('-', '_')
             op_cls = ''.join(x.capitalize() or '_' for x in fname.split('_'))
 
@@ -66,7 +100,6 @@ class OperatorLoader:
             op = getattr(importlib.import_module(module), op_cls)
             return self.instance_operator(op, arg, kws) if op is not None else None
         except Exception:  # pylint: disable=broad-except
-            # 动态查询
             return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:

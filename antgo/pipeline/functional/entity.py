@@ -36,7 +36,7 @@ class Entity:
 
         Examples:
 
-        >>> from towhee import Entity
+        >>> from antgo.pipeline import Entity
         >>> e = Entity(a = 1, b = 2)
         >>> e
         <Entity dict_keys(['a', 'b'])>
@@ -50,7 +50,7 @@ class Entity:
 
         Examples:
 
-        >>> from towhee import Entity
+        >>> from antgo.pipeline import Entity
         >>> e = Entity(a = 1, b = 2)
         >>> str(e)
         "{'a': 1, 'b': 2}"
@@ -68,7 +68,7 @@ class EntityView:
 
     Examples:
 
-    >>> from towhee import Entity, DataFrame
+    >>> from antgo.pipeline import Entity, DataFrame
     >>> e = [Entity(a=a, b=b) for a,b in zip(range(3), range(3))]
     >>> df = DataFrame(e)
     >>> df = df.to_column()
@@ -108,7 +108,7 @@ class EntityView:
 
         Examples:
 
-        >>> from towhee import Entity, DataFrame
+        >>> from antgo.pipeline import Entity, DataFrame
         >>> e = [Entity(a=a, b=b) for a,b in zip(range(5), range(5))]
         >>> df = DataFrame(e)
         >>> df = df.to_column()

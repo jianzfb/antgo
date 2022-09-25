@@ -91,7 +91,7 @@ class DataCollection(Iterable, DCMixins):
             call.
 
     Examples:
-        >>> from towhee import register
+        >>> from antgo.pipeline import register
         >>> dc = DataCollection([1,2,3,4])
         >>> @register(name='test/add1')
         ... def add1(x):
@@ -346,7 +346,7 @@ class DataCollection(Iterable, DCMixins):
     """Filter the DataCollection data based on function.
 
     Filters the DataCollection based on the function provided. If data is stored
-    as an Option (see towhee.functional.option.py), drop empty will decide whether
+    as an Option (see antgo.pipeline.functional.option.py), drop empty will decide whether
     to remove the element or set it to empty.
 
     Args:
@@ -388,14 +388,14 @@ class DataCollection(Iterable, DCMixins):
         DataFrame: Resulting converted DataFrame.
 
     Examples:
-        >>> from towhee import DataCollection, Entity
+        >>> from antgo.pipeline import DataCollection, Entity
         >>> e = [Entity(a=a, b=b) for a,b in zip(['abc', 'def', 'ghi'], [1,2,3])]
         >>> dc = DataCollection(e)
         >>> type(dc)
-        <class 'towhee.functional.data_collection.DataCollection'>
+        <class 'antgo.pipeline.functional.data_collection.DataCollection'>
 
         >>> type(dc.to_df())
-        <class 'towhee.functional.data_collection.DataFrame'>
+        <class 'antgo.pipeline.functional.data_collection.DataFrame'>
     """
     return DataFrame(self._iterable)
 
@@ -404,7 +404,7 @@ class DataFrame(DataCollection, DataFrameMixin):
   """Entity based DataCollection.
 
   Examples:
-      >>> from towhee import Entity
+      >>> from antgo.pipeline import Entity
       >>> DataFrame([Entity(id=a) for a in [1,2,3]])
       [<Entity dict_keys(['id'])>, <Entity dict_keys(['id'])>, <Entity dict_keys(['id'])>]
   """
@@ -461,14 +461,14 @@ class DataFrame(DataCollection, DataFrameMixin):
         DataCollection: Resulting DataCollection from DataFrame
 
     Examples:
-        >>> from towhee import DataFrame, Entity
+        >>> from antgo.pipeline import DataFrame, Entity
         >>> e = [Entity(a=a, b=b) for a,b in zip(['abc', 'def', 'ghi'], [1,2,3])]
         >>> df = DataFrame(e)
         >>> type(df)
-        <class 'towhee.functional.data_collection.DataFrame'>
+        <class 'antgo.pipeline.functional.data_collection.DataFrame'>
 
         >>> type(df.to_dc())
-        <class 'towhee.functional.data_collection.DataCollection'>
+        <class 'antgo.pipeline.functional.data_collection.DataCollection'>
     """
     return DataCollection(self._iterable)
 
@@ -482,7 +482,7 @@ class DataFrame(DataCollection, DataFrameMixin):
         ModeFlag: The storage format of the Dataframe.
 
     Examples:
-        >>> from towhee import Entity, DataFrame
+        >>> from antgo.pipeline import Entity, DataFrame
         >>> e = [Entity(a=a, b=b) for a,b in zip(range(5), range(5))]
         >>> df = DataFrame(e)
         >>> df.mode
@@ -503,7 +503,7 @@ class DataFrame(DataCollection, DataFrameMixin):
     Examples:
         1. Row Based::
 
-            >>> from towhee import Entity, DataFrame
+            >>> from antgo.pipeline import Entity, DataFrame
             >>> e = [Entity(a=a, b=b) for a,b in zip(range(3), range(3))]
             >>> df = DataFrame(e)
             >>> df.to_list()[0]
