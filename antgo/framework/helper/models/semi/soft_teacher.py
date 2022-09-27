@@ -1,4 +1,5 @@
 from sys import maxsize
+from numpy.lib.function_base import diff
 import torch
 from torch._C import device
 from antgo.framework.helper.models.builder import DETECTORS, build_model
@@ -224,9 +225,11 @@ class SoftTeacher(MultiSteamDetector):
         results_list = self.teacher.bbox_head.get_bboxes(*aug_outs, image_metas, rescale=False, with_nms=False)
 
         bbox_results = {
-            'box': torch.stack([a for a, _ in results_list], dim=0),
-            'label': torch.stack([b for _, b in results_list], dim=0)
+            'box': torch.stack([a for a, _, _ in results_list], dim=0),
+            'label': torch.stack([b for _, b, _ in results_list], dim=0),
+            'around_box': torch.stack([c for _, _,c in results_list], dim=0),
         }
+        
         # clip by position
         image_h = image_metas[0]['image_shape'][0]
         image_w = image_metas[0]['image_shape'][1]
@@ -238,12 +241,14 @@ class SoftTeacher(MultiSteamDetector):
 
         # 
         pseudo_bbox_candidates = bbox_results['box']          # BxNx5 (x0,y0,x1,y1,score)
+        pseudo_around_bbox_candidates = bbox_results['around_box']  # BxNxMx4
         paeudo_label_candidates = bbox_results['label']       # BxN
         pseudo_index_candidates = torch.arange(pseudo_bbox_candidates.shape[1])
 
         pseudo_bbox_filter_list = []
         pseudo_label_filter_list = []
         pseudo_index_filter_list = []
+        pseudo_around_bbox_filter_list = []
         # 过滤1：使用nms
         for img_id in range(len(image_metas)):
             keep = batched_nms(
@@ -254,10 +259,12 @@ class SoftTeacher(MultiSteamDetector):
             
             bboxes = pseudo_bbox_candidates[img_id, keep]
             labels = paeudo_label_candidates[img_id, keep]
+            around_bboxes = pseudo_around_bbox_candidates[img_id, keep]
             keep_index = pseudo_index_candidates[keep]
 
             pseudo_bbox_filter_list.append(bboxes)
             pseudo_label_filter_list.append(labels)
+            pseudo_around_bbox_filter_list.append(around_bboxes)
             pseudo_index_filter_list.append(keep_index)
 
         # 过滤2：基于自定义规则过滤
@@ -272,39 +279,38 @@ class SoftTeacher(MultiSteamDetector):
         aspect_ratio = self.train_cfg.get('pseduo_box_aspect_ratio', None)  # 宽高比
         box_min_size = self.train_cfg.get('pseduo_box_min_size', None)      # 最小尺寸
         class_constraint = self.train_cfg.get('class_constraint', None)     # 类别个数限制
-        pseudo_bbox_list, pseudo_label_list, _, pseudo_index_list = list(
+        pseudo_bbox_list, pseudo_label_list, _, pseudo_index_list, pseudo_around_bbox_list = list(
             zip(
                 *[
                     filter_invalid(
                         pseudo_bbox,
                         pseudo_label,
                         pseudo_bbox[:, -1],
+                        around_bbox=pseudo_around_bbox,
                         index=pseudo_index,
                         thr=thr,
                         box_min_size=box_min_size,
                         aspect_ratio=aspect_ratio,
                         class_constraint=class_constraint
                     )
-                    for pseudo_bbox, pseudo_label, pseudo_index in zip(
-                        pseudo_bbox_filter_list, pseudo_label_filter_list, pseudo_index_filter_list
+                    for pseudo_bbox, pseudo_label, pseudo_index, pseudo_around_bbox in zip(
+                        pseudo_bbox_filter_list, pseudo_label_filter_list, pseudo_index_filter_list, pseudo_around_bbox_filter_list
                     )
                 ]
             )
         )        
 
-        # 统计框的不稳定性
+        # 过滤3：统计框的不稳定性        
         reg_unc = \
             self.compute_location_uncertainty(
                 pseudo_bbox_list, 
                 pseudo_index_list, 
-                pseudo_bbox_candidates, 
-                np.std(np.arange(min(image_h//2, image_w//2))))
-
+                pseudo_around_bbox_list)
         det_bboxes = pseudo_bbox_list
 
         # x0,y0,x1,y1,score (分数), uncertaity (稳定性)
         det_bboxes = [
-            torch.cat([bbox, torch.unsqueeze(unc,-1).to(device=bbox.device)], dim=-1) for bbox, unc in zip(det_bboxes, reg_unc)
+            torch.cat([bbox, torch.unsqueeze(unc,-1)], dim=-1) for bbox, unc in zip(det_bboxes, reg_unc)
         ]
         det_labels = pseudo_label_list
         teacher_info["pseudo_bboxes"] = det_bboxes
@@ -317,57 +323,34 @@ class SoftTeacher(MultiSteamDetector):
         teacher_info["image"] = image
         return teacher_info
 
-    def compute_location_uncertainty(self, pseudo_bbox_list, pseudo_index_list, pseudo_bbox_candidates, max_std=10.0):
+    def compute_location_uncertainty(self, pseudo_bbox_list, pseudo_index_list, pseudo_around_bbox_list):
         # 在中心点附近的 目标框回归的所有框，计算不确定度
         pseudo_bbox_uncertainty_list = []
         for img_id in range(len(pseudo_bbox_list)):
             # pseudo_bbox, pseudo_index 经过NMS后的挑选出来的框和索引
             # 挑选出来得伪框
-            pseudo_bbox = pseudo_bbox_list[img_id]
-            pseudo_index = pseudo_index_list[img_id]
-            # 全部候选框
-            pseudo_candidates = pseudo_bbox_candidates[img_id]
-            pseudo_candidates = torch.unsqueeze(pseudo_candidates, 0)
+            pseudo_bbox = pseudo_bbox_list[img_id]          # [[x0,y0,x1,y1]]
+            pseudo_index = pseudo_index_list[img_id]            
+            
+            pseudo_around_bbox = pseudo_around_bbox_list[img_id]        # [[x0,y0,x1,y1],[x0,y0,x1,y1],[x0,y0,x1,y1],...]
+            if pseudo_bbox.size(0) == 0:
+                pseudo_bbox_uncertainty_list.append(torch.empty((0)).to(pseudo_bbox.device))              # 无限不确定古
+                continue
 
-            pseudo_bbox_uncertainty = torch.zeros_like(pseudo_index, dtype=torch.float32)
-            if pseudo_index.shape[0] > 0:
-                pseudo_bbox = torch.unsqueeze(pseudo_bbox,1)
-                inter_x0 = torch.maximum(pseudo_bbox[:,:,0], pseudo_candidates[:,:,0])
-                inter_y0 = torch.maximum(pseudo_bbox[:,:,1], pseudo_candidates[:,:,1])
+            # 计算回归框的方差
+            # N,8,4
+            diff = pseudo_bbox[:,:4].unsqueeze(1) - pseudo_around_bbox[:,:,:4]
+            # N,4
+            diff = torch.std(diff, 1)
 
-                inter_x1 = torch.minimum(pseudo_bbox[:,:,2], pseudo_candidates[:,:,2])
-                inter_y1 = torch.minimum(pseudo_bbox[:,:,3], pseudo_candidates[:,:,3])
+            # Z
+            pseudo_wh_denominator = (pseudo_bbox[:,3]-pseudo_bbox[:,1]) + (pseudo_bbox[:,2]-pseudo_bbox[:,0])
+            pseudo_wh_denominator = 0.5 * pseudo_wh_denominator
+            pseudo_wh_denominator = pseudo_wh_denominator.view(-1,1)
+            diff = diff / (pseudo_wh_denominator + 1e-6)
+            diff = torch.mean(diff)
 
-                # 计算有效重叠框索引标记
-                valid = (inter_x1 > inter_x0) & (inter_y1 > inter_y0)
-
-                # 计算重叠框IOU
-                inter_area = (inter_y1-inter_y0)*(inter_x1-inter_x0)
-                iou = \
-                    (((pseudo_bbox[:,:,2]-pseudo_bbox[:,:,0])*(pseudo_bbox[:,:,3]-pseudo_bbox[:,:,1])) + \
-                        ((pseudo_candidates[:,:,2]-pseudo_candidates[:,:,0])*(pseudo_candidates[:,:,3] - \
-                            pseudo_candidates[:,:,1])) - inter_area) / (inter_area + 1e-6)
-                
-                # NxN'
-                # 挑选出每个伪框和候选池框 IOU>0.5的所有框，统计wh的方差，基于此确定这个伪框预测的稳定性
-                # 理想情况：伪框挑选预测好的化，其周围的框也应位置接近
-                # TODO，临时将所有框的不确定度　设置伪１
-                valid_mask = (iou >= 0.5) & valid
-                for pseudo_bbox_i in range(pseudo_index.shape[0]):
-                    around_candidates = pseudo_candidates[0].index_select(0,torch.nonzero(valid_mask[pseudo_bbox_i])[:,0])   
-                    if around_candidates.shape[0] <= 10:
-                        pseudo_bbox_uncertainty[pseudo_bbox_i] = 1
-                        continue
-                    
-                    around_candidates_w = around_candidates[:,2]-around_candidates[:,0]
-                    around_candidates_h = around_candidates[:,3]-around_candidates[:,1]
-
-                    unc = (torch.std(around_candidates_w) + torch.std(around_candidates_h))/2.0
-                    unc = unc/max_std
-                    unc = torch.minimum(unc, torch.ones_like(unc))
-                    pseudo_bbox_uncertainty[pseudo_bbox_i] = 1
-
-            pseudo_bbox_uncertainty_list.append(pseudo_bbox_uncertainty)
+            pseudo_bbox_uncertainty_list.append(diff)
         
         return pseudo_bbox_uncertainty_list
 

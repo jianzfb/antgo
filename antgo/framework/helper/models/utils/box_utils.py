@@ -235,7 +235,7 @@ class Transform2D:
             )
 
 
-def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0, box_min_size=0, class_constraint=None, aspect_ratio=None):
+def filter_invalid(bbox, label=None, score=None, mask=None, around_bbox=None, index=None, thr=0.0, box_min_size=0, class_constraint=None, aspect_ratio=None):
     if score is not None:
         valid = score > thr
         bbox = bbox[valid]
@@ -245,6 +245,8 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]
 
     if box_min_size is not None:
         bw = bbox[:, 2] - bbox[:, 0]
@@ -257,6 +259,8 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]
     
     if aspect_ratio is not None:
         bw = bbox[:, 2] - bbox[:, 0]
@@ -270,6 +274,8 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]
 
     if class_constraint is not None and label is not None and label.shape[0] > 0:
         # class_constraint {0: (min,max), 1: (min,max)}
@@ -288,5 +294,7 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]            
 
-    return bbox, label, mask, index
+    return bbox, label, mask, index, around_bbox
