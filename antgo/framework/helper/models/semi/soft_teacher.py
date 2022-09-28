@@ -92,6 +92,14 @@ class SoftTeacher(MultiSteamDetector):
             [meta["image_shape"] for meta in student_info["image_metas"]],
         )
         
+        pseudo_background = self._transform_mask(
+            teacher_info['pseudo_background'],
+            M
+        )
+
+        for pb, meta in zip(pseudo_background, student_info["image_metas"]):
+            meta['background'] = pb.squeeze(0)
+
         image_h = student_info['image_metas'][0]['image_shape'][0]
         image_w = student_info['image_metas'][0]['image_shape'][1]
         image_wh = torch.from_numpy(np.array([[image_w-1, image_h-1]])).to(pseudo_bboxes[0].device)
@@ -151,8 +159,13 @@ class SoftTeacher(MultiSteamDetector):
                     cv2.rectangle(teacher_image, ((int)(x0),(int)(y0)), ((int)(x1),(int)(y1)), color, 2)
                     cv2.putText(teacher_image, f'score {score}', ((int)(x0),(int)(y0-5)), cv2.FONT_HERSHEY_PLAIN, 1, color , 1)
 
+                teacher_mask = teacher_info['pseudo_background'][i].squeeze(0).detach().cpu().numpy() * 255
+                student_mask = student_info["image_metas"][i]['background'].detach().cpu().numpy() * 255
+
                 student_teacher_image = np.concatenate([image, teacher_image], 0)
+                student_teacher_mask = np.concatenate([student_mask, teacher_mask], 0)
                 cv2.imwrite(f'./debug/student_teacher_{i}.png', student_teacher_image)
+                cv2.imwrite(f'./debug/student_teacher_mask_{i}.png', student_teacher_mask)
 
         loss = {}
         # 使用伪标签，构建student分类损失
@@ -177,6 +190,10 @@ class SoftTeacher(MultiSteamDetector):
     def _transform_bbox(self, bboxes, trans_mat, max_shape):
         bboxes = Transform2D.transform_bboxes(bboxes, trans_mat, max_shape)
         return bboxes
+    
+    def _transform_mask(self, masks, trans_mat):
+        masks = Transform2D.transform_masks(masks, trans_mat, [m.shape[1:] for m in masks])
+        return masks
 
     def _get_trans_mat(self, a, b):
         return [bt @ at.inverse() for bt, at in zip(b, a)]
@@ -324,19 +341,27 @@ class SoftTeacher(MultiSteamDetector):
         # 过滤4：控制存在目标区域
         background_constraint = self.train_cfg.get('background_constraint', 0.01)   # 低于此值认为是纯背景
         background_weight = self.train_cfg.get('background_weight', 1.0)            # 纯背景区域权重
-        for bi in range(len(results_list['mask'])):
+        pseudo_background = []
+        for bi in range(len(bbox_results['mask'])):
             # MASK 说明：越接近0 背景概率越大；越接近1 前景概率越大
-            mask_weight = results_list['mask'][bi] < background_constraint
+            mask_weight = bbox_results['mask'][bi] < background_constraint
             mask_weight = mask_weight.float()
             if background_weight >= 0.0:
                 mask_weight = mask_weight * background_weight
             else:
-                mask_weight = mask_weight * (1.0-results_list['mask'][bi])
+                mask_weight = mask_weight * (1.0-bbox_results['mask'][bi])
             
             mask_weight = mask_weight.view(*mask_weight.shape[2:])
-            
-            # 将mask写入meta中
-            image_metas[bi]['background_weight'] = mask_weight
+
+            hh,ww = mask_weight.shape
+            mask_weight[0:10,0:10] = 128
+            mask_weight[0:10,ww-10:] = 128
+            mask_weight[hh-10:,0:10] = 255
+            mask_weight[hh-10:,ww-10:] = 255
+            mask_weight[hh//2-5:hh//2+5,ww//2-5:ww//2+5] = 255
+
+            mask_weight = mask_weight.unsqueeze(0)
+            pseudo_background.append(mask_weight)
 
         # 计算统计框的不稳定性        
         reg_unc = \
@@ -348,11 +373,12 @@ class SoftTeacher(MultiSteamDetector):
 
         # x0,y0,x1,y1,score (分数), uncertaity (稳定性)
         det_bboxes = [
-            torch.cat([bbox, torch.unsqueeze(unc,-1)], dim=-1) for bbox, unc in zip(det_bboxes, reg_unc)
+            torch.cat([bbox, unc], dim=-1) for bbox, unc in zip(det_bboxes, reg_unc)
         ]
         det_labels = pseudo_label_list
         teacher_info["pseudo_bboxes"] = det_bboxes
         teacher_info["pseudo_labels"] = det_labels
+        teacher_info["pseudo_background"] = pseudo_background
         teacher_info["transform_matrix"] = [
             torch.from_numpy(meta["transform_matrix"]).float().to(feat[0][0].device)
             for meta in image_metas
@@ -372,7 +398,7 @@ class SoftTeacher(MultiSteamDetector):
             
             pseudo_around_bbox = pseudo_around_bbox_list[img_id]        # [[x0,y0,x1,y1],[x0,y0,x1,y1],[x0,y0,x1,y1],...]
             if pseudo_bbox.size(0) == 0:
-                pseudo_bbox_uncertainty_list.append(torch.empty((0)).to(pseudo_bbox.device))              # 无限不确定古
+                pseudo_bbox_uncertainty_list.append(torch.empty((0,1)).to(pseudo_bbox.device))              # 无限不确定古
                 continue
 
             # 计算回归框的方差
@@ -386,7 +412,7 @@ class SoftTeacher(MultiSteamDetector):
             pseudo_wh_denominator = 0.5 * pseudo_wh_denominator
             pseudo_wh_denominator = pseudo_wh_denominator.view(-1,1)
             diff = diff / (pseudo_wh_denominator + 1e-6)
-            diff = torch.mean(diff)
+            diff = torch.mean(diff,dim=1,keepdim=True)
 
             pseudo_bbox_uncertainty_list.append(diff)
         

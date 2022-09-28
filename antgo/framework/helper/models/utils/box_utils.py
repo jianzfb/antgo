@@ -196,23 +196,16 @@ class Transform2D:
                 for b, m, o in zip(mask, M, out_shape)
             ]
         else:
-            if mask.masks.shape[0] == 0:
-                return BitmapMasks(np.zeros((0, *out_shape)), *out_shape)
-            mask_tensor = (
-                torch.from_numpy(mask.masks[:, None, ...]).to(M.device).to(M.dtype)
-            )
-            return BitmapMasks(
-                warp_affine(
+            if mask.shape[0] == 0:
+                return torch.empty((0, *out_shape), device=M.device)
+
+            mask_tensor = mask[:, None, ...]
+            return warp_affine(
                     mask_tensor,
-                    M[None, ...].expand(mask.masks.shape[0], -1, -1),
+                    M[None, ...].expand(mask.shape[0], -1, -1),
                     out_shape,
-                )
-                .squeeze(1)
-                .cpu()
-                .numpy(),
-                out_shape[0],
-                out_shape[1],
-            )
+                ).squeeze(1)
+
 
     @staticmethod
     def transform_image(img, M, out_shape):
