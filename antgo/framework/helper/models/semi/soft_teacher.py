@@ -5,7 +5,7 @@ from torch._C import device
 from antgo.framework.helper.models.builder import DETECTORS, build_model
 from antgo.framework.helper.models.utils.structure_utils import dict_stack, weighted_loss
 from antgo.framework.helper.models.multi_stream_detector import MultiSteamDetector
-from antgo.framework.helper.models.utils.box_utils import Transform2D, filter_invalid
+from antgo.framework.helper.models.utils.box_utils import Transform2D, filter_invalid,random_ignore
 from torchvision.ops import batched_nms 
 import numpy as np
 import cv2
@@ -27,6 +27,7 @@ class SoftTeacher(MultiSteamDetector):
         self.unsup_weight = self.train_cfg.unsup_weight
         self.debug = self.train_cfg.get('debug', False)
         self.target_size = self.train_cfg.get('target_size', (64, 80))
+        self.enable_random_ignore = self.train_cfg.get('random_ignore', False)
 
     def forward_train(self, image, image_metas, **kwargs):
         super().forward_train(image, image_metas, **kwargs)
@@ -225,9 +226,10 @@ class SoftTeacher(MultiSteamDetector):
         results_list = self.teacher.bbox_head.get_bboxes(*aug_outs, image_metas, rescale=False, with_nms=False)
 
         bbox_results = {
-            'box': torch.stack([a for a, _, _ in results_list], dim=0),
-            'label': torch.stack([b for _, b, _ in results_list], dim=0),
-            'around_box': torch.stack([c for _, _,c in results_list], dim=0),
+            'box': torch.stack([a for a, _, _, _ in results_list], dim=0),
+            'label': torch.stack([b for _, b, _, _ in results_list], dim=0),
+            'around_box': torch.stack([c for _, _, c, _ in results_list], dim=0),
+            'mask': [d for _, _, _, d in results_list],
         }
         
         # clip by position
@@ -299,8 +301,44 @@ class SoftTeacher(MultiSteamDetector):
                 ]
             )
         )        
+        
+        # 过滤3：随机忽略目标框（防止，错误框参与训练后，无法剔除）
+        if self.enable_random_ignore:
+            pseudo_bbox_list, pseudo_label_list, _, pseudo_index_list, pseudo_around_bbox_list = list(
+                zip(
+                    *[
+                        random_ignore(
+                            pseudo_bbox,
+                            pseudo_label,
+                            pseudo_bbox[:, -1],
+                            around_bbox=pseudo_around_bbox,
+                            index=pseudo_index,
+                        )
+                        for pseudo_bbox, pseudo_label, pseudo_index, pseudo_around_bbox in zip(
+                            pseudo_bbox_list, pseudo_label_list, pseudo_index_list, pseudo_around_bbox_list
+                        )
+                    ]
+                )
+            )        
 
-        # 过滤3：统计框的不稳定性        
+        # 过滤4：控制存在目标区域
+        background_constraint = self.train_cfg.get('background_constraint', 0.01)   # 低于此值认为是纯背景
+        background_weight = self.train_cfg.get('background_weight', 1.0)            # 纯背景区域权重
+        for bi in range(len(results_list['mask'])):
+            # MASK 说明：越接近0 背景概率越大；越接近1 前景概率越大
+            mask_weight = results_list['mask'][bi] < background_constraint
+            mask_weight = mask_weight.float()
+            if background_weight >= 0.0:
+                mask_weight = mask_weight * background_weight
+            else:
+                mask_weight = mask_weight * (1.0-results_list['mask'][bi])
+            
+            mask_weight = mask_weight.view(*mask_weight.shape[2:])
+            
+            # 将mask写入meta中
+            image_metas[bi]['background_weight'] = mask_weight
+
+        # 计算统计框的不稳定性        
         reg_unc = \
             self.compute_location_uncertainty(
                 pseudo_bbox_list, 

@@ -234,6 +234,25 @@ class Transform2D:
                 .to(img.dtype)
             )
 
+def random_ignore(bbox, label=None, score=None, mask=None, around_bbox=None, index=None):
+    if bbox.size(0) == 0:
+        return bbox, label, mask, index, around_bbox
+
+    valid = np.random.random([bbox.shape[0]]) > 0.5
+    valid = torch.from_numpy(valid).to(bbox.device) 
+    
+    bbox = bbox[valid]
+    if label is not None:
+        label = label[valid]
+    if mask is not None:
+        mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
+    if index is not None:
+        index = index[valid]
+    if around_bbox is not None:
+        around_bbox = around_bbox[valid]
+
+    return bbox, label, mask, index, around_bbox
+
 
 def filter_invalid(bbox, label=None, score=None, mask=None, around_bbox=None, index=None, thr=0.0, box_min_size=0, class_constraint=None, aspect_ratio=None):
     if score is not None:
