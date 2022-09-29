@@ -10,6 +10,9 @@ from torchvision.ops import batched_nms
 import numpy as np
 import cv2
 import os
+from torch.nn import functional as F
+from typing import List, Optional, Tuple, Union
+from collections.abc import Sequence
 
 
 @DETECTORS.register_module()
@@ -28,6 +31,7 @@ class SoftTeacher(MultiSteamDetector):
         self.debug = self.train_cfg.get('debug', False)
         self.target_size = self.train_cfg.get('target_size', (64, 80))
         self.enable_random_ignore = self.train_cfg.get('random_ignore', False)
+        self.enable_flip_label = self.train_cfg.get('flip_label', True)
 
     def forward_train(self, image, image_metas, **kwargs):
         super().forward_train(image, image_metas, **kwargs)
@@ -94,11 +98,12 @@ class SoftTeacher(MultiSteamDetector):
         
         pseudo_background = self._transform_mask(
             teacher_info['pseudo_background'],
-            M
+            M,
+            [meta["image_shape"] for meta in teacher_info["image_metas"]]
         )
 
         for pb, meta in zip(pseudo_background, student_info["image_metas"]):
-            meta['background'] = pb.squeeze(0)
+            meta['background'] = pb
 
         image_h = student_info['image_metas'][0]['image_shape'][0]
         image_w = student_info['image_metas'][0]['image_shape'][1]
@@ -118,9 +123,9 @@ class SoftTeacher(MultiSteamDetector):
         pseudo_labels = list(teacher_info["pseudo_labels"])
         for bi in range(len(pseudo_bboxes)):
             if pseudo_labels[bi].shape[0] > 0:
-                if 'flipped' in student_info['image_metas'][bi] and student_info['image_metas'][bi]['flipped']:
+                if 'flipped' in student_info['image_metas'][bi] and student_info['image_metas'][bi]['flipped'] and self.enable_flip_label:
                     pseudo_labels[bi] = 1-pseudo_labels[bi]
-
+                    
         if self.debug:
             # 检查teacher中获得的检测狂，是否可以通过M转换到 student的图像中
             if not os.path.exists('./debug'):
@@ -151,7 +156,7 @@ class SoftTeacher(MultiSteamDetector):
                 for bbox_i, bbox in enumerate(teacher_bboxs):
                     x0,y0,x1,y1,score,_ = bbox
                     label = bboxs_label[bbox_i]
-                    if 'flipped' in student_info['image_metas'][i] and student_info['image_metas'][i]['flipped']:
+                    if 'flipped' in student_info['image_metas'][i] and student_info['image_metas'][i]['flipped'] and self.enable_flip_label:
                         label = 1-label
                     color = (255,0,0)
                     if label == 1:
@@ -191,8 +196,23 @@ class SoftTeacher(MultiSteamDetector):
         bboxes = Transform2D.transform_bboxes(bboxes, trans_mat, max_shape)
         return bboxes
     
-    def _transform_mask(self, masks, trans_mat):
-        masks = Transform2D.transform_masks(masks, trans_mat, [m.shape[1:] for m in masks])
+    def _transform_mask(self, masks, trans_mat, image_shapes):
+        # 修改旋转矩阵（基于原始图像大小）的偏移->到特征图
+        fixed_trans_mat = []
+        for mat, mask, image_shape in zip(trans_mat, masks, image_shapes):
+            image_h = image_shape[0]
+            image_w = image_shape[1]
+
+            mask_h,mask_w = mask.shape[1:]
+            
+            fixed_mat = torch.clone(mat)
+            fixed_mat[0,2] = fixed_mat[0,2]/image_w*mask_w
+            fixed_mat[1,2] = fixed_mat[1,2]/image_h*mask_h
+            fixed_trans_mat.append(fixed_mat)
+
+        masks = Transform2D.transform_masks(masks, fixed_trans_mat, [m.shape[1:] for m in masks])
+
+        masks = [mask.squeeze(0) for mask in masks]
         return masks
 
     def _get_trans_mat(self, a, b):
@@ -353,12 +373,13 @@ class SoftTeacher(MultiSteamDetector):
             
             mask_weight = mask_weight.view(*mask_weight.shape[2:])
 
-            hh,ww = mask_weight.shape
-            mask_weight[0:10,0:10] = 128
-            mask_weight[0:10,ww-10:] = 128
-            mask_weight[hh-10:,0:10] = 255
-            mask_weight[hh-10:,ww-10:] = 255
-            mask_weight[hh//2-5:hh//2+5,ww//2-5:ww//2+5] = 255
+            # 调试使用
+            # hh,ww = mask_weight.shape
+            # mask_weight[0:10,0:10] = 128
+            # mask_weight[0:10,ww-10:] = 128
+            # mask_weight[hh-10:,0:10] = 255
+            # mask_weight[hh-10:,ww-10:] = 255
+            # mask_weight[hh//2-5:hh//2+5,ww//2-5:ww//2+5] = 255
 
             mask_weight = mask_weight.unsqueeze(0)
             pseudo_background.append(mask_weight)
@@ -376,9 +397,9 @@ class SoftTeacher(MultiSteamDetector):
             torch.cat([bbox, unc], dim=-1) for bbox, unc in zip(det_bboxes, reg_unc)
         ]
         det_labels = pseudo_label_list
-        teacher_info["pseudo_bboxes"] = det_bboxes
-        teacher_info["pseudo_labels"] = det_labels
-        teacher_info["pseudo_background"] = pseudo_background
+        teacher_info["pseudo_bboxes"] = det_bboxes                  # 获得伪前景目标框
+        teacher_info["pseudo_labels"] = det_labels                  # 获得伪前景目标框类别
+        teacher_info["pseudo_background"] = pseudo_background       # 获得伪背景区域
         teacher_info["transform_matrix"] = [
             torch.from_numpy(meta["transform_matrix"]).float().to(feat[0][0].device)
             for meta in image_metas
