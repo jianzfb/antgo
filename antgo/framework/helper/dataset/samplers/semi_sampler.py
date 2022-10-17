@@ -4,6 +4,7 @@ from os import unlink
 
 import numpy as np
 import torch
+from torch.nn.functional import pairwise_distance
 from antgo.framework.helper.runner import get_dist_info
 from torch.utils.data import Sampler
 import copy
@@ -31,20 +32,35 @@ class SemiSampler(Sampler):
         unlabeled_s = int(
                 math.ceil(self.label_and_unlabel_group_sizes[1] * 1.0 / self.samples_per_gpu))
 
-        s = max(labeled_s//self.strategy['labeled'], unlabeled_s//self.strategy['unlabeled']) 
-        labeled_s = s * self.strategy['labeled']
-        unlabeled_s = s * self.strategy['unlabeled']
+        assert((self.strategy['labeled'] >= 1 and self.strategy['unlabeled'] >= 1) or (self.strategy['labeled']+self.strategy['unlabeled']) == 1)
 
-        self.num_samples += labeled_s * self.samples_per_gpu
-        self.num_samples += unlabeled_s * self.samples_per_gpu
+        if self.strategy['labeled'] >= 1 and self.strategy['unlabeled'] >= 1:
+            # 每个batch内仅有一种类型样本（有标签或无标签）
+            self.sampling_mode = 'interleave_mode'
+        else:
+            # 每个batch内同时含有有标签和无标签
+            self.sampling_mode = 'mix_mode'
+
+        if self.sampling_mode == 'interleave_mode':
+            s = max(labeled_s//self.strategy['labeled'], unlabeled_s//self.strategy['unlabeled']) 
+            labeled_s = s * self.strategy['labeled']
+            unlabeled_s = s * self.strategy['unlabeled']
+
+            self.num_samples += labeled_s * self.samples_per_gpu
+            self.num_samples += unlabeled_s * self.samples_per_gpu
+        else:
+            self.num_samples = 0
+            for i, size in enumerate(self.label_and_unlabel_group_sizes):
+                self.num_samples += int(np.ceil(
+                    size / self.samples_per_gpu)) * self.samples_per_gpu
+
         # labeled: 0, unlabeled: 1
         self.labeled_indices = np.where(self.flag == 0)[0]
         self.unlabeled_indices = np.where(self.flag == 1)[0]
         assert(len(self.labeled_indices) > 0 and len(self.unlabeled_indices) > 0)
         self.iter_flag = 0
 
-    def __iter__(self):
-        # 基于策略采集样本
+    def sampling_by_interleave(self):
         # labeled -> unlabeled
         labeled_indices = self.labeled_indices.copy()
         unlabeled_indices = self.unlabeled_indices.copy()
@@ -72,7 +88,7 @@ class SemiSampler(Sampler):
                         indice = np.concatenate(
                                 [indice, np.random.choice(indice, num_extra)])
                     else:
-                        indice = np.random.choice(unlabeled_indices, num_extra)
+                        indice = np.random.choice(labeled_indices, num_extra)
 
                     indices.append(indice)
                     offset_labeled = len(labeled_indices)
@@ -100,6 +116,68 @@ class SemiSampler(Sampler):
 
         assert len(indices) == self.num_samples
         return iter(indices)
+
+    def sampling_by_mix(self):
+        labeled_indices = self.labeled_indices.copy()
+        unlabeled_indices = self.unlabeled_indices.copy()
+        
+        np.random.shuffle(labeled_indices)
+        np.random.shuffle(unlabeled_indices)
+
+        labeled_num_per_batch = (int)(self.samples_per_gpu * self.strategy['labeled'])
+        unlabeled_num_per_batch = self.samples_per_gpu - labeled_num_per_batch
+        offset_labeled = 0
+        offset_unlabeled = 0
+        indices = []
+        for batch_i in range(self.num_samples // self.samples_per_gpu):
+            # 从有标签数据中挑选
+            labeled_indice = None
+            if offset_labeled + labeled_num_per_batch <= len(labeled_indices):
+                labeled_indice = labeled_indices[offset_labeled:offset_labeled+labeled_num_per_batch]
+                offset_labeled += labeled_num_per_batch
+            else:
+                num_extra = offset_labeled + labeled_num_per_batch - len(labeled_indices)
+                labeled_indice = labeled_indices[offset_labeled:]
+
+                if len(labeled_indice) != 0:
+                    labeled_indice = np.concatenate(
+                            [labeled_indice, np.random.choice(labeled_indice, num_extra)])
+                else:
+                    labeled_indice = np.random.choice(labeled_indices, num_extra)
+                
+                offset_labeled = len(labeled_indices)
+        
+            # 从无标签数据中挑选
+            unlabeled_indice = None
+            if offset_unlabeled + unlabeled_num_per_batch <= len(unlabeled_indices):
+                unlabeled_indice = unlabeled_indices[offset_unlabeled:offset_unlabeled+unlabeled_num_per_batch]
+                offset_unlabeled += unlabeled_num_per_batch
+            else:
+                num_extra = offset_unlabeled + unlabeled_num_per_batch - len(unlabeled_indices)
+                unlabeled_indice = unlabeled_indices[offset_unlabeled:]
+
+                if len(unlabeled_indice) != 0:
+                    unlabeled_indice = np.concatenate(
+                            [unlabeled_indice, np.random.choice(unlabeled_indice, num_extra)])
+                else:
+                    unlabeled_indice = np.random.choice(unlabeled_indices, num_extra)
+
+                offset_unlabeled = len(unlabeled_indices)       
+
+            indice = np.concatenate([labeled_indice, unlabeled_indice])
+            indices.append(indice)   
+
+        indices = np.concatenate(indices)
+        indices = indices.astype(np.int64).tolist()
+
+        assert len(indices) == self.num_samples
+        return iter(indices)
+
+    def __iter__(self):
+        if self.sampling_mode == 'interleave_mode':
+            return self.sampling_by_interleave()
+        else:
+            return self.sampling_by_mix()
 
     def __len__(self):
         return self.num_samples
@@ -141,6 +219,7 @@ class DistributedSemiSampler(Sampler):
         self.samples_per_gpu = samples_per_gpu
         self.num_replicas = num_replicas
         self.rank = rank
+
         self.epoch = 0
         self.seed = seed if seed is not None else 0
 
@@ -190,9 +269,9 @@ class DistributedSemiSampler(Sampler):
         Z = self.strategy['labeled'] + self.strategy['unlabeled']  
         offset_labeled = 0
         offset_unlabeled = 0
-
+        
         indices = []
-        for _ in range(self.num_replicas):
+        for replica_i in range(self.num_replicas):
             for part_i in range(self.num_samples // self.samples_per_gpu):
                 if part_i % Z < self.strategy['labeled']:
                     # 从有标签数据中采样
@@ -208,7 +287,7 @@ class DistributedSemiSampler(Sampler):
                             indice = np.concatenate(
                                     [indice, np.random.choice(indice, num_extra)])
                         else:
-                            indice = np.random.choice(unlabeled_indices, num_extra)
+                            indice = np.random.choice(labeled_indices, num_extra)
 
                         indices.append(indice)
                         offset_labeled = len(labeled_indices)
@@ -238,6 +317,23 @@ class DistributedSemiSampler(Sampler):
         indices = indices[offset:offset + self.num_samples]
         assert len(indices) == self.num_samples
 
+        # shard_num = self.num_samples // self.samples_per_gpu        
+        # if self.rank % 2 == 1 and shard_num % 2 == 0:
+        #     rearrange_indices = []
+        #     for part_i in range(shard_num//2):
+        #         before_start_i = (part_i*2) * self.samples_per_gpu
+        #         before_stop_i = before_start_i + self.samples_per_gpu
+
+        #         after_start_i = (part_i*2+1) * self.samples_per_gpu
+        #         after_stop_i = after_start_i + self.samples_per_gpu
+        #         rearrange_indices.append(indices[after_start_i:after_stop_i])
+        #         rearrange_indices.append(indices[before_start_i:before_stop_i])
+
+        #     rearrange_indices = np.concatenate(rearrange_indices)
+        #     rearrange_indices = rearrange_indices.astype(np.int64).tolist()
+        #     indices = rearrange_indices
+
+        assert len(indices) == self.num_samples
         return iter(indices)
 
     def __len__(self):

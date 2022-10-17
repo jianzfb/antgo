@@ -1,14 +1,18 @@
 from sys import maxsize
+from numpy.lib.function_base import diff
 import torch
 from torch._C import device
 from antgo.framework.helper.models.builder import DETECTORS, build_model
 from antgo.framework.helper.models.utils.structure_utils import dict_stack, weighted_loss
 from antgo.framework.helper.models.multi_stream_detector import MultiSteamDetector
-from antgo.framework.helper.models.utils.box_utils import Transform2D, filter_invalid
+from antgo.framework.helper.models.utils.box_utils import Transform2D, filter_invalid,random_ignore
 from torchvision.ops import batched_nms 
 import numpy as np
 import cv2
 import os
+from torch.nn import functional as F
+from typing import List, Optional, Tuple, Union
+from collections.abc import Sequence
 
 
 @DETECTORS.register_module()
@@ -26,6 +30,8 @@ class SoftTeacher(MultiSteamDetector):
         self.unsup_weight = self.train_cfg.unsup_weight
         self.debug = self.train_cfg.get('debug', False)
         self.target_size = self.train_cfg.get('target_size', (64, 80))
+        self.enable_random_ignore = self.train_cfg.get('random_ignore', False)
+        self.enable_flip_label = self.train_cfg.get('flip_label', True)
 
     def forward_train(self, image, image_metas, **kwargs):
         super().forward_train(image, image_metas, **kwargs)
@@ -90,6 +96,15 @@ class SoftTeacher(MultiSteamDetector):
             [meta["image_shape"] for meta in student_info["image_metas"]],
         )
         
+        pseudo_background = self._transform_mask(
+            teacher_info['pseudo_background'],
+            M,
+            [meta["image_shape"] for meta in teacher_info["image_metas"]]
+        )
+
+        for pb, meta in zip(pseudo_background, student_info["image_metas"]):
+            meta['background'] = pb
+
         image_h = student_info['image_metas'][0]['image_shape'][0]
         image_w = student_info['image_metas'][0]['image_shape'][1]
         image_wh = torch.from_numpy(np.array([[image_w-1, image_h-1]])).to(pseudo_bboxes[0].device)
@@ -108,9 +123,9 @@ class SoftTeacher(MultiSteamDetector):
         pseudo_labels = list(teacher_info["pseudo_labels"])
         for bi in range(len(pseudo_bboxes)):
             if pseudo_labels[bi].shape[0] > 0:
-                if 'flipped' in student_info['image_metas'][bi] and student_info['image_metas'][bi]['flipped']:
+                if 'flipped' in student_info['image_metas'][bi] and student_info['image_metas'][bi]['flipped'] and self.enable_flip_label:
                     pseudo_labels[bi] = 1-pseudo_labels[bi]
-
+                    
         if self.debug:
             # 检查teacher中获得的检测狂，是否可以通过M转换到 student的图像中
             if not os.path.exists('./debug'):
@@ -141,7 +156,7 @@ class SoftTeacher(MultiSteamDetector):
                 for bbox_i, bbox in enumerate(teacher_bboxs):
                     x0,y0,x1,y1,score,_ = bbox
                     label = bboxs_label[bbox_i]
-                    if 'flipped' in student_info['image_metas'][i] and student_info['image_metas'][i]['flipped']:
+                    if 'flipped' in student_info['image_metas'][i] and student_info['image_metas'][i]['flipped'] and self.enable_flip_label:
                         label = 1-label
                     color = (255,0,0)
                     if label == 1:
@@ -149,8 +164,20 @@ class SoftTeacher(MultiSteamDetector):
                     cv2.rectangle(teacher_image, ((int)(x0),(int)(y0)), ((int)(x1),(int)(y1)), color, 2)
                     cv2.putText(teacher_image, f'score {score}', ((int)(x0),(int)(y0-5)), cv2.FONT_HERSHEY_PLAIN, 1, color , 1)
 
+                teacher_mask = teacher_info['pseudo_background'][i].squeeze(0).detach().cpu().numpy() * 255
+                student_mask = student_info["image_metas"][i]['background'].detach().cpu().numpy() * 255
+
                 student_teacher_image = np.concatenate([image, teacher_image], 0)
+                student_teacher_mask = np.concatenate([student_mask, teacher_mask], 0)
+
+                student_teacher_resized_mask = cv2.resize(student_teacher_mask, (student_teacher_image.shape[1], student_teacher_image.shape[0]))
+                student_teacher_resized_mask = student_teacher_resized_mask/255
+                student_teacher_resized_mask = np.expand_dims(student_teacher_resized_mask, -1)
+                student_teacher_image_focus = student_teacher_image*student_teacher_resized_mask
+                student_teacher_image_focus = student_teacher_image_focus.astype(np.uint8)
                 cv2.imwrite(f'./debug/student_teacher_{i}.png', student_teacher_image)
+                cv2.imwrite(f'./debug/student_teacher_mask_{i}.png', student_teacher_mask)
+                cv2.imwrite(f'./debug/student_teacher_focus_{i}.png', student_teacher_image_focus)
 
         loss = {}
         # 使用伪标签，构建student分类损失
@@ -175,6 +202,25 @@ class SoftTeacher(MultiSteamDetector):
     def _transform_bbox(self, bboxes, trans_mat, max_shape):
         bboxes = Transform2D.transform_bboxes(bboxes, trans_mat, max_shape)
         return bboxes
+    
+    def _transform_mask(self, masks, trans_mat, image_shapes):
+        # 修改旋转矩阵（基于原始图像大小）的偏移->到特征图
+        fixed_trans_mat = []
+        for mat, mask, image_shape in zip(trans_mat, masks, image_shapes):
+            image_h = image_shape[0]
+            image_w = image_shape[1]
+
+            mask_h,mask_w = mask.shape[1:]
+            
+            fixed_mat = torch.clone(mat)
+            fixed_mat[0,2] = fixed_mat[0,2]/image_w*mask_w
+            fixed_mat[1,2] = fixed_mat[1,2]/image_h*mask_h
+            fixed_trans_mat.append(fixed_mat)
+
+        masks = Transform2D.transform_masks(masks, fixed_trans_mat, [m.shape[1:] for m in masks])
+
+        masks = [mask.squeeze(0) for mask in masks]
+        return masks
 
     def _get_trans_mat(self, a, b):
         return [bt @ at.inverse() for bt, at in zip(b, a)]
@@ -224,9 +270,12 @@ class SoftTeacher(MultiSteamDetector):
         results_list = self.teacher.bbox_head.get_bboxes(*aug_outs, image_metas, rescale=False, with_nms=False)
 
         bbox_results = {
-            'box': torch.stack([a for a, _ in results_list], dim=0),
-            'label': torch.stack([b for _, b in results_list], dim=0)
+            'box': torch.stack([a for a, _, _, _ in results_list], dim=0),
+            'label': torch.stack([b for _, b, _, _ in results_list], dim=0),
+            'around_box': torch.stack([c for _, _, c, _ in results_list], dim=0),
+            'mask': [d for _, _, _, d in results_list],
         }
+        
         # clip by position
         image_h = image_metas[0]['image_shape'][0]
         image_w = image_metas[0]['image_shape'][1]
@@ -238,12 +287,14 @@ class SoftTeacher(MultiSteamDetector):
 
         # 
         pseudo_bbox_candidates = bbox_results['box']          # BxNx5 (x0,y0,x1,y1,score)
+        pseudo_around_bbox_candidates = bbox_results['around_box']  # BxNxMx4
         paeudo_label_candidates = bbox_results['label']       # BxN
         pseudo_index_candidates = torch.arange(pseudo_bbox_candidates.shape[1])
 
         pseudo_bbox_filter_list = []
         pseudo_label_filter_list = []
         pseudo_index_filter_list = []
+        pseudo_around_bbox_filter_list = []
         # 过滤1：使用nms
         for img_id in range(len(image_metas)):
             keep = batched_nms(
@@ -254,10 +305,12 @@ class SoftTeacher(MultiSteamDetector):
             
             bboxes = pseudo_bbox_candidates[img_id, keep]
             labels = paeudo_label_candidates[img_id, keep]
+            around_bboxes = pseudo_around_bbox_candidates[img_id, keep]
             keep_index = pseudo_index_candidates[keep]
 
             pseudo_bbox_filter_list.append(bboxes)
             pseudo_label_filter_list.append(labels)
+            pseudo_around_bbox_filter_list.append(around_bboxes)
             pseudo_index_filter_list.append(keep_index)
 
         # 过滤2：基于自定义规则过滤
@@ -272,43 +325,90 @@ class SoftTeacher(MultiSteamDetector):
         aspect_ratio = self.train_cfg.get('pseduo_box_aspect_ratio', None)  # 宽高比
         box_min_size = self.train_cfg.get('pseduo_box_min_size', None)      # 最小尺寸
         class_constraint = self.train_cfg.get('class_constraint', None)     # 类别个数限制
-        pseudo_bbox_list, pseudo_label_list, _, pseudo_index_list = list(
+        pseudo_bbox_list, pseudo_label_list, _, pseudo_index_list, pseudo_around_bbox_list = list(
             zip(
                 *[
                     filter_invalid(
                         pseudo_bbox,
                         pseudo_label,
                         pseudo_bbox[:, -1],
+                        around_bbox=pseudo_around_bbox,
                         index=pseudo_index,
                         thr=thr,
                         box_min_size=box_min_size,
                         aspect_ratio=aspect_ratio,
                         class_constraint=class_constraint
                     )
-                    for pseudo_bbox, pseudo_label, pseudo_index in zip(
-                        pseudo_bbox_filter_list, pseudo_label_filter_list, pseudo_index_filter_list
+                    for pseudo_bbox, pseudo_label, pseudo_index, pseudo_around_bbox in zip(
+                        pseudo_bbox_filter_list, pseudo_label_filter_list, pseudo_index_filter_list, pseudo_around_bbox_filter_list
                     )
                 ]
             )
         )        
+        
+        # 过滤3：随机忽略目标框（防止，错误框参与训练后，无法剔除）
+        if self.enable_random_ignore:
+            pseudo_bbox_list, pseudo_label_list, _, pseudo_index_list, pseudo_around_bbox_list = list(
+                zip(
+                    *[
+                        random_ignore(
+                            pseudo_bbox,
+                            pseudo_label,
+                            pseudo_bbox[:, -1],
+                            around_bbox=pseudo_around_bbox,
+                            index=pseudo_index,
+                        )
+                        for pseudo_bbox, pseudo_label, pseudo_index, pseudo_around_bbox in zip(
+                            pseudo_bbox_list, pseudo_label_list, pseudo_index_list, pseudo_around_bbox_list
+                        )
+                    ]
+                )
+            )        
 
-        # 统计框的不稳定性
+        # 过滤4：控制存在目标区域
+        background_constraint = self.train_cfg.get('background_constraint', 0.01)   # 低于此值认为是纯背景
+        background_weight = self.train_cfg.get('background_weight', 1.0)            # 纯背景区域权重
+        background_shrink_size = self.train_cfg.get('background_shrink_size', 7)    # 使用腐蚀操作，对背景区域进行缩小（防止纯背景区域的误判）
+        pseudo_background = []
+        for bi in range(len(bbox_results['mask'])):
+            # MASK 说明：越接近0 背景概率越大；越接近1 前景概率越大
+            mask_weight = bbox_results['mask'][bi] < background_constraint
+            mask_weight = mask_weight.float()
+            if background_shrink_size > 0:
+                inverse_mask_weight = 1-mask_weight
+                pad = (background_shrink_size - 1) // 2
+                inverse_mask_weight = F.pad(inverse_mask_weight, pad=[pad, pad, pad, pad], mode='reflect')
+                inverse_mask_weight = F.max_pool2d(inverse_mask_weight, kernel_size=background_shrink_size, stride=1, padding=0)
+                
+                mask_weight = 1 - inverse_mask_weight
+
+            if background_weight >= 0.0:
+                mask_weight = mask_weight * background_weight
+            else:
+                mask_weight = mask_weight * (1.0-bbox_results['mask'][bi])
+            
+            mask_weight = mask_weight.view(*mask_weight.shape[2:])
+
+            mask_weight = mask_weight.unsqueeze(0)
+            pseudo_background.append(mask_weight)
+
+        # 过滤5：计算统计框的不稳定性        
+        pseduo_box_unc_thres = self.train_cfg.get('pseduo_box_unc_thres', 0.1)   # 伪框位置不确定度阈值（高于此阈值，则置为1，表示完全不确定）
         reg_unc = \
             self.compute_location_uncertainty(
                 pseudo_bbox_list, 
                 pseudo_index_list, 
-                pseudo_bbox_candidates, 
-                np.std(np.arange(min(image_h//2, image_w//2))))
-
+                pseudo_around_bbox_list, pseduo_box_unc_thres)
         det_bboxes = pseudo_bbox_list
 
         # x0,y0,x1,y1,score (分数), uncertaity (稳定性)
         det_bboxes = [
-            torch.cat([bbox, torch.unsqueeze(unc,-1).to(device=bbox.device)], dim=-1) for bbox, unc in zip(det_bboxes, reg_unc)
+            torch.cat([bbox, unc], dim=-1) for bbox, unc in zip(det_bboxes, reg_unc)
         ]
         det_labels = pseudo_label_list
-        teacher_info["pseudo_bboxes"] = det_bboxes
-        teacher_info["pseudo_labels"] = det_labels
+        teacher_info["pseudo_bboxes"] = det_bboxes                  # 获得伪前景目标框
+        teacher_info["pseudo_labels"] = det_labels                  # 获得伪前景目标框类别
+        teacher_info["pseudo_background"] = pseudo_background       # 获得伪背景区域
         teacher_info["transform_matrix"] = [
             torch.from_numpy(meta["transform_matrix"]).float().to(feat[0][0].device)
             for meta in image_metas
@@ -317,57 +417,37 @@ class SoftTeacher(MultiSteamDetector):
         teacher_info["image"] = image
         return teacher_info
 
-    def compute_location_uncertainty(self, pseudo_bbox_list, pseudo_index_list, pseudo_bbox_candidates, max_std=10.0):
+    def compute_location_uncertainty(self, pseudo_bbox_list, pseudo_index_list, pseudo_around_bbox_list, pseduo_box_unc_thres):
         # 在中心点附近的 目标框回归的所有框，计算不确定度
         pseudo_bbox_uncertainty_list = []
         for img_id in range(len(pseudo_bbox_list)):
             # pseudo_bbox, pseudo_index 经过NMS后的挑选出来的框和索引
             # 挑选出来得伪框
-            pseudo_bbox = pseudo_bbox_list[img_id]
-            pseudo_index = pseudo_index_list[img_id]
-            # 全部候选框
-            pseudo_candidates = pseudo_bbox_candidates[img_id]
-            pseudo_candidates = torch.unsqueeze(pseudo_candidates, 0)
+            pseudo_bbox = pseudo_bbox_list[img_id]          # [[x0,y0,x1,y1]]
+            pseudo_index = pseudo_index_list[img_id]            
+            
+            pseudo_around_bbox = pseudo_around_bbox_list[img_id]        # [[x0,y0,x1,y1],[x0,y0,x1,y1],[x0,y0,x1,y1],...]
+            if pseudo_bbox.size(0) == 0:
+                pseudo_bbox_uncertainty_list.append(torch.empty((0,1)).to(pseudo_bbox.device))              # 无限不确定古
+                continue
 
-            pseudo_bbox_uncertainty = torch.zeros_like(pseudo_index, dtype=torch.float32)
-            if pseudo_index.shape[0] > 0:
-                pseudo_bbox = torch.unsqueeze(pseudo_bbox,1)
-                inter_x0 = torch.maximum(pseudo_bbox[:,:,0], pseudo_candidates[:,:,0])
-                inter_y0 = torch.maximum(pseudo_bbox[:,:,1], pseudo_candidates[:,:,1])
+            # 计算回归框的方差
+            # N,8,4
+            diff = pseudo_bbox[:,:4].unsqueeze(1) - pseudo_around_bbox[:,:,:4]
+            # N,4
+            diff = torch.std(diff, 1)
 
-                inter_x1 = torch.minimum(pseudo_bbox[:,:,2], pseudo_candidates[:,:,2])
-                inter_y1 = torch.minimum(pseudo_bbox[:,:,3], pseudo_candidates[:,:,3])
-
-                # 计算有效重叠框索引标记
-                valid = (inter_x1 > inter_x0) & (inter_y1 > inter_y0)
-
-                # 计算重叠框IOU
-                inter_area = (inter_y1-inter_y0)*(inter_x1-inter_x0)
-                iou = \
-                    (((pseudo_bbox[:,:,2]-pseudo_bbox[:,:,0])*(pseudo_bbox[:,:,3]-pseudo_bbox[:,:,1])) + \
-                        ((pseudo_candidates[:,:,2]-pseudo_candidates[:,:,0])*(pseudo_candidates[:,:,3] - \
-                            pseudo_candidates[:,:,1])) - inter_area) / (inter_area + 1e-6)
-                
-                # NxN'
-                # 挑选出每个伪框和候选池框 IOU>0.5的所有框，统计wh的方差，基于此确定这个伪框预测的稳定性
-                # 理想情况：伪框挑选预测好的化，其周围的框也应位置接近
-                # TODO，临时将所有框的不确定度　设置伪１
-                valid_mask = (iou >= 0.5) & valid
-                for pseudo_bbox_i in range(pseudo_index.shape[0]):
-                    around_candidates = pseudo_candidates[0].index_select(0,torch.nonzero(valid_mask[pseudo_bbox_i])[:,0])   
-                    if around_candidates.shape[0] <= 10:
-                        pseudo_bbox_uncertainty[pseudo_bbox_i] = 1
-                        continue
-                    
-                    around_candidates_w = around_candidates[:,2]-around_candidates[:,0]
-                    around_candidates_h = around_candidates[:,3]-around_candidates[:,1]
-
-                    unc = (torch.std(around_candidates_w) + torch.std(around_candidates_h))/2.0
-                    unc = unc/max_std
-                    unc = torch.minimum(unc, torch.ones_like(unc))
-                    pseudo_bbox_uncertainty[pseudo_bbox_i] = 1
-
-            pseudo_bbox_uncertainty_list.append(pseudo_bbox_uncertainty)
+            # Z
+            pseudo_wh_denominator = \
+                torch.abs((pseudo_bbox[:,3]-pseudo_bbox[:,1])) + \
+                torch.abs((pseudo_bbox[:,2]-pseudo_bbox[:,0]))
+            pseudo_wh_denominator = 0.5 * pseudo_wh_denominator
+            pseudo_wh_denominator = pseudo_wh_denominator.view(-1,1)
+            diff = diff / (pseudo_wh_denominator + 1e-6)
+            diff = torch.mean(diff,dim=1,keepdim=True)
+            diff = torch.minimum(diff, torch.ones_like(diff))
+            diff[diff > pseduo_box_unc_thres] = 1.0
+            pseudo_bbox_uncertainty_list.append(diff)
         
         return pseudo_bbox_uncertainty_list
 

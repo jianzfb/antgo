@@ -1,8 +1,6 @@
 from antgo.framework.helper.parallel import is_module_wrapper
 from antgo.framework.helper.runner.hooks import HOOKS, Hook
-
 from bisect import bisect_right
-# from ..logger import log_every_n
 
 
 @HOOKS.register_module()
@@ -43,10 +41,15 @@ class MeanTeacher(Hook):
         model = runner.model
         if is_module_wrapper(model):
             model = model.module
-        # We warm up the momentum considering the instability at beginning
-        momentum = min(
-            self.momentum, 1 - (1 + self.warm_up) / (curr_step + 1 + self.warm_up)
-        )
+        if self.decay_factor <= 1e-4:
+            # keep the same
+            momentum = self.momentum
+        else:
+            # We warm up the momentum considering the instability at beginning
+            momentum = min(
+                self.momentum, 1 - (1 + self.warm_up) / (curr_step + 1 + self.warm_up)
+            )            
+
         runner.log_buffer.output["ema_momentum"] = momentum
         self.momentum_update(model, momentum)
 
@@ -54,9 +57,12 @@ class MeanTeacher(Hook):
         curr_step = runner.iter
         if self.decay_intervals is None:
             return
-        self.momentum = 1 - (1 - self.momentum) * self.decay_factor ** bisect_right(
-            self.decay_intervals, curr_step
-        )
+        
+        # if decay_factory == 0.0, keep the same all the way
+        if self.decay_factor > 1e-4:
+            self.momentum = 1 - (1 - self.momentum) * self.decay_factor ** bisect_right(
+                self.decay_intervals, curr_step
+            )
 
     def momentum_update(self, model, momentum):
         for (src_name, src_parm), (tgt_name, tgt_parm) in zip(
