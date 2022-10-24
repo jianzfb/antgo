@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch
 from antgo.framework.helper.runner import  load_checkpoint, _load_checkpoint, load_state_dict
 from antgo.framework.helper.base_module import *
-from antgo.framework.helper.models.multi_stream_detector import *
+from antgo.framework.helper.models.detectors.multi_stream_detector import *
 from antgo.framework.helper.models.distillation.loss import *
 from ..builder import DISTILLER, build_distill_loss, build_model
 

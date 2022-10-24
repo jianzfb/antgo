@@ -27,7 +27,6 @@ from .profiler import ProfilerHook
 from .sampler_seed import DistSamplerSeedHook
 from .sync_buffer import SyncBuffersHook
 from .metrics import COCOBboxEval
-from .mean_teacher import MeanTeacher
 from .weight_adjust import Weighter
 
 __all__ = [
@@ -45,6 +44,6 @@ __all__ = [
     'SyncBuffersHook', 'EMAHook', 'EvalHook', 'DistEvalHook', 'ProfilerHook',
     'GradientCumulativeOptimizerHook', 'GradientCumulativeFp16OptimizerHook',
     'SegmindLoggerHook', 'LinearAnnealingLrUpdaterHook',
-    'LinearAnnealingMomentumUpdaterHook', 'ClearMLLoggerHook', 'MeanTeacher', 'Weighter',
+    'LinearAnnealingMomentumUpdaterHook', 'ClearMLLoggerHook', 'Weighter',
     'SubModulesDistEvalHook', 'SubModulesEvalHook'
 ]

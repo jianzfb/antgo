@@ -196,23 +196,16 @@ class Transform2D:
                 for b, m, o in zip(mask, M, out_shape)
             ]
         else:
-            if mask.masks.shape[0] == 0:
-                return BitmapMasks(np.zeros((0, *out_shape)), *out_shape)
-            mask_tensor = (
-                torch.from_numpy(mask.masks[:, None, ...]).to(M.device).to(M.dtype)
-            )
-            return BitmapMasks(
-                warp_affine(
+            if mask.shape[0] == 0:
+                return torch.empty((0, *out_shape), device=M.device)
+
+            mask_tensor = mask[:, None, ...]
+            return warp_affine(
                     mask_tensor,
-                    M[None, ...].expand(mask.masks.shape[0], -1, -1),
+                    M[None, ...].expand(mask.shape[0], -1, -1),
                     out_shape,
-                )
-                .squeeze(1)
-                .cpu()
-                .numpy(),
-                out_shape[0],
-                out_shape[1],
-            )
+                ).squeeze(1)
+
 
     @staticmethod
     def transform_image(img, M, out_shape):
@@ -234,8 +227,27 @@ class Transform2D:
                 .to(img.dtype)
             )
 
+def random_ignore(bbox, label=None, score=None, mask=None, around_bbox=None, index=None):
+    if bbox.size(0) == 0:
+        return bbox, label, mask, index, around_bbox
 
-def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0, box_min_size=0, class_constraint=None, aspect_ratio=None):
+    valid = np.random.random([bbox.shape[0]]) > 0.5
+    valid = torch.from_numpy(valid).to(bbox.device) 
+    
+    bbox = bbox[valid]
+    if label is not None:
+        label = label[valid]
+    if mask is not None:
+        mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
+    if index is not None:
+        index = index[valid]
+    if around_bbox is not None:
+        around_bbox = around_bbox[valid]
+
+    return bbox, label, mask, index, around_bbox
+
+
+def filter_invalid(bbox, label=None, score=None, mask=None, around_bbox=None, index=None, thr=0.0, box_min_size=0, class_constraint=None, aspect_ratio=None):
     if score is not None:
         valid = score > thr
         bbox = bbox[valid]
@@ -245,6 +257,8 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]
 
     if box_min_size is not None:
         bw = bbox[:, 2] - bbox[:, 0]
@@ -257,6 +271,8 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]
     
     if aspect_ratio is not None:
         bw = bbox[:, 2] - bbox[:, 0]
@@ -270,6 +286,8 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]
 
     if class_constraint is not None and label is not None and label.shape[0] > 0:
         # class_constraint {0: (min,max), 1: (min,max)}
@@ -288,5 +306,7 @@ def filter_invalid(bbox, label=None, score=None, mask=None, index=None, thr=0.0,
             mask = BitmapMasks(mask.masks[valid.cpu().numpy()], mask.height, mask.width)
         if index is not None:
             index = index[valid]
+        if around_bbox is not None:
+            around_bbox = around_bbox[valid]            
 
-    return bbox, label, mask, index
+    return bbox, label, mask, index, around_bbox

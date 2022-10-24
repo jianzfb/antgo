@@ -285,7 +285,7 @@ class Trainer(object):
             val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
             self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
 
-    def make_model(self, model_builder=None, resume_from=None, load_from=None):
+    def make_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
         # prepare network
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
@@ -386,7 +386,7 @@ class Trainer(object):
         if resume_from is not None:
             self.runner.resume(resume_from)
         elif load_from is not None:
-            self.runner.load_checkpoint(load_from)
+            self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
 
     @contextmanager
     def train_context(self, max_epochs):

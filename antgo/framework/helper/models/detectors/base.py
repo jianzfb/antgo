@@ -199,7 +199,7 @@ class BaseDetector(BaseModule):
 
         return loss, log_vars
 
-    def train_step(self, data, optimizer):
+    def train_step(self, data, optimizer, **kwargs):
         """The iteration step during training.
 
         This method defines an iteration step during training, except for the
@@ -226,22 +226,31 @@ class BaseDetector(BaseModule):
                   DDP, it means the batch size on each GPU), which is used for
                   averaging the logs.
         """
-        losses = self(**data)
+        losses =  None
+        if type(data) == list or type(data) == tuple:
+            losses = self(*data, **kwargs)
+        else:
+            losses = self(**data, **kwargs)
+                
         loss, log_vars = self._parse_losses(losses)
-
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['image_metas']))
 
         return outputs
 
-    def val_step(self, data, optimizer=None):
+    def val_step(self, data, optimizer=None, **kwargs):
         """The iteration step during validation.
 
         This method shares the same signature as :func:`train_step`, but used
         during val epochs. Note that the evaluation after training epochs is
         not implemented with this method, but an evaluation hook.
         """
-        results = self(**data)
+        results = None
+        if type(data) == list or type(data) == tuple:
+            results = self(*data, **kwargs)
+        else:
+            results = self(**data, **kwargs)
+
         return results
         
     def onnx_export(self, img, img_metas):

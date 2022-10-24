@@ -190,7 +190,16 @@ class ObjDetReader(Reader):
         return sample
 
 class SemiReader(torch.utils.data.Dataset):
-    def __init__(self, reader_cls, dataset, pipeline_teacher, pipeline_student, inputs_def, strategy=None, **kwargs):
+    def __init__(
+        self, 
+        reader_cls, 
+        dataset,         
+        pipeline_teacher, 
+        pipeline_student, 
+        inputs_def, 
+        strategy=None, 
+        pipeline=None,
+        **kwargs):
         self.reader_base = reader_cls(dataset, None, None, **kwargs)
         self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
 
@@ -231,6 +240,17 @@ class SemiReader(torch.utils.data.Dataset):
                 else:
                     raise TypeError('student pipeline must be a dict')
         
+        self.pipeline_types = []
+        self.pipeline = []
+        if pipeline is not None:
+            for transform in pipeline:
+                if isinstance(transform, dict):
+                    self.pipeline_types.append(transform['type'])
+                    transform = build_from_cfg(transform, PIPELINES)
+                    self.pipeline.append(transform)
+                else:
+                    raise TypeError('pipeline must be a dict')          
+        
         self.flag = np.zeros(len(self), dtype=np.int32)
         if hasattr(self.reader_base, 'flag'):
             self.flag = self.reader_base.flag
@@ -262,10 +282,20 @@ class SemiReader(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         sample = self.reader_base[idx]
 
+        # 共用管线处理
+        processed_sample = copy.deepcopy(sample)
+        for (transform, transform_type) in zip(self.pipeline, self.pipeline_types):
+            try:
+                processed_sample = transform(processed_sample)
+            except Exception as e:
+                print(f'{transform_type}')
+                print(e)
+                raise e
+
         # 为teacher构建数据
         teacher_samples = []
         for pipeline_i in range(len(self.teacher_pipeline)):
-            teacher_sample = copy.deepcopy(sample)
+            teacher_sample = copy.deepcopy(processed_sample)
             for (transform, transform_type) in zip(self.teacher_pipeline[pipeline_i], self.teacher_pipeline_types[pipeline_i]):
                 try:
                     teacher_sample = transform(teacher_sample)
@@ -279,7 +309,7 @@ class SemiReader(torch.utils.data.Dataset):
             teacher_samples.append(teacher_sample)
 
         # 为student构建数据
-        student_sample = copy.deepcopy(sample)
+        student_sample = copy.deepcopy(processed_sample)
         for (transform, transform_type) in zip(self.student_pipeline, self.student_pipeline_types):
             try:
                 student_sample = transform(student_sample)
@@ -301,7 +331,7 @@ class SemiReader(torch.utils.data.Dataset):
 
         if sample['image_metas']['labeled']:
             semi_sample.update({
-                'labeled': student_sample,
+                'labeled': student_sample
             })
 
         if not sample['image_metas']['labeled']:

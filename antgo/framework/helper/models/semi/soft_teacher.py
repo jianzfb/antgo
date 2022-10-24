@@ -4,7 +4,7 @@ import torch
 from torch._C import device
 from antgo.framework.helper.models.builder import DETECTORS, build_model
 from antgo.framework.helper.models.utils.structure_utils import dict_stack, weighted_loss
-from antgo.framework.helper.models.multi_stream_detector import MultiSteamDetector
+from antgo.framework.helper.models.detectors.multi_stream_detector import MultiSteamDetector
 from antgo.framework.helper.models.utils.box_utils import Transform2D, filter_invalid,random_ignore
 from torchvision.ops import batched_nms 
 import numpy as np
@@ -32,10 +32,12 @@ class SoftTeacher(MultiSteamDetector):
         self.target_size = self.train_cfg.get('target_size', (64, 80))
         self.enable_random_ignore = self.train_cfg.get('random_ignore', False)
         self.enable_flip_label = self.train_cfg.get('flip_label', True)
+        self.epoch = 0
 
     def forward_train(self, image, image_metas, **kwargs):
         super().forward_train(image, image_metas, **kwargs)
         
+        self.epoch = kwargs.get('epoch')
         data_groups = {}
         if 'labeled' in kwargs:
             data_groups['labeled'] = dict_stack(kwargs['labeled'], image_metas[0]['fields'])
@@ -105,6 +107,15 @@ class SoftTeacher(MultiSteamDetector):
         for pb, meta in zip(pseudo_background, student_info["image_metas"]):
             meta['background'] = pb
 
+        pseudo_ignore = self._transform_mask(
+            teacher_info['pseudo_ignore'],
+            M,
+            [meta["image_shape"] for meta in teacher_info["image_metas"]]
+        )
+
+        for pb, meta in zip(pseudo_ignore, student_info["image_metas"]):
+            meta['ignore'] = pb
+
         image_h = student_info['image_metas'][0]['image_shape'][0]
         image_w = student_info['image_metas'][0]['image_shape'][1]
         image_wh = torch.from_numpy(np.array([[image_w-1, image_h-1]])).to(pseudo_bboxes[0].device)
@@ -170,11 +181,22 @@ class SoftTeacher(MultiSteamDetector):
                 student_teacher_image = np.concatenate([image, teacher_image], 0)
                 student_teacher_mask = np.concatenate([student_mask, teacher_mask], 0)
 
+                teacher_ignore = teacher_info['pseudo_ignore'][i].squeeze(0).detach().cpu().numpy() * 255
+                student_ignore = student_info["image_metas"][i]['ignore'].detach().cpu().numpy() * 255
+                student_teacher_ignore = np.concatenate([student_ignore, teacher_ignore], 0)
+
                 student_teacher_resized_mask = cv2.resize(student_teacher_mask, (student_teacher_image.shape[1], student_teacher_image.shape[0]))
                 student_teacher_resized_mask = student_teacher_resized_mask/255
                 student_teacher_resized_mask = np.expand_dims(student_teacher_resized_mask, -1)
                 student_teacher_image_focus = student_teacher_image*student_teacher_resized_mask
+
+                student_teacher_ignore = cv2.resize(student_teacher_ignore, (student_teacher_image.shape[1], student_teacher_image.shape[0]))
+                student_teacher_ignore = student_teacher_ignore/255
+                student_teacher_ignore = np.expand_dims(student_teacher_ignore, -1)
+                student_teacher_image_focus = \
+                    student_teacher_image_focus * (1-student_teacher_ignore) + np.ones_like(student_teacher_image_focus)*128*student_teacher_ignore
                 student_teacher_image_focus = student_teacher_image_focus.astype(np.uint8)
+
                 cv2.imwrite(f'./debug/student_teacher_{i}.png', student_teacher_image)
                 cv2.imwrite(f'./debug/student_teacher_mask_{i}.png', student_teacher_mask)
                 cv2.imwrite(f'./debug/student_teacher_focus_{i}.png', student_teacher_image_focus)
@@ -255,7 +277,10 @@ class SoftTeacher(MultiSteamDetector):
                 for t_i in range(len(outs)):
                     heat_h, heat_w = outs[t_i][0].shape[2:]
                     if heat_h != self.target_size[0] or heat_w != self.target_size[1]:
-                        outs[t_i][0] = torch.nn.functional.interpolate(outs[t_i][0], size=(self.target_size[0], self.target_size[1]), mode='bilinear')
+                        outs[t_i][0] = \
+                            torch.nn.functional.interpolate(
+                                outs[t_i][0], 
+                                size=(self.target_size[0], self.target_size[1]), mode='bilinear')
 
             if aug_outs is None:
                 aug_outs = list(outs)
@@ -267,13 +292,15 @@ class SoftTeacher(MultiSteamDetector):
             aug_outs[t_i][0] /= len(image)
             
         image_metas = image_metas[0]
-        results_list = self.teacher.bbox_head.get_bboxes(*aug_outs, image_metas, rescale=False, with_nms=False)
+        results_list = \
+            self.teacher.bbox_head.get_bboxes(
+                *aug_outs, image_metas, rescale=False, with_nms=False)
 
         bbox_results = {
             'box': torch.stack([a for a, _, _, _ in results_list], dim=0),
             'label': torch.stack([b for _, b, _, _ in results_list], dim=0),
             'around_box': torch.stack([c for _, _, c, _ in results_list], dim=0),
-            'mask': [d for _, _, _, d in results_list],
+            'score_map': [d for _, _, _, d in results_list],         # channel 0: score_map-min; channel 1: score_map-max; channel 2: score_map-diff
         }
         
         # clip by position
@@ -316,12 +343,19 @@ class SoftTeacher(MultiSteamDetector):
         # 过滤2：基于自定义规则过滤
         # 分数，面积，长宽比
         # filter invalid box roughly
-        if isinstance(self.train_cfg.pseudo_label_initial_score_thr, float):
-            thr = self.train_cfg.pseudo_label_initial_score_thr
-        else:
-            # TODO: use dynamic threshold
-            raise NotImplementedError("Dynamic Threshold is not implemented yet.")
-        
+        pseudo_label_init_score = self.train_cfg.get('pseudo_label_initial_score_thr', 0.5)
+        pseudo_label_end_score = self.train_cfg.get('pseudo_label_end_score_thre', 0.9)
+        pseudo_label_score_step = self.train_cfg.get('pseudo_label_score_step')
+        pseudo_label_score_step = [0]+pseudo_label_score_step
+        cur_step_i = 0
+        for step_i in range(0, len(pseudo_label_score_step)):
+            if self.epoch >= pseudo_label_score_step[step_i]:
+                cur_step_i = step_i
+                break
+        pseudo_label_score = pseudo_label_init_score + 0.1 * cur_step_i
+        pseudo_label_score = min(pseudo_label_score, pseudo_label_end_score)
+        thr = pseudo_label_score
+
         aspect_ratio = self.train_cfg.get('pseduo_box_aspect_ratio', None)  # 宽高比
         box_min_size = self.train_cfg.get('pseduo_box_min_size', None)      # 最小尺寸
         class_constraint = self.train_cfg.get('class_constraint', None)     # 类别个数限制
@@ -347,7 +381,7 @@ class SoftTeacher(MultiSteamDetector):
         )        
         
         # 过滤3：随机忽略目标框（防止，错误框参与训练后，无法剔除）
-        if self.enable_random_ignore:
+        if self.enable_random_ignore and False:
             pseudo_bbox_list, pseudo_label_list, _, pseudo_index_list, pseudo_around_bbox_list = list(
                 zip(
                     *[
@@ -369,13 +403,18 @@ class SoftTeacher(MultiSteamDetector):
         background_constraint = self.train_cfg.get('background_constraint', 0.01)   # 低于此值认为是纯背景
         background_weight = self.train_cfg.get('background_weight', 1.0)            # 纯背景区域权重
         background_shrink_size = self.train_cfg.get('background_shrink_size', 7)    # 使用腐蚀操作，对背景区域进行缩小（防止纯背景区域的误判）
+        
+        ignore_diff_thres = self.train_cfg.get('ignore_diff_thres', 0.5)            # 前景区域的类间差异低于此阈值，认为是忽略区域
+
         pseudo_background = []
-        for bi in range(len(bbox_results['mask'])):
+        pseudo_ignore = []
+        for bi in range(len(bbox_results['score_map'])):
             # MASK 说明：越接近0 背景概率越大；越接近1 前景概率越大
-            mask_weight = bbox_results['mask'][bi] < background_constraint
+            # use channel 1
+            mask_weight = bbox_results['score_map'][bi][:,1:2] < background_constraint
             mask_weight = mask_weight.float()
             if background_shrink_size > 0:
-                inverse_mask_weight = 1-mask_weight
+                inverse_mask_weight = 1 - mask_weight
                 pad = (background_shrink_size - 1) // 2
                 inverse_mask_weight = F.pad(inverse_mask_weight, pad=[pad, pad, pad, pad], mode='reflect')
                 inverse_mask_weight = F.max_pool2d(inverse_mask_weight, kernel_size=background_shrink_size, stride=1, padding=0)
@@ -385,20 +424,37 @@ class SoftTeacher(MultiSteamDetector):
             if background_weight >= 0.0:
                 mask_weight = mask_weight * background_weight
             else:
-                mask_weight = mask_weight * (1.0-bbox_results['mask'][bi])
+                mask_weight = mask_weight * (1.0-bbox_results['score_map'][bi][:,1:2])
             
             mask_weight = mask_weight.view(*mask_weight.shape[2:])
 
             mask_weight = mask_weight.unsqueeze(0)
             pseudo_background.append(mask_weight)
 
+            # 发现忽略区域
+            # use channel 2
+            foreground_weight = bbox_results['score_map'][bi][:,1:2] > thr
+            ignore_weight = bbox_results['score_map'][bi][:,2:3] < ignore_diff_thres
+            ignore_weight = ignore_weight * foreground_weight
+            ignore_weight = ignore_weight.to(torch.float32)
+
+            if background_shrink_size > 0:
+                pad = (background_shrink_size - 1) // 2
+                ignore_weight = F.pad(ignore_weight, pad=[pad, pad, pad, pad], mode='reflect')
+                ignore_weight = F.max_pool2d(ignore_weight, kernel_size=background_shrink_size, stride=1, padding=0)
+                
+            ignore_weight = ignore_weight.view(*ignore_weight.shape[2:])
+            ignore_weight = ignore_weight.unsqueeze(0)
+            pseudo_ignore.append(ignore_weight)
+
         # 过滤5：计算统计框的不稳定性        
         pseduo_box_unc_thres = self.train_cfg.get('pseduo_box_unc_thres', 0.1)   # 伪框位置不确定度阈值（高于此阈值，则置为1，表示完全不确定）
+        pseduo_box_unc_scale = self.train_cfg.get('pseduo_box_unc_scale', 5)    # 不确定度放大尺度
         reg_unc = \
             self.compute_location_uncertainty(
                 pseudo_bbox_list, 
                 pseudo_index_list, 
-                pseudo_around_bbox_list, pseduo_box_unc_thres)
+                pseudo_around_bbox_list, pseduo_box_unc_thres, pseduo_box_unc_scale)
         det_bboxes = pseudo_bbox_list
 
         # x0,y0,x1,y1,score (分数), uncertaity (稳定性)
@@ -409,6 +465,7 @@ class SoftTeacher(MultiSteamDetector):
         teacher_info["pseudo_bboxes"] = det_bboxes                  # 获得伪前景目标框
         teacher_info["pseudo_labels"] = det_labels                  # 获得伪前景目标框类别
         teacher_info["pseudo_background"] = pseudo_background       # 获得伪背景区域
+        teacher_info["pseudo_ignore"] = pseudo_ignore               # 获得伪忽略区域
         teacher_info["transform_matrix"] = [
             torch.from_numpy(meta["transform_matrix"]).float().to(feat[0][0].device)
             for meta in image_metas
@@ -417,7 +474,10 @@ class SoftTeacher(MultiSteamDetector):
         teacher_info["image"] = image
         return teacher_info
 
-    def compute_location_uncertainty(self, pseudo_bbox_list, pseudo_index_list, pseudo_around_bbox_list, pseduo_box_unc_thres):
+    def compute_location_uncertainty(
+        self, pseudo_bbox_list, pseudo_index_list, pseudo_around_bbox_list, 
+        pseduo_box_unc_thres, pseduo_box_unc_scale
+    ):
         # 在中心点附近的 目标框回归的所有框，计算不确定度
         pseudo_bbox_uncertainty_list = []
         for img_id in range(len(pseudo_bbox_list)):
@@ -447,6 +507,9 @@ class SoftTeacher(MultiSteamDetector):
             diff = torch.mean(diff,dim=1,keepdim=True)
             diff = torch.minimum(diff, torch.ones_like(diff))
             diff[diff > pseduo_box_unc_thres] = 1.0
+            diff[diff <= pseduo_box_unc_thres] = \
+                diff[diff <= pseduo_box_unc_thres] * pseduo_box_unc_scale
+            diff[diff > 1.0] = 1.0
             pseudo_bbox_uncertainty_list.append(diff)
         
         return pseudo_bbox_uncertainty_list

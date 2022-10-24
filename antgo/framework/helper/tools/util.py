@@ -73,7 +73,7 @@ def parse_args(model_name='defalut'):
         help='checkpoint'
     ) 
     parser.add_argument(
-        '--exp_name',
+        '--exp',
         type=str,
         default='',
         help='experiment name'

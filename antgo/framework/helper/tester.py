@@ -65,7 +65,7 @@ class Tester(object):
         }        
         self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
 
-    def make_model(self, model_builder=None, checkpoint='', is_fuse_conv_bn=False):
+    def make_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False):
         # build the model and load checkpoint
         if model_builder is not None:
             self.model = model_builder()
@@ -74,7 +74,7 @@ class Tester(object):
 
         if checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
-        checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu')
+        checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu', revise_keys=revise_keys)
         
         if is_fuse_conv_bn:
             print('use fuse conv_bn')
