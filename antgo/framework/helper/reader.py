@@ -4,11 +4,51 @@ from __future__ import unicode_literals
 from __future__ import print_function
 import os
 import torch.utils.data
-from antgo.framework.helper.utils import build_from_cfg
 import torchvision.transforms as transforms
 import numpy as np
 import copy
 import cv2
+from antgo.framework.helper.utils import build_from_cfg
+
+
+def register(cls):
+    class ProxyReader(Reader):
+        def __init__(self, train_or_test, dir='', params={}, pipeline=None, inputs_def=None, **kwargs):
+            super().__init__(
+                cls(train_or_test, dir, params),
+                pipeline=pipeline,
+                inputs_def=inputs_def,
+            )
+    from antgo.framework.helper.dataset.builder import DATASETS
+    DATASETS.register_module(name=cls.__name__)(ProxyReader)   
+    return ProxyReader
+
+
+def objregister(cls):
+    class ProxyReader(ObjDetReader):
+        def __init__(
+            self, 
+            train_or_test, 
+            dir='', 
+            params={},
+            pipeline = None, 
+            inputs_def=None, 
+            enable_mixup=True, 
+            enable_cutmix=True, 
+            class_aware_sampling=False, 
+            num_classes=1, 
+            cache_size=0, 
+            file_loader=None, **kwargs):
+            super().__init__(
+                cls(train_or_test, dir, params),
+                pipeline=pipeline,
+                inputs_def=inputs_def,
+            )
+    from antgo.framework.helper.dataset.builder import DATASETS
+    DATASETS.register_module(name=cls.__name__)(ProxyReader)   
+    return ProxyReader
+
+
 
 class Reader(torch.utils.data.Dataset):
     def __init__(self, dataset, pipeline=None, inputs_def=None):

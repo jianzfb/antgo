@@ -6,6 +6,8 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import cv2
+import numpy as np
+import os
 
 
 class ComputerVisionMixin:
@@ -68,6 +70,51 @@ class ComputerVisionMixin:
     audio_stream = acontainer.streams.audio[0]
 
     return cls(acontainer.decode(audio_stream))
+
+  def map_group(self, output_path, rows=10, cols=10):
+    count = 0
+    big_image = None
+    init_width = -1
+    init_height = -1
+    shard = 0
+
+    for x in self:
+      row_i = count // cols
+      col_i = (int)(count - row_i*cols)
+
+      if len(x.shape) == 2:
+        x = np.stack([x,x,x], -1)
+      x = x[:,:,:3]
+      height, width = x.shape[:2]
+      big_width = (int)(cols * width)
+      big_height = (int)(rows * height)
+      if init_width < 0:
+        init_width = width
+      if init_height < 0:
+        init_height = height
+
+      if big_width != (int)(cols * init_width):
+        big_width = (int)(cols * init_width)
+      if big_height != (int)(rows * init_height):
+        big_height = (int)(rows * init_height)
+
+      if big_image is None:
+        big_image = np.zeros((big_height, big_width, 3), dtype=np.uint8) 
+      elif (row_i+1)*height > big_image.shape[0]:
+        # 保存
+        if not os.path.exists(output_path):
+          os.makedirs(output_path)
+        cv2.imwrite(os.path.join(output_path, f'{shard}.png'), big_image)
+        shard += 1
+
+        big_image = np.zeros((big_height, big_width, 3), dtype=np.uint8) 
+        count = 0
+        row_i = count // cols
+        col_i = (int)(count - row_i*cols)
+      
+      # 填充当前图片
+      big_image[row_i*height: row_i*height+x.shape[0], col_i*width:col_i*width+x.shape[1]] = x
+      count += 1
 
   def to_video(self,
                output_path,

@@ -9,7 +9,7 @@ import numpy as np
 import time
 
 
-class COCO_M(COCO):
+class COCOWarp(COCO):
     def __init__(self, gt_ann=None):
         """
         Constructor of Microsoft COCO helper class for reading and visualizing annotations.
@@ -33,99 +33,84 @@ class COCO_M(COCO):
             self.dataset = dataset
             self.createIndex()    
 
-    def convert_from(self, pred_ann):
-        '''
-        predetect_result:为列表，每个列表中包含[x1, y1, x2, y2, score, label]
-        img_name: 图片的名字
-        '''
-        json_data = []
-        bbox_id = 100000
-        for sample_i, sample_ann in enumerate(pred_ann):
-            # sample_ann 包含bbox列表，和ann
-            bboxes = sample_ann
-            image_id = self.dataset['images'][sample_i]['id']
-
-            for result in bboxes:
-                x1, y1, x2, y2, score, label = result
-                w, h = x2 - x1, y2 - y1
-                # x1, y1 = x1, y1
-
-                category_id = self.dataset['categories'][label]['id']
-                detect_json = {
-                    "area": w * h,
-                    "iscrowd": 0,
-                    "image_id": image_id,
-                    "bbox": [ x1, y1, w, h ],
-                    "category_id": (int)(category_id),
-                    "id": bbox_id,
-                    "ignore": 0,
-                    "segmentation": [],
-                    "score": score
-                }
-                json_data.append(detect_json)
-
-                bbox_id += 1
-
-        anns = json_data
-        res = COCO_M()
-        res.dataset['images'] = [img for img in self.dataset['images']]
-
-        assert type(anns) == list, 'results in not an array of objects'
-        annsImgIds = [ann['image_id'] for ann in anns]
-        assert set(annsImgIds) == (set(annsImgIds) & set(self.getImgIds())), \
-            'Results do not correspond to current coco set'
-        if 'caption' in anns[0]:
-            imgIds = set([img['id'] for img in res.dataset['images']]) & set([ann['image_id'] for ann in anns])
-            res.dataset['images'] = [img for img in res.dataset['images'] if img['id'] in imgIds]
-            for id, ann in enumerate(anns):
-                ann['id'] = id + 1
-        elif 'bbox' in anns[0] and not anns[0]['bbox'] == []:
-            res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
-            for id, ann in enumerate(anns):
-                bb = ann['bbox']
-                x1, x2, y1, y2 = [bb[0], bb[0] + bb[2], bb[1], bb[1] + bb[3]]
-                if not 'segmentation' in ann:
-                    ann['segmentation'] = [[x1, y1, x1, y2, x2, y2, x2, y1]]
-                ann['area'] = bb[2] * bb[3]
-                ann['id'] = id + 1
-                ann['iscrowd'] = 0
-        elif 'segmentation' in anns[0]:
-            res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
-            for id, ann in enumerate(anns):
-                # now only support compressed RLE format as segmentation results
-                ann['area'] = maskUtils.area(ann['segmentation'])
-                if not 'bbox' in ann:
-                    ann['bbox'] = maskUtils.toBbox(ann['segmentation'])
-                ann['id'] = id + 1
-                ann['iscrowd'] = 0
-        elif 'keypoints' in anns[0]:
-            res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
-            for id, ann in enumerate(anns):
-                s = ann['keypoints']
-                x = s[0::3]
-                y = s[1::3]
-                x0, x1, y0, y1 = np.min(x), np.max(x), np.min(y), np.max(y)
-                ann['area'] = (x1 - x0) * (y1 - y0)
-                ann['id'] = id + 1
-                ann['bbox'] = [x0, y0, x1 - x0, y1 - y0]
-
-        res.dataset['annotations'] = anns
-        res.createIndex()
-
-        return res
-
 
 @MEASURES.register_module()
-class COCOBboxEval(object):
-    def __init__(self, **kwargs):
-        pass
+class COCOCompatibleEval(object):
+    def __init__(self, categories=[{'name': 'left', 'id': 1},{'name': 'right', 'id': 2}], without_background=True):
+        self.categories = categories
+        for c in self.categories:
+            if 'supercategory' not in c:
+                c['supercategory'] = 'default'
+        
+        self.without_background = without_background
     
     def __call__(self, preds, gts):
         # gts 格式 'info', 'licenses', 'images', 'annotations', 'categories’
-        coco_gt = COCO_M(gts)
-        coco_dt = coco_gt.convert_from(preds)
+        # 将GT 转换为COCO格式
+        images = []
+        annotations = []
+        bbox_id = 0
+        for image_id, gt in enumerate(gts):
+            image_file = gt['image_metas']['image_file']
+            bboxes = [[box[0], box[1], box[2]-box[0], box[3]-box[1]] for box in gt['gt_bbox'].tolist()]
+            areas = [box[2]*box[3] for box in bboxes]
+            category_ids = [l for l in gt['gt_class'].tolist()]
 
-        coco_eval = COCOeval(coco_gt, coco_dt, "bbox")
+            for _, (bbox, area, category_id) in enumerate(zip(bboxes, areas, category_ids)):
+                if self.without_background:
+                    category_id += 1
+
+                annotations.append({
+                    "segmentation": [],
+                    "iscrowd": 0,
+                    "image_id": image_id+1,
+                    "bbox":bbox,
+                    "area": area,
+                    "category_id": category_id,
+                    "id": bbox_id+1,
+                    'ignore': 0
+                })
+                bbox_id += 1
+
+            images.append({
+                'height': 480,
+                'width': 640,
+                'id': image_id+1,
+                'file_name': image_file
+            })
+
+        gt_coco = COCOWarp({
+            'images': images,
+            'categories': self.categories,
+            'annotations': annotations
+        })
+
+        # 将预测转换为COCO格式
+        pred_annotations = []
+        for image_id, pred in enumerate(preds):
+            pred_bboxes = pred['box'][:,:4]
+            pred_probs = pred['box'][:,4]
+            pred_labels = pred['label']
+
+            for _, (pred_bbox, pred_prob, pred_label) in enumerate(zip(pred_bboxes, pred_probs, pred_labels)):
+                x1, y1, x2, y2 = pred_bbox
+                score = (float)(pred_prob)
+                label = (int)(pred_label)
+                if self.without_background:
+                    label += 1
+
+                w, h = x2 - x1, y2 - y1
+                pred_dict = {
+                    "image_id": image_id+1,
+                    "bbox": [ x1, y1, w, h ],
+                    "category_id": (int)(label),
+                    "score": score
+                }
+                pred_annotations.append(pred_dict)
+
+        pred_coco = gt_coco.loadRes(pred_annotations)
+
+        coco_eval = COCOeval(gt_coco, pred_coco, "bbox")
         coco_eval.evaluate()
         coco_eval.accumulate()
         coco_eval.summarize()

@@ -44,15 +44,10 @@ def single_gpu_test(model, data_loader):
             if var_name not in results:
                 results[var_name] = []
             
-            # var_value = var_value.cpu().numpy()
             if batch_size == 0:
-                # batch_size = var_value.shape[0]
                 batch_size = len(var_value)
-            # results[var_name].extend([np.squeeze(v, 0) for v in np.split(var_value, var_value.shape[0], 0)])
-            results[var_name].extend([v.cpu().numpy() for v in var_value])
+            results[var_name].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in var_value])
 
-        # Assume result has the same length of batch_size
-        # refer to https://github.com/open-mmlab/mmcv/issues/985
         for _ in range(batch_size):
             prog_bar.update()
     
@@ -109,12 +104,9 @@ def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
             if var_name not in results:
                 results[var_name] = []
             
-            # var_value = var_value.cpu().numpy()
             if batch_size == 0:
-                # batch_size = var_value.shape[0]
                 batch_size = len(var_value)
-            # results[var_name].extend([np.squeeze(v, 0) for v in np.split(var_value, var_value.shape[0], 0)])
-            results[var_name].extend([v.cpu().numpy() for v in var_value])
+            results[var_name].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in var_value])
 
         if rank == 0:
             batch_size_all = batch_size * world_size
@@ -174,9 +166,13 @@ def collect_results_cpu(result_part, size, tmpdir=None):
             os.makedirs(tmpdir, exist_ok=True)
 
     # dump the part result to the dir
-    # mmcv.dump(result_part, osp.join(tmpdir, f'part_{rank}.pkl'))
-    with open(osp.join(tmpdir, f'part_{rank}.pkl'), 'wb') as fp:
-        pickle.dump(result_part, fp)
+    print('save part before')
+    try:
+        with open(osp.join(tmpdir, f'part_{rank}.pkl'), 'wb') as fp:
+            pickle.dump(result_part, fp)
+    except Exception as e:
+        print(e)
+    print('save part after')
 
     dist.barrier()
     # collect all parts

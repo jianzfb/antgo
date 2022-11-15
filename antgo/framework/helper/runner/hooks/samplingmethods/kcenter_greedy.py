@@ -29,13 +29,11 @@ from .sampling_def import SamplingMethod
 
 class kCenterGreedy(SamplingMethod):
   def __init__(self, X, metric='euclidean'):
-    self.X = X
-    self.flat_X = self.flatten_X()
     self.name = 'kcenter'
-    self.features = self.flat_X
+    self.features = self.flatten_X(X)
     self.metric = metric
     self.min_distances = None
-    self.n_obs = self.X.shape[0]
+    self.n_obs = self.features.shape[0]
 
   def update_distances(self, cluster_centers, already_selected, only_new=True, reset_dist=False):
     """Update min distances given cluster centers.
@@ -62,30 +60,25 @@ class kCenterGreedy(SamplingMethod):
       else:
         self.min_distances = np.minimum(self.min_distances, dist)
 
-  def select_batch_(self, model, already_selected, N, **kwargs):
+  def select_batch_(self, already_selected, N, **kwargs):
     """
     Diversity promoting active learning method that greedily forms a batch
     to minimize the maximum distance to a cluster center among all unlabeled
     datapoints.
 
     Args:
-      model: model with scikit-like API with decision_function implemented
       already_selected: index of datapoints already selected
       N: batch size
 
     Returns:
       indices of points selected to minimize distance to cluster centers
     """
-
-    if model is None:
-      self.features = self.X
-    else:
-      self.features = model.transform(self.X)
     # init
     self.update_distances(None, None, only_new=False, reset_dist=True)
 
     new_batch = []
     for _ in range(N):
+      print(f'greedy {_}')
       if self.min_distances is None:
         # Initialize centers with a randomly selected datapoint
         ind = np.random.choice(np.arange(self.n_obs))

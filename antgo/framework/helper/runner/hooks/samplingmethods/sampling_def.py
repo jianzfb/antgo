@@ -19,17 +19,11 @@ import numpy as np
 class SamplingMethod(object):
   __metaclass__ = abc.ABCMeta
 
-  @abc.abstractmethod
-  def __init__(self, X, y, seed, **kwargs):
-    self.X = X
-    self.y = y
-    self.seed = seed
-
-  def flatten_X(self):
-    shape = self.X.shape
-    flat_X = self.X
+  def flatten_X(self, X):
+    shape = X.shape
+    flat_X = X
     if len(shape) > 2:
-      flat_X = np.reshape(self.X, (shape[0],np.product(shape[1:])))
+      flat_X = np.reshape(X, (shape[0], np.product(shape[1:])))
     return flat_X
 
 

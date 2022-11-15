@@ -259,15 +259,6 @@ class Trainer(object):
                     'strategy': semi_loader_strategy
                 }
             })
-        
-        activelearning_cfg = self.cfg.get('activelearning', None)
-        if activelearning_cfg is not None:
-            # 主动学习加载策略，仅加载有标签数据
-            train_loader_cfg.update({
-                'activelearning': {
-
-                }
-            })
         self.train_generator = build_dataloader(dataset, **train_loader_cfg)
         
         if with_validate:
@@ -341,12 +332,6 @@ class Trainer(object):
             if custom_hooks is None:
                 custom_hooks = []
             custom_hooks.extend(semi_cfg.get('hooks'))
-        
-        activelearning_cfg = self.cfg.get('activelearning', None)
-        if activelearning_cfg is not None and activelearning_cfg.get('hooks', None):
-            if custom_hooks is None:
-                custom_hooks = []
-            custom_hooks.extend(activelearning_cfg.get('hooks'))
         
         self.runner.register_training_hooks(
             self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等

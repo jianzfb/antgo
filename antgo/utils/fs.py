@@ -119,5 +119,12 @@ def maybe_here_fixed_3_hierarchy(dest_dir,target_pattern):
       maybe_dest_dir = None
       return maybe_dest_dir
 
+
+def list_dir_by_time(dir):
+  assert(os.path.isdir(dir))
+  dir_list = os.listdir(dir)
+  dir_list = sorted(dir_list,  key=lambda x: os.path.getmtime(os.path.join(dir, x)))
+  return dir_list
+
 if __name__ == '__main__':
     download('http://dl.caffe.berkeleyvision.org/caffe_ilsvrc12.tar.gz', '.')
