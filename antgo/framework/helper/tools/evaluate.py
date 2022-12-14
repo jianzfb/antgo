@@ -62,7 +62,7 @@ def main():
         distributed = False
     else:
         distributed = True
-        init_dist(args.launcher, **cfg.get('dist_params', {}))
+        init_dist(**cfg.get('dist_params', {}))
 
     test_dataloader_default_args = dict(
         samples_per_gpu=1, workers_per_gpu=2, dist=distributed, shuffle=False)

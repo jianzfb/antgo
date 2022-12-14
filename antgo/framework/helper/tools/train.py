@@ -66,7 +66,7 @@ def main():
         distributed = False
     else:
         distributed = True
-        init_dist(args.launcher, **cfg.get('dist_params', {}))
+        init_dist(**cfg.get('dist_params', {}))
         # re-set gpu_ids with distributed training mode
         _, world_size = get_dist_info()
         cfg.gpu_ids = range(world_size)

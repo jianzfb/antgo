@@ -368,8 +368,14 @@ class EvalHook(Hook):
                 results, logger=runner.logger, **self.eval_kwargs)
         else:
             gts = []
-            for gt_i in range(len(self.dataloader.dataset)):
-                gts.append(self.dataloader.dataset.get_ann_info(gt_i))
+            needed_info = self.metric_func.keys()['gt']
+            for sample in results:
+                gt = {}
+                for k in needed_info:
+                    v = sample[k]
+                    gt[k] = v
+                    sample.pop(k)
+                gts.append(gt)
 
             eval_res = self.metric_func(results, gts)
 
@@ -509,11 +515,15 @@ class DistEvalHook(EvalHook):
             tmpdir = osp.join(runner.work_dir, '.eval_hook')
 
         # 所有节点都需要运行
+        needed_info = []        
+        if self.metric_func is not None:
+            needed_info = self.metric_func.keys()['gt']
         results = self.test_fn(
             runner.model,
             self.dataloader,
             tmpdir=tmpdir,
-            gpu_collect=False)
+            gpu_collect=False,
+            needed_info=needed_info)
 
         if runner.rank == 0:
             # 仅在master节点进行统计模型分数

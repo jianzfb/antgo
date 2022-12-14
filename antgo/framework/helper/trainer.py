@@ -16,7 +16,7 @@ import torchvision.transforms as transforms
 from torch.nn.parallel.data_parallel import DataParallel
 from antgo.framework.helper.utils.config import Config
 from antgo.framework.helper.apis.train import *
-from antgo.framework.helper.dataset import (build_dataloader, build_dataset)
+from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader)
 from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, get_device
 from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import *
@@ -47,7 +47,6 @@ try:
     from aimet_torch.onnx_utils import OnnxExportApiArgs
     from aimet_torch.model_preparer import prepare_model
     from aimet_common.utils import start_bokeh_server_session
-    from aimet_torch import visualize_model
 except:
     print('Dont support aimet.')
     pass
@@ -218,7 +217,7 @@ class Trainer(object):
         setup_multi_processes(self.cfg)
 
         if self.distributed:
-            init_dist("pytorch", **self.cfg.get('dist_params', {}))
+            init_dist(**self.cfg.get('dist_params', {}))
             # re-set gpu_ids with distributed training mode
             _, world_size = get_dist_info()
             self.cfg.gpu_ids = range(world_size)
@@ -250,17 +249,11 @@ class Trainer(object):
             **train_dataloader_default_args,
             **self.cfg.data.get('train_dataloader', {})
         }
-        semi_cfg = self.cfg.get('semi',None)
-        if semi_cfg is not None:
-            # 半监督加载策略，仅在训练时使用
-            semi_loader_strategy = semi_cfg.get('strategy', {'labeled': 1,'unlabeled': 1})
-            train_loader_cfg.update({
-                'semi': {
-                    'strategy': semi_loader_strategy
-                }
-            })
-        self.train_generator = build_dataloader(dataset, **train_loader_cfg)
-        
+        if not getattr(dataset, 'is_kv', False):
+            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
+        else:
+            self.train_generator = build_kv_dataloader(dataset, **train_loader_cfg)
+
         if with_validate:
             val_dataloader_default_args = dict(
                 samples_per_gpu=1,
@@ -274,13 +267,17 @@ class Trainer(object):
                     **self.cfg.data.get('val_dataloader', {})
             }
             val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
-            self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
+            if not getattr(dataset, 'is_kv', False):
+                self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
+            else:
+                self.val_dataloader = build_kv_dataloader(val_dataset, **val_dataloader_args)
 
     def make_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
         # prepare network
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
 
+        # 构建网络
         if model_builder is not None:
             model = model_builder()
         else:
@@ -395,25 +392,25 @@ class Trainer(object):
         self.runner.call_hook('after_run')
 
     def export(self, dummy_input, checkpoint=None, model_builder=None, path='./', prefix='model'):
-        f32_model = None
+        model = None
         if model_builder is not None:
-            f32_model = model_builder()
+            model = model_builder()
         else:
-            f32_model = build_model(self.cfg.model)
+            model = build_model(self.cfg.model)
 
         # 加载checkpoint
         if checkpoint is not None:
             ckpt = torch.load(checkpoint, map_location='cpu')
-            f32_model.load_state_dict(ckpt['state_dict'], strict=True)
+            model.load_state_dict(ckpt['state_dict'], strict=True)
 
         # 获得浮点模型的 FLOPS、PARAMS
         # model = DummyModelWarp(f32_model)        
         # model = model.eval()
-        f32_model.eval()
-        f32_model.forward = f32_model.onnx_export
-        f32_model = f32_model.to('cpu')
+        model.eval()
+        model.forward = model.onnx_export
+        model = model.to('cpu')
         dummy_input = dummy_input.to('cpu')
-        flops, params = profile(f32_model, inputs=(dummy_input,))
+        flops, params = profile(model, inputs=(dummy_input,))
         print('FLOPs = ' + str(flops/1000**3) + 'G')
         print('Params = ' + str(params/1000**2) + 'M')
 
@@ -422,7 +419,7 @@ class Trainer(object):
 
         # Export the model
         torch.onnx.export(
-                f32_model,                                      # model being run
+                model,                                      # model being run
                 dummy_input,                                # model input (or a tuple for multiple inputs)
                 os.path.join(path, f'{prefix}.onnx'),       # where to save the model (can be a file or file-like object)
                 export_params=True,                         # store the trained parameter weights inside the model file
@@ -432,11 +429,16 @@ class Trainer(object):
         )
 
         # 模型可视化
-        if not os.path.exists(os.path.join(path, 'visualization')):
-            os.makedirs(os.path.join(path, 'visualization'))
-        visualization_dir = os.path.join(path, 'visualization')
-        visualize_model.visualize_weight_ranges(f32_model, visualization_dir)
-        visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(f32_model, visualization_dir)
+        try:
+            from aimet_torch import visualize_model
+            if not os.path.exists(os.path.join(path, 'visualization')):
+                os.makedirs(os.path.join(path, 'visualization'))
+            visualization_dir = os.path.join(path, 'visualization')
+            visualize_model.visualize_weight_ranges(model, visualization_dir)
+            visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, visualization_dir)            
+        except:
+            print('Dont have aimet_torch visualize model')
+            pass
 
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################

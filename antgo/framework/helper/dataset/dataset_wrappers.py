@@ -33,6 +33,45 @@ class ConcatDataset(_ConcatDataset):
                 flags.append(datasets[i].flag)
             self.flag = np.concatenate(flags)
 
+    def __getitem__(self, idx):
+        if type(idx) == list:
+            # 聚合到每个数据集
+            d_i_map = {}
+            for i in idx:
+                if i < 0:
+                    if -i > len(self):
+                        raise ValueError("absolute value of index should not exceed dataset length")
+                    i = len(self) + i
+
+                dataset_idx = bisect.bisect_right(self.cumulative_sizes, i)
+                if dataset_idx not in d_i_map:
+                    d_i_map[dataset_idx] = []
+
+                if dataset_idx == 0:
+                    sample_idx = i
+                else:
+                    sample_idx = i - self.cumulative_sizes[dataset_idx - 1]
+                                    
+                d_i_map[dataset_idx].append(sample_idx)
+
+            sample_list = []
+            for dataset_idx, sample_idxs in d_i_map.items():
+                sample_list.extend(self.datasets[dataset_idx][sample_idxs])
+            
+            return sample_list
+        else:
+            # 
+            if idx < 0:
+                if -idx > len(self):
+                    raise ValueError("absolute value of index should not exceed dataset length")
+                idx = len(self) + idx
+            dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+            if dataset_idx == 0:
+                sample_idx = idx
+            else:
+                sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+            return self.datasets[dataset_idx][sample_idx]
+
     def get_cat_ids(self, idx):
         """Get category ids of concatenated dataset by index.
 
@@ -76,6 +115,14 @@ class ConcatDataset(_ConcatDataset):
         else:
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
         return self.datasets[dataset_idx].get_ann_info(sample_idx)
+
+    def worker_init_fn(self, *args, **kwargs):
+        for dataset in self.datasets:
+            if getattr(dataset, 'worker_init_fn'):
+                dataset.worker_init_fn(*args, **kwargs)
+
+    def is_kv(self):
+        return getattr(self.datasets[0], 'is_kv', False)
 
 
 @DATASETS.register_module()

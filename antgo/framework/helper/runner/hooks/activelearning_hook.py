@@ -4,7 +4,7 @@ import torch.distributed as dist
 from torch.nn.modules.batchnorm import _BatchNorm
 from torch.utils.data import DataLoader, dataloader
 from bisect import bisect_right
-from antgo.framework.helper.dataset import (build_dataloader, build_dataset)
+from antgo.framework.helper.dataset import (build_dataloader, build_dataset, build_kv_dataloader)
 from antgo.framework.helper.runner import BaseModule
 from .samplingmethods.kcenter_greedy import *
 import os
@@ -70,13 +70,15 @@ class SamplingByEntropy(object):
             selected_list.append(index)
 
             # get data info at index
-            info = dataset.get_ann_info(index)
+            # info = dataset.get_ann_info(index)
 
-            image_file = info['image_metas']['image_file']
-            image_index = info['image_metas']['id']
+            meta_info = results[index]['image_metas'][0]
+            image_file = meta_info['image_file']
+            image_index = meta_info.get('id', '')
             sample_list.append({
                 'id': image_index,
-                'image_file': image_file
+                'image_file': image_file,
+                'image_tag': meta_info['image_tag']
             })
 
         return sample_list, selected_list
@@ -107,13 +109,15 @@ class SamplingByUniform(object):
             index = pre_selected[index]
             selected_list.append(index)
             # get data info at index
-            info = dataset.get_ann_info(index)            
+            # info = dataset.get_ann_info(index)            
 
-            image_file = info['image_metas']['image_file']
-            image_index = info['image_metas']['id']
+            meta_info = results[index]['image_metas'][0]
+            image_file = meta_info['image_file']
+            image_index = meta_info.get('id', '')
             sample_list.append({
                 'id': image_index,
-                'image_file': image_file
+                'image_file': image_file,
+                'image_tag': meta_info['image_tag']
             })
 
         return sample_list, selected_list
@@ -154,13 +158,15 @@ class SamplingByKCenter(object):
             index = pre_selected[index]
             selected_list.append(index)
             # get data info at index
-            info = dataset.get_ann_info(index)            
+            # info = dataset.get_ann_info(index)            
 
-            image_file = info['image_metas']['image_file']
-            image_index = info['image_metas']['id']
+            meta_info = results[index]['image_metas'][0]
+            image_file = meta_info['image_file']
+            image_index = meta_info.get('id', '')
             sample_list.append({
                 'id': image_index,
-                'image_file': image_file
+                'image_file': image_file,
+                'image_tag': meta_info['image_tag']
             })
 
         return sample_list, selected_list
@@ -228,12 +234,6 @@ class GuidByCrossDomain(object):
             
             new_batch.append(ind)
 
-        print('ref_ind_list')
-        print(len(set(ref_ind_list)))
-
-        print('ind_list')
-        print(len(set(new_batch)))
-
         # 4.step select sample
         sample_list = []
         selected_list = []
@@ -242,13 +242,15 @@ class GuidByCrossDomain(object):
             index = pre_selected[index]
             selected_list.append(index)
             # get data info at index
-            info = dataset.get_ann_info(index)            
+            # info = dataset.get_ann_info(index)                 
 
-            image_file = info['image_metas']['image_file']
-            image_index = info['image_metas']['id']
+            meta_info = results[index]['image_metas'][0]
+            image_file = meta_info['image_file']
+            image_index = meta_info.get('id', '')
             sample_list.append({
                 'id': image_index,
-                'image_file': image_file
+                'image_file': image_file,
+                'image_tag': meta_info['image_tag']
             })
 
         return sample_list, selected_list
@@ -322,6 +324,7 @@ class ActiveLearningHook(Hook):
                 workers_per_gpu=2,
                 dist=is_dist,
                 shuffle=False,
+                drop_last=False,
                 persistent_workers=True)
         dataloader_args = {
             **dataloader_default_args,
@@ -331,7 +334,12 @@ class ActiveLearningHook(Hook):
 
         # dataloader，使用常规采样器，不考虑dataset.flag设置（同等对待所有样本）
         # 只需要按照正常数据加载即可（不可打乱顺序）       
-        self.dataloader = build_dataloader(dataset, **dataloader_args)
+        if not getattr(dataset, 'is_kv', False):
+            self.dataloader = build_dataloader(dataset, **dataloader_args)
+        else:
+            self.dataloader = build_kv_dataloader(dataset, **dataloader_args)
+
+        print(f"Unlabel Sample Num {len(self.dataloader)} In Activelearning Process")
 
         self.ref_dataloader = None
         if reference_data_cfg is not None:
@@ -341,13 +349,19 @@ class ActiveLearningHook(Hook):
                     workers_per_gpu=2,
                     dist=is_dist,
                     shuffle=False,
+                    drop_last=False,
                     persistent_workers=True)
             ref_dataloader_args = {
                 **ref_dataloader_default_args,
                 **reference_data_cfg['loader']
             }
             ref_dataloader_args['shuffle'] = False
-            self.ref_dataloader = build_dataloader(ref_results, **ref_dataloader_args)
+            if not getattr(ref_results, 'is_kv', False):
+                self.ref_dataloader = build_dataloader(ref_results, **ref_dataloader_args)
+            else:
+                self.ref_dataloader = build_kv_dataloader(ref_results, **ref_dataloader_args)
+            
+            print(f"Reference Sample Num {len(self.ref_dataloader)} In Activelearning Process")
 
         # 每次采样样本数
         self.sampling_num = sampling_num
@@ -372,7 +386,7 @@ class ActiveLearningHook(Hook):
         print(f'start analysis next round {now_time} waiting samples')
         for _ in range(self.sampling_count):
             # results is dict
-            results = self.test_fn(runner.model, self.dataloader)
+            results = self.test_fn(runner.model, self.dataloader, needed_info=['image_metas'])
             if sample_results is None:
                 sample_results = [{} for i in range(len(results))]
                 for i in range(len(results)):
@@ -386,7 +400,7 @@ class ActiveLearningHook(Hook):
 
         ref_sample_results = None
         if self.ref_dataloader is not None:
-            ref_results = self.test_fn(runner.model, self.ref_dataloader)
+            ref_results = self.test_fn(runner.model, self.ref_dataloader, needed_info=['image_metas'])
             if ref_sample_results is None:
                 ref_sample_results = [{} for i in range(len(ref_results))]
                 for i in range(len(ref_results)):
@@ -459,7 +473,8 @@ class DistActiveLearningHook(ActiveLearningHook):
                 runner.model,
                 self.dataloader,
                 tmpdir=tmpdir,
-                gpu_collect=False)
+                gpu_collect=False,
+                needed_info=['image_metas'])
             
             if runner.rank == 0:
                 # 仅在master节点，合并所有结果
@@ -482,7 +497,8 @@ class DistActiveLearningHook(ActiveLearningHook):
                 runner.model,
                 self.ref_dataloader,
                 tmpdir=tmpdir,
-                gpu_collect=False)
+                gpu_collect=False,
+                needed_info=['image_metas'])
                         
             if runner.rank == 0:
                 if ref_sample_results is None:
@@ -495,8 +511,6 @@ class DistActiveLearningHook(ActiveLearningHook):
                         for k,v in ref_results[i].items():
                             ref_sample_results[i][k].append(v) 
 
-                print('ref results')
-                print(len(ref_sample_results))
         # 同步
         dist.barrier()        
 

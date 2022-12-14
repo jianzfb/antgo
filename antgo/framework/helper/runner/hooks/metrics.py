@@ -44,9 +44,14 @@ class COCOCompatibleEval(object):
         
         self.without_background = without_background
     
+    def keys(self):
+        # 约束使用此评估方法，需要具体的关键字信息
+        return {'pred': ['box', 'label'], 'gt': ['image_metas', 'gt_bbox', 'gt_class']}
+
     def __call__(self, preds, gts):
         # gts 格式 'info', 'licenses', 'images', 'annotations', 'categories’
         # 将GT 转换为COCO格式
+        # image_metas, gt_bbox, gt_class
         images = []
         annotations = []
         bbox_id = 0

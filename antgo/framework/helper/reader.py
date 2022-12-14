@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import os
+from numpy.lib.arraysetops import isin
 import torch.utils.data
 import torchvision.transforms as transforms
 import numpy as np
@@ -24,30 +25,36 @@ def register(cls):
     return ProxyReader
 
 
-def objregister(cls):
-    class ProxyReader(ObjDetReader):
-        def __init__(
-            self, 
-            train_or_test, 
-            dir='', 
-            params={},
-            pipeline = None, 
-            inputs_def=None, 
-            enable_mixup=True, 
-            enable_cutmix=True, 
-            class_aware_sampling=False, 
-            num_classes=1, 
-            cache_size=0, 
-            file_loader=None, **kwargs):
-            super().__init__(
-                cls(train_or_test, dir, params),
-                pipeline=pipeline,
-                inputs_def=inputs_def,
-            )
-    from antgo.framework.helper.dataset.builder import DATASETS
-    DATASETS.register_module(name=cls.__name__)(ProxyReader)   
-    return ProxyReader
+class KVReaderBase(torch.utils.data.Dataset):
+    def __init__(self, pipeline=None) -> None:
+        super().__init__()
+        self.pipeline = []
+        self.is_kv = True
+        self.keys = []
+        if pipeline is not None:
+            from antgo.framework.helper.dataset import PIPELINES
+            for transform in pipeline:
+                if isinstance(transform, dict):
+                    transform = build_from_cfg(transform, PIPELINES)
+                    self.pipeline.append(transform)
+                else:
+                    raise TypeError('pipeline must be a dict')
+    
+    def __len__(self):
+        return len(self.keys)
 
+    def reads(self, index):
+        raise NotImplementedError
+
+    def __getitem__(self, index):
+        assert(isinstance(index, list))
+        sample_list = []
+        for sample in self.reads(index):
+            for transform in self.pipeline:
+                sample = transform(sample)
+            
+            sample_list.append(sample)
+        return sample_list
 
 
 class Reader(torch.utils.data.Dataset):
@@ -136,7 +143,7 @@ class Reader(torch.utils.data.Dataset):
         
         return target_size
 
-class ObjDetReader(Reader):
+class DetReader(Reader):
     def __init__(
         self, 
         dataset, 

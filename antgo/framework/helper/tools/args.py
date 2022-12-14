@@ -99,6 +99,12 @@ def nn_args():
         help='checkpoint'
     ) 
     parser.add_argument(
+        '--max-epochs',
+        type=int,
+        default=30,
+        help='max epochs'
+    )    
+    parser.add_argument(
         '--exp',
         type=str,
         default='',

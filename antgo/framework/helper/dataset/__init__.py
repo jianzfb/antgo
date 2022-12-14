@@ -1,5 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset
+from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset, build_kv_dataloader
 from .dataset_wrappers import (ClassBalancedDataset, ConcatDataset,
                                MultiImageMixDataset, RepeatDataset)
 from .samplers import DistributedGroupSampler, DistributedSampler, GroupSampler

@@ -4,10 +4,8 @@ import torch.utils.checkpoint as cp
 from .conv_module import ConvModule
 from .drop import DropPath
 from .se_layer import SELayer
-from .registry import PLUGIN_LAYERS
 
 
-@PLUGIN_LAYERS.register_module()
 class InvertedResidual(nn.Module):
     """Inverted Residual Block.
 

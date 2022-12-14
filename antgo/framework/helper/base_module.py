@@ -44,12 +44,6 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
 
         self.init_cfg = copy.deepcopy(init_cfg)
 
-        # Backward compatibility in derived classes
-        # if pretrained is not None:
-        #     warnings.warn('DeprecationWarning: pretrained is a deprecated \
-        #         key, please consider using init_cfg')
-        #     self.init_cfg = dict(type='Pretrained', checkpoint=pretrained)
-
     @property
     def is_init(self):
         return self._is_init
@@ -92,9 +86,8 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                 sub_module._params_init_info = self._params_init_info
 
         # Get the initialized logger, if not exist,
-        # create a logger named `mmcv`
         logger_names = list(logger_initialized.keys())
-        logger_name = logger_names[0] if logger_names else 'mmcv'
+        logger_name = logger_names[0] if logger_names else 'antgo'
 
         from antgo.framework.helper.cnn import initialize
         from antgo.framework.helper.cnn.utils.weight_init import update_init_info
@@ -111,6 +104,8 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                     # from being overwritten by
                     # the `init_weights`
                     if self.init_cfg['type'] == 'Pretrained':
+                        for sub_module in self.modules():
+                            del sub_module._params_init_info
                         return
 
             for m in self.children():
@@ -129,40 +124,8 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                           f'been called more than once.')
 
         if is_top_level_module:
-            self._dump_init_info(logger_name)
-
             for sub_module in self.modules():
                 del sub_module._params_init_info
-
-    @master_only
-    def _dump_init_info(self, logger_name):
-        """Dump the initialization information to a file named
-        `initialization.log.json` in workdir.
-
-        Args:
-            logger_name (str): The name of logger.
-        """
-
-        logger = get_logger(logger_name)
-
-        with_file_handler = False
-        # dump the information to the logger file if there is a `FileHandler`
-        for handler in logger.handlers:
-            if isinstance(handler, FileHandler):
-                handler.stream.write(
-                    'Name of parameter - Initialization information\n')
-                for name, param in self.named_parameters():
-                    handler.stream.write(
-                        f'\n{name} - {param.shape}: '
-                        f"\n{self._params_init_info[param]['init_info']} \n")
-                handler.stream.flush()
-                with_file_handler = True
-        if not with_file_handler:
-            for name, param in self.named_parameters():
-                print_log(
-                    f'\n{name} - {param.shape}: '
-                    f"\n{self._params_init_info[param]['init_info']} \n ",
-                    logger=logger_name)
 
     def _parse_losses(self, losses):
         """Parse the raw outputs (losses) of the network.
@@ -329,7 +292,6 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         if self.init_cfg:
             s += f'\ninit_cfg={self.init_cfg}'
         return s
-
 
 
 class Sequential(BaseModule, nn.Sequential):

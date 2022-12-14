@@ -22,10 +22,6 @@ class EpochBasedRunner(BaseRunner):
     """
 
     def run_iter(self, data_batch, train_mode, **kwargs):
-        # kwargs.update({
-        #     'epoch': self._epoch,
-        #     'iter': self._iter
-        # })
         if self.batch_processor is not None:
             outputs = self.batch_processor(
                 self.model, data_batch, train_mode=train_mode, **kwargs)

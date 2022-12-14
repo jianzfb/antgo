@@ -15,7 +15,8 @@ from torch.utils.data import DataLoader
 
 from .samplers import (ClassAwareSampler, DistributedGroupSampler,
                        DistributedSampler, GroupSampler, InfiniteBatchSampler,
-                       InfiniteGroupBatchSampler, SemiSampler, DistributedSemiSampler)
+                       InfiniteGroupBatchSampler, SemiSampler, DistributedSemiSampler,
+                       KVSampler, DistributedKVSampler)
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973
@@ -198,19 +199,6 @@ def build_dataloader(dataset,
 
         batch_sampler = None
 
-    # # 指定sampler
-    # custom_sampler_cls = kwargs.get('sampler', None)
-    
-    # if custom_sampler_cls is not None:
-    #     if dist:
-    #         sampler = custom_sampler_cls(dataset, world_size, rank, shuffle=False, seed=seed)
-    #     else:
-    #         sampler = custom_sampler_cls(dataset, samples_per_gpu)
-
-    init_fn = partial(
-        worker_init_fn, num_workers=num_workers, rank=rank,
-        seed=seed) if seed is not None else None
-
     if (TORCH_VERSION != 'parrots'
             and digit_version(TORCH_VERSION) >= digit_version('1.7.0')):
         kwargs['persistent_workers'] = persistent_workers
@@ -218,6 +206,10 @@ def build_dataloader(dataset,
         warnings.warn('persistent_workers is invalid because your pytorch '
                       'version is lower than 1.7.0')
 
+    init_fn = partial(
+        worker_init_fn, num_workers=num_workers, rank=rank,
+        seed=seed) if seed is not None else None
+        
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -232,6 +224,65 @@ def build_dataloader(dataset,
     return data_loader
 
 
+def build_kv_dataloader(dataset,
+                     samples_per_gpu,
+                     workers_per_gpu,
+                     num_gpus=1,
+                     dist=True,
+                     shuffle=True,
+                     seed=0,
+                     runner_type='EpochBasedRunner',
+                     persistent_workers=False,
+                     **kwargs):
+    sampler = None
+    if dist:
+        # When model is :obj:`DistributedDataParallel`,
+        # `batch_size` of :obj:`dataloader` is the
+        # number of training samples on each GPU.
+        batch_size = samples_per_gpu
+        num_workers = workers_per_gpu
+    else:
+        # When model is obj:`DataParallel`
+        # the batch size is samples on all the GPUS
+        batch_size = num_gpus * samples_per_gpu
+        num_workers = num_gpus * workers_per_gpu
+
+    rank, world_size = get_dist_info()
+    # print(f"batch_size {batch_size}")
+    # print(f"rank {rank}")
+    # print(f"world_size {world_size}")
+    # print(f"shuffle {shuffle}")
+    # print(f"drop_last {kwargs.get('drop_last', False)}")
+    if dist:
+        sampler = DistributedKVSampler(
+            dataset,
+            batch_size, 
+            num_replicas=world_size,
+            shuffle=shuffle,
+            rank=rank,
+            seed=seed, 
+            drop_last=kwargs.get('drop_last', False))
+    else:
+        sampler = \
+            KVSampler(dataset, samples_per_gpu, drop_last=kwargs.get('drop_last', False))
+
+    init_fn = partial(
+        worker_init_fn, num_workers=num_workers, rank=rank,
+        seed=seed) if seed is not None else None
+        
+    data_loader = DataLoader(
+        dataset,
+        batch_size=None,
+        sampler=sampler,
+        num_workers=num_workers,
+        batch_sampler=None,
+        pin_memory=kwargs.pop('pin_memory', False),
+        collate_fn=partial(collate, samples_per_gpu=samples_per_gpu),
+        worker_init_fn=init_fn)
+
+    return data_loader
+
+
 def worker_init_fn(worker_id, num_workers, rank, seed):
     # The seed of each worker equals to
     # num_worker * rank + worker_id + user_seed
@@ -239,3 +290,8 @@ def worker_init_fn(worker_id, num_workers, rank, seed):
     np.random.seed(worker_seed)
     random.seed(worker_seed)
     torch.manual_seed(worker_seed)
+
+    # 初始化
+    worker_info = torch.utils.data.get_worker_info()
+    if getattr(worker_info.dataset, 'worker_init_fn'):
+        worker_info.dataset.worker_init_fn(worker_id)
