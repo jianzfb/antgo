@@ -10,35 +10,40 @@ parser = argparse.ArgumentParser(description=f'ANTGO')
 def DEFINE_int(name, default, var_help):
     global parser
     parser.add_argument(
-    f'--{name}',
-    type=int,
-    default=default,
-    help=var_help)
+        f'--{name}',
+        type=int,
+        default=default,
+        help=var_help
+    )
 
 def DEFINE_float(name, default, var_help):
     global parser
     parser.add_argument(
-    f'--{name}',
-    type=float,
-    default=default,
-    help=var_help)
+        f'--{name}',
+        type=float,
+        default=default,
+        help=var_help
+    )
 
 def DEFINE_indicator(name, default, var_help):
     global parser
     parser.add_argument(
-    f'--{name}',
-    action='store_true' if default else 'store_false',
-    help=var_help)   
+        f'--{name}',
+        action='store_true' if default else 'store_false',
+        help=var_help
+    )   
 
 def DEFINE_string(name, default, var_help):
     global parser
     parser.add_argument(
-    f'--{name}',
-    action=default,
-    help=var_help)   
+        f'--{name}',
+        type=str,
+        default=default,
+        help=var_help
+    )   
 
 
-def nn_args():
+def DEFINE_nn_args():
     global parser
     group_gpus = parser.add_mutually_exclusive_group()
     parser.add_argument('--config', type=str, default="/root/paddlejob/workspace/env_run/portrait/InterHand2.6M/main/test_config.py", help='train config file path')
@@ -98,11 +103,12 @@ def nn_args():
         default='',
         help='checkpoint'
     ) 
+    
     parser.add_argument(
         '--max-epochs',
         type=int,
         default=30,
-        help='max epochs'
+        help='experiment name'
     )    
     parser.add_argument(
         '--exp',
@@ -112,7 +118,12 @@ def nn_args():
     )
     parser.add_argument('--ext-module', type=str, default='ext_module.py', help='introduce ext module py file')
 
+
+def parse_args():
+    global parser
     args = parser.parse_args()
+
     if 'LOCAL_RANK' not in os.environ:
-        os.environ['LOCAL_RANK'] = str(args.local_rank)
+        if getattr(args, 'local_rank', None):
+           os.environ['LOCAL_RANK'] = str(args.local_rank)
     return args

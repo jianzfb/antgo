@@ -1,3 +1,0 @@
-FLIC https://bensapp.github.io/flic-dataset.html
-MPII http://human-pose.mpi-inf.mpg.de/#download
-LJ_Speech https://keithito.com/LJ-Speech-Dataset/

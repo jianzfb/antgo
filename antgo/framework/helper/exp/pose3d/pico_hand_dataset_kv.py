@@ -1,4 +1,3 @@
-# from warp_kv import *
 import sys
 sys.path.append('/workspace/antgo')
 import multiprocessing as mp
@@ -12,9 +11,6 @@ import bytedrh2
 from bytedrh2 import photonx
 from numpy import linalg as LA
 
-
-def get_keys(args):
-    return KVReader(*args).list_keys()
 
 def worker_init_fn(path, dataset, _):
     # worker_info = torch.utils.data.get_worker_info()
@@ -31,9 +27,6 @@ class KVPicoHandDataset(KVReaderBase):
         super().__init__(pipeline=pipeline)
         
         self.worker_init_fn = lambda worker_id: worker_init_fn(path, self, worker_id)
-        # if not is_dist:
-        #     self.worker_init_fn(0)
-        
         # dataset_id
         self.dataset_id_list = ['2a42d33ee0008612']
         self.dataset_tag_list = ['test']

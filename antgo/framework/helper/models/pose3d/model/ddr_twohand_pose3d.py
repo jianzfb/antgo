@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from antgo.framework.helper.models.pose3d.backbone import *
+from antgo.framework.helper.cnn.backbone import *
 from antgo.framework.helper.models.pose3d.head import *
 
 from antgo.framework.helper.models.pose3d.losses.loss import JointHeatmapLoss, HandTypeLoss, RelRootDepthLoss

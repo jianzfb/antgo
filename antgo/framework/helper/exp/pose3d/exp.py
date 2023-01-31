@@ -60,10 +60,10 @@ cfg_dict = dict(
     evaluation=dict(out_dir='./out')
 )
 
-
+args.DEFINE_nn_args()
 def main():
     # argument parse and create log
-    exp_args = args.nn_args()
+    exp_args = args.parse_args()
 
     print(f'distributed {exp_args.distributed}')
     trainer = Trainer(cfg_dict, './', device='cpu', distributed=exp_args.distributed, diff_seed=exp_args.diff_seed, deterministic=exp_args.deterministic)

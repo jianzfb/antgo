@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 
 import torch.nn as nn
@@ -59,7 +58,6 @@ class DDRMobileNetV2(BaseModule):
                  init_cfg=None, **kwargs):
         super(DDRMobileNetV2, self).__init__(init_cfg)
 
-        # pretrained = '/opt/tiger/handtt/mobilenet_v2_batch256_imagenet_20200708-3b2dc3af.pth'
         self.pretrained = pretrained
         assert not (init_cfg and pretrained), \
             'init_cfg and pretrained cannot be specified at the same time'
