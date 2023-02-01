@@ -106,8 +106,6 @@ class Tester(object):
             model.load_state_dict(ckpt['state_dict'], strict=True)
 
         # 获得浮点模型的 FLOPS、PARAMS
-        # model = DummyModelWarp(f32_model)        
-        # model = model.eval()
         model.eval()
         model.forward = model.onnx_export
         model = model.to('cpu')

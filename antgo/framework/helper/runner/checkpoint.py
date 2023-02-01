@@ -736,29 +736,11 @@ def save_checkpoint(model,
         for name, optim in optimizer.items():
             checkpoint['optimizer'][name] = optim.state_dict()
 
-    if filename.startswith('pavi://'):
-        if file_client_args is not None:
-            raise ValueError(
-                'file_client_args should be "None" if filename starts with'
-                f'"pavi://", but got {file_client_args}')
-        try:
-            from pavi import exception, modelcloud
-        except ImportError:
-            raise ImportError(
-                'Please install pavi to load checkpoint from modelcloud.')
-        model_path = filename[7:]
-        root = modelcloud.Folder()
-        model_dir, model_name = osp.split(model_path)
-        try:
-            model = modelcloud.get(model_dir)
-        except exception.NodeNotFoundError:
-            model = root.create_training_model(model_dir)
-        with TemporaryDirectory() as tmp_dir:
-            checkpoint_file = osp.join(tmp_dir, model_name)
-            with open(checkpoint_file, 'wb') as f:
-                torch.save(checkpoint, f)
-                f.flush()
-            model.create_file(checkpoint_file, name=model_name)
+    if filename.startswith('hdfs'):
+        file_client = FileClient.infer_client({'backend': 'hdfs'}, filename)
+        with io.BytesIO() as f:
+            torch.save(checkpoint, f)
+            file_client.put(f.getvalue(), filename)
     else:
         file_client = FileClient.infer_client(file_client_args, filename)
         with io.BytesIO() as f:

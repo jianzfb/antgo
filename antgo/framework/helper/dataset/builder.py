@@ -8,6 +8,7 @@ from functools import partial
 import numpy as np
 from numpy.random.mtrand import sample
 import torch
+from torch.utils.data.dataset import IterableDataset
 from antgo.framework.helper.parallel import collate
 from antgo.framework.helper.runner import get_dist_info
 from antgo.framework.helper.utils import TORCH_VERSION, Registry, build_from_cfg, digit_version
@@ -126,7 +127,6 @@ def build_dataloader(dataset,
         DataLoader: A PyTorch dataloader.
     """
     rank, world_size = get_dist_info()
-
     semi_config = kwargs.get('semi', None)
     semi_loader_strategy = None
     if semi_config is not None:

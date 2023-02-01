@@ -270,7 +270,8 @@ class EvalHook(Hook):
 
     def _do_evaluate(self, runner):
         """perform evaluation and save ckpt."""
-        results = self.test_fn(runner.model, self.dataloader)
+        needed_info = self.metric_func.keys()['gt']
+        results = self.test_fn(runner.model, self.dataloader, needed_info)
         runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
         key_score = self.evaluate(runner, results)
         # the key_score may be `None` so it needs to skip the action to save
@@ -359,7 +360,7 @@ class EvalHook(Hook):
         """Evaluate the results.
 
         Args:
-            runner (:obj:`mmcv.Runner`): The underlined training runner.
+            runner The underlined training runner.
             results (list): Output results.
         """
         eval_res = {}

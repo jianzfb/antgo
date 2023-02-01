@@ -30,8 +30,9 @@ class EpochBasedRunner(BaseRunner):
                                             **kwargs)
         else:
             outputs = self.model.val_step(data_batch, self.optimizer, **kwargs)
+
         if not isinstance(outputs, dict):
-            raise TypeError('"batch_processor()" or "model.train_step()"'
+            raise TypeError('"model.train_step()"'
                             'and "model.val_step()" must return a dict')
                             
         if 'log_vars' in outputs:

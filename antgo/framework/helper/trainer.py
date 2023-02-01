@@ -385,61 +385,6 @@ class Trainer(object):
     def run_on_val(self, **kwargs):
         self.runner.val(self.val_dataloader, **kwargs)
     
-    def run_before(self):
-        self.runner.call_hook('before_run')
-        
-    def run_after(self):
-        self.runner.call_hook('after_run')
-
-    def export(self, dummy_input, checkpoint=None, model_builder=None, path='./', prefix='model'):
-        model = None
-        if model_builder is not None:
-            model = model_builder()
-        else:
-            model = build_model(self.cfg.model)
-
-        # 加载checkpoint
-        if checkpoint is not None:
-            ckpt = torch.load(checkpoint, map_location='cpu')
-            model.load_state_dict(ckpt['state_dict'], strict=True)
-
-        # 获得浮点模型的 FLOPS、PARAMS
-        # model = DummyModelWarp(f32_model)        
-        # model = model.eval()
-        model.eval()
-        model.forward = model.onnx_export
-        model = model.to('cpu')
-        dummy_input = dummy_input.to('cpu')
-        flops, params = profile(model, inputs=(dummy_input,))
-        print('FLOPs = ' + str(flops/1000**3) + 'G')
-        print('Params = ' + str(params/1000**2) + 'M')
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        # Export the model
-        torch.onnx.export(
-                model,                                      # model being run
-                dummy_input,                                # model input (or a tuple for multiple inputs)
-                os.path.join(path, f'{prefix}.onnx'),       # where to save the model (can be a file or file-like object)
-                export_params=True,                         # store the trained parameter weights inside the model file
-                opset_version=11,                           # the ONNX version to export the model to
-                do_constant_folding=True,                   # whether to execute constant folding for optimization
-                input_names = ['input'],                    # the model's input names
-        )
-
-        # 模型可视化
-        try:
-            from aimet_torch import visualize_model
-            if not os.path.exists(os.path.join(path, 'visualization')):
-                os.makedirs(os.path.join(path, 'visualization'))
-            visualization_dir = os.path.join(path, 'visualization')
-            visualize_model.visualize_weight_ranges(model, visualization_dir)
-            visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, visualization_dir)            
-        except:
-            print('Dont have aimet_torch visualize model')
-            pass
-
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
         # 计算浮点模型

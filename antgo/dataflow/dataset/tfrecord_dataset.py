@@ -9,6 +9,8 @@ import os
 from functools import partial
 import cv2
 from antgo.ant import environment
+from antgo.dataflow.dataset import *
+
 
 def _bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
@@ -25,6 +27,7 @@ def _float_feature(value):
 def _int64_feature(value):
     """Returns an int64_list from a bool / enum / int / uint."""
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
 
 def _decode_int(tensor):
     if isinstance(tensor, list):
@@ -68,13 +71,8 @@ def _decode_with_pickle(tensor):
     return pickle.loads(buffer)
 
 
-class DataReader(object):
-    def __init__(self, fields2types, path) -> None:
-        # dataset = tf.data.TFRecordDataset(["./1.tfrecords", "./2.tfrecords"])
-        # dataset = dataset.map(map_func=map_func)
-        # iterator = dataset.make_one_shot_iterator()
-        # element = iterator.get_next()
-        
+class TFRecordData(object):
+    def __init__(self, fields2types, path, use_color_image=False) -> None:
         tfrecords_files = []
         for file in os.listdir(path):
             if file.startswith("tfrecords"):
@@ -82,6 +80,22 @@ class DataReader(object):
         
         self.tfrecord_dataset = tf.data.TFRecordDataset(tfrecords_files)
         self.fields2types = fields2types
+        self.decode_methods = {}
+        for field, ftype in self.fields2types.items():
+            if field == "image":
+                self.decode_methods[field] = partial(_decode_image, color=use_color_image)
+            elif ftype == np.ndarray:
+                self.decode_methods[field] = _decode_numpy_array
+            elif ftype == bytes:
+                self.decode_methods[field] = _decode_bytes
+            elif ftype == int:
+                self.decode_methods[field] = _decode_int
+            elif ftype == float:
+                self.decode_methods[field] = _decode_float
+            elif ftype == str:
+                self.decode_methods[field] = _decode_str
+            else:
+                self.decode_methods[field] = _decode_with_pickle
 
     def get_features(self):
         feature = {}
@@ -97,32 +111,16 @@ class DataReader(object):
 
         return feature
 
-    def get_decode_methods(self, use_color_image=False):
-        methods = {}
-        for field, ftype in self.fields2types.items():
-            if field == "image":
-                methods[field] = partial(_decode_image, color=use_color_image)
-            elif ftype == np.ndarray:
-                methods[field] = _decode_numpy_array
-            elif ftype == bytes:
-                methods[field] = _decode_bytes
-            elif ftype == int:
-                methods[field] = _decode_int
-            elif ftype == float:
-                methods[field] = _decode_float
-            elif ftype == str:
-                methods[field] = _decode_str
-            else:
-                methods[field] = _decode_with_pickle
+    @property
+    def size(self):
+        return len(self.tfrecord_dataset)
 
-        return methods
-
-    def read(self, index):
-        for data in self.tfrecord_dataset:
-            ss = tf.io.parse_single_example(data, self.get_features())
-            
-            
-        pass
+    def parse(self, data):
+        decode_data = {}
+        for key in data.keys():
+            decode_data[key] = self.decode_methods[key](data[key])
+        
+        return decode_data
 
 
 class TFRecordDataWriter(object):
@@ -159,7 +157,10 @@ class TFRecordDataWriter(object):
         self.output = output
         self.num_shards = num_shards
 
-    def get_example_object(data_record):
+        if not os.path.exists(self.output):
+            os.makedirs(self.output)
+
+    def get_example_object(self, data_record):
         # 将数据转化为int64 float 或bytes类型的列表
         # 注意都是list形式
 
@@ -178,7 +179,7 @@ class TFRecordDataWriter(object):
         
         return example
     
-    def serialize_field(data):
+    def serialize_field(self, data):
         if isinstance(data, (bytes, str)):
             return _bytes_feature(data)
         if isinstance(data, int):
@@ -208,8 +209,11 @@ class TFRecordDataWriter(object):
             
             if (count // size_in_shard) != shard_i:
                 shard_i = count // self.num_shards
-                filename = os.path.join(self.output, "./tfrecords-%.5d-of-%.5d"%(shard_i, self.num_shards))
-                tfwriter = tf.python_io.TFRecordWriter(filename)
+                filename = os.path.join(self.output, "tfrecords-%.5d-of-%.5d"%(shard_i, self.num_shards))
+                tfwriter = tf.compat.v1.python_io.TFRecordWriter(filename)
             
             tfwriter.write(example_proto.SerializeToString())
             count += 1
+
+
+

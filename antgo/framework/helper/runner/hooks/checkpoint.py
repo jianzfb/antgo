@@ -72,8 +72,9 @@ class CheckpointHook(Hook):
         if not self.out_dir:
             self.out_dir = runner.work_dir
 
-        self.file_client = FileClient.infer_client(self.file_client_args,
-                                                   self.out_dir)
+        self.file_client = \
+            FileClient.infer_client(
+                self.file_client_args, self.out_dir)
 
         # if `self.out_dir` is not equal to `runner.work_dir`, it means that
         # `self.out_dir` is set so the final `self.out_dir` is the
@@ -83,21 +84,13 @@ class CheckpointHook(Hook):
             basename = osp.basename(runner.work_dir.rstrip(osp.sep))
             self.out_dir = self.file_client.join_path(self.out_dir, basename)
 
-        runner.logger.info((f'Checkpoints will be saved to {self.out_dir} by '
+        runner.logger.info(
+            (f'Checkpoints will be saved to {self.out_dir} by '
                             f'{self.file_client.name}.'))
 
         # disable the create_symlink option because some file backends do not
         # allow to create a symlink
-        if 'create_symlink' in self.args:
-            if self.args[
-                    'create_symlink'] and not self.file_client.allow_symlink:
-                self.args['create_symlink'] = False
-                warnings.warn(
-                    ('create_symlink is set as True by the user but is changed'
-                     'to be False because creating symbolic link is not '
-                     f'allowed in {self.file_client.name}'))
-        else:
-            self.args['create_symlink'] = self.file_client.allow_symlink
+        self.args['create_symlink'] = False
 
     def after_train_epoch(self, runner):
         if not self.by_epoch:
@@ -132,6 +125,7 @@ class CheckpointHook(Hook):
             runner.meta.setdefault('hook_msgs', dict())
             runner.meta['hook_msgs']['last_ckpt'] = self.file_client.join_path(
                 self.out_dir, cur_ckpt_filename)
+
         # remove other checkpoints
         if self.max_keep_ckpts > 0:
             if self.by_epoch:

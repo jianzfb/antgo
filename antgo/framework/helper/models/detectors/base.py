@@ -7,8 +7,6 @@ import torch
 import torch.distributed as dist
 from antgo.framework.helper.runner import BaseModule
 
-# from mmdet.core.visualization import imshow_det_bboxes
-
 
 class BaseDetector(BaseModule):
     """Base class for detectors."""
@@ -22,13 +20,6 @@ class BaseDetector(BaseModule):
     def with_neck(self):
         """bool: whether the detector has a neck"""
         return hasattr(self, 'neck') and self.neck is not None
-
-    # TODO: these properties need to be carefully handled
-    # for both single stage & two stage detectors
-    @property
-    def with_shared_head(self):
-        """bool: whether the detector has a shared head in the RoI Head"""
-        return hasattr(self, 'roi_head') and self.roi_head.with_shared_head
 
     @property
     def with_bbox(self):
@@ -72,20 +63,12 @@ class BaseDetector(BaseModule):
                 :class:`mmdet.datasets.pipelines.Collect`.
             kwargs (keyword arguments): Specific to concrete implementation.
         """
-        # NOTE the batched image size information may be useful, e.g.
-        # in DETR, this is needed for the construction of masks, which is
-        # then used for the transformer_head.
         batch_input_shape = tuple(imgs[0].size()[-2:])
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
 
     @abstractmethod
     def simple_test(self, img, img_metas, **kwargs):
-        pass
-
-    @abstractmethod
-    def aug_test(self, imgs, img_metas, **kwargs):
-        """Test function with test time augmentation."""
         pass
 
     def forward_test(self, imgs, img_metas, **kwargs):
@@ -110,30 +93,13 @@ class BaseDetector(BaseModule):
             raise ValueError(f'num of augmentations ({len(imgs)}) '
                              f'!= num of image meta ({len(img_metas)})')
 
-        # NOTE the batched image size information may be useful, e.g.
-        # in DETR, this is needed for the construction of masks, which is
-        # then used for the transformer_head.
         for img, img_meta in zip(imgs, img_metas):
             batch_size = len(img_meta)
             for img_id in range(batch_size):
                 img_meta[img_id]['batch_input_shape'] = tuple(img.size()[-2:])
 
-        if num_augs == 1:
-            # proposals (List[List[Tensor]]): the outer list indicates
-            # test-time augs (multiscale, flip, etc.) and the inner list
-            # indicates images in a batch.
-            # The Tensor should have a shape Px4, where P is the number of
-            # proposals.
-            if 'proposals' in kwargs:
-                kwargs['proposals'] = kwargs['proposals'][0]
-            return self.simple_test(imgs[0], img_metas[0], **kwargs)
-        else:
-            assert imgs[0].size(0) == 1, 'aug test does not support ' \
-                                         'inference with batch size ' \
-                                         f'{imgs[0].size(0)}'
-            # TODO: support test augmentation for predefined proposals
-            assert 'proposals' not in kwargs
-            return self.aug_test(imgs, img_metas, **kwargs)
+        assert(num_augs == 1)
+        return self.simple_test(imgs[0], img_metas[0], **kwargs)
 
     def forward(self, image, image_metas, return_loss=True, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending

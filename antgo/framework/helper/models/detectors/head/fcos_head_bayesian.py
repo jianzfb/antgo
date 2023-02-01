@@ -9,7 +9,6 @@ from ..utils.gaussian_target import gaussian_radius, gen_gaussian_target
 from ..utils.gaussian_target import (get_local_maximum, get_topk_from_heatmap,
                                      transpose_and_gather_feat)
 from .base_dense_head import BaseDenseHead
-from .dense_test_mixins import BBoxTestMixin
 import torch.nn.functional as F
 import numpy as np
 import cv2 
@@ -96,7 +95,7 @@ def sigmoid_focal_loss(
 
 
 @HEADS.register_module()
-class FcosHeadBayesian(BaseDenseHead, BBoxTestMixin):
+class FcosHeadBayesian(BaseDenseHead):
     """Objects as Points Head. CenterHead use center_point to indicate object's
     position. Paper link <https://arxiv.org/abs/1904.07850>
 
@@ -225,7 +224,7 @@ class FcosHeadBayesian(BaseDenseHead, BBoxTestMixin):
             offset_preds (List[Tensor]): offset predicts for all levels, the
                channels number is 2.
         """
-        feats = (feats[0][0],)
+        feats = (feats[0],)
         return multi_apply(self.forward_single, feats)
 
     def forward_single(self, feat):
@@ -674,3 +673,4 @@ class FcosHeadBayesian(BaseDenseHead, BBoxTestMixin):
             bboxes = bboxes[remained_index]
             labels = labels[remained_index]
         return bboxes, labels
+
