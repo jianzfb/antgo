@@ -10,7 +10,7 @@ from torch.utils.data import Sampler
 import copy
 
 
-class SemiSampler(Sampler):
+class MixSampler(Sampler):
 
     def __init__(self, dataset, samples_per_gpu=1, strategy={'labeled': 1, 'unlabeled': 1}):
         # flag 标记有标签和无标签
@@ -183,7 +183,7 @@ class SemiSampler(Sampler):
         return self.num_samples
 
 
-class DistributedSemiSampler(Sampler):
+class DistributedMixSampler(Sampler):
     """Sampler that restricts data loading to a subset of the dataset.
 
     It is especially useful in conjunction with

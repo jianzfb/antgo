@@ -60,7 +60,6 @@ class DistributedKVSampler(torch.utils.data.distributed.DistributedSampler):
                  shuffle=True,
                  drop_last=False,
                  seed=0) -> None:
-        print(f'num_replicas {num_replicas}')
         super().__init__(dataset, num_replicas= num_replicas, rank=rank, shuffle=shuffle, drop_last=drop_last, seed=seed)        
         self.batch_size = samplers_per_gpu
 

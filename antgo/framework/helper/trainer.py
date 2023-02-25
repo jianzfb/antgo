@@ -239,7 +239,7 @@ class Trainer(object):
             samples_per_gpu=2,
             workers_per_gpu=2,
             # `num_gpus` will be ignored if distributed
-            num_gpus=len(self.cfg.gpu_ids),
+            num_gpus=1,
             dist=self.distributed,
             seed=self.cfg.seed,
             runner_type='EpochBasedRunner',

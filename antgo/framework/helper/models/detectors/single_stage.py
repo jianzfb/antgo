@@ -76,6 +76,9 @@ class SingleStageDetector(BaseDetector):
         super(SingleStageDetector, self).forward_train(image, image_metas)
         x = self.extract_feat(image)
         
+        if gt_bbox is None or gt_class is None:
+            return self.bbox_head(x)
+
         losses = self.bbox_head.forward_train(x, image_metas, gt_bbox,
                                               gt_class, gt_bboxes_ignore)
         return losses

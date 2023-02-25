@@ -1,20 +1,20 @@
 from typing import Dict
 from antgo.framework.helper.models.detectors.base import BaseDetector
+from antgo.framework.helper.base_module import BaseModule
 
 
-
-class MultiSteamDetector(BaseDetector):
+class MultiSteamModule(BaseModule):
     def __init__(
         self, model=dict(), train_cfg=None, test_cfg=None
     ):
-        super(MultiSteamDetector, self).__init__()
+        super(MultiSteamModule, self).__init__()
         self.submodules = list(model.keys())
         for k, v in model.items():
             setattr(self, k, v)
 
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
-        self.inference_on = self.test_cfg.get("inference_on", self.submodules[0])
+        self.inference_on = self.test_cfg.get("inference_on", None)
 
     def model(self, **kwargs):
         if "submodule" in kwargs:
@@ -38,9 +38,6 @@ class MultiSteamDetector(BaseDetector):
 
     def extract_feat(self, imgs):
         return self.model().extract_feat(imgs)
-
-    def aug_test(self, imgs, img_metas, **kwargs):
-        return self.model(**kwargs).aug_test(imgs, img_metas, **kwargs)
 
     def simple_test(self, img, img_metas, **kwargs):
         return self.model(**kwargs).simple_test(img, img_metas, **kwargs)

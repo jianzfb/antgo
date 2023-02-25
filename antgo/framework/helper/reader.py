@@ -93,6 +93,7 @@ class TFReaderBase(torch.utils.data.IterableDataset):
 
         #     yield sample
 
+
 class Reader(torch.utils.data.Dataset):
     def __init__(self, dataset, pipeline=None, inputs_def=None):
         self.proxy_dataset = dataset
