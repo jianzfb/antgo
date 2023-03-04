@@ -53,22 +53,23 @@ class Tester(object):
             _, world_size = get_dist_info()
             self.cfg.gpu_ids = range(world_size)
 
-        # build the dataloader
-        self.dataset = build_dataset(self.cfg.data.test)
-        test_dataloader_default_args = dict(
-            samples_per_gpu=1, workers_per_gpu=2, dist=distributed, shuffle=False)
+        if self.cfg.data.get('test', None):
+            # build the dataloader
+            self.dataset = build_dataset(self.cfg.data.test)
+            test_dataloader_default_args = dict(
+                samples_per_gpu=1, workers_per_gpu=2, dist=distributed, shuffle=False)
 
-        test_loader_cfg = {
-            **test_dataloader_default_args,
-            **self.cfg.data.get('test_dataloader', {})
-        }        
-        
-        if not getattr(self.dataset, 'is_kv', False):
-            self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
-        else:
-            self.data_loader = build_kv_dataloader(self.dataset, **test_loader_cfg)
+            test_loader_cfg = {
+                **test_dataloader_default_args,
+                **self.cfg.data.get('test_dataloader', {})
+            }        
+            
+            if not getattr(self.dataset, 'is_kv', False):
+                self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
+            else:
+                self.data_loader = build_kv_dataloader(self.dataset, **test_loader_cfg)
 
-    def make_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False):
+    def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False):
         # build the model and load checkpoint
         if model_builder is not None:
             self.model = model_builder()
@@ -93,7 +94,7 @@ class Tester(object):
                 device_ids=[int(os.environ['LOCAL_RANK'])],
                 broadcast_buffers=False)
 
-    def export(self, dummy_input, checkpoint=None, model_builder=None, path='./', prefix='model'):
+    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, path='./', prefix='model'):
         model = None
         if model_builder is not None:
             model = model_builder()
@@ -109,8 +110,11 @@ class Tester(object):
         model.eval()
         model.forward = model.onnx_export
         model = model.to('cpu')
-        dummy_input = dummy_input.to('cpu')
-        flops, params = profile(model, inputs=(dummy_input,))
+        if isinstance(input_tensor_list, list):
+            for i in range(len(input_tensor_list)):
+                input_tensor_list[i] = input_tensor_list[i].to('cpu')
+
+        flops, params = profile(model, inputs=input_tensor_list)
         print('FLOPs = ' + str(flops/1000**3) + 'G')
         print('Params = ' + str(params/1000**2) + 'M')
 
@@ -120,12 +124,13 @@ class Tester(object):
         # Export the model
         torch.onnx.export(
                 model,                                      # model being run
-                dummy_input,                                # model input (or a tuple for multiple inputs)
+                tuple(input_tensor_list),                   # model input (or a tuple for multiple inputs)
                 os.path.join(path, f'{prefix}.onnx'),       # where to save the model (can be a file or file-like object)
                 export_params=True,                         # store the trained parameter weights inside the model file
                 opset_version=11,                           # the ONNX version to export the model to
                 do_constant_folding=True,                   # whether to execute constant folding for optimization
-                input_names = ['input'],                    # the model's input names
+                input_names = input_name_list,              # the model's input names
+                output_names = output_name_list
         )
 
     def evaluate(self):

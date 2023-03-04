@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import copy
 import warnings
 from abc import ABCMeta
@@ -8,9 +7,7 @@ import torch.distributed as dist
 import torch.nn as nn
 from collections import OrderedDict
 import torch
-
-from antgo.framework.helper.runner.dist_utils import master_only
-from antgo.framework.helper.utils.logging import get_logger, logger_initialized, print_log
+from antgo.framework.helper.utils.logging import logger_initialized, print_log
 
 
 class BaseModule(nn.Module, metaclass=ABCMeta):
@@ -283,9 +280,6 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
 
     def forward_test(self, image, **kwargs):
         raise NotImplementedError
-
-    # def load_state_dict(self, *args, **kwargs):
-    #     return False
 
     def __repr__(self):
         s = super().__repr__()

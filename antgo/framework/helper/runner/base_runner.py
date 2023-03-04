@@ -51,34 +51,12 @@ class BaseRunner(metaclass=ABCMeta):
 
     def __init__(self,
                  model,
-                 batch_processor=None,
                  optimizer=None,
                  work_dir=None,
                  logger=None,
                  meta=None,
                  max_iters=None,
                  max_epochs=None):
-        if batch_processor is not None:
-            if not callable(batch_processor):
-                raise TypeError('batch_processor must be callable, '
-                                f'but got {type(batch_processor)}')
-            warnings.warn(
-                'batch_processor is deprecated, please implement '
-                'train_step() and val_step() in the model instead.',
-                DeprecationWarning)
-            # raise an error is `batch_processor` is not None and
-            # `model.train_step()` exists.
-            if is_module_wrapper(model):
-                _model = model.module
-            else:
-                _model = model
-            if hasattr(_model, 'train_step') or hasattr(_model, 'val_step'):
-                raise RuntimeError(
-                    'batch_processor and model.train_step()/model.val_step() '
-                    'cannot be both available.')
-        else:
-            assert hasattr(model, 'train_step')
-
         # check the type of `optimizer`
         if isinstance(optimizer, dict):
             for name, optim in optimizer.items():
@@ -102,7 +80,6 @@ class BaseRunner(metaclass=ABCMeta):
                 f'meta must be a dict or None, but got {type(meta)}')
 
         self.model = model
-        self.batch_processor = batch_processor
         self.optimizer = optimizer
         self.logger = logger
         self.meta = meta

@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 import numpy as np

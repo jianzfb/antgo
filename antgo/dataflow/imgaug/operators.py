@@ -2043,13 +2043,15 @@ class Resize(BaseOperator):
             sample['semantic'] = cv2.resize(
                 sample['semantic'], (resize_w, resize_h), interpolation=cv2.INTER_NEAREST)
 
-        sample['scale_factor'] = [scale_x, scale_y] * 2
-        sample['h'] = resize_h
-        sample['w'] = resize_w
+        # sample['scale_factor'] = [scale_x, scale_y] * 2
+        # sample['h'] = resize_h
+        # sample['w'] = resize_w
 
         if 'image_metas' in sample:
             sample['image_metas']['image_shape'] = (resize_h, resize_w)
-            sample['image_metas']['scale_factor'] =  sample['scale_factor']
+            sample['image_metas']['scale_factor'] =  [scale_x, scale_y] * 2
+            sample['image_metas']['h'] = resize_h
+            sample['image_metas']['w'] = resize_w
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
         

@@ -1,19 +1,10 @@
 import torch
-from antgo.framework.helper.models.builder import DETECTORS, build_model
-from antgo.framework.helper.models.utils.structure_utils import dict_stack, weighted_loss
+from antgo.framework.helper.models.builder import MODELS, build_model
 from antgo.framework.helper.multi_stream_module import MultiSteamModule
-from antgo.framework.helper.models.utils.box_utils import Transform2D, filter_invalid,random_ignore
-from torchvision.ops import batched_nms 
-import numpy as np
-import cv2
-import os
-from torch.nn import functional as F
-from typing import List, Optional, Tuple, Union
-from collections.abc import Sequence
-from losses.quality_focal_loss import QualityFocalLoss
+from .losses.quality_focal_loss import QualityFocalLoss
 
 
-@DETECTORS.register_module()
+@MODELS.register_module()
 class DenseTeacher(MultiSteamModule):
     def __init__(self, model: dict, train_cfg=None, test_cfg=None):
         # 默认使用teacher模型作为最佳模型
@@ -31,19 +22,22 @@ class DenseTeacher(MultiSteamModule):
             test_cfg=test_cfg,
         )
         self.freeze("teacher")
-        self.focus_key = ''
-        self.focus_i = 0
-        self.use_sigmoid = True
+        self.key = train_cfg.get('key', 0)
+        self.use_sigmoid = train_cfg.get('use_sigmoid', True)
 
-        self.semi_ratio = 0.5
-        self.heatmap_n_thr = 0.25
-        self.semi_loss_w = 1
+        self.label_batch_size = train_cfg.get('label_batch_size', 5)
+        self.unlabel_batch_size = train_cfg.get('unlabel_batch_size', 3)
+
+        self.semi_ratio = train_cfg.get('semi_ratio',0.5)
+        self.heatmap_n_thr = train_cfg.get('heatmap_n_thr', 0.25)
+        self.semi_loss_w = train_cfg.get('semi_loss_w', 1.0)
 
     def _get_unsup_dense_loss(self, student_heatmap_, teacher_heatmap_):
         # student_heatmap_: N,C,H,W
         # teacher_heatmap_: N,C,H,W
-        student_heatmap = student_heatmap_.permute(0, 2, 3, 1).reshape(-1, self.num_classes)
-        teacher_heatmap = teacher_heatmap_.permute(0, 2, 3, 1).reshape(-1, self.num_classes)
+        num_classes = student_heatmap_.shape[1]
+        student_heatmap = student_heatmap_.permute(0, 2, 3, 1).reshape(-1, num_classes)
+        teacher_heatmap = teacher_heatmap_.permute(0, 2, 3, 1).reshape(-1, num_classes)
         if self.use_sigmoid:
             student_heatmap = student_heatmap.sigmoid()
             teacher_heatmap = teacher_heatmap.sigmoid()
@@ -73,58 +67,67 @@ class DenseTeacher(MultiSteamModule):
 
         return {"loss_heatmap": loss_heatmap}
 
-    def forward_train(self, images, image_metas, index, **kwargs):
-        super().forward_train(images, image_metas, **kwargs)
+    def forward_train(self, images, image_metas, **kwargs):
+        label_images, unlabel_weak_strong_images = \
+            torch.split(images, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
+        label_metas = image_metas[:self.label_batch_size]
 
-        # 需要保证可以同时传入有标签数据和无标签数据
-        # index 记录样本源
+        unlabel_weak_images=torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
+        unlabel_strong_images=torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
+
+        unlabel_weak_strong_metas = image_metas[self.label_batch_size:]
+        unlabel_weak_metas = [unlabel_weak_strong_metas[i] for i in range(0, 2*self.unlabel_batch_size, 2)]
+        unlabel_strong_metas = [unlabel_weak_strong_metas[i] for i in range(1, 2*self.unlabel_batch_size, 2)]
         
+        label_kwargs = {}
+        unlabel_weak_kwargs = {}
+        unlabel_strong_kwargs = {}
+        for k, v in kwargs.items():
+            v_label_kwargs, v_unlabel_weak_strong_kwargs = \
+                torch.split(v, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
+            label_kwargs[k] = v_label_kwargs
 
+            v_unlabel_weak_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
+            v_unlabel_strong_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
 
-        # label_images, label_metas
-        # unlabel_strong_images, unlabel_strong_metas
-        # unlabel_weak_images, unlabel_weak_metas
-        label_images = None
-        label_metas = None
+            unlabel_weak_kwargs[k] = v_unlabel_weak_kwargs
+            unlabel_strong_kwargs[k] = v_unlabel_strong_kwargs
 
-        unlabel_strong_images = None
-        unlabel_strong_metas = None
-        unlabel_weak_images = None
-        unlabel_weak_metas = None
-
-        losse = {}
+        losses = {}
         # 有监督损失
-        output_dict = self.student.forward_train(label_images, label_metas)
+        output_dict = self.student.forward_train(label_images, label_metas, **label_kwargs)
         assert(isinstance(output_dict, dict))
-        output_dict = {"labeled_" + k: v.cpu().item() for k, v in output_dict.items()}
+        output_dict = {"labeled_" + k: v for k, v in output_dict.items()}
         losses.update(**output_dict)
 
         # 无监督损失
         # 应该返回 heatmap
-        output_unsup_strong = self.student.forward_train(unlabel_strong_images, unlabel_strong_metas)
+        for k in unlabel_strong_kwargs.keys():
+            unlabel_strong_kwargs[k] = None
+            unlabel_weak_kwargs[k] = None
+
+        output_unsup_strong = self.student.forward_train(unlabel_strong_images, unlabel_strong_metas, **unlabel_strong_kwargs)
         strong_heatmap = None
         if isinstance(output_unsup_strong, dict):
-            strong_heatmap = output_unsup_strong[self.focus_key]
+            strong_heatmap = output_unsup_strong[self.key]
         else:
-            strong_heatmap = output_unsup_strong[self.focus_i]
+            strong_heatmap = output_unsup_strong[int(self.key)]
 
         # 应该返回 heatmap
-        output_unsup_weak = self.teacher.forward_train(unlabel_weak_images, unlabel_weak_metas)
+        self.teacher.eval()
+        output_unsup_weak = self.teacher.forward_train(unlabel_weak_images, unlabel_weak_metas, **unlabel_weak_kwargs)
         weak_heatmap = None
         if isinstance(output_unsup_weak, dict):
-            weak_heatmap = output_unsup_weak[self.focus_key]
+            weak_heatmap = output_unsup_weak[self.key]
         else:
-            weak_heatmap = output_unsup_weak[self.focus_i]
+            weak_heatmap = output_unsup_weak[int(self.key)]
 
         unsup_loss = self._get_unsup_dense_loss(
-            student_heatmap,
-            teacher_heatmap
+            strong_heatmap,
+            weak_heatmap
         )
-        unsup_loss_sum = (
-            sum([metrics_value for metrics_value in unsup_loss.values() if metrics_value.requires_grad])
-            * self.semi_loss_w
-        )
-        unsup_loss = {"unlabeled_" + k: v.item() for k, v in unsup_loss.items()}
+
+        unsup_loss = {"unlabeled_" + k: v*self.semi_loss_w for k, v in unsup_loss.items()}
         losses.update(**unsup_loss)
 
         return losses

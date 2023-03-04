@@ -28,8 +28,8 @@ from antgo.framework.helper.utils import *
 from antgo.framework.helper.models.dummy_module import *
 from antgo.framework.helper.models.proxy_module import *
 from antgo.framework.helper.models.distillation import *
-from antgo.framework.helper.models.semi import *
 from antgo.framework.helper.runner.hooks.hook import *
+from .base_trainer import *
 from thop import profile
 import copy
 
@@ -200,7 +200,7 @@ def calculate_quantsim(model, val_dataloader, dummy_input, use_cuda, path, prefi
     quantsim.export(path=path, filename_prefix=prefix, dummy_input=dummy_input.cpu())
     return quantsim
 
-class Trainer(object):
+class Trainer(BaseTrainer):
     def __init__(self, cfg_dict, work_dir="./", device='cuda', distributed=False, diff_seed=True, deterministic=True):
         self.cfg = Config.fromstring(json.dumps(cfg_dict), '.json')
 
@@ -230,7 +230,7 @@ class Trainer(object):
         self.meta['seed'] = seed
         self.device = device
 
-    def make_dataloader(self, with_validate=False):
+    def config_dataloader(self, with_validate=False):
         # 创建数据集
         dataset = build_dataset(self.cfg.data.train)
 
@@ -272,7 +272,7 @@ class Trainer(object):
             else:
                 self.val_dataloader = build_kv_dataloader(val_dataset, **val_dataloader_args)
 
-    def make_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
+    def config_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
         # prepare network
         logger = get_logger('model', log_level=self.cfg.log_level)
         logger.info("Creating graph and optimizer...")
@@ -282,7 +282,7 @@ class Trainer(object):
             model = model_builder()
         else:
             model = build_model(self.cfg.model)
-        
+
         # 模型初始化
         model.init_weights()
 
@@ -306,7 +306,7 @@ class Trainer(object):
         optimizer = build_optimizer(model, self.cfg.optimizer)
 
         # build training strategy
-        custom_runner = self.cfg.get('custom_runner', dict(type='EpochBasedRunner', max_epochs=1))
+        custom_runner = self.cfg.get('runner', dict(type='EpochBasedRunner', max_epochs=1))
         self.runner = build_runner(
             custom_runner,        # 忽略max_epochs，开发者控制最大epoch
             default_args=dict(
@@ -323,13 +323,7 @@ class Trainer(object):
         if 'type' not in optimizer_config:
             optimizer_config = OptimizerHook(**optimizer_config)
 
-        custom_hooks = self.cfg.get('custom_hooks', None)
-        semi_cfg = self.cfg.get('semi',None)
-        if semi_cfg is not None and semi_cfg.get('hooks', None):
-            if custom_hooks is None:
-                custom_hooks = []
-            custom_hooks.extend(semi_cfg.get('hooks'))
-        
+        custom_hooks = self.cfg.get('custom_hooks', None)        
         self.runner.register_training_hooks(
             self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等
             optimizer_config,                                       # 优化器的相关后处理，比如限制梯度操作等
@@ -354,9 +348,6 @@ class Trainer(object):
 
             if 'type' not in eval_cfg:
                 eval_hook = DistEvalHook if self.distributed else EvalHook
-                if semi_cfg is not None:
-                    eval_hook = SubModulesDistEvalHook if self.distributed else SubModulesEvalHook
-
                 self.runner.register_hook(
                     eval_hook(self.val_dataloader, **eval_cfg), priority='LOW')
             else:
@@ -370,21 +361,6 @@ class Trainer(object):
         elif load_from is not None:
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
 
-    @contextmanager
-    def train_context(self, max_epochs):
-        self.runner._max_epochs = max_epochs
-        self.runner.call_hook('before_run')
-        yield self.runner
-
-        time.sleep(1)  # wait for some hooks like loggers to finish
-        self.runner.call_hook('after_run')
-
-    def run_on_train(self, **kwargs):
-        self.runner.train(self.train_generator, **kwargs)
-
-    def run_on_val(self, **kwargs):
-        self.runner.val(self.val_dataloader, **kwargs)
-    
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
         # 计算浮点模型
@@ -560,15 +536,15 @@ class Trainer(object):
         else:
             model = build_dp(model, self.device, device_ids=self.cfg.gpu_ids)
 
-        # 自动调整单设备下的学习率到多设备下的学习率
-        auto_scale_lr(self.cfg, self.distributed, logger)
-
         ###############################     STEP - 1    ###############################
         # Finetune the quantized model
         if not self.distributed or (get_dist_info()[0] == 0):        
             print('Starting Model Finetune')
         # build optimizer        
         optimizer = build_optimizer(model, self.cfg.optimizer)
+
+        # 自动调整单设备下的学习率到多设备下的学习率
+        auto_scale_lr(self.cfg, self.distributed, logger)
 
         # build training strategy
         self.runner = build_runner(

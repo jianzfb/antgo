@@ -22,12 +22,8 @@ class EpochBasedRunner(BaseRunner):
     """
 
     def run_iter(self, data_batch, train_mode, **kwargs):
-        if self.batch_processor is not None:
-            outputs = self.batch_processor(
-                self.model, data_batch, train_mode=train_mode, **kwargs)
-        elif train_mode:
-            outputs = self.model.train_step(data_batch, self.optimizer,
-                                            **kwargs)
+        if train_mode:
+            outputs = self.model.train_step(data_batch, self.optimizer, **kwargs)
         else:
             outputs = self.model.val_step(data_batch, self.optimizer, **kwargs)
 
@@ -50,6 +46,7 @@ class EpochBasedRunner(BaseRunner):
         for i, data_batch in enumerate(self.data_loader):
             self._inner_iter = i
             self.call_hook('before_train_iter')
+            kwargs.update({'epoch': self._epoch, 'iter': self._iter})
             self.run_iter(data_batch, train_mode=True, **kwargs)
             self.call_hook('after_train_iter')
             self._iter += 1
@@ -72,7 +69,7 @@ class EpochBasedRunner(BaseRunner):
 
         self.call_hook('after_val_epoch')
 
-    def run(self, data_loaders, workflow, max_epochs=None, **kwargs):
+    def run(self, data_loaders, workflow, max_epochs, **kwargs):
         """Start running.
 
         Args:
@@ -84,30 +81,15 @@ class EpochBasedRunner(BaseRunner):
                 iteratively.
         """
         assert isinstance(data_loaders, list)
-        # assert mmcv.is_list_of(workflow, tuple)
         assert len(data_loaders) == len(workflow)
-        if max_epochs is not None:
-            warnings.warn(
-                'setting max_epochs in run is deprecated, '
-                'please set max_epochs in runner_config', DeprecationWarning)
-            self._max_epochs = max_epochs
-
-        assert self._max_epochs is not None, (
-            'max_epochs must be specified during instantiation')
-
-        for i, flow in enumerate(workflow):
-            mode, epochs = flow
-            if mode == 'train':
-                self._max_iters = self._max_epochs * len(data_loaders[i])
-                break
+        self._max_epochs = max_epochs
 
         work_dir = self.work_dir if self.work_dir is not None else 'NONE'
         self.logger.info('Start running, host: %s, work_dir: %s',
                          get_host_info(), work_dir)
         self.logger.info('Hooks will be executed in the following order:\n%s',
                          self.get_hook_info())
-        self.logger.info('workflow: %s, max: %d epochs', workflow,
-                         self._max_epochs)
+        self.logger.info('workflow: %s, max: %d epochs', workflow, self._max_epochs)
         self.call_hook('before_run')
 
         while self.epoch < self._max_epochs:
@@ -180,14 +162,3 @@ class EpochBasedRunner(BaseRunner):
                 os.symlink(filename, dst_file)
             else:
                 shutil.copy(filepath, dst_file)
-
-
-@RUNNERS.register_module()
-class Runner(EpochBasedRunner):
-    """Deprecated name of EpochBasedRunner."""
-
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            'Runner was deprecated, please use EpochBasedRunner instead',
-            DeprecationWarning)
-        super().__init__(*args, **kwargs)

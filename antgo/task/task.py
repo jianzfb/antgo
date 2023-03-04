@@ -1,6 +1,6 @@
 from __future__ import unicode_literals
 from __future__ import division
-from antgo.dataflow.dataset import *
+from antgo.dataflow import dataset
 from antgo.measures import *
 from antgo.utils import logger
 from antgo import config
@@ -53,7 +53,9 @@ class AntTask(object):
     self._dataset_params['dataset_name'] = dataset_name
 
     # dataset class
-    self._ant_dataset = AntDatasetFactory.dataset(dataset_name)
+    self._ant_dataset = None
+    if dataset_name in dataset.__all__:
+      self._ant_dataset = getattr(dataset, dataset_name)
 
     # related evaluation measures
     self._ant_measures = AntMeasuresFactory(self)
@@ -70,18 +72,14 @@ class AntTask(object):
   def config(self, dataset_name=None, task_xml=None):
     if dataset_name is not None and dataset_name != '':
       # 更新dataset配置
-      self._ant_dataset = AntDatasetFactory.dataset(dataset_name)
+      self._ant_dataset = None
+      if dataset_name in dataset.__all__:
+        self._ant_dataset = getattr(dataset, dataset_name)      
       self._dataset_name = dataset_name
       self._dataset_params['dataset_name'] = dataset_name
 
   @property
   def dataset_params(self):
-    '''
-
-    Returns
-    -------
-
-    '''
     return self._dataset_params
 
   @property

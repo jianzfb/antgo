@@ -126,6 +126,7 @@ class AntActiveLearningV2(AntBase):
     self._running_dataset = None
     self._running_task = None
     self.p = None
+    self._round = -1
 
   @property
   def running_dataset(self):
@@ -145,6 +146,53 @@ class AntActiveLearningV2(AntBase):
 
   def wait_until_stop(self):
     self.p.join()
+
+  def labeling(self):
+    # 启动新一轮标注
+    response = self.rpc.info.get()
+    if response['content']['project_state']['stage'] == 'labeling':
+      logger.error(f'Label Round {self._round} is not finish.')
+      return
+
+    self._round += 1
+    self.rpc.info.post(running_state='running',  running_stage='labeling', running_round=self._round)
+
+  def waiting(self):
+    # 完成本轮标注，后台会清空标注信息
+    self.rpc.info.post(running_state='running',  running_stage='waiting', running_round=self._round)
+    
+  def state(self):
+    response = self.rpc.info.get()
+    return response['content']['project_state']   
+
+  def download(self, waiting_finish=True):
+    if waiting_finish:
+      # 需要等待本轮标准完成
+      while True:
+        response = self.rpc.info.get()
+        if response['status'] == 'ERROR':
+          print('rpc error...')
+          time.sleep(5)
+          continue
+
+        if response['content']['project_state']['stage'] == 'finish':
+          break
+        # 等待10分钟后检查
+        time.sleep(10*60)
+        
+    if not os.path.exists(os.path.join(self.activelearning_label_dir, f'{self._round}')):
+      os.makedirs(os.path.join(self.activelearning_label_dir, f'{self._round}'))
+
+    folder = os.path.join(self.activelearning_label_dir, f'{self._round}')
+    file_name = f'label.json'
+    self.rpc.label.export.download(
+      file_folder=folder,
+      file_name=file_name
+    )    
+    with open(os.path.join(folder, file_name), 'r') as fp:
+      content = json.load(fp)
+
+      return content
 
   def start(self):
     # 0.step loading challenge task
@@ -217,7 +265,7 @@ class AntActiveLearningV2(AntBase):
 
       # 在独立进程中启动webserver
       sample_metas = {'filters': []}
-      label_metas = self.context.params.activelearning.label_metas.get()
+      metas = self.context.params.activelearning.metas.get()
       white_users = self.context.params.activelearning.white_users.get() \
         if self.context.params.activelearning.white_users is not None else None
       task_metas = {
@@ -232,9 +280,12 @@ class AntActiveLearningV2(AntBase):
                 self.host_port,
                 task_metas,
                 sample_metas,
-                label_metas,
+                metas,
                 [],
-                {'state': 'running', 'stage': self.context.params.activelearning.get('stage', 'waiting')},
+                {
+                  'state': 'running', 
+                  'stage': 'waiting'    # 标注服务启动后，处在等待状态。之后数据推送好后，重制状态使其处在标注状态
+                },
                 white_users)
         )
       self.p.start()

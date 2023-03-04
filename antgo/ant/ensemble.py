@@ -35,7 +35,6 @@ class EnsembleMergeRecorder(object):
                  ensemble_method='',
                  dataset_name='',
                  dataset_flag='train',
-                 dataset_num=0,
                  model_weight=1.0,
                  prefix='',
                  feedback=True):
@@ -46,7 +45,6 @@ class EnsembleMergeRecorder(object):
         self.record_variable_name = []
         self.record_sample_list = {}
         self.dataset_name = dataset_name
-        self.dataset_num = dataset_num
         self.dataset_flag = dataset_flag
         self.ensemble_method = ensemble_method
         self.dump_dir = dump_dir
@@ -69,7 +67,7 @@ class EnsembleMergeRecorder(object):
             result = {'image_file': id}
 
         for k, v in data.items():
-            if type(v['data']) != np.ndarray:
+            if type(v) != np.ndarray:
                 print('Only support np.ndarray.')
                 continue
 
@@ -79,7 +77,7 @@ class EnsembleMergeRecorder(object):
             }
 
             # 将数据以文件流模式上传
-            data = msgpack.packb(v['data'], default=ms.encode)
+            data = msgpack.packb(v, default=ms.encode)
             response = \
                 requests.post('%s/antgo/api/ensemble/avg/'%(self.url),
                               headers={'file_id': f'{id}',
@@ -95,9 +93,7 @@ class EnsembleMergeRecorder(object):
             if response.status_code != 200:
                 continue
 
-            result[k] = {
-                'data': None
-            }
+            result[k] = None
             if self.feedback:
                 with BytesIO() as pdf:
                     for chunk in response.iter_content(chunk_size=1024*1024):
@@ -105,9 +101,7 @@ class EnsembleMergeRecorder(object):
                             pdf.write(chunk)
                     data = msgpack.unpackb(pdf.getvalue(), object_hook=ms.decode)
 
-                result[k] = {
-                    'data': data,
-                }
+                result[k] = data
 
         return result
 
@@ -156,13 +150,11 @@ class EnsembleMergeRecorder(object):
 
         # 提交完成 ensemble 模型创建
         record_sample_num = len(self.record_sample_list)
-        dataset_sample_num = self.dataset_num
 
         # 记录信息（MLTALKER）
         logger.info('Update ensemble experiment record.')
         info = {
             'record_sample_num': record_sample_num,
-            'dataset_num': dataset_sample_num,
             'dataset_name': self.dataset_name,
             'dataset_flag': self.dataset_flag,
             'ensemble_method': self.ensemble_method,
@@ -296,11 +288,11 @@ class AntEnsemble(AntBase):
                  ant_token,
                  ant_task_config,
                  dataset,
-                 ensemble_stage, **kwargs):
+                 **kwargs):
         super().__init__(ant_name, ant_context=ant_context, ant_token=ant_token, **kwargs)
         # master, slave
         # bagging, stacking
-        self.ensemble_stage = ensemble_stage            # train, merge, release
+        self.ensemble_stage =  self.context.params.ensemble.stage            # train, merge, release
         assert(self.ensemble_stage in ['train', 'merge', 'release'])
 
         self.mode = self.context.params.ensemble.mode      # online/offline
@@ -428,7 +420,7 @@ class AntEnsemble(AntBase):
             ant_dataset = ProxyDataset(dataset_flag)
             kwargs = {dataset_flag: self.context.register_at(dataset_flag)}
             ant_dataset.register(**kwargs)
-        else:
+        elif running_ant_task.dataset is not None:
             ant_dataset = \
                 running_ant_task.dataset(dataset_flag,
                                          os.path.join(self.ant_data_source, dataset_name),
@@ -450,7 +442,6 @@ class AntEnsemble(AntBase):
                                       ensemble_method=self.method,
                                       dataset_name=dataset_name,
                                       dataset_flag=dataset_flag,
-                                      dataset_num=ant_dataset.size,
                                       prefix=f"{self.ant_name}-{self.context.params.ensemble.get('model_name', 'model')}",
                                       model_weight=self.model_weight,
                                       feedback=self.context.params.ensemble.feedback)

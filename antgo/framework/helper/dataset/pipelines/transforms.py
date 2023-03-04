@@ -703,8 +703,10 @@ class Normalize(object):
         for key in ['image']:
             results[key] = imnormalize(results[key], self.mean, self.std,
                                             self.to_rgb)
-        results['img_norm_cfg'] = dict(
-            mean=self.mean, std=self.std, to_rgb=self.to_rgb)
+
+        if 'image_metas' in results:
+            results['image_metas']['img_norm_cfg'] = \
+                dict(mean=self.mean, std=self.std, to_rgb=self.to_rgb)
         return results
 
     def __repr__(self):

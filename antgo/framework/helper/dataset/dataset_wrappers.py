@@ -27,11 +27,10 @@ class ConcatDataset(_ConcatDataset):
         self.CLASSES = getattr(datasets[0], 'CLASSES', None)
         self.PALETTE = getattr(datasets[0], 'PALETTE', None)
 
-        if hasattr(datasets[0], 'flag'):
-            flags = []
-            for i in range(0, len(datasets)):
-                flags.append(datasets[i].flag)
-            self.flag = np.concatenate(flags)
+        self.flag = []
+        for index, dataset in enumerate(datasets):
+            self.flag.append(np.ones(len(dataset), dtype=np.int64) * index)
+        self.flag = np.concatenate(self.flag)
 
     def __getitem__(self, idx):
         if type(idx) == list:
@@ -118,9 +117,9 @@ class ConcatDataset(_ConcatDataset):
 
     def worker_init_fn(self, *args, **kwargs):
         for dataset in self.datasets:
-            if getattr(dataset, 'worker_init_fn'):
+            if getattr(dataset, 'worker_init_fn', None):
                 dataset.worker_init_fn(*args, **kwargs)
-
+    @property
     def is_kv(self):
         return getattr(self.datasets[0], 'is_kv', False)
 

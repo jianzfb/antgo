@@ -1,1 +1,1 @@
-from .fcos_head_bayesian import *
+from .fcos_head import *

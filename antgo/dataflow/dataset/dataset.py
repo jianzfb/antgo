@@ -367,6 +367,9 @@ class Dataset(BaseNode):
   
   def sample(self, id):
     image, annotation = self.at(id)
+    if not isinstance(annotation, dict):
+      annotation = {'label': annotation}
+
     if image is not None:
       annotation['image'] = image
     return annotation

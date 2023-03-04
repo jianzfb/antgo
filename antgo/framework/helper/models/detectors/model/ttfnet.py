@@ -44,6 +44,6 @@ class TTFNet(SingleStageDetector):
 
     def onnx_export(self, img):
         feat = self.extract_feat(img)
-        local_cls, local_reg = self.bbox_head.forward_single(feat[0])
+        local_cls, local_reg = self.bbox_head(feat)
         return local_cls, local_reg
 

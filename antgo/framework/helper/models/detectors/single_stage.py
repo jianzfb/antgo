@@ -1,9 +1,8 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch
-#
-from core.bbox import bbox2result
 from antgo.framework.helper.models.builder import DETECTORS, build_backbone, build_head, build_neck
 from .base import BaseDetector
+from .core.bbox import bbox2result
 from antgo.framework.helper.runner import *
 
 
@@ -40,7 +39,7 @@ class SingleStageDetector(BaseDetector):
         """Directly extract features from the backbone+neck."""
         x = self.backbone(img)
         if self.with_neck:
-            x = self.neck(*x)
+            x = self.neck(x)
         return x
 
     def forward_dummy(self, img):
@@ -57,9 +56,9 @@ class SingleStageDetector(BaseDetector):
                       gt_bboxes_ignore=None, **kwargs):
         """
         Args:
-            img (Tensor): Input images of shape (N, C, H, W).
+            image (Tensor): Input images of shape (N, C, H, W).
                 Typically these should be mean centered and std scaled.
-            img_metas (list[dict]): A List of image info dict where each dict
+            image_metas (list[dict]): A List of image info dict where each dict
                 has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
                 For details on the values of these keys see
@@ -83,7 +82,7 @@ class SingleStageDetector(BaseDetector):
                                               gt_class, gt_bboxes_ignore)
         return losses
 
-    def simple_test(self, img, img_metas, rescale=True, **kwargs):
+    def simple_test(self, image, image_metas, rescale=True, **kwargs):
         """Test function without test-time augmentation.
 
         Args:
@@ -97,13 +96,12 @@ class SingleStageDetector(BaseDetector):
                 The outer list corresponds to each image. The inner list
                 corresponds to each class.
         """
-        feat = self.extract_feat(img)
+        feat = self.extract_feat(image)
         results_list = self.bbox_head.simple_test(
-            feat, img_metas, rescale=rescale)
+            feat, image_metas, rescale=rescale)
         
         bbox_results = {
             'box': torch.stack([a for a, _ in results_list], dim=0),
             'label': torch.stack([b for _, b in results_list], dim=0)
         }
-        # {'box', 'prob', 'label'}
         return bbox_results

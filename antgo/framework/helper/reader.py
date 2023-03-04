@@ -9,9 +9,9 @@ import numpy as np
 import copy
 import cv2
 from antgo.framework.helper.utils import build_from_cfg
-from antgo.dataflow.dataset.tfrecord_dataset import *
+# from antgo.dataflow.dataset.tfrecord_dataset import *
 from antgo.framework.helper.dataset.builder import DATASETS
-import tensorflow as tf
+# import tensorflow as tf
 
 
 def register(cls):
@@ -28,9 +28,11 @@ def register(cls):
 
 
 class KVReaderBase(torch.utils.data.Dataset):
-    def __init__(self, pipeline=None) -> None:
+    def __init__(self, pipeline=None, weak_pipeline=None, strong_pipeline=None) -> None:
         super().__init__()
         self.pipeline = []
+        self.weak_pipeline = []
+        self.strong_pipeline = []
         self.is_kv = True
         self.keys = []
         if pipeline is not None:
@@ -41,6 +43,21 @@ class KVReaderBase(torch.utils.data.Dataset):
                     self.pipeline.append(transform)
                 else:
                     raise TypeError('pipeline must be a dict')
+
+            if weak_pipeline is not None and strong_pipeline is not None:
+                for transform in weak_pipeline:
+                    if isinstance(transform, dict):
+                        transform = build_from_cfg(transform, PIPELINES)
+                        self.weak_pipeline.append(transform)
+                    else:
+                        raise TypeError('weak_pipeline must be a dict')
+                
+                for transform in strong_pipeline:
+                    if isinstance(transform, dict):
+                        transform = build_from_cfg(transform, PIPELINES)
+                        self.strong_pipeline.append(transform)
+                    else:
+                        raise TypeError('strong_pipeline must be a dict')
     
     def __len__(self):
         return len(self.keys)
@@ -52,10 +69,31 @@ class KVReaderBase(torch.utils.data.Dataset):
         assert(isinstance(index, list))
         sample_list = []
         for sample in self.reads(index):
-            for transform in self.pipeline:
-                sample = transform(sample)
+            weak_sample = None
+            strong_sample = None
+            if len(self.weak_pipeline) > 0 or len(self.strong_pipeline) > 0:
+                weak_sample = copy.deepcopy(sample)
+                for transform in self.weak_pipeline:
+                    weak_sample = transform(weak_sample)
+
+                strong_sample = copy.deepcopy(weak_sample)
+                for transform in self.strong_pipeline:
+                    strong_sample = transform(strong_sample)
+
+            if weak_sample is not None and strong_sample is not None:
+                for transform in self.pipeline:
+                    weak_sample = transform(weak_sample)
+
+                for transform in self.pipeline:
+                    strong_sample = transform(strong_sample)
+
+                sample_list.append(weak_sample)
+                sample_list.append(strong_sample)
+            else:
+                for transform in self.pipeline:
+                    sample = transform(sample)
             
-            sample_list.append(sample)
+                sample_list.append(sample)
         return sample_list
 
 
@@ -95,10 +133,12 @@ class TFReaderBase(torch.utils.data.IterableDataset):
 
 
 class Reader(torch.utils.data.Dataset):
-    def __init__(self, dataset, pipeline=None, inputs_def=None):
+    def __init__(self, dataset, pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None):
         self.proxy_dataset = dataset
         self.pipeline = []
         self.pipeline_types = []
+        self.weak_pipeline = []
+        self.strong_pipeline = []        
         if pipeline is not None:
             from antgo.framework.helper.dataset import PIPELINES
             for transform in pipeline:
@@ -108,6 +148,22 @@ class Reader(torch.utils.data.Dataset):
                     self.pipeline.append(transform)
                 else:
                     raise TypeError('pipeline must be a dict')
+
+
+            if weak_pipeline is not None and strong_pipeline is not None:
+                for transform in weak_pipeline:
+                    if isinstance(transform, dict):
+                        transform = build_from_cfg(transform, PIPELINES)
+                        self.weak_pipeline.append(transform)
+                    else:
+                        raise TypeError('weak_pipeline must be a dict')
+                
+                for transform in strong_pipeline:
+                    if isinstance(transform, dict):
+                        transform = build_from_cfg(transform, PIPELINES)
+                        self.strong_pipeline.append(transform)
+                    else:
+                        raise TypeError('strong_pipeline must be a dict')
 
         self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
         self.flag = np.zeros(len(self), dtype=np.uint8)
@@ -145,16 +201,34 @@ class Reader(torch.utils.data.Dataset):
         except:
             print(f'sample error {idx}')
 
-        # transform
-        for (transform, transform_type) in zip(self.pipeline, self.pipeline_types):
-            try:
-                sample = transform(sample)
-            except:
-                print(f'transform error{transform_type}')
+        weak_sample = None
+        strong_sample = None
+        if len(self.weak_pipeline) > 0 or len(self.strong_pipeline) > 0:
+            weak_sample = copy.deepcopy(sample)
+            for transform in self.weak_pipeline:
+                weak_sample = transform(weak_sample)
+            strong_sample = copy.deepcopy(weak_sample)
+            for transform in self.strong_pipeline:
+                strong_sample = transform(strong_sample)
 
-        # arange warp
-        sample = self._arrange(sample, self._fields)
-        return sample
+        if weak_sample is not None and strong_sample is not None:
+            for transform in self.pipeline:
+                weak_sample = transform(weak_sample)
+
+            for transform in self.pipeline:
+                strong_sample = transform(strong_sample)
+
+            # arange warp
+            weak_sample = self._arrange(weak_sample, self._fields)
+            strong_sample = self._arrange(strong_sample, self._fields)
+            return [weak_sample, strong_sample]
+        else:
+            for transform in self.pipeline:
+                sample = transform(sample)
+            
+            # arange warp
+            sample = self._arrange(sample, self._fields)
+            return sample
 
     def get_cat_ids(self, idx):
         return self.proxy_dataset.get_cat_ids(idx)

@@ -14,9 +14,10 @@ from antgo.framework.helper.runner import get_dist_info
 from antgo.framework.helper.utils import TORCH_VERSION, Registry, build_from_cfg, digit_version
 from torch.utils.data import DataLoader
 
+
 from .samplers import (ClassAwareSampler, DistributedGroupSampler,
                        DistributedSampler, GroupSampler, InfiniteBatchSampler,
-                       InfiniteGroupBatchSampler, SemiSampler, DistributedSemiSampler,
+                       InfiniteGroupBatchSampler, MixSampler, DistributedMixSampler,
                        KVSampler, DistributedKVSampler)
 
 if platform.system() != 'Windows':
@@ -127,23 +128,23 @@ def build_dataloader(dataset,
         DataLoader: A PyTorch dataloader.
     """
     rank, world_size = get_dist_info()
-    semi_config = kwargs.get('semi', None)
-    semi_loader_strategy = None
-    if semi_config is not None:
-        semi_loader_strategy = semi_config['strategy']
-        kwargs.pop('semi')
-
     if dist:
         # When model is :obj:`DistributedDataParallel`,
         # `batch_size` of :obj:`dataloader` is the
         # number of training samples on each GPU.
-        batch_size = samples_per_gpu
+        batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu)
         num_workers = workers_per_gpu
     else:
         # When model is obj:`DataParallel`
         # the batch size is samples on all the GPUS
-        batch_size = num_gpus * samples_per_gpu
+        batch_size = num_gpus * samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu)
         num_workers = num_gpus * workers_per_gpu
+
+    strategy = None
+    if isinstance(samples_per_gpu, list):
+        strategy = {}
+        for index, s in enumerate(samples_per_gpu):
+            strategy[index] = s
 
     if runner_type == 'IterBasedRunner':
         # this is a batch sampler, which can yield
@@ -179,23 +180,22 @@ def build_dataloader(dataset,
             # DistributedGroupSampler will definitely shuffle the data to
             # satisfy that images on each GPU are in the same group
             if shuffle:
-                if semi_loader_strategy is None:
-                    sampler = DistributedGroupSampler(
-                        dataset, samples_per_gpu, world_size, rank, seed=seed)
-                else:
-                    sampler = DistributedSemiSampler(
-                        dataset, samples_per_gpu, world_size, rank, seed=seed, strategy=semi_loader_strategy
-                    )
+                sampler = DistributedGroupSampler(
+                    dataset, 
+                    samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu),
+                    world_size, 
+                    rank, 
+                    seed=seed, 
+                    strategy=strategy)
+
             else:
                 sampler = DistributedSampler(
-                    dataset, world_size, rank, shuffle=False, seed=seed)
+                    dataset, world_size, rank, shuffle=False, seed=seed, strategy=strategy)
         else:
-            if semi_loader_strategy is None:
-                sampler = GroupSampler(dataset,
-                                    samples_per_gpu) if shuffle else None
-            else:
-                assert(shuffle)
-                sampler = SemiSampler(dataset, samples_per_gpu, semi_loader_strategy)
+            sampler = GroupSampler(
+                dataset,
+                samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu),
+                strategy=strategy) if shuffle else None
 
         batch_sampler = None
 
@@ -212,7 +212,7 @@ def build_dataloader(dataset,
         
     data_loader = DataLoader(
         dataset,
-        batch_size=batch_size,
+        batch_size=int(batch_size),
         sampler=sampler,
         num_workers=num_workers,
         batch_sampler=batch_sampler,
@@ -239,20 +239,21 @@ def build_kv_dataloader(dataset,
         # When model is :obj:`DistributedDataParallel`,
         # `batch_size` of :obj:`dataloader` is the
         # number of training samples on each GPU.
-        batch_size = samples_per_gpu
+        batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu)
         num_workers = workers_per_gpu
     else:
         # When model is obj:`DataParallel`
         # the batch size is samples on all the GPUS
-        batch_size = num_gpus * samples_per_gpu
+        batch_size = num_gpus * (samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu))
         num_workers = num_gpus * workers_per_gpu
 
+    strategy = None
+    if isinstance(samples_per_gpu, list):
+        strategy = {}
+        for index, s in enumerate(samples_per_gpu):
+            strategy[index] = s
+    
     rank, world_size = get_dist_info()
-    # print(f"batch_size {batch_size}")
-    # print(f"rank {rank}")
-    # print(f"world_size {world_size}")
-    # print(f"shuffle {shuffle}")
-    # print(f"drop_last {kwargs.get('drop_last', False)}")
     if dist:
         sampler = DistributedKVSampler(
             dataset,
@@ -261,10 +262,16 @@ def build_kv_dataloader(dataset,
             shuffle=shuffle,
             rank=rank,
             seed=seed, 
-            drop_last=kwargs.get('drop_last', False))
+            drop_last=kwargs.get('drop_last', False), 
+            strategy=strategy)
     else:
         sampler = \
-            KVSampler(dataset, samples_per_gpu, drop_last=kwargs.get('drop_last', False))
+            KVSampler(
+                dataset, 
+                samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu), 
+                drop_last=kwargs.get('drop_last', False), 
+                shuffle=shuffle,
+                strategy=strategy)
 
     init_fn = partial(
         worker_init_fn, num_workers=num_workers, rank=rank,

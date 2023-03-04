@@ -11,17 +11,31 @@ from .data_container import DataContainer
 def collate(batch, samples_per_gpu=1, level=0, stack=True, ignore_stack=[]):
     """Puts each data field into a tensor/DataContainer with outer dimension
     batch size.
-
-    Extend default_collate to add support for
-    :type:`~mmcv.parallel.DataContainer`. There are 3 cases.
-
-    1. cpu_only = True, e.g., meta data
-    2. cpu_only = False, stack = True, e.g., images tensors
-    3. cpu_only = False, stack = False, e.g., gt bboxes
     """
 
     if not isinstance(batch, Sequence):
         raise TypeError(f'{batch.dtype} is not supported.')
+
+    # 对于Mapping和Sequence混合模式，将Sequence拆解开
+    if level == 0:
+        has_other_data = False
+        has_sequence_data = False
+        for d in batch:
+            if isinstance(d, Sequence):
+                has_sequence_data = True
+            else:
+                has_other_data = True
+            if has_other_data and has_sequence_data:
+                break
+
+        if has_other_data and has_sequence_data:
+            new_batch = []
+            for d in batch:
+                if isinstance(d, Sequence):
+                    new_batch.extend(d)
+                else:
+                    new_batch.append(d)
+            batch = new_batch
 
     if isinstance(batch[0], DataContainer):
         stacked = []
@@ -74,7 +88,7 @@ def collate(batch, samples_per_gpu=1, level=0, stack=True, ignore_stack=[]):
         return DataContainer(stacked, batch[0].stack, batch[0].padding_value)
     elif isinstance(batch[0], Sequence):
         transposed = zip(*batch)
-        return [collate(samples, samples_per_gpu) for samples in transposed]
+        return [collate(samples, samples_per_gpu, level+1) for samples in transposed]
     elif isinstance(batch[0], Mapping) and level == 0:
         return {
             key: collate([d[key] for d in batch], samples_per_gpu, level+1, stack=key not in ignore_stack)

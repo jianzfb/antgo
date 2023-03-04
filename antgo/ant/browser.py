@@ -8,6 +8,7 @@ from __future__ import print_function
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
 from antgo.crowdsource.browser_server import *
+from antgo.dataflow import dataset
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
 from antgo.dataflow.dataset.parallel_read import MultiprocessReader
@@ -18,6 +19,7 @@ import json
 from jinja2 import Environment, FileSystemLoader
 import traceback
 import threading
+import cv2
 
 
 class BrowserDataRecorder(object):
@@ -55,7 +57,7 @@ class BrowserDataRecorder(object):
 
       file_name = '%s.png' % str(uuid.uuid4())
       image_path = os.path.join(self.dump_dir, file_name)
-      imwrite(image_path, transfer_result)
+      cv2.imwrite(image_path, transfer_result)
       return file_name
     except:
       logger.error('Couldnt transfer image data.')
@@ -144,13 +146,15 @@ class AntBrowser(AntBase):
   def __init__(self,
                ant_context,
                ant_name,
-               ant_token,
                ant_data_folder,
-               ant_dataset,
                ant_dump_dir,
+               ant_token,
+               ant_task_config,
+               ant_dataset,
                **kwargs):
     super(AntBrowser, self).__init__(ant_name, ant_context, ant_token, **kwargs)
     self.ant_data_source = ant_data_folder
+    self.ant_task_config = ant_task_config
     self.dataset_name = ant_dataset
     self.dump_dir = ant_dump_dir
     self.host_ip = self.context.params.system.get('ip', '127.0.0.1')
@@ -208,14 +212,19 @@ class AntBrowser(AntBase):
         logger.error('unknow error')
         exit(-1)
 
-    self._running_task = running_ant_task
-    if running_ant_task is not None:
-      self.dataset_name = running_ant_task.dataset_name
+    if running_ant_task is None:
+        # 1.2.step load custom task
+        if self.ant_task_config is not None:
+            custom_task = create_task_from_xml(self.ant_task_config, self.context)
+            if custom_task is None:
+                logger.error('Couldnt load custom task.')
+                exit(-1)
+            running_ant_task = custom_task
 
-    parse_flag = ''
-    dataset_cls = None
-    if self.dataset_name != '':
-      dataset_cls = AntDatasetFactory.dataset(self.dataset_name, parse_flag)
+    self._running_task = running_ant_task
+    if running_ant_task is not None and running_ant_task.dataset is not None:
+      self.dataset_name = running_ant_task.dataset_name
+    dataset_cls = running_ant_task.dataset
 
     # 2.step 配置记录器
     self.rpc = HttpRpc("v1", "antgo/api", self.host_ip, self.host_port)
@@ -264,7 +273,8 @@ class AntBrowser(AntBase):
       'dataset_offset': test_offset
     }]
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+    if self.context.params.browser is not None and \
+      'offset' in self.context.params.browser.keys():
       if 'TRAIN' in self.context.params.browser.offset.keys():
         train_offset = self.context.params.browser.offset.TRAIN
         offset_config = {
@@ -273,7 +283,8 @@ class AntBrowser(AntBase):
         }
         offset_configs[0] = offset_config
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+    if self.context.params.browser is not None and \
+      'offset' in self.context.params.browser.keys():
       if 'VAL' in self.context.params.browser.offset:
         val_offset = self.context.params.browser.offset.VAL
         offset_config = {
@@ -282,7 +293,8 @@ class AntBrowser(AntBase):
         }
         offset_configs[1] = offset_config
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+    if self.context.params.browser is not None and \
+      'offset' in self.context.params.browser.keys():
       if 'TEST' in self.context.params.browser.offset:
         test_offset = self.context.params.browser.offset.TEST
         offset_config = {

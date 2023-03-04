@@ -33,11 +33,11 @@ class MultiSteamModule(BaseModule):
         for param in model.parameters():
             param.requires_grad = False
 
-    def forward_test(self, imgs, img_metas, **kwargs):
-        return self.model(**kwargs).forward_test(imgs, img_metas, **kwargs)
+    def forward_test(self, images, image_metas, **kwargs):
+        return self.model(**kwargs).forward_test(images, image_metas, **kwargs)
 
-    def extract_feat(self, imgs):
-        return self.model().extract_feat(imgs)
+    def extract_feat(self, images):
+        return self.model().extract_feat(images)
 
-    def simple_test(self, img, img_metas, **kwargs):
-        return self.model(**kwargs).simple_test(img, img_metas, **kwargs)
+    def simple_test(self, images, image_metas, **kwargs):
+        return self.model(**kwargs).simple_test(images, image_metas, **kwargs)

@@ -32,11 +32,13 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 import base64
 import imagesize
+from antgo.utils import colormap
 
 
 MB = 1024 * 1024
 GB = 1024 * MB
 MAX_STREAMED_SIZE = 1*GB
+
 class LiveApiHandler(BaseHandler):
   @gen.coroutine
   def get(self):
@@ -102,20 +104,33 @@ class LabelStateHandler(BaseHandler):
   def post(self):
     running_state = self.get_argument('running_state', None)
     running_stage = self.get_argument('running_stage', None)
-    running_round = self.get_argument("running_round", '0')
+    running_round = self.get_argument("running_round", '-1')
     if running_state is None or running_stage is None:
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
       return
 
     assert(running_state in ['running', 'abnormal', 'overtime', 'pending'])
-    assert(running_stage in ['waiting', 'training', 'labeling', 'finish'])
+    assert(running_stage in ['waiting', 'labeling', 'finish'])
+    # running_stage的finish状态需要由前端触发，标记本轮标注已经结束
+
+    if running_stage == 'labeling':
+      running_round = int(running_round)
+      if running_round == -1:
+        self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+        return 
+
+      self.db['running']['state'] = running_state
+      self.db['running']['stage'] = running_stage
+      self.db['running']['round'] = (int)(running_round)
+      self.response(RESPONSE_STATUS_CODE.SUCCESS)
+      return
+  
     if running_stage == 'waiting':
       # 切换运行状态为等待, 清空标注样本
       self.db['samples'] = []
 
     self.db['running']['state'] = running_state
     self.db['running']['stage'] = running_stage
-    self.db['running']['round'] = (int)(running_round)
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
@@ -649,11 +664,12 @@ def label_server_start(
     db['task_metas'] = task_metas
 
     # 设置标注基本信息
-    assert('label_category' in label_metas)
-    for i, label_config in enumerate(label_metas['label_category']):
+    assert('category' in label_metas)
+    for i, label_config in enumerate(label_metas['category']):      
       if 'color' not in label_config or 'background_color' not in label_config:
-        label_config['color'] = 'green'
-        label_config['background_color'] = '#00800026'
+        # 自动选择配色
+        color = colormap.highlight[i%len(colormap.highlight)]['color']
+        background_color = colormap.dark[i%len(colormap.dark)]['color']
 
     db['label_metas'] = label_metas
 

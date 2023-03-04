@@ -76,6 +76,9 @@ class CifarBase(Dataset):
       self.data_samples, self.ids = self.load_samples()
       return
 
+    if not os.path.exists(self.dir):
+      os.makedirs(self.dir)
+
     # fixed seed
     self.seed = time.time()
 

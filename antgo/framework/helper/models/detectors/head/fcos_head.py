@@ -95,7 +95,7 @@ def sigmoid_focal_loss(
 
 
 @HEADS.register_module()
-class FcosHeadBayesian(BaseDenseHead):
+class FcosHead(BaseDenseHead):
     """Objects as Points Head. CenterHead use center_point to indicate object's
     position. Paper link <https://arxiv.org/abs/1904.07850>
 
@@ -125,11 +125,10 @@ class FcosHeadBayesian(BaseDenseHead):
                  rescale=1.0,
                  score_thresh=0.15,
                  loss_wh=dict(type='L1Loss', loss_weight=0.1),
-                 enable_dropout=True,
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=None):
-        super(FcosHeadBayesian, self).__init__(init_cfg)
+        super(FcosHead, self).__init__(init_cfg)
         self.num_classes = num_classes
         self.rescale_x, self.rescale_y = rescale if type(rescale) == list or type(rescale) == tuple else (rescale, rescale)
         self.score_thresh = score_thresh
@@ -137,11 +136,8 @@ class FcosHeadBayesian(BaseDenseHead):
         self.img_width = img_width
         self.img_height = img_height      
         self.last_channel = in_channel  
-        self.enable_dropout = enable_dropout
-        self.drop_out = None
         self._build_head()
         self.loss_reg = build_loss(loss_wh)
-
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
         self.register_buffer('center_offset_yx', torch.from_numpy(np.array([
@@ -184,10 +180,6 @@ class FcosHeadBayesian(BaseDenseHead):
             nn.ReLU(inplace=True)
         )
 
-        if self.enable_dropout:
-            self.drop_out = nn.Dropout(0.5)
-        # self.scale_exp = ScaleExp(1.0)
-
     def init_weights(self):
         """Initialize weights of the head."""
         for m in self.modules():
@@ -224,69 +216,19 @@ class FcosHeadBayesian(BaseDenseHead):
             offset_preds (List[Tensor]): offset predicts for all levels, the
                channels number is 2.
         """
-        feats = (feats[0],)
-        return multi_apply(self.forward_single, feats)
-
-    def forward_single(self, feat):
-        """Forward feature of a single level.
-
-        Args:
-            feat (Tensor): Feature of a single level.
-
-        Returns:
-            center_heatmap_pred (Tensor): center predict heatmaps, the
-               channels number is num_classes.
-            wh_pred (Tensor): wh predicts, the channels number is 2.
-            offset_pred (Tensor): offset predicts, the channels number is 2.
-        """
-        if self.drop_out is not None:
-            if self.base_stage == 'activelearning':
-                self.drop_out.train()
-                feat = self.drop_out(feat)
-            else:
-                self.drop_out.eval()
-                feat = self.drop_out(feat)
-
-        center_heatmap_pred = self.heatmap_head(feat)
-        reg_pred = self.reg_head(feat)
+        center_heatmap_pred = self.heatmap_head(feats[0])
+        reg_pred = self.reg_head(feats[0])
         return center_heatmap_pred, reg_pred
 
     def loss(self,
-             center_heatmap_preds,
+             center_heatmap_pred,
              reg_pred,
              gt_bboxes,
              gt_labels,
              img_metas,
              gt_bboxes_ignore=None):
-        """Compute losses of the head.
-
-        Args:
-            center_heatmap_preds (list[Tensor]): center predict heatmaps for
-               all levels with shape (B, num_classes, H, W).
-            reg_preds (list[Tensor]): offset predicts for all levels
-               with shape (B, 4, H, W).
-            gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
-                shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels (list[Tensor]): class indices corresponding to each box.
-            img_metas (list[dict]): Meta information of each image, e.g.,
-                image size, scaling factor, etc.
-            gt_bboxes_ignore (None | list[Tensor]): specify which bounding
-                boxes can be ignored when computing the loss. Default: None
-
-        Returns:
-            dict[str, Tensor]: which has components below:
-                - loss_center_heatmap (Tensor): loss of center heatmap.
-                - loss_wh (Tensor): loss of hw heatmap
-                - loss_offset (Tensor): loss of offset heatmap.
-        """
-        assert len(center_heatmap_preds) == len(
-            reg_pred) == 1
-        center_heatmap_pred = center_heatmap_preds[0]
-        reg_pred = reg_pred[0]
-
-        target_result, avg_factor = self.get_targets(gt_bboxes, gt_labels,
-                                                     center_heatmap_pred.shape,
-                                                     (self.img_height,self.img_width), img_metas)
+        target_result, avg_factor = \
+            self.get_targets(gt_bboxes, gt_labels, center_heatmap_pred.shape, (self.img_height,self.img_width), img_metas)
 
         center_heatmap_target = target_result['center_heatmap_target']
         center_heatmap_target_weight = target_result['center_heatmap_target_weight']
@@ -354,21 +296,9 @@ class FcosHeadBayesian(BaseDenseHead):
 
         center_heatmap_target = gt_bboxes[-1].new_zeros(
             [bs, self.num_classes, feat_h, feat_w])
-        # wh_target = gt_bboxes[-1].new_zeros([bs, 2, feat_h, feat_w])
-        # offset_target = gt_bboxes[-1].new_zeros([bs, 2, feat_h, feat_w])
-        # wh_offset_target_weight = gt_bboxes[-1].new_zeros(
-        #     [bs, 2, feat_h, feat_w]
-        # )
         center_heatmap_target_weight = gt_bboxes[-1].new_ones(
             [bs, 1, feat_h, feat_w]
         )
-
-        # gt_bboxes: num_gts, 6 [tl_x, tl_y, br_x, br_y, score, un_reg]
-        # 这里根据gt_bboxes的维度，确定提供的框框的可信度
-        # 如果提供的框框的可信度
-        # TODO，后期可以统一:4,5维度分别提供框的可信度，和框的大小的不确定度（归一化到1）
-        # if not image_metas[0]['labeled']:
-        #     center_heatmap_target_weight =  gt_bboxes[-1].new_zeros([bs, 1, feat_h, feat_w])
 
         reg_target_list = []
         reg_weight_list = []
@@ -409,7 +339,7 @@ class FcosHeadBayesian(BaseDenseHead):
             mask_center = c_off_max<radiu
 
             mask_pos=mask_in_gtboxes&mask_in_level&mask_center      #[h*w,m]
-            areas[~mask_pos]=99999999
+            areas[~mask_pos] = 99999999
             areas_min_ind=torch.min(areas,dim=-1)[1]    #[h*w]
 
             reg_target = ltrb_off[torch.zeros_like(areas,dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1),1)]#[h*w,4]
@@ -438,12 +368,9 @@ class FcosHeadBayesian(BaseDenseHead):
                 radius = (int)(radius)
                 ind = gt_label[j]
                 ind = ind + 1
-                # 生成 GT Gaussian
+
                 k = 1
-                # if not image_metas[batch_id]['labeled']:
-                #     k = gt_bbox[j][4]
                 gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius, k=k)
-                # gen_k_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius*4, k=k)
 
             reg_target_list.append(reg_target)
             reg_weight_list.append(mask_pos_2*box_confidence)

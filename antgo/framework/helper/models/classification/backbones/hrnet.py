@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 
 import torch.nn as nn
@@ -6,7 +5,7 @@ from antgo.framework.helper.cnn import build_conv_layer, build_norm_layer
 from antgo.framework.helper.base_module import BaseModule, ModuleList, Sequential
 from torch.nn.modules.batchnorm import _BatchNorm
 
-from ..builder import BACKBONES
+from antgo.framework.helper.models.builder import BACKBONES
 from .resnet import BasicBlock, Bottleneck
 
 

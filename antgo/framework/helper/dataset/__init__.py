@@ -1,71 +1,35 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset, build_kv_dataloader
 from .dataset_wrappers import (ClassBalancedDataset, ConcatDataset,
                                MultiImageMixDataset, RepeatDataset)
-from .samplers import DistributedGroupSampler, DistributedSampler, GroupSampler
 from .pipelines import *
-from antgo.dataflow.dataset.interhand26M import InterHand26M
-from antgo.dataflow.dataset.imagenet import ImageNet
+from antgo.dataflow import dataset as local_dataset
 from antgo.framework.helper.reader import *
 
-@DATASETS.register_module()
-class InterHand26MReader(Reader):
-    def __init__(self, 
-                train_or_test='train', 
-                dir='', 
-                trans_test='rootnet', 
-                output_hm_shape=(64, 64, 64), 
-                input_img_shape= (256, 256), 
-                bbox_3d_size= 400, 
-                output_root_hm_shape=64, 
-                bbox_3d_size_root=400,
-                pipeline=None,
-                inputs_def=None, **kwargs):
-        
-        super().__init__(
-            InterHand26M(
-                train_or_test=train_or_test, 
-                dir=dir, 
-                params={
-                    'trans_test': trans_test,
-                    'output_hm_shape': output_hm_shape,
-                    'input_img_shape':input_img_shape,
-                    'bbox_3d_size': bbox_3d_size,      
-                    'output_root_hm_shape': output_root_hm_shape, 
-                    'bbox_3d_size_root': bbox_3d_size_root
+def register_antgo_dataset():
+    local_antgo_dataset = []
+    for dataset_module_name in local_dataset.__all__:
+        if dataset_module_name == 'Dataset':
+            continue
+
+        dataset_module_reader = \
+            type(
+                dataset_module_name, 
+                (Reader,), 
+                {   
+                    'name': dataset_module_name,
+                    '__doc__': f'{dataset_module_name} reader', 
+                    '__init__': lambda self, pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None, **kwargs: 
+                        Reader.__init__(self, getattr(local_dataset, self.name)(**kwargs), pipeline=pipeline, weak_pipeline=weak_pipeline, strong_pipeline=strong_pipeline, inputs_def=inputs_def)
                 }
-            ), 
-            pipeline=pipeline, 
-            inputs_def=inputs_def)
+            )
+        DATASETS.register_module()(dataset_module_reader)
+
+    return local_antgo_dataset
 
 
-@DATASETS.register_module()
-class ImageNetReader(Reader):
-    def __init__(self, 
-                    train_or_test, 
-                    dir='',
-                    ann_file = None, 
-                    classes = None, 
-                    extensions = ('.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif'),
-                    pipeline=None,
-                    inputs_def=None, **kwargs):
-
-        super().__init__(        
-            ImageNet(
-                train_or_test, 
-                dir , 
-                params={
-                    'data_prefix': dir,
-                    'ann_file': ann_file,
-                    'classes': classes,
-                    'extensions': extensions
-                }
-            ), 
-            pipeline=pipeline, 
-            inputs_def=inputs_def)
+LOCAL_ANTGO_DATASETS = register_antgo_dataset()
 
 
 __all__ = [
-    'DATASETS','build_dataloader','build_dataset','ClassBalancedDataset','ConcatDataset','MultiImageMixDataset','RepeatDataset',
-    'DistributedGroupSampler','DistributedSampler','GroupSampler'
+    'DATASETS','build_dataloader','build_dataset','ClassBalancedDataset','ConcatDataset','MultiImageMixDataset','RepeatDataset'
 ]

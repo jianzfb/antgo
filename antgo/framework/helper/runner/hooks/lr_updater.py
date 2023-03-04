@@ -5,7 +5,7 @@ from .hook import HOOKS, Hook
 
 
 class LrUpdaterHook(Hook):
-    """LR Scheduler in MMCV.
+    """LR Scheduler.
 
     Args:
         by_epoch (bool): LR changes epoch by epoch
@@ -105,7 +105,6 @@ class LrUpdaterHook(Hook):
     def before_run(self, runner):
         # NOTE: when resuming from a checkpoint, if 'initial_lr' is not saved,
         # it will be set according to the optimizer params
-        # 使用在optimizer 中设置的学习率，作为基础学习率
         if isinstance(runner.optimizer, dict):
             self.base_lr = {}
             for k, optim in runner.optimizer.items():
@@ -178,7 +177,6 @@ class StepLrUpdaterHook(LrUpdaterHook):
 
     def __init__(self, step, gamma=0.1, min_lr=None, **kwargs):
         if isinstance(step, list):
-            # assert mmcv.is_list_of(step, int)
             assert all([s > 0 for s in step])
         elif isinstance(step, int):
             assert step > 0

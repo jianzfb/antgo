@@ -14,7 +14,7 @@ class DistributedSampler(_DistributedSampler):
                  num_replicas=None,
                  rank=None,
                  shuffle=True,
-                 seed=0):
+                 seed=0,strategy=None):
         super().__init__(
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle)
 

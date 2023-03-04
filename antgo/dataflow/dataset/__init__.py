@@ -2,61 +2,70 @@
 # @Time    : 18-3-26
 # @File    : __init__.py
 # @Author  : jian<jian@mltalker.com>
-from pkgutil import walk_packages
-import os
-import os.path
-from .simplecsvs import *
-from .simpleimages import *
-from .simplevideos import *
-from .standard import *
+from .dataset import Dataset
+from .cifar import Cifar10, Cifar100
+from .imagenet import ImageNet
+__all__ = [
+  'Cifar10', 'Cifar100', 'ImageNet', 'Dataset'
+]
 
-class AntDatasetFactory(object):
-  factory_dataset = {}
 
-  @staticmethod
-  def dataset(name, parse_flag=''):
-    if name is None or name == '':
-      return AntDatasetFactory.factory_dataset['EmptyDataset']
+# from pkgutil import walk_packages
+# import os
+# import os.path
+# from .simplecsvs import *
+# from .simpleimages import *
+# from .simplevideos import *
+# from .standard import *
 
-    if name in AntDatasetFactory.factory_dataset:
-      return AntDatasetFactory.factory_dataset[name]
 
-    for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
-      if dataset_name.lower() == name.lower():
-        return dataset_obj
+# class AntDatasetFactory(object):
+#   factory_dataset = {}
 
-    if parse_flag == 'csv':
-      return CSV
+#   @staticmethod
+#   def dataset(name, parse_flag=''):
+#     if name is None or name == '':
+#       return AntDatasetFactory.factory_dataset['EmptyDataset']
+
+#     if name in AntDatasetFactory.factory_dataset:
+#       return AntDatasetFactory.factory_dataset[name]
+
+#     for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
+#       if dataset_name.lower() == name.lower():
+#         return dataset_obj
+
+#     if parse_flag == 'csv':
+#       return CSV
       
-    if name.lower().startswith('image'):
-      return SimpleImages
-    elif name.lower().startswith('video'):
-      return SimpleVideos
+#     if name.lower().startswith('image'):
+#       return SimpleImages
+#     elif name.lower().startswith('video'):
+#       return SimpleVideos
 
-    return AntDatasetFactory.factory_dataset['EmptyDataset']
+#     return AntDatasetFactory.factory_dataset['EmptyDataset']
 
-  @staticmethod
-  def add_custom_dataset(custom_dataset):
-    for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
-      if dataset_obj == custom_dataset:
-        return
+#   @staticmethod
+#   def add_custom_dataset(custom_dataset):
+#     for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
+#       if dataset_obj == custom_dataset:
+#         return
 
-    AntDatasetFactory.factory_dataset[custom_dataset.__name__] = custom_dataset
+#     AntDatasetFactory.factory_dataset[custom_dataset.__name__] = custom_dataset
 
-def _global_import(name):
-  p = __import__(name, globals(), locals(), level=1)
-  globals().pop(name)
-  lst = p.__all__ if '__all__' in dir(p) else dir(p)
-  for k in lst:
-    # add global varaible
-    globals()[k] = p.__dict__[k]
+# def _global_import(name):
+#   p = __import__(name, globals(), locals(), level=1)
+#   globals().pop(name)
+#   lst = p.__all__ if '__all__' in dir(p) else dir(p)
+#   for k in lst:
+#     # add global varaible
+#     globals()[k] = p.__dict__[k]
 
-    # register in Dataset Factory
-    AntDatasetFactory.factory_dataset[k] = p.__dict__[k]
+#     # register in Dataset Factory
+#     AntDatasetFactory.factory_dataset[k] = p.__dict__[k]
 
 
-for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
-  if not module_name.startswith('_'):
-    if module_name in ['tfrecordsreader', 'dataset', 'simplecsvs', 'simpleimages', 'standard']:
-      continue
-    _global_import(module_name)
+# for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
+#   if not module_name.startswith('_'):
+#     if module_name in ['tfrecordsreader', 'dataset', 'simplecsvs', 'simpleimages', 'standard']:
+#       continue
+#     _global_import(module_name)

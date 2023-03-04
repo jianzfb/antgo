@@ -58,6 +58,7 @@ class IterBasedRunner(BaseRunner):
         self._epoch = data_loader.epoch
         data_batch = next(data_loader)
         self.call_hook('before_train_iter')
+        kwargs.update({'iter': self._iter})
         outputs = self.model.train_step(data_batch, self.optimizer, **kwargs)
         if not isinstance(outputs, dict):
             raise TypeError('model.train_step() must return a dict')
@@ -96,7 +97,6 @@ class IterBasedRunner(BaseRunner):
                 1000 iterations for validation, iteratively.
         """
         assert isinstance(data_loaders, list)
-        # assert mmcv.is_list_of(workflow, tuple)
         assert len(data_loaders) == len(workflow)
         if max_iters is not None:
             warnings.warn(

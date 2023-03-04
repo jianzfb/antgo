@@ -20,6 +20,7 @@ from antgo.dataflow.basic import *
 import requests
 from antgo.context import *
 from antgo.utils import *
+import cv2
 
 
 class RecorderNode(Node):
