@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 
+import sys
 import copy
 
 import tornado.httpserver
@@ -124,6 +125,18 @@ class LabelStateHandler(BaseHandler):
       self.db['running']['round'] = (int)(running_round)
       self.response(RESPONSE_STATUS_CODE.SUCCESS)
       return
+  
+    if running_stage == 'finish':
+      # 检查是否每个数据已经完成审核或标注
+      sample_num = len(self.db['samples'])
+      completed_num = 0
+      for sample in self.db['samples']:
+        if sample['state'] == 'completed':
+          completed_num += 1
+        
+      if sample_num != completed_num:
+        self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+        return 
   
     if running_stage == 'waiting':
       # 切换运行状态为等待, 清空标注样本
@@ -363,7 +376,7 @@ class LabelGetSampleHandler(BaseHandler):
           # 将当前样本状态切换为等待状态
           self.db['samples'][sample_i]['state'] = 'waiting'     # 重置状态
           self.db['samples'][sample_i]['assigner'] = ''         # 清空已经分配的操作者
-          self.db['samples'][sample_i]['created_time'] = 0       # 清空创建时间
+          self.db['samples'][sample_i]['created_time'] = 0      # 清空创建时间
 
     # 仅有当前样本处在未锁定状态才允许进行重新分配标注人员
     if self.db['samples'][sample_i]['state'] != 'labeling':
@@ -394,6 +407,9 @@ class LabelNextSampleHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
       return
 
+    # TODO, 需要根据当前标注样本索引，继续向下寻找
+    # update_sample = self.get_argument('sample', None)
+  
     # 发现下一个还没有标注的样本(没有被分配的样本)
     waiting_label_sample_i = -1
     # state: labeling/completed/waiting
@@ -409,7 +425,7 @@ class LabelNextSampleHandler(BaseHandler):
           # 将当前样本状态切换为等待状态
           self.db['samples'][sample_i]['state'] = 'waiting'     # 重置状态
           self.db['samples'][sample_i]['assigner'] = ''         # 清空已经分配的操作者
-          self.db['samples'][sample_i]['created_time'] = 0       # 清空创建时间
+          self.db['samples'][sample_i]['created_time'] = 0      # 清空创建时间
           waiting_label_sample_i = sample_i
           break
 
@@ -665,11 +681,16 @@ def label_server_start(
 
     # 设置标注基本信息
     assert('category' in label_metas)
-    for i, label_config in enumerate(label_metas['category']):      
+    label_category = label_metas['category']
+    label_metas['label_category'] = label_category
+    for i, label_config in enumerate(label_metas['label_category']):      
       if 'color' not in label_config or 'background_color' not in label_config:
         # 自动选择配色
         color = colormap.highlight[i%len(colormap.highlight)]['color']
         background_color = colormap.dark[i%len(colormap.dark)]['color']
+        
+        label_config['color'] = color
+        label_config['background_color'] = background_color
 
     db['label_metas'] = label_metas
 
@@ -708,6 +729,7 @@ def label_server_start(
         (r"/antgo/api/label/sample/get/", LabelGetSampleHandler),         # 得到指定样本信息
         (r"/antgo/api/label/sample/next/", LabelNextSampleHandler),       # 得到下一个需要进行标注的样本信息
         (r"/antgo/api/label/export/", LabelExportHandler),                # 标注导出
+        (r"/antgo/api/label/export/download/", LabelExportHandler),       # 标注导出
         (r"/antgo/api/label/import/", LabelImportHandler),                # 标注导入
         (r"/antgo/api/user/info/", UserInfoHandler),                  # 获得用户信息
         (r"/antgo/api/user/login/", LoginHandler),  # 登录，仅支持预先指定用户
@@ -748,7 +770,7 @@ if __name__ == '__main__':
     'stage': 'labeling'
   }
   label_metas = {
-        'label_category': [
+        'category': [
           {
             'class_name': 'A',
             'class_index': 0,
@@ -770,7 +792,7 @@ if __name__ == '__main__':
   }
   samples = [
             {
-              'image_file': '/static/data/1.jpeg',
+              'image_file': '/static/data/1.png',
               'height': 800,
               'width': 1200,
               'sample_id': 0,
@@ -804,7 +826,7 @@ if __name__ == '__main__':
               ],
             },
             {
-              'image_file': '/static/data/2.jpeg',
+              'image_file': '/static/data/1.png',
               'height': 800,
               'width': 1200,
               'sample_id': 1,
@@ -817,7 +839,7 @@ if __name__ == '__main__':
               'label_info': [],
             },
             {
-              'image_file': '/static/data/3.jpeg',
+              'image_file': '/static/data/1.png',
               'height': 800,
               'width': 1200,
               'sample_id': 2,
@@ -834,4 +856,4 @@ if __name__ == '__main__':
     samples[i] = copy.deepcopy(samples[i])
     samples[i]['sample_id'] = i
 
-  label_server_start('/Users/jian/Downloads/BB', 9000, task_metas, sample_metas, label_metas, samples, running_metas, white_users)
+  label_server_start('/Users/bytedance/Downloads/workspace/my/A', 9000, task_metas, sample_metas, label_metas, samples, running_metas, white_users)

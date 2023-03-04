@@ -32,9 +32,6 @@ class ActivelearningDataRecorder(object):
   def __init__(self, rpc, dump_dir):
     self.rpc = rpc
     self.activelearning_static_dir = os.path.join(dump_dir, 'static')
-    self.activelearning_label_dir = os.path.join(dump_dir, 'label')
-    if not os.path.exists(self.activelearning_label_dir):
-      os.makedirs(self.activelearning_label_dir)
 
   def record(self, sample):
     if not os.path.exists(os.path.join(self.activelearning_static_dir, 'data')):
@@ -77,33 +74,8 @@ class ActivelearningDataRecorder(object):
     # 更新待标注样本
     self.rpc.label.sample.fresh.post(samples=samples)
 
-  def start(self, round=0):
-    # 更新标注服务状态
-    self.rpc.info.post(running_state='running',  running_stage='labeling', running_round=round)
-
-    # 等待标注完成
-    while True:
-      response = self.rpc.info.get()
-      if response['status'] == 'ERROR':
-        print('rpc error...')
-        time.sleep(5)
-        continue
-
-      if response['content']['project_state']['stage'] == 'finish':
-        break
-      time.sleep(5)
-
-    # 下载标注结果，到dumpdir
-    if not os.path.exists(os.path.join(self.activelearning_label_dir, f'{round}')):
-      os.makedirs(os.path.join(self.activelearning_label_dir, f'{round}'))
-
-    self.rpc.label.export.download(
-      file_folder=os.path.join(self.activelearning_label_dir, f'{round}'),
-      file_name='label.json'
-    )
-
-    # 更新标注服务状态
-    self.rpc.info.post(running_state='running',  running_stage='waiting', running_round=round)
+  def close(self):
+    pass
 
 
 class AntActiveLearningV2(AntBase):
@@ -178,12 +150,12 @@ class AntActiveLearningV2(AntBase):
         if response['content']['project_state']['stage'] == 'finish':
           break
         # 等待10分钟后检查
-        time.sleep(10*60)
+        time.sleep(30)
         
-    if not os.path.exists(os.path.join(self.activelearning_label_dir, f'{self._round}')):
-      os.makedirs(os.path.join(self.activelearning_label_dir, f'{self._round}'))
+    if not os.path.exists(os.path.join(self.ant_dump_dir, 'label', f'{self._round}')):
+      os.makedirs(os.path.join(self.ant_dump_dir, 'label', f'{self._round}'))
 
-    folder = os.path.join(self.activelearning_label_dir, f'{self._round}')
+    folder = os.path.join(self.ant_dump_dir, 'label', f'{self._round}')
     file_name = f'label.json'
     self.rpc.label.export.download(
       file_folder=folder,
@@ -288,6 +260,7 @@ class AntActiveLearningV2(AntBase):
                 },
                 white_users)
         )
+      self.p.daemon = True  # 主进程结束后，自进程也将结束
       self.p.start()
 
       # 等待直到http服务开启

@@ -31,7 +31,7 @@ highlight = [
     {'color': '#63B8FF', 'name': 'SteelBlue1'},
     {'color': '#00BFFF', 'name': 'DeepSkyBlue1'},
     {'color': '#CAE1FF', 'name': 'LightSteelBlue1'},
-    {'color': '#BFEFFF', 'name': 'LightBlue1'}
+    {'color': '#BFEFFF', 'name': 'LightBlue1'},
     {'color': '#E0FFFF', 'name': 'LightCyan1'}
 ]
 

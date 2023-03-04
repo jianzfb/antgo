@@ -141,7 +141,9 @@ class BrowserDataRecorder(object):
   def record(self, val):
     self.prepare_queue.put(val)
 
-
+  def close(self):
+    pass
+  
 class AntBrowser(AntBase):
   def __init__(self,
                ant_context,
@@ -183,6 +185,35 @@ class AntBrowser(AntBase):
   def wait_until_stop(self):
     self.p.join()
 
+  def download(self):
+    if not os.path.exists(os.path.join(self.dump_dir, 'check')):
+      os.makedirs(os.path.join(self.dump_dir, 'check'))
+
+    folder = os.path.join(self.dump_dir, 'check')
+    file_name = f'check.json'
+    self.rpc.browser.download(
+      file_folder=folder,
+      file_name=file_name
+    )    
+    with open(os.path.join(folder, file_name), 'r') as fp:
+      content = json.load(fp)
+
+      return content
+  
+  def waiting(self):
+    # 需要等待本轮标准完成
+    while True:
+      response = self.rpc.info.get()
+      if response['status'] == 'ERROR':
+        print('rpc error...')
+        time.sleep(5)
+        continue
+
+      if response['content']['project_state']['stage'] == 'finish':
+        break
+      # 等待10分钟后检查
+      time.sleep(30)
+  
   def start(self):
     # 1.step 获得数据集解析
     running_ant_task = None
@@ -342,7 +373,8 @@ class AntBrowser(AntBase):
     # 设置记录器偏移
     self.context.recorder.sample_index = sample_offset
 
-    white_users = self.context.params.browser.white_users
+    white_users = \
+      self.context.params.browser.white_users.get() if self.context.params.browser.white_users is not None else None
     # 在独立进程中启动webserver
     self.p = \
       multiprocessing.Process(

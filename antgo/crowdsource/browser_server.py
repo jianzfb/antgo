@@ -215,8 +215,12 @@ class NextApiHandler(BaseHandler):
       # 发现数据id
       data_id = None
       for item in data:
-        if item['title'] == 'ID':
-          data_id = str(item['data'])
+        assert('id' in item or 'ID' in item)
+        if 'id' in item:
+          data_id = str(item['id'])
+        if 'ID' in item:
+          data_id = str(item['ID'])
+
       if data_id is None:
         data_id = str(entry_id + offset)
 
@@ -327,15 +331,24 @@ class FileApiHandler(BaseHandler):
 class DownloadApiHandler(BaseHandler):
   @gen.coroutine
   def get(self):
-    download_file = self.get_argument('path', None)
-    if download_file is None:
-      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'not set download file')
+    if not os.path.exists(os.path.join(self.dump_folder, self.db['state'])):
+      self.finish()
       return
-
-    download_path = os.path.join(self.data_folder, download_file)
-    if not os.path.exists(download_path):
-      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'not download file')
-      return
+    
+    package_data = {}
+    for file_name in os.listdir(os.path.join(self.dump_folder, self.db['state'])):
+      if not file_name.endswith('json'):
+        continue
+      
+      data_id = file_name.split('.')[0]
+      with open(os.path.join(self.dump_folder, self.db['state'], file_name), 'r') as fp:
+        package_data[data_id] = json.load(fp)
+              
+    now_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+    download_file = f'{now_time}.json'
+    download_path = os.path.join(self.dump_folder, download_file)
+    with open(download_path, 'w') as fp:
+      json.dump(package_data, fp)
 
     # Content-Type
     self.set_header('Content-Type', 'application/octet-stream')
@@ -460,11 +473,13 @@ class UserInfoHandler(BaseHandler):
 class ProjectInfoHandler(BaseHandler):
   @gen.coroutine
   def get(self):
-
+    
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
       'project_type': 'BROWSER',
       'project_state': {
-
+        'stage': \
+          'finish' if len(self.db['data']) > 0 and \
+            self.db['dataset'][self.db['state']]['samples_num_checked'] == len(self.db['data'])  else 'checking'
       }
     })
     return
@@ -553,7 +568,7 @@ def browser_server_start(browser_dump_dir,
                                             (r"/antgo/api/browser/download/", DownloadApiHandler),
                                             (r"/antgo/api/browser/config/", ConfigApiHandler),
                                             (r"/antgo/api/ping/", PingApiHandler),
-                                            (r"/antgo/api/user/login/", LoginHandler),  # 登录，仅支持预先指定用户
+                                            (r"/antgo/api/user/login/", LoginHandler),    # 登录，仅支持预先指定用户
                                             (r"/antgo/api/user/logout/", LogoutHandler),  # 退出
                                             (r"/antgo/api/user/info/", UserInfoHandler),  # 获得用户信息
                                             (r"/antgo/api/info/", ProjectInfoHandler),
