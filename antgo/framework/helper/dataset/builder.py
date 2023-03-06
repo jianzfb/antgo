@@ -17,8 +17,7 @@ from torch.utils.data import DataLoader
 
 from .samplers import (ClassAwareSampler, DistributedGroupSampler,
                        DistributedSampler, GroupSampler, InfiniteBatchSampler,
-                       InfiniteGroupBatchSampler, MixSampler, DistributedMixSampler,
-                       KVSampler, DistributedKVSampler)
+                       InfiniteGroupBatchSampler, KVSampler, DistributedKVSampler)
 
 if platform.system() != 'Windows':
     # https://github.com/pytorch/pytorch/issues/973

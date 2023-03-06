@@ -18,6 +18,7 @@ class DistributedSampler(_DistributedSampler):
         super().__init__(
             dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle)
 
+        assert(strategy is None)
         # In distributed sampling, different ranks should sample
         # non-overlapped data in the dataset. Therefore, this function
         # is used to make sure that each rank shuffles the data indices

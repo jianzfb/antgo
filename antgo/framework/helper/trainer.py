@@ -1,7 +1,6 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.framework.helper.dataset.builder import build_iter_dataloader
 from antgo.framework.helper.models.proxy_module import ProxyModule
 from antgo.framework.helper.runner.test import single_gpu_test
 
@@ -17,7 +16,7 @@ import torchvision.transforms as transforms
 from torch.nn.parallel.data_parallel import DataParallel
 from antgo.framework.helper.utils.config import Config
 from antgo.framework.helper.apis.train import *
-from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader)
+from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader, build_iter_dataloader)
 from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, get_device
 from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import *

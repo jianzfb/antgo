@@ -17,7 +17,7 @@ import torchvision.transforms as transforms
 from torch.nn.parallel.data_parallel import DataParallel
 from antgo.framework.helper.utils.config import Config
 from antgo.framework.helper.apis.train import *
-from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader)
+from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader, build_iter_dataloader)
 from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, get_device
 from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import *
@@ -92,10 +92,12 @@ class BaseTrainer(object):
             **train_dataloader_default_args,
             **self.cfg.data.get('train_dataloader', {})
         }
-        if not getattr(dataset, 'is_kv', False):
-            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
-        else:
+        if getattr(dataset, 'is_kv', False):
             self.train_generator = build_kv_dataloader(dataset, **train_loader_cfg)
+        elif isinstance(dataset, torch.utils.data.IterableDataset):
+            self.train_generator = build_iter_dataloader(dataset, **train_loader_cfg)
+        else:
+            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
 
         if with_validate:
             val_dataloader_default_args = dict(
@@ -110,10 +112,13 @@ class BaseTrainer(object):
                     **self.cfg.data.get('val_dataloader', {})
             }
             val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
-            if not getattr(dataset, 'is_kv', False):
-                self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
-            else:
+            if getattr(dataset, 'is_kv', False):
                 self.val_dataloader = build_kv_dataloader(val_dataset, **val_dataloader_args)
+            elif isinstance(dataset, torch.utils.data.IterableDataset):
+                val_dataset.is_infinite = False
+                self.val_dataloader = build_iter_dataloader(val_dataset, **val_dataloader_args)
+            else:
+                self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
 
     def _config_runner(self, runner_config, model, logger):
         self.runner = build_runner(

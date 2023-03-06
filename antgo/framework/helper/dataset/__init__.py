@@ -1,4 +1,4 @@
-from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset, build_kv_dataloader
+from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset, build_kv_dataloader, build_iter_dataloader
 from .dataset_wrappers import (ConcatDataset, IterConcatDataset, RepeatDataset)
 from .pipelines import *
 from .tfdataset import *
