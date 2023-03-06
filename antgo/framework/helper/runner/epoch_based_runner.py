@@ -45,10 +45,10 @@ class EpochBasedRunner(BaseRunner):
         time.sleep(2)  # Prevent possible deadlock during epoch transition
         for i, data_batch in enumerate(self.data_loader):
             self._inner_iter = i
-            # self.call_hook('before_train_iter')
-            # kwargs.update({'epoch': self._epoch, 'iter': self._iter})
-            # self.run_iter(data_batch, train_mode=True, **kwargs)
-            # self.call_hook('after_train_iter')
+            self.call_hook('before_train_iter')
+            kwargs.update({'epoch': self._epoch, 'iter': self._iter})
+            self.run_iter(data_batch, train_mode=True, **kwargs)
+            self.call_hook('after_train_iter')
 
             print(data_batch['image'].shape)
             self._iter += 1
