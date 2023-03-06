@@ -61,8 +61,7 @@ def _concat_dataset(cfg, default_args=None):
 
 
 def build_dataset(cfg, default_args=None):
-    from .dataset_wrappers import (ClassBalancedDataset, ConcatDataset,
-                                   MultiImageMixDataset, RepeatDataset)
+    from .dataset_wrappers import (ConcatDataset, RepeatDataset)
     if isinstance(cfg, (list, tuple)):
         dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
     elif cfg['type'] == 'ConcatDataset':
@@ -71,14 +70,6 @@ def build_dataset(cfg, default_args=None):
     elif cfg['type'] == 'RepeatDataset':
         dataset = RepeatDataset(
             build_dataset(cfg['dataset'], default_args), cfg['times'])
-    elif cfg['type'] == 'ClassBalancedDataset':
-        dataset = ClassBalancedDataset(
-            build_dataset(cfg['dataset'], default_args), cfg['oversample_thr'])
-    elif cfg['type'] == 'MultiImageMixDataset':
-        cp_cfg = copy.deepcopy(cfg)
-        cp_cfg['dataset'] = build_dataset(cp_cfg['dataset'])
-        cp_cfg.pop('type')
-        dataset = MultiImageMixDataset(**cp_cfg)
     elif isinstance(cfg.get('ann_file'), (list, tuple)):
         dataset = _concat_dataset(cfg, default_args)
     else:
@@ -286,6 +277,23 @@ def build_kv_dataloader(dataset,
         pin_memory=kwargs.pop('pin_memory', False),
         collate_fn=partial(collate, samples_per_gpu=samples_per_gpu),
         worker_init_fn=init_fn)
+
+    return data_loader
+
+
+def build_iter_dataloader(dataset,   
+                          samples_per_gpu,
+                          workers_per_gpu,
+                          **kwargs):
+    batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else int(np.sum(samples_per_gpu))
+    dataset.samples_per_gpu = samples_per_gpu
+    data_loader = torch.utils.data.DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        num_workers=workers_per_gpu,
+        pin_memory=kwargs.pop('pin_memory', False),
+        collate_fn=partial(collate, samples_per_gpu=batch_size),
+        drop_last=kwargs.get('drop_last', True))
 
     return data_loader
 

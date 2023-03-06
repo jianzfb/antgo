@@ -1,11 +1,15 @@
 from .compose import Compose
 from .formatting import ToTensor, ImageToTensor
-from .loading import DecodeImageP
 from .transforms import Normalize, RandomErasing, RandomFlip, RandomResizedCrop, Resize, CenterCrop
-from .transformer_det import RandomFlipImageP, RandomDistortP, RandomCropP, ResizeP
+from antgo.dataflow import imgaug as local_imgaug
+from ..builder import PIPELINES
 
+def register_antgo_pipeline():
+    for imgaug_module_name in local_imgaug.__all__:
+        PIPELINES.register_module()(getattr(local_imgaug, imgaug_module_name))
+
+register_antgo_pipeline()
 __all__ = [
-    'Compose', 'ToTensor', 'ImageToTensor', 'DecodeImageP', 'Normalize',
-    'RandomErasing', 'RandomFlip', 'RandomResizedCrop','Resize','CenterCrop',
-    'RandomFlipImageP', 'RandomDistortP', 'RandomCropP', 'ResizeP'
+    'Compose', 'ToTensor', 'ImageToTensor', 'Normalize',
+    'RandomErasing', 'RandomFlip', 'RandomResizedCrop','Resize','CenterCrop'
 ]

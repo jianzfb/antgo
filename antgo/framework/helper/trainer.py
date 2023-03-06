@@ -1,6 +1,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+from antgo.framework.helper.dataset.builder import build_iter_dataloader
 from antgo.framework.helper.models.proxy_module import ProxyModule
 from antgo.framework.helper.runner.test import single_gpu_test
 
@@ -249,10 +250,13 @@ class Trainer(BaseTrainer):
             **train_dataloader_default_args,
             **self.cfg.data.get('train_dataloader', {})
         }
-        if not getattr(dataset, 'is_kv', False):
-            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
-        else:
+
+        if getattr(dataset, 'is_kv', False):
             self.train_generator = build_kv_dataloader(dataset, **train_loader_cfg)
+        elif isinstance(dataset, torch.utils.data.IterableDataset):
+            self.train_generator = build_iter_dataloader(dataset, **train_loader_cfg)
+        else:
+            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
 
         if with_validate:
             val_dataloader_default_args = dict(
@@ -267,10 +271,14 @@ class Trainer(BaseTrainer):
                     **self.cfg.data.get('val_dataloader', {})
             }
             val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
-            if not getattr(dataset, 'is_kv', False):
-                self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
-            else:
+
+            if getattr(dataset, 'is_kv', False):
                 self.val_dataloader = build_kv_dataloader(val_dataset, **val_dataloader_args)
+            elif isinstance(dataset, torch.utils.data.IterableDataset):
+                val_dataset.is_infinite = False
+                self.val_dataloader = build_iter_dataloader(val_dataset, **val_dataloader_args)
+            else:
+                self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
 
     def config_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
         # prepare network

@@ -1,12 +1,12 @@
 from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset, build_kv_dataloader
-from .dataset_wrappers import (ClassBalancedDataset, ConcatDataset,
-                               MultiImageMixDataset, RepeatDataset)
+from .dataset_wrappers import (ConcatDataset, IterConcatDataset, RepeatDataset)
 from .pipelines import *
+from .tfdataset import *
 from antgo.dataflow import dataset as local_dataset
 from antgo.framework.helper.reader import *
 
+
 def register_antgo_dataset():
-    local_antgo_dataset = []
     for dataset_module_name in local_dataset.__all__:
         if dataset_module_name == 'Dataset':
             continue
@@ -24,12 +24,10 @@ def register_antgo_dataset():
             )
         DATASETS.register_module()(dataset_module_reader)
 
-    return local_antgo_dataset
 
-
-LOCAL_ANTGO_DATASETS = register_antgo_dataset()
+register_antgo_dataset()
 
 
 __all__ = [
-    'DATASETS','build_dataloader','build_dataset','ClassBalancedDataset','ConcatDataset','MultiImageMixDataset','RepeatDataset'
+    'DATASETS','build_dataloader','build_dataset','ConcatDataset', 'IterConcatDataset','RepeatDataset', 'TFDataset'
 ]

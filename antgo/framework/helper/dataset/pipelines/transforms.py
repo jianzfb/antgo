@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import inspect
 import math
 import random
@@ -750,6 +749,7 @@ class Resize(object):
 
     def __init__(self,
                  size,
+                 keys=['image'],
                  interpolation='bilinear',
                  adaptive_side='short'):
         assert isinstance(size, int) or ((isinstance(size, tuple) or isinstance(size, list))
@@ -770,9 +770,10 @@ class Resize(object):
 
         self.size = size
         self.interpolation = interpolation
+        self.keys = keys
 
     def _resize_img(self, results):
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             ignore_resize = False
             if self.adaptive_resize:

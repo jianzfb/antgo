@@ -1,215 +1,99 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-import tensorflow as tf
 import numpy as np
 from typing import List
+from functools import partial
 import pickle
 import os
-from functools import partial
-import cv2
+import tfrecord
+from tfrecord.tools.tfrecord2idx import *
 
+numpy_dtype_map = {
+    0: np.float32,
+    1: np.int32,
+    2: np.int64,
+    3: np.int8,
+    4: np.uint8
+}
 
-def _bytes_feature(value):
-    """Returns a bytes_list from a string / byte."""
-    if isinstance(value, type(tf.constant(0))):
-        value = value.numpy()  # BytesList won't unpack a string from an EagerTensor.
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
-
-def _float_feature(value):
-    """Returns a float_list from a float / double."""
-    return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
-
-
-def _int64_feature(value):
-    """Returns an int64_list from a bool / enum / int / uint."""
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
-
-def _decode_int(tensor):
-    if isinstance(tensor, list):
-        return tensor[0]
-    return tensor.numpy().item()
-
-
-def _decode_float(tensor):
-    if isinstance(tensor, list):
-        return tensor[0]
-    return tensor.numpy().item()
-
-
-def _decode_bytes(tensor):
-    # tensor = io.BytesIO(tensor)
-    if isinstance(tensor, bytes):
-        return np.frombuffer(tensor, dtype=np.uint8)
-    return np.frombuffer(tensor.numpy(), dtype=np.uint8)
-
-def _decode_image(tensor, color=False):
-    buffer = _decode_bytes(tensor)
-    method = cv2.IMREAD_COLOR if color else cv2.IMREAD_GRAYSCALE
-    return cv2.imdecode(buffer, method)
-
-
-def _decode_numpy_array(tensor, dtype=np.float32):
-    buffer = _decode_bytes(tensor)
-    # return np.frombuffer(buffer, dtype=dtype)
-    return pickle.loads(buffer)
-
-
-def _decode_str(tensor):
-    if isinstance(tensor, bytes):
-        return tensor.decode("utf-8")
-    return tensor.numpy().decode("utf-8")
-
-
-def _decode_with_pickle(tensor):
-    # for list and dict ...
-    buffer = _decode_bytes(tensor)
-    return pickle.loads(buffer)
-
-
-class DataReader(object):
-    def __init__(self, fields2types, path) -> None:
-        # dataset = tf.data.TFRecordDataset(["./1.tfrecords", "./2.tfrecords"])
-        # dataset = dataset.map(map_func=map_func)
-        # iterator = dataset.make_one_shot_iterator()
-        # element = iterator.get_next()
-        
-        tfrecords_files = []
-        for file in os.listdir(path):
-            if file.startswith("tfrecords"):
-                tfrecords_files.append(os.path.join(path, file))
-        
-        self.tfrecord_dataset = tf.data.TFRecordDataset(tfrecords_files)
-        self.fields2types = fields2types
-
-    def get_features(self):
-        feature = {}
-        for field, ftype in self.fields2types.items():
-            if ftype == bytes or ftype == str:
-                feature[field] = tf.io.FixedLenFeature([], tf.string, default_value="")
-            elif ftype == int:
-                feature[field] = tf.io.FixedLenFeature([], tf.int64, default_value=0)
-            elif ftype == float:
-                feature[field] = tf.io.FixedLenFeature([], tf.float32, default_value=0)
-            else:
-                feature[field] = tf.io.FixedLenFeature([], tf.string, default_value="")
-
-        return feature
-
-    def get_decode_methods(self, use_color_image=False):
-        methods = {}
-        for field, ftype in self.fields2types.items():
-            if field == "image":
-                methods[field] = partial(_decode_image, color=use_color_image)
-            elif ftype == np.ndarray:
-                methods[field] = _decode_numpy_array
-            elif ftype == bytes:
-                methods[field] = _decode_bytes
-            elif ftype == int:
-                methods[field] = _decode_int
-            elif ftype == float:
-                methods[field] = _decode_float
-            elif ftype == str:
-                methods[field] = _decode_str
-            else:
-                methods[field] = _decode_with_pickle
-
-        return methods
-
-    def read(self, index):
-        for data in self.tfrecord_dataset:
-            ss = tf.io.parse_single_example(data, self.get_features())
-            
-            
-        pass
-
-
-class DataWriter(object):
-    def __init__(self, fields2types, output, num_shards=1) -> None:
-        # fields2types = {
-        #     "image": bytes,  # 原始图片
-        #     "height": int,
-        #     "width": int,
-        #     "num_joints": int,  # joints数量
-        #     # 关键点，包括2d和3d
-        #     "joints_2d": np.ndarray,
-        #     "joints_3d": np.ndarray,
-        #     "joints_25d": np.ndarray,
-        #     # 关键点是否可见，包括2d和3d
-        #     "joints_vis_2d": np.ndarray,
-        #     "joints_vis_3d": np.ndarray,
-        #     # bbox坐标
-        #     "bbox": list,
-        #     # root id
-        #     "root_id": int,
-        #     # 骨长关键点id，用于normalization
-        #     "bone": list,
-        #     "bone_scale": float,
-        #     "pose": np.ndarray,
-        #     "shape": np.ndarray,
-        #     "root_3d": np.ndarray,
-        #     "bones_template": np.ndarray,
-        #     "depth": np.ndarray,
-        #     "extra_fields": dict,
-        #     # 部分数据集没有深度信息
-        #     "has_depth": int,
-        # }
-        self.fields2types = fields2types
-        self.output = output
+class TFDataWriter(object):
+    def __init__(self, prefix, output_path, size_in_shard=100000, num_shards=1) -> None:
         self.num_shards = num_shards
-            
-    def get_example_object(data_record):
-        # 将数据转化为int64 float 或bytes类型的列表
-        # 注意都是list形式
-
-        feature_key_value_pair = {
-            'int_list':tf.train.Feature(int64_list = tf.train.Int64List(value = [data_record['int_data']])),
-            'float_list': tf.train.Feature(float_list=tf.train.FloatList(value = [data_record['float_data']])),
-            'str_list': tf.train.Feature(bytes_list=tf.train.BytesList(value = [data_record['str_data']])),
-            'float_list2': tf.train.Feature(float_list=tf.train.FloatList(value = data_record['float_list_data'])),
-        }
-        
-        # 创建一个features
-        features = tf.train.Features(feature = feature_key_value_pair)
-        
-        # 创建一个example
-        example = tf.train.Example(features = features)
-        
-        return example
-    
-    def serialize_field(data):
-        if isinstance(data, (bytes, str)):
-            return _bytes_feature(data)
-        if isinstance(data, int):
-            return _int64_feature(data)
-        if isinstance(data, float):
-            return _float_feature(data)
-        if isinstance(data, (list, dict, np.ndarray)):
-            return _bytes_feature(pickle.dumps(data))
-        else:
-            raise ValueError("Unknown type: {}".format(type(data)))
+        self.prefix = prefix
+        self.output_path = output_path
+        self.size_in_shard = size_in_shard
 
     def write(self, data_iterator):
-        fields = self.fields2types.keys()
-        data_num = len(data_iterator)
-        size_in_shard = (data_num+self.num_shards-1) // self.num_shards
+        data_num = len(data_iterator)     
+        size_in_shard = self.size_in_shard
+        if size_in_shard < 0:
+            size_in_shard = (data_num+self.num_shards-1) // self.num_shards
+        else:
+            num_shards = data_num // size_in_shard
+            if num_shards * size_in_shard != data_num:
+                num_shards += 1
+            self.num_shards = num_shards
 
         tfwriter = None
         shard_i = -1
         count = 0
+
+        # step 1: write tfrecord
         for data in data_iterator:
-            features = {}
-            for field in fields:
-                value = data[field]
-                features[field] = self.serialize_field(value) 
-            
-            example_proto = tf.train.Example(features=tf.train.Features(feature=features))
-            
+            data_and_description = {}
+            for k,v in data.items():
+                if isinstance(data, str):
+                    data_and_description[k] = (v.encode('utf-8'), 'byte')
+                elif isinstance(v, bytes):
+                    data_and_description[k] = (v, 'byte')
+                elif isinstance(v, np.ndarray):
+                    if v.dtype not in [np.float32, np.int32, np.int64, np.int8, np.uint8]:
+                        continue
+
+                    data_and_description[k] = (v.tobytes(), 'byte')
+                    data_and_description[f'__{k}_shape'] = (list(v.shape), 'int')
+                    if v.dtype == np.float32:
+                        data_and_description[f'__{k}_type'] = (0, 'int')
+                    elif v.dtype == np.int32:
+                        data_and_description[f'__{k}_type'] = (1, 'int')
+                    elif v.dtype == np.int64:
+                        data_and_description[f'__{k}_type'] = (2, 'int')
+                    elif v.dtype == np.int8:
+                        data_and_description[f'__{k}_type'] = (3, 'int')
+                    elif v.dtype == np.uint8:
+                        data_and_description[f'__{k}_type'] = (4, 'int')
+                elif isinstance(v, list):
+                    if isinstance(v[0], float):
+                        data_and_description[k] = (v, 'float')
+                    elif isinstance(v[0], int):
+                        data_and_description[k] = (v, 'int')
+                elif isinstance(v, float):
+                    data_and_description[k] = (v, 'float')
+                elif isinstance(v, int):
+                    data_and_description[k] = (v, 'int')
+
+                if k not in data_and_description:
+                    print(f'ignore {k} in data')
+
+            if len(data_and_description) == 0:
+                continue
+
             if (count // size_in_shard) != shard_i:
-                shard_i = count // self.num_shards
-                filename = os.path.join(self.output, "./tfrecords-%.5d-of-%.5d"%(shard_i, self.num_shards))
-                tfwriter = tf.python_io.TFRecordWriter(filename)
-            
-            tfwriter.write(example_proto.SerializeToString())
+                if tfwriter is not None:
+                    tfwriter.close()
+                shard_i = count // size_in_shard
+                filename = os.path.join(self.output_path, "./%s-%.5d-of-%.5d-tfrecord"%(self.prefix, shard_i, self.num_shards))
+                tfwriter = tfrecord.TFRecordWriter(filename)
+
+            tfwriter.write(data_and_description)            
             count += 1
+
+        if tfwriter is not None:
+            tfwriter.close()
+
+        # step 2: create index
+        for shard_i in range(self.num_shards):
+            tfrecord_file = os.path.join(self.output_path, "./%s-%.5d-of-%.5d-tfrecord"%(self.prefix, shard_i, self.num_shards))
+            index_file = os.path.join(self.output_path, "./%s-%.5d-of-%.5d-index"%(self.prefix, shard_i, self.num_shards))
+            create_index(tfrecord_file, index_file)

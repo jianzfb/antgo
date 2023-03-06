@@ -3,15 +3,14 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import os
+import typing
 import torch.utils.data
 import torchvision.transforms as transforms
 import numpy as np
 import copy
 import cv2
+from antgo.framework.helper.runner.dist_utils import get_dist_info
 from antgo.framework.helper.utils import build_from_cfg
-# from antgo.dataflow.dataset.tfrecord_dataset import *
-from antgo.framework.helper.dataset.builder import DATASETS
-# import tensorflow as tf
 
 
 def register(cls):
@@ -95,41 +94,6 @@ class KVReaderBase(torch.utils.data.Dataset):
             
                 sample_list.append(sample)
         return sample_list
-
-
-class TFReaderBase(torch.utils.data.IterableDataset):
-    def __init__(self, folder, fields2types, pipeline=None, **kwargs) -> None:
-        super().__init__()
-        self.dataset = TFRecordData(fields2types, folder)
-        self.pipeline = []
-        self.keys = []
-        self.flag = np.zeros(len(self.dataset.tfrecord_dataset), dtype=np.uint8)
-        if pipeline is not None:
-            from antgo.framework.helper.dataset import PIPELINES
-            for transform in pipeline:
-                if isinstance(transform, dict):
-                    transform = build_from_cfg(transform, PIPELINES)
-                    self.pipeline.append(transform)
-                else:
-                    raise TypeError('pipeline must be a dict')        
-        
-    def __iter__(self):
-        # do something        
-        for data in self.dataset.tfrecord_dataset:
-            sample = tf.io.parse_single_example(data, self.dataset.get_features())
-            sample = self.dataset.parse(sample)
-
-            # transform
-            for transform in self.pipeline:
-                sample = transform(sample)
-
-            yield sample
-        # for data in range(10):
-        #     sample = np.load('/opt/tiger/handdetJ/t.npy')
-        #     for transform in self.pipeline:
-        #         sample = transform(sample)
-
-        #     yield sample
 
 
 class Reader(torch.utils.data.Dataset):

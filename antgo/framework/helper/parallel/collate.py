@@ -12,23 +12,19 @@ def collate(batch, samples_per_gpu=1, level=0, stack=True, ignore_stack=[]):
     """Puts each data field into a tensor/DataContainer with outer dimension
     batch size.
     """
-
     if not isinstance(batch, Sequence):
         raise TypeError(f'{batch.dtype} is not supported.')
 
     # 对于Mapping和Sequence混合模式，将Sequence拆解开
     if level == 0:
-        has_other_data = False
         has_sequence_data = False
         for d in batch:
             if isinstance(d, Sequence):
                 has_sequence_data = True
-            else:
-                has_other_data = True
-            if has_other_data and has_sequence_data:
+            if has_sequence_data:
                 break
 
-        if has_other_data and has_sequence_data:
+        if has_sequence_data:
             new_batch = []
             for d in batch:
                 if isinstance(d, Sequence):

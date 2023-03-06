@@ -1964,7 +1964,7 @@ class RandomInterpImage(BaseOperator):
         return resizer(sample, context)
 
 
-class Resize(BaseOperator):
+class ResizeExt(BaseOperator):
     """Resize image and bbox.
     Args:
         target_dim (int or list): target size, can be a single number or a list
@@ -1983,7 +1983,7 @@ class Resize(BaseOperator):
     }
 
     def __init__(self, target_dim=[], interp='LINEAR', inputs=None):
-        super(Resize, self).__init__(inputs=inputs)
+        super(ResizeExt, self).__init__(inputs=inputs)
         if type(target_dim) == list or type(target_dim) == tuple:
             self.target_dim = target_dim                # w,h
         else:
@@ -2002,12 +2002,7 @@ class Resize(BaseOperator):
             interp = random.choice(list(self.interp_dict.keys()))
         else:
             interp = self.interp
-        # if isinstance(self.target_dim, Sequence):
-        #     dim = np.random.choice(self.target_dim)
-        # else:
-        #     dim = self.target_dim
-        #
-        # resize_w = resize_h = dim
+
         resize_w, resize_h = self.target_dim
         scale_x = resize_w / w
         scale_y = resize_h / h
@@ -2043,10 +2038,6 @@ class Resize(BaseOperator):
             sample['semantic'] = cv2.resize(
                 sample['semantic'], (resize_w, resize_h), interpolation=cv2.INTER_NEAREST)
 
-        # sample['scale_factor'] = [scale_x, scale_y] * 2
-        # sample['h'] = resize_h
-        # sample['w'] = resize_w
-
         if 'image_metas' in sample:
             sample['image_metas']['image_shape'] = (resize_h, resize_w)
             sample['image_metas']['scale_factor'] =  [scale_x, scale_y] * 2
@@ -2055,14 +2046,6 @@ class Resize(BaseOperator):
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
         
-        # for bi in range(len(sample['gt_bbox'])):
-        #     x0,y0,x1,y1 = sample['gt_bbox'][bi]
-        #     x0=(int)(x0)
-        #     y0=(int)(y0)
-        #     x1=(int)(x1)
-        #     y1=(int)(y1)
-        #     cv2.rectangle(sample['image'], (x0,y0),(x1,y1), (255,0,0), 4)
-        # cv2.imwrite("./show.png", sample['image'])
         return sample
 
     def reset(self, target_dim):
