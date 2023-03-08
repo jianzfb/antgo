@@ -1,7 +1,5 @@
 include antgo/utils/_mask.pyx
 include antgo/utils/_bbox.pyx
-include antgo/utils/_nms.pyx
-include antgo/utils/_resize.pyx
 include antgo/utils/_encode_png.pyx
 include antgo/cutils/maskApi.h
 recursive-include antgo/resource *

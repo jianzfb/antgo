@@ -214,7 +214,7 @@ class AntBrowser(AntBase):
       # 等待10分钟后检查
       time.sleep(30)
   
-  def start(self):
+  def start(self, *args, **kwargs):
     # 1.step 获得数据集解析
     running_ant_task = None
     if self.token is not None:
@@ -279,18 +279,6 @@ class AntBrowser(AntBase):
     # 3.2.step 准备有效端口
     self.host_port = _pick_idle_port(self.host_port)
 
-    # base_url = '{}:{}'.format(self.host_ip, self.host_port)
-    #
-    # # 3.3.step 准备web配置文件
-    # template_file_folder = os.path.join(static_folder, 'resource', 'browser', 'static')
-    # file_loader = FileSystemLoader(template_file_folder)
-    # env = Environment(loader=file_loader)
-    # template = env.get_template('config.json')
-    # output = template.render(BASE_URL=base_url)
-    #
-    # with open(os.path.join(browser_static_dir, 'static', 'config.json'), 'w') as fp:
-    #   fp.write(output)
-
     # 3.3.step 状态
     train_offset, val_offset, test_offset = 0, 0, 0
     offset_configs = [{
@@ -341,7 +329,8 @@ class AntBrowser(AntBase):
         dataset_flag = \
           self.context.params.browser.dataset_flag.lower()
 
-    if dataset_cls is not None:
+    data_json_file = kwargs.get('json_file', None)
+    if dataset_cls is not None and data_json_file is None:
       train_dataset = \
         dataset_cls(dataset_flag, os.path.join(self.ant_data_source, self.dataset_name))
       self._running_dataset = train_dataset
@@ -356,6 +345,15 @@ class AntBrowser(AntBase):
     if not os.path.exists(self.context.recorder.tag_dir):
       os.makedirs(self.context.recorder.tag_dir)
 
+    sample_list = []
+    if data_json_file is not None:
+      # 直接使用来自于data_json_file中的样本
+      with open(data_json_file, 'r') as fp:
+        sample_list = json.load(fp)
+        self.context.recorder.dataset_size = len(sample_list)
+      
+      sample_folder = os.path.dirname(data_json_file)
+
     sample_offset = train_offset
     if dataset_flag == 'test':
       sample_offset = test_offset
@@ -366,7 +364,7 @@ class AntBrowser(AntBase):
     # 设置数据基本信息
     profile_config = {
       'dataset_flag': dataset_flag.upper(),
-      'samples_num': self.running_dataset.size if self.running_dataset is not None else self.context.params.browser.size,
+      'samples_num': self.context.recorder.dataset_size,
       'samples_num_checked': sample_offset
     }
 
@@ -384,8 +382,7 @@ class AntBrowser(AntBase):
               self.host_port,
               offset_configs,
               profile_config,
-              [],
-              white_users)
+              sample_folder, sample_list, white_users)
       )
     self.p.start()
 

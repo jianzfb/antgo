@@ -501,7 +501,7 @@ def browser_server_start(browser_dump_dir,
                          server_port,
                          offset_configs,
                          profile_config,
-                         samples=[],
+                         sample_folder=None, sample_list=None,
                          white_users=None):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
@@ -523,10 +523,24 @@ def browser_server_start(browser_dump_dir,
 
     # 2.step launch show server
     db = {'data': [], 'users': {}, 'dataset': {}, 'user_record': {}}
-    if samples is not None:
-      for sample in samples:
+
+    if sample_list is not None and sample_folder is not None:
+      # 为样本所在目录建立软连接到static下面
+      os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
+      
+      # 将数据信息写如本地数据库
+      for sample in sample_list:
+        file_name = sample['image_file'].split('/')[-1] if sample['image_file'] != '' else sample['image_url'].split('/')[-1]
+        convert_sample = {
+          'type': 'IMAGE',
+          'data': f'/static/dataset/{sample["image_file"]}' if sample['image_file'] != '' else sample['image_url'],
+          'width': 256,
+          'height': 256,
+          'tag': [],
+          'title': file_name
+        }
         db['data'].append({
-          'value': sample,
+          'value': convert_sample,
           'status': False,
           'time': time.time()
         })
@@ -641,4 +655,4 @@ if __name__ == '__main__':
     offset_configs,
     profile_config,
     white_users=white_users,
-    samples=samples)
+    sample_list=samples, sample_folder='')

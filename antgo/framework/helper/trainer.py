@@ -32,6 +32,7 @@ from antgo.framework.helper.runner.hooks.hook import *
 from .base_trainer import *
 from thop import profile
 import copy
+import logging
 
 import torch.distributed as dist
 from contextlib import contextmanager
@@ -201,27 +202,32 @@ def calculate_quantsim(model, val_dataloader, dummy_input, use_cuda, path, prefi
     return quantsim
 
 class Trainer(BaseTrainer):
-    def __init__(self, cfg_dict, work_dir="./", device='cuda', distributed=False, diff_seed=True, deterministic=True):
-        self.cfg = Config.fromstring(json.dumps(cfg_dict), '.json')
-
+    def __init__(self, cfg, work_dir="./", gpu_id=-1, distributed=False, diff_seed=True, deterministic=True, find_unused_parameters=False):
+        if isinstance(cfg, dict):
+            self.cfg = Config.fromstring(json.dumps(cfg), '.json')
+        else:
+            self.cfg = cfg
+            
         self.data_loaders = None
         self.runner = None
         self.work_dir = work_dir
         self.train_generator = None
         self.val_dataloader = None
         self.distributed = distributed
+        self.find_unused_parameters = find_unused_parameters
         self.meta = {}
 
         # set multi-process settings
-        # 如 opencv_num_threads, OMP_NUM_THREADS, MKL_NUM_THREADS
         setup_multi_processes(self.cfg)
 
+        device = 'cpu' if gpu_id < 0 else 'cuda'
+        self.cfg.gpu_ids = [gpu_id] if gpu_id >= 0 else []
         if self.distributed:
             init_dist(**self.cfg.get('dist_params', {}))
             # re-set gpu_ids with distributed training mode
             _, world_size = get_dist_info()
             self.cfg.gpu_ids = range(world_size)
-
+        
         # set random seeds
         seed = init_random_seed(self.cfg.get('seed', 0), device=device)
         seed = seed + dist.get_rank() if diff_seed else seed
@@ -281,7 +287,7 @@ class Trainer(BaseTrainer):
 
     def config_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
         # prepare network
-        logger = get_logger('model', log_level=self.cfg.log_level)
+        logger = get_logger('model', log_level=self.cfg.get('log_level', logging.INFO))
         logger.info("Creating graph and optimizer...")
 
         # 构建网络
@@ -294,15 +300,12 @@ class Trainer(BaseTrainer):
         model.init_weights()
 
         if self.distributed:
-            find_unused_parameters = self.cfg.get('find_unused_parameters', False)
-            # Sets the `find_unused_parameters` parameter in
-            # torch.nn.parallel.DistributedDataParallel
             model = build_ddp(
                 model,
                 self.device,
                 device_ids=[int(os.environ['LOCAL_RANK'])],
                 broadcast_buffers=False,
-                find_unused_parameters=find_unused_parameters)
+                find_unused_parameters=self.find_unused_parameters)
         else:
             model = build_dp(model, self.device, device_ids=self.cfg.gpu_ids)
 

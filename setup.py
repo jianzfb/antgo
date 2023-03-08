@@ -25,16 +25,10 @@ def ext_modules():
                 ["antgo/utils/_bbox.pyx"],
                 include_dirs=[np.get_include()],
                 extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
-                ),
-      Extension('antgo.utils._nms',
-                ["antgo/utils/_nms.pyx"],
-                include_dirs=[np.get_include()],
-                extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
                 )
     ]
 
     return some_extention
-
 
 
 def readme():

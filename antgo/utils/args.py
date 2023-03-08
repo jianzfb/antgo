@@ -5,6 +5,7 @@ import argparse
 import importlib
 import os
 import sys
+from pprint import pprint
 parser = argparse.ArgumentParser(description=f'ANTGO')
 
 def DEFINE_int(name, default, var_help):
@@ -46,9 +47,10 @@ def DEFINE_string(name, default, var_help):
 def DEFINE_nn_args():
     global parser
     group_gpus = parser.add_mutually_exclusive_group()
-    parser.add_argument('--config', type=str, default="/root/paddlejob/workspace/env_run/portrait/InterHand2.6M/main/test_config.py", help='train config file path')
+    parser.add_argument('--config', type=str, default="config.py", help='train config file path')
     parser.add_argument(
         '--resume-from', default=None, help='the checkpoint file to resume from')
+
     parser.add_argument(
         '--auto-resume',
         action='store_true',
@@ -74,7 +76,7 @@ def DEFINE_nn_args():
         help='whether to set deterministic options for CUDNN backend.')        
     parser.add_argument(
         '--launcher',
-        choices=['none', 'pytorch', 'slurm', 'mpi'],
+        choices=['none', 'pytorch'],
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
@@ -100,14 +102,19 @@ def DEFINE_nn_args():
     parser.add_argument(
         '--checkpoint',
         type=str,
-        default='',
+        default=None,
         help='checkpoint'
     ) 
-    
+    parser.add_argument(
+        '--process',
+        choices=['train', 'test', 'export'],
+        default='train',
+        help='train or test process'
+    )
     parser.add_argument(
         '--max-epochs',
         type=int,
-        default=30,
+        default=-1,
         help='experiment name'
     )    
     parser.add_argument(
@@ -115,6 +122,11 @@ def DEFINE_nn_args():
         type=str,
         default='',
         help='experiment name'
+    )
+    parser.add_argument(
+        '--find-unused-parameters',
+        action='store_true',
+        help='only work on multi gpu training process'
     )
     parser.add_argument('--ext-module', type=str, default='ext_module.py', help='introduce ext module py file')
 
@@ -127,3 +139,10 @@ def parse_args():
         if getattr(args, 'local_rank', None):
            os.environ['LOCAL_RANK'] = str(args.local_rank)
     return args
+
+def print_args(s):
+    s_dict = {}
+    for k,v in s._get_kwargs():
+        s_dict[k] = v
+    pprint(f'exp {s.exp} config')
+    pprint(s_dict)

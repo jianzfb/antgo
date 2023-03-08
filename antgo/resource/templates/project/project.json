@@ -1,0 +1,62 @@
+{
+	"git": "",
+	"name": "",
+	"type": "",
+	"teacher": [],
+	"baseline": {
+		/*
+			example:
+			"exp": "", "branch": "", "commit": "", "metric": {"miou": 0.0, "acc": 0.0}, "test": "", "train": [], "create_time": ""
+		*/
+	},
+	"semi": {
+		"method": "",
+		"config": ""
+	},
+	"distillation": {
+		"method": "",
+		"config": ""
+	},
+	"activelearning": {
+		"method": "",
+		"config": ""
+	},
+	"ensemble":{
+		"method": "",
+		"config": ""
+	},
+	"dataset": {
+		"train": {
+			"label": [
+				/*
+					example: 
+					{"tag": "", "num": "",  "path": "", "time": ""}
+				*/
+			],
+			"unlabel": [
+				/*
+					example: 
+					{"tag": "", "num": "", "path": "", "time": ""}
+				*/
+			]
+		},
+		"test": [
+				/*
+					example: 
+					{"tag": "", "num": "", "path": "", "time": ""}
+				*/
+		],
+		"val": [
+				/*
+					example: 
+					{"tag": "", "num": "", "path": "", "time": ""}
+				*/
+		]
+	},
+	"history": [
+		/*
+			example:
+			{"exp": "", "branch": "", "commit": "", "metric": {"miou": 0.0, "acc": 0.0}, "test": "", "train": [], "create_time": ""}
+		*/
+	]
+}

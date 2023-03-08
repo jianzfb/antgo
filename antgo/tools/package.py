@@ -7,7 +7,8 @@ class __DataIter(object):
     def __init__(self, image_folder, annotation_file) -> None:
         pass
     
-
+# support lmdb, tfrecord
+# independent: json file
 def make_package(image_folder, annotation_file, num_shards):
     tfrecord_data_writer = TFRecordDataWriter()
     with open(annotation_file, 'r') as fp:
