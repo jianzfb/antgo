@@ -54,11 +54,13 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
     for video_name in os.listdir(target_folder):
         if video_name[0] == '.':
             continue
-        
-        for file_name in os.path.join(target_folder, video_name):
+        if not os.path.isdir(os.path.join(target_folder, video_name)):
+            continue
+
+        for file_name in os.listdir(os.path.join(target_folder, video_name)):
             if file_name[0] == '.':
                 continue
-
+            
             sample_gt_cp = copy.deepcopy(sample_gt)
             sample_gt_cp.update({
                 'image_file': f'{video_name}/{file_name}'
