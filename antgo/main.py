@@ -8,7 +8,6 @@ from __future__ import unicode_literals
 from ast import parse
 from random import shuffle
 import sys
-# sys.path.append('/root/workspace/antgo')
 import os
 from typing import NamedTuple
 from antgo.utils.utils import *
@@ -61,9 +60,8 @@ DEFINE_int("frame-rate", 30, "video frame rate")
 DEFINE_string("filter-prefix", None, "filter by prefixe")
 DEFINE_string("filter-suffix", None, "filter by suffix")
 DEFINE_string("filter-ext", None, "filter by ext")
-DEFINE_string("filter-key", None, "filter by key")
 DEFINE_string("white-users", None, "name:password,name:password")
-DEFINE_string("tag", None, "tag info")
+DEFINE_string("tags", None, "tag info")
 
 #############################################
 DEFINE_nn_args()
@@ -276,12 +274,11 @@ def main():
           return
         tool_func(args.src, args.tgt, frame_rate=args.frame_rate, filter_prefix=args.filter_prefix, filter_suffix=args.filter_suffix, filter_ext=args.filter_ext)
       elif sub_action_name.startswith('browser'):
-        # TODO 测试
         tool_func = getattr(tools, f'browser_{sub_action_name.split("/")[-1]}', None)
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return
-        tool_func(args.src, args.tgt, args.tags, args.white_users)
+        tool_func(args.src, args.tags, args.white_users)
       elif sub_action_name.startswith('annotation'):
         # annotation/ls, annotation/browser, annotation
         if sub_action_name == 'annotation':
@@ -295,14 +292,13 @@ def main():
         # src: data folder, tgt: annotation file
         tool_func(args.src, args.tgt)
       elif sub_action_name.startswith('filter'):
-        # TODO ceshi 
         tool_func = getattr(tools, f'filter_by_{sub_action_name.split("/")[1]}', None)
 
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return 
         
-        tool_func(args.src, args.tgt, args.filter_prefix, args.filter_suffix, args.filter_ext, args.filter_key)
+        tool_func(args.src, args.tgt, args.tags)
         return
       elif sub_action_name.startswith('package'):
         # TODO测试

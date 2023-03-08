@@ -421,7 +421,7 @@ class InteractContext(Context):
                                 cc.task,                             
                                 cc.dataset)
           # 浏览控制
-          self.handler.start()
+          self.handler.start(**kwargs)
         elif self.name == 'demo':
           # 1.step 配置基本信息
           cc._prepare_context(exp_name, exp_param, **kwargs)

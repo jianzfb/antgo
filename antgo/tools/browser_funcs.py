@@ -3,11 +3,16 @@ import logging
 import json
 from antgo.interactcontext import InteractContext
 
-def browser_images(src_file, tgt_folder, tags, white_users_str):
+def browser_images(src_file, tags, white_users_str):
     # src check
     if not os.path.exists(src_file):
         logging.error(f"{src_file} not existed")
         return
+    if not src_file.endswith('.json'):
+        logging.error(f"{src_file} must be json file")
+        return
+    
+    title = src_file.split('/')[-1].split('.')[0]
 
     tags = tags.split(',')
     white_users = {}
@@ -18,13 +23,16 @@ def browser_images(src_file, tgt_folder, tags, white_users_str):
                 user_name: {'password': password}
             })
     ctx = InteractContext()
-    ctx.browser.start("b_exp", config = {
+    ctx.browser.start(f"{title}", config = {
             'tags': tags,
             'white_users': white_users,
-        })
+        }, json_file=src_file)
     
     logging.info('Waiting data browser stop.')
     ctx.browser.waiting()
     content = ctx.browser.download()
-    with open(os.path.join(tgt_folder, 'check.json'), 'w') as fp:
+    
+    src_folder = os.path.dirname(src_file)
+    src_name = src_file.split('/')[-1]
+    with open(os.path.join(src_folder, f'{src_name}_browser.json'), 'w') as fp:
         json.dump(content, fp)

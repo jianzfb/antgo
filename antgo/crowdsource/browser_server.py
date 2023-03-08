@@ -529,16 +529,18 @@ def browser_server_start(browser_dump_dir,
       os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
       
       # 将数据信息写如本地数据库
-      for sample in sample_list:
+      
+      for sample_id, sample in enumerate(sample_list):
         file_name = sample['image_file'].split('/')[-1] if sample['image_file'] != '' else sample['image_url'].split('/')[-1]
-        convert_sample = {
+        convert_sample = [{
           'type': 'IMAGE',
           'data': f'/static/dataset/{sample["image_file"]}' if sample['image_file'] != '' else sample['image_url'],
           'width': 256,
           'height': 256,
           'tag': [],
-          'title': file_name
-        }
+          'title': file_name,
+          'id': sample_id
+        }]
         db['data'].append({
           'value': convert_sample,
           'status': False,

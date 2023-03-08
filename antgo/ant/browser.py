@@ -212,7 +212,7 @@ class AntBrowser(AntBase):
       if response['content']['project_state']['stage'] == 'finish':
         break
       # 等待10分钟后检查
-      time.sleep(30)
+      time.sleep(10)
   
   def start(self, *args, **kwargs):
     # 1.step 获得数据集解析
@@ -346,6 +346,7 @@ class AntBrowser(AntBase):
       os.makedirs(self.context.recorder.tag_dir)
 
     sample_list = []
+    sample_folder = None
     if data_json_file is not None:
       # 直接使用来自于data_json_file中的样本
       with open(data_json_file, 'r') as fp:
@@ -373,6 +374,9 @@ class AntBrowser(AntBase):
 
     white_users = \
       self.context.params.browser.white_users.get() if self.context.params.browser.white_users is not None else None
+    if len(white_users) == 0:
+      white_users = None
+      
     # 在独立进程中启动webserver
     self.p = \
       multiprocessing.Process(
