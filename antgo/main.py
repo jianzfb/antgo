@@ -8,6 +8,7 @@ from __future__ import unicode_literals
 from ast import parse
 from random import shuffle
 import sys
+sys.path.append('/Users/jian/Downloads/workspace/temp/antgo')
 import os
 from typing import NamedTuple
 from antgo.utils.utils import *
@@ -62,6 +63,7 @@ DEFINE_string("filter-suffix", None, "filter by suffix")
 DEFINE_string("filter-ext", None, "filter by ext")
 DEFINE_string("white-users", None, "name:password,name:password")
 DEFINE_string("tags", None, "tag info")
+DEFINE_indicator("feedback", True, "")
 
 #############################################
 DEFINE_nn_args()
@@ -90,7 +92,7 @@ def main():
     if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
       os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
-    config_data = {'FACTORY': '', 'USER_TOKEN': ''}
+    config_data = {'FACTORY': './.factory', 'USER_TOKEN': ''}
     env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
     config_template = env.get_template('config.xml')
     config_content = config_template.render(**config_data)
@@ -98,9 +100,16 @@ def main():
     with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
       fp.write(config_content)
     logging.warn('Using default config file.')
-
+  
+  # 配置操作
   if action_name == 'config':
     config_data = {'FACTORY': '', 'USER_TOKEN': ''}
+    # 读取现有数值
+    config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+    config.AntConfig.parse_xml(config_xml)
+    config_data['FACTORY'] = getattr(config.AntConfig, 'factory', '')
+    config_data['USER_TOKEN'] = getattr(config.AntConfig, 'token', '')
+    
     if args.root is not None:
       config_data['FACTORY'] = args.root
     if args.token is not None:
@@ -120,12 +129,8 @@ def main():
   config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
   config.AntConfig.parse_xml(config_xml)
 
-  factory = getattr(config.AntConfig, 'factory', None)
-  if factory is None or \
-      factory == '' or not os.path.exists(config.AntConfig.factory):
-    logging.error('Factory folder is missing, please run antgo config.')
-    return
-
+  if not os.path.exists(config.AntConfig.factory):
+    os.makedirs(config.AntConfig.factory)
   if not os.path.exists(config.AntConfig.data_factory):
     os.makedirs(config.AntConfig.data_factory)
   if not os.path.exists(config.AntConfig.task_factory):
@@ -278,7 +283,7 @@ def main():
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return
-        tool_func(args.src, args.tags, args.white_users)
+        tool_func(args.src, args.tags, args.white_users, args.feedback)
       elif sub_action_name.startswith('annotation'):
         # annotation/ls, annotation/browser, annotation
         if sub_action_name == 'annotation':

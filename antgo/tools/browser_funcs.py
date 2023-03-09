@@ -3,7 +3,7 @@ import logging
 import json
 from antgo.interactcontext import InteractContext
 
-def browser_images(src_file, tags, white_users_str):
+def browser_images(src_file, tags, white_users_str, feedback=True):
     # src check
     if not os.path.exists(src_file):
         logging.error(f"{src_file} not existed")
@@ -14,7 +14,10 @@ def browser_images(src_file, tags, white_users_str):
     
     title = src_file.split('/')[-1].split('.')[0]
 
-    tags = tags.split(',')
+    if tags is not None:
+        tags = tags.split(',')
+    else:
+        tags = []
     white_users = {}
     if white_users_str is not None:
         for t in white_users_str.split(','):
@@ -29,10 +32,12 @@ def browser_images(src_file, tags, white_users_str):
         }, json_file=src_file)
     
     logging.info('Waiting data browser stop.')
-    ctx.browser.waiting()
-    content = ctx.browser.download()
+    ctx.browser.waiting(not feedback)
     
-    src_folder = os.path.dirname(src_file)
-    src_name = src_file.split('/')[-1]
-    with open(os.path.join(src_folder, f'{src_name}_browser.json'), 'w') as fp:
-        json.dump(content, fp)
+    if feedback:
+        content = ctx.browser.download()
+        
+        src_folder = os.path.dirname(src_file)
+        src_name = src_file.split('/')[-1]
+        with open(os.path.join(src_folder, f'{src_name}_browser.json'), 'w') as fp:
+            json.dump(content, fp)

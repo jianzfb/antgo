@@ -535,8 +535,6 @@ def browser_server_start(browser_dump_dir,
         convert_sample = [{
           'type': 'IMAGE',
           'data': f'/static/dataset/{sample["image_file"]}' if sample['image_file'] != '' else sample['image_url'],
-          'width': 256,
-          'height': 256,
           'tag': [],
           'title': file_name,
           'id': sample_id

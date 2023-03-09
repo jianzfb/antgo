@@ -200,7 +200,7 @@ class AntBrowser(AntBase):
 
       return content
   
-  def waiting(self):
+  def waiting(self, until_exit=False):
     # 需要等待本轮标准完成
     while True:
       response = self.rpc.info.get()
@@ -209,7 +209,7 @@ class AntBrowser(AntBase):
         time.sleep(5)
         continue
 
-      if response['content']['project_state']['stage'] == 'finish':
+      if response['content']['project_state']['stage'] == 'finish' and not until_exit:
         break
       # 等待10分钟后检查
       time.sleep(10)
