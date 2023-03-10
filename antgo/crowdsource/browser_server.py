@@ -345,6 +345,9 @@ class RandomApiHandler(BaseHandler):
     ################  随机找寻一个样本  ##################
     accessed_ids =  self.db['user_record'][user_name]
     candidate_ids = [i for i in range(len(self.db['data'])) if i not in accessed_ids]
+    if len(candidate_ids) == 0:
+      # 已经没有未访问的数据
+      candidate_ids = [i for i in range(len(self.db['data']))]
     next_entry_id = int(np.random.choice(candidate_ids))
     self.db['user_record'][user_name].append(next_entry_id)
 
