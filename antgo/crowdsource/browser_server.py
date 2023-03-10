@@ -539,6 +539,22 @@ def browser_server_start(browser_dump_dir,
           'title': file_name,
           'id': sample_id
         }]
+        if 'bboxes' in sample:
+          convert_sample[0].update({
+            'bboxes': sample['bboxes']
+          })
+        if 'labels' in sample:
+          convert_sample[0].update({
+            'labels': sample['labels']
+          })
+        if 'joints2d' in sample:
+          convert_sample[0].update({
+            'joints2d': sample['joints2d']
+          })
+        if 'image_label' in sample:
+            convert_sample[0].update({
+            'image_label': sample['image_label']
+          })
         db['data'].append({
           'value': convert_sample,
           'status': False,
