@@ -62,6 +62,7 @@ DEFINE_string("suffix", None, "filter by suffix")
 DEFINE_string("ext", None, "filter by ext")
 DEFINE_string("white-users", None, "name:password,name:password")
 DEFINE_string("tags", None, "tag info")
+DEFINE_string("no-tags", None, "tag info")
 DEFINE_indicator("feedback", True, "")
 DEFINE_int('num', 0, "number")
 
@@ -311,7 +312,7 @@ def main():
           logging.error(f'Tool {sub_action_name} not exist.')
           return 
         
-        tool_func(args.src, args.tgt, args.tags)
+        tool_func(args.src, args.tgt, args.tags, args.no_tags)
         return
       elif sub_action_name.startswith('package'):
         tool_func = getattr(tools, f'package_to_{sub_action_name.split("/")[1]}', None)

@@ -25,6 +25,7 @@ yapf
 timer
 thop
 torch
+torchvision
 imagesize
 multipart
 fastapi
