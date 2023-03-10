@@ -31,3 +31,4 @@ multipart
 fastapi
 tfrecord
 GitPython
+protobuf==3.20.0

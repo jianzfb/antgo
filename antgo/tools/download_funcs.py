@@ -14,13 +14,13 @@ import time
 import  urllib.parse
 import uuid
 
-def spider_api_baidu():
-    FLAGS = flags.AntFLAGS
-
+def download_from_baidu(target_folder, keys):
     datasource_name = 'baidu'
     datasource_type = ''
     datasource_keyword = ''
-    for p in FLAGS.param().split(','):
+    
+    # key:image,keyword:k/k/,
+    for p in keys.split(','):
         k,v = p.split(":")     
         if k == 'type':
             datasource_type = v
@@ -41,18 +41,22 @@ def spider_api_baidu():
         logger.error('Must set keyword')
         return
 
+    if target_folder is None:
+        target_folder = './'
+
     time_stamp = (int)(time.time())
-    if not os.path.exists('./spider_%d'%(time_stamp)):
-        os.makedirs('./spider_%d'%(time_stamp))
-    baidu_download(datasource_keyword, {'download_data_type': datasource_type}, './spider_%d'%(time_stamp))
+    if not os.path.exists(os.path.join(target_folder, 'spider_%d'%(time_stamp))):
+        os.makedirs(os.path.join(target_folder, 'spider_%d'%(time_stamp)))
+    baidu_download(
+        datasource_keyword,
+        {'download_data_type': datasource_type}, 
+        os.path.join(target_folder, 'spider_%d'%(time_stamp)))
 
-def spider_api_bing():
-    FLAGS = flags.AntFLAGS
-
+def download_from_bing(target_folder, keys):
     datasource_name = 'bing'
     datasource_type = ''
     datasource_keyword = ''
-    for p in FLAGS.param().split(','):
+    for p in keys.split(','):
         k,v = p.split(":")    
         if k == 'type':
             datasource_type = v
@@ -74,22 +78,23 @@ def spider_api_bing():
         return
 
     time_stamp = (int)(time.time())
-    if not os.path.exists('./spider_%d'%(time_stamp)):
-        os.makedirs('./spider_%d'%(time_stamp))
-    bing_download(datasource_keyword, {'download_data_type': datasource_type}, './spider_%d'%(time_stamp))
+    if not os.path.exists(os.path.join(target_folder, 'spider_%d'%(time_stamp))):
+        os.makedirs(os.path.join(target_folder, 'spider_%d'%(time_stamp)))        
+    bing_download(
+        datasource_keyword,
+        {'download_data_type': datasource_type}, 
+        os.path.join(target_folder, 'spider_%d'%(time_stamp)))
 
-def spider_api_google():
+def download_from_google(target_folder, keys):
     FLAGS = flags.AntFLAGS
 
     logger.error("In coming")
 
-def spider_api_vcg():
-    FLAGS = flags.AntFLAGS
-
+def download_from_vcg(target_folder, keys):
     datasource_name = 'vcg'
     datasource_type = ''
     datasource_keyword = ''
-    for p in FLAGS.param().split(','):
+    for p in keys.split(','):
         k,v = p.split(":")    
         if k == 'type':
             datasource_type = v
@@ -111,6 +116,9 @@ def spider_api_vcg():
         return
 
     time_stamp = (int)(time.time())
-    if not os.path.exists('./spider_%d'%(time_stamp)):
-        os.makedirs('./spider_%d'%(time_stamp))
-    vcg_download(datasource_keyword, {'download_data_type': datasource_type}, './spider_%d'%(time_stamp))
+    if not os.path.exists(os.path.join(target_folder, 'spider_%d'%(time_stamp))):
+        os.makedirs(os.path.join(target_folder, 'spider_%d'%(time_stamp))) 
+    vcg_download(
+        datasource_keyword, 
+        {'download_data_type': datasource_type}, 
+        os.path.join(target_folder, 'spider_%d'%(time_stamp)))

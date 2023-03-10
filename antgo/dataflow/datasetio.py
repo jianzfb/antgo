@@ -44,6 +44,9 @@ class TFDataWriter(object):
 
         # step 1: write tfrecord
         for index, data in enumerate(data_iterator):
+            if data is None:
+                continue
+                        
             data_and_description = {}
             for k,v in data.items():
                 if isinstance(v, str):
@@ -134,6 +137,8 @@ class KVDataWriter(object):
         cache_list = []
         cache_size = 1000
         for index, data in enumerate(data_iterator):
+            if data is None:
+                continue
             serial_data_bytes = pickle.dumps(data)
             
             if (index // size_in_shard) != shard_i:

@@ -7,7 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 import copy
-
+import numpy as np
 import tornado.httpserver
 import tornado.ioloop
 import tornado.options
@@ -268,6 +268,84 @@ class NextApiHandler(BaseHandler):
       return
 
     # 为当前用户分配下一个审查数据
+    self.db['user_record'][user_name].append(next_entry_id)
+
+    #
+    response_content = {
+      'value': self.db['data'][next_entry_id]['value'],
+      'step': len(self.db['user_record'][user_name]) - 1,
+      'tags': self.settings.get('tags', []),
+      'operators': [],
+      'state': self.db['state'],
+      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+    }
+
+    self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
+    return
+
+class RandomApiHandler(BaseHandler):
+  @gen.coroutine
+  def get(self):
+    user = self.get_current_user()
+    if user is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+      return
+
+    step = self.get_argument("step", None)
+    data = self.get_argument("data", None)
+    if step is None or data is None:
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
+      return
+
+    user_name = user['full_name']
+    if user_name not in self.db['user_record']:
+      self.db['user_record'] = []
+    step = int(step)
+    if step < 0 or step >= len(self.db['user_record'][user_name]):
+      self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID, 'request parameter wrong')
+      return
+
+    # 保存当前修改到内存
+    data = json.loads(data)
+    entry_id = self.db['user_record'][user_name][step]
+    if not self.db['data'][entry_id]['status']:
+      self.db['dataset'][self.db['state']]['samples_num_checked'] += 1
+
+    self.db['data'][entry_id] = {'value': data, 'status': True, 'time': time.time()}
+
+    # 保存当前修改到文件
+    # 使用 offset
+    state = self.db['state']
+    offset = self.db['dataset'][state]['offset']
+    if not os.path.exists(os.path.join(self.dump_folder, state)):
+      os.makedirs(os.path.join(self.dump_folder, state))
+
+    try:
+      # 发现数据id
+      data_id = None
+      for item in data:
+        assert('id' in item or 'ID' in item)
+        if 'id' in item:
+          data_id = str(item['id'])
+        if 'ID' in item:
+          data_id = str(item['ID'])
+
+      if data_id is None:
+        data_id = str(entry_id + offset)
+
+      with open(os.path.join(self.dump_folder, state, '%s.json' % data_id), "w") as fp:
+        json.dump(data, fp)
+    except Exception as e:
+      print('str(Exception):\t', str(Exception))
+      print('str(e):\t\t', str(e))
+      print('repr(e):\t', repr(e))
+      print('e.message:\t', e.message)
+
+    ################  随机找寻一个样本  ##################
+    accessed_ids =  self.db['user_record'][user_name]
+    candidate_ids = [i for i in range(len(self.db['data'])) if i not in accessed_ids]
+    next_entry_id = int(np.random.choice(candidate_ids))
     self.db['user_record'][user_name].append(next_entry_id)
 
     #
@@ -551,6 +629,10 @@ def browser_server_start(browser_dump_dir,
           convert_sample[0].update({
             'joints2d': sample['joints2d']
           })
+        if 'segments' in sample:
+            convert_sample[0].update({
+            'segments': sample['segments']
+          })
         if 'image_label' in sample:
             convert_sample[0].update({
             'image_label': sample['image_label']
@@ -591,6 +673,7 @@ def browser_server_start(browser_dump_dir,
 
     app = tornado.web.Application(handlers=[(r"/antgo/api/browser/sample/prev/", PrevApiHandler),
                                             (r"/antgo/api/browser/sample/next/", NextApiHandler),
+                                            (r"/antgo/api/browser/sample/random/", RandomApiHandler),
                                             (r'/antgo/api/browser/sample/fresh/', FreshApiHandler),
                                             (r"/antgo/api/browser/sample/entry/", EntryApiHandler),
                                             (r"/antgo/api/browser/operators/", OperatorApiHandler),

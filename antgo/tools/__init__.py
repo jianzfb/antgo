@@ -2,6 +2,7 @@ from .extract import (extract_from_videos, extract_from_images, extract_from_sam
 from .browser_funcs import (browser_images)
 from .filter_funcs import (filter_by_tags)
 from .package import (package_to_kv, package_to_tfrecord)
+from .download_funcs import (download_from_baidu, download_from_bing, download_from_vcg)
 __all__ = [
     'extract_from_videos', 
     'extract_from_images', 
@@ -9,5 +10,8 @@ __all__ = [
     'browser_images', 
     'filter_by_tags',
     'package_to_kv',
-    'package_to_tfrecord'
+    'package_to_tfrecord',
+    'download_from_baidu',
+    'download_from_bing',
+    'download_from_vcg'
 ]

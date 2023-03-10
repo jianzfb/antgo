@@ -28,8 +28,6 @@ from antgo import tools
 assert(int(sys.version[0]) >= 3)
 
 
-_ant_support_commands = ["train", "eval", "export"]
-
 #############################################
 #######   antgo parameters            #######
 #############################################
@@ -326,7 +324,14 @@ def main():
         # prefix: 打包数据的文件前缀
         # num: 每个shard内样本条数
         tool_func(args.src, args.tgt, args.prefix, args.num)
+      elif sub_action_name.startswith('download'):
+        tool_func = getattr(tools, f'download_from_{sub_action_name.split("/")[1]}', None)
 
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+        
+        tool_func(args.tgt, args.tags)
 
 if __name__ == '__main__':
   main()

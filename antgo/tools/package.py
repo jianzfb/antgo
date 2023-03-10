@@ -7,6 +7,8 @@ import pickle
 from antgo.framework.helper.dataset.tfdataset import *
 from antgo.framework.helper.dataset.kvdataset import *
 from antgo.ant import environment
+import requests
+import logging
 
 
 class __SampleDataGenerator(object):
@@ -42,7 +44,12 @@ class __SampleDataGenerator(object):
             # 加载图像
             assert(sample['image_file'] != '' or sample['image_url'] != '')
             if sample['image_url'] != '':
-                pass
+                try:
+                    pic = requests.get(sample['image_url'], timeout=20)
+                    sample['image'] = pic.content                
+                except:
+                    logging.error("Couldnt download %s."%sample['image_url'])
+                    sample['image'] = b''
             else:
                 image_path = os.path.join(self.src_folder, sample['image_file'])
                 if os.path.exists(image_path):
@@ -51,15 +58,20 @@ class __SampleDataGenerator(object):
                         sample['image'] = image_content
                 else:
                     print(f'Missing image {image_path}')
-                    
-            yield sample
+                    sample['image'] = b''
+            
+            if sample['image'] == b'':
+                # 图像为空时，直接忽略样本
+                yield None
+            else:            
+                yield sample
 
 
-def package_to_kv(src_file, tgt_folder, prefix, size_in_shard=-1, tags=[]):
+def package_to_kv(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs):
     # src_file json 文件 (仅支持标准格式 sample_gt.json)
 
     # 创建writer 实例
-    kvw = KVDataWriter(prefix, tgt_folder, -1, keys=tags)
+    kvw = KVDataWriter(prefix, tgt_folder, -1)
 
     # 
     kvw.write(__SampleDataGenerator(src_file))
