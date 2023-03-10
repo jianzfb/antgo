@@ -9,6 +9,7 @@ from antgo.framework.helper.dataset.builder import DATASETS
 import copy
 from antgo.dataflow.datasetio import *
 import threading
+import json
 
 
 def _cycle(iterator_fn: typing.Callable) -> typing.Iterable[typing.Any]:
@@ -137,6 +138,39 @@ class TFDataset(torch.utils.data.IterableDataset):
             index_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['index'])
             index_file = os.path.join(folder, index_file)
             self.index_path_list.append(index_file)
+
+        if description is None:
+            description = {}
+            print('Using default tfrecord description.')
+            tfdataset_file_path = os.path.realpath(__file__)
+            parent_folder = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(tfdataset_file_path))))
+            with open(os.path.join(parent_folder, 'resource', 'templates', 'sample_gt.json'), 'r') as fp:
+                key_map_info = json.load(fp)
+
+            for k in key_map_info.keys():                
+                # 对于list数据直接转换为numpy
+                if isinstance(key_map_info[k], list):
+                    description[k] = 'numpy'
+                # 对于dict数据转换成字符串
+                elif isinstance(key_map_info[k], dict):
+                    description[k] = 'dict'
+                # 对bool数据转换成int
+                elif isinstance(key_map_info[k], bool):
+                    description[k] = 'int'
+                elif isinstance(key_map_info[k], int):
+                    description[k] = 'int'
+                elif isinstance(key_map_info[k], float):
+                    description[k] = 'float'
+                elif isinstance(key_map_info[k], str):
+                    description[k] = 'str'
+                elif isinstance(key_map_info[k], bytes):
+                    description[k] = 'byte'
+                else:
+                    print('unkown data type')
+
+            # 默认字段，用于存储图像
+            description['image'] = 'byte'
+
         self.description = {}
         self.raw_description = description
         for k, v in description.items():
@@ -145,6 +179,14 @@ class TFDataset(torch.utils.data.IterableDataset):
                     k: 'byte',
                     f'__{k}_type': 'int',
                     f'__{k}_shape': 'int'
+                })
+            elif v == 'str':
+                self.description.update({
+                    k: 'byte'
+                })
+            elif v == 'dict':
+                self.description.update({
+                    k: 'byte'
                 })
             else:
                 self.description.update({
@@ -196,8 +238,8 @@ class TFDataset(torch.utils.data.IterableDataset):
         self.real_num_samples = self.num_samples
 
         rank, world_size = get_dist_info()
-        rank = 0
-        world_size = 2
+        # rank = 0
+        # world_size = 2
         if world_size > 1:
             # TODO，现在多卡实现基于文件级别的拆分，粒度较粗
             assert(len(self.data_path_list) >= world_size)
@@ -225,6 +267,10 @@ class TFDataset(torch.utils.data.IterableDataset):
                     dtype = numpy_dtype_map[sample[f'__{k}_type'][0]]
                     shape = tuple(sample[f'__{k}_shape'])
                     new_sample[k] = np.frombuffer(sample[k].tobytes(), dtype=dtype).reshape(shape)
+                elif self.raw_description[k] == 'str':
+                    new_sample[k] = sample[k].tobytes().decode('utf-8')
+                elif self.raw_description[k] == 'dict':
+                    new_sample[k] = json.loads(sample[k].tobytes().decode('utf-8'))
                 else:
                     new_sample[k] = sample[k]
         sample = new_sample

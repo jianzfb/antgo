@@ -8,7 +8,6 @@ from __future__ import unicode_literals
 from ast import parse
 from random import shuffle
 import sys
-sys.path.append('/Users/jian/Downloads/workspace/temp/antgo')
 import os
 from typing import NamedTuple
 from antgo.utils.utils import *
@@ -58,12 +57,13 @@ DEFINE_string("ensemble", "", "set ensemble method")
 DEFINE_string("src", "", "set src folder/file")
 DEFINE_string("tgt", "", "set tgt folder/file")
 DEFINE_int("frame-rate", 30, "video frame rate")
-DEFINE_string("filter-prefix", None, "filter by prefixe")
-DEFINE_string("filter-suffix", None, "filter by suffix")
-DEFINE_string("filter-ext", None, "filter by ext")
+DEFINE_string("prefix", None, "filter by prefixe")
+DEFINE_string("suffix", None, "filter by suffix")
+DEFINE_string("ext", None, "filter by ext")
 DEFINE_string("white-users", None, "name:password,name:password")
 DEFINE_string("tags", None, "tag info")
 DEFINE_indicator("feedback", True, "")
+DEFINE_int('num', 0, "number")
 
 #############################################
 DEFINE_nn_args()
@@ -277,7 +277,15 @@ def main():
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return
-        tool_func(args.src, args.tgt, frame_rate=args.frame_rate, filter_prefix=args.filter_prefix, filter_suffix=args.filter_suffix, filter_ext=args.filter_ext)
+        tool_func(
+          args.src, 
+          args.tgt, 
+          frame_rate=args.frame_rate, 
+          filter_prefix=args.prefix, 
+          filter_suffix=args.suffix, 
+          filter_ext=args.ext,
+          feedback=args.feedback,
+          num=args.num)
       elif sub_action_name.startswith('browser'):
         tool_func = getattr(tools, f'browser_{sub_action_name.split("/")[-1]}', None)
         if tool_func is None:
@@ -306,16 +314,17 @@ def main():
         tool_func(args.src, args.tgt, args.tags)
         return
       elif sub_action_name.startswith('package'):
-        # TODO测试
-        # src is annotation file
-        # tgt is target folder
         tool_func = getattr(tools, f'package_to_{sub_action_name.split("/")[1]}', None)
 
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return
         
-        tool_func(args.src, args.tgt)
+        # src: json文件路径
+        # tgt: 打包数据存放目录
+        # prefix: 打包数据的文件前缀
+        # num: 每个shard内样本条数
+        tool_func(args.src, args.tgt, args.prefix, args.num)
 
 
 if __name__ == '__main__':

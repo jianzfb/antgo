@@ -6,6 +6,9 @@ import os
 import json
 import copy
 import glob
+import logging
+import numpy as np
+from pprint import pprint
 
 
 def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
@@ -133,3 +136,77 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
 
     with open(os.path.join(target_folder, annotation_file_name), 'w') as fp:
         json.dump(annotation_list, fp)
+
+
+def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kwargs):
+    source_file_name = source_file.split('/')[-1]
+    pure_file_name = source_file_name.split('.')[0]
+    ext_name =source_file_name.split('.')[-1]
+    if ext_name not in ['json', 'txt']:
+        logging.error('Only support json or txt file.')
+        return
+    
+    if target_folder is None:
+        target_folder = './'
+    
+    # 随机抽取10条数据
+    samples = []
+    sample_indexs = []
+    total_sample_num = 0
+    if ext_name == 'json':
+        with open(source_file, 'r') as fp:
+            content = json.load(fp)
+            total_sample_num = len(content)
+            sample_num = min(total_sample_num, num)
+
+            sample_indexs = np.random.choice(total_sample_num, sample_num, replace=False).tolist()
+            for i in sample_indexs:
+                samples.append(content[i])
+
+        target_file_path = os.path.join(target_folder, f'{pure_file_name}_samples_{len(samples)}.{ext_name}')
+        with open(target_file_path, 'w') as fp:
+            json.dump(samples, fp)
+
+        if feedback:
+            # step1: 显示样本总条数
+            print(f'Total Sample Num: {total_sample_num}')
+            
+            # step2: 显示keys
+            if isinstance(samples[0], dict):
+                print('Total Keys: ')
+                print(samples[0].keys())
+
+            # step3: 显示采样的索引
+            print('Sample Index: ')
+            print(sample_indexs)
+
+            # step4: 显示采样的样本
+            print('Samples: ')
+            pprint(samples)
+    else:
+        with open(source_file, 'r') as fp:
+            content = fp.readlines()
+
+            total_sample_num = len(content)
+            sample_num = min(total_sample_num, num)
+            sample_indexs = np.random.choice(total_sample_num, sample_num, replace=False).tolist()
+            for i in sample_indexs:
+                samples.append(content[i].strip())
+        
+        target_file_path = os.path.join(target_folder, f'{pure_file_name}_samples_{len(samples)}.{ext_name}')
+        with open(target_file_path, 'w') as fp:
+            for s in samples:
+                fp.write(f'{s}\n')
+
+        if feedback:
+            # step1: 显示样本总条数
+            print(f'Total Sample Num: {total_sample_num}')
+
+            # step2: 显示采样的样本行索引
+            print('Sample Index: ')
+            print(sample_indexs)
+
+            # step3: 显示采样的样本
+            print('Samples: ')
+            for s in samples:
+                print(f'{s}\n')

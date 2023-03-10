@@ -38,7 +38,6 @@ class DummyKVWriter(object):
         pass
     def write_many(self, keys, values):
         pass
-
     def flush(self):
         pass
 
