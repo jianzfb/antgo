@@ -14,6 +14,10 @@ antgo tool extract/images --src=image-folder-path --tgt=target-folder
 // 如果同时想要指定文件名前缀，后缀，扩展名进行过滤，可以如下，
 antgo tool extract/images --src=image-folder-path --tgt=target-folder --prefix=prefix --suffix=suffix --ext=ext
 ```
+### 转换全图数据到局部小图
+```
+antgo tool extract/crop --src=json-path --tgt=target-folder
+```
 ### 从第三方提供的json/txt标注文件中随机采样
 ```
 // 用于查看GT格式

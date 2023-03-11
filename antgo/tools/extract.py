@@ -10,6 +10,8 @@ import logging
 import numpy as np
 from pprint import pprint
 import imagesize
+import requests
+from antgo.utils.sample_gt import *
 
 
 def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
@@ -157,6 +159,98 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
     with open(os.path.join(target_folder, annotation_file_name), 'w') as fp:
         json.dump(annotation_list, fp)
 
+
+def extract_from_crop(source_file, target_folder, **kwargs):
+    # 仅支持标准GT
+    source_file_name = source_file.split('/')[-1]
+    pure_file_name = source_file_name.split('.')[0]
+    ext_name =source_file_name.split('.')[-1]
+    if ext_name != 'json':
+        logging.error('Only support json or txt file.')
+        return
+    
+    if target_folder is None:
+        target_folder = './'
+
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+
+    if not os.path.exists(os.path.join(target_folder, 'images')):
+        os.makedirs(os.path.join(target_folder, 'images'))
+
+    with open(source_file, 'r') as fp:
+        content = json.load(fp)
+
+    src_folder = os.path.dirname(source_file)
+    sgtt = SampleGTTemplate()
+    total_gt_list = []
+    for sample_i, sample in enumerate(content):
+        bboxes = sample['bboxes']
+        labels = sample['labels']
+        label_names = sample['label_names']
+        if len(label_names) == 0:
+            label_names = [str(l) for l in labels]
+        
+        image = None
+        file_name = f'{str(sample_i)}.png'
+        if sample['image_file'] != '':
+            image_path = os.path.join(src_folder, sample['image_file'])
+            image = cv2.imread(image_path)
+            file_name = image_path.split('/')[-1]
+        else:
+            try:
+                pic = requests.get(sample['image_url'], timeout=20)
+                image = cv2.imdecode(np.frombuffer(pic.content, np.uint8), cv2.IMREAD_COLOR)
+            except:
+                logging.error("Couldnt download %s."%sample['image_url'])
+                image = None
+
+        if image is None:
+            continue
+        
+        pure_file_name = file_name.split('.')[0]
+        height, width = image.shape[:2]
+        
+        for box_i, (box, label, label_name) in enumerate(zip(bboxes, labels, label_names)):
+            x0,y0,x1,y1 = box
+            
+            x0 = int(max(x0, 0))
+            y0 = int(max(y0, 0))
+            x1 = int(min(x1, width))
+            y1 = int(min(y1, height))
+            
+            patch_image = image[y0:y1,x0:x1]
+            patch_file_name = f'{pure_file_name}_box_{box_i}_label_{label_name}.png'
+            cv2.imwrite(os.path.join(target_folder, 'images', patch_file_name), patch_image)
+            
+            standard_gt = sgtt.get()
+            standard_gt['image_file'] = f'images/{patch_file_name}'
+            standard_gt['height'] = patch_image.shape[0]
+            standard_gt['width'] = patch_image.shape[1]
+            standard_gt['image_label'] = label
+            standard_gt['image_label_name'] = label_name
+            
+            if len(sample['has_joints2d']) > 0:
+                if sample['has_joints2d'][box_i]:
+                    standard_gt['has_joints2d'].append(1)
+                    standard_gt['joints2d'].append(sample['joints2d'][box_i])
+                else:
+                    standard_gt['has_joints2d'].append(0)
+                    standard_gt['joints2d'].append([])
+            
+            if len(sample['has_segments']) > 0:
+                if sample['has_segments'][box_i]:
+                    standard_gt['has_segments'].append(1)
+                    standard_gt['segments'].append(sample['segments'][box_i])
+                else:
+                    standard_gt['has_segments'].append(0)
+                    standard_gt['segments'].append([])
+            
+            total_gt_list.append(standard_gt)
+
+    with open(os.path.join(target_folder, 'annotation.json'), 'w') as fp:
+        json.dump(total_gt_list, fp)
+        
 
 def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kwargs):
     source_file_name = source_file.split('/')[-1]
