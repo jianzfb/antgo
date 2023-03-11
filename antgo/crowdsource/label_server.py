@@ -571,11 +571,6 @@ class UserInfoHandler(BaseHandler):
 class LabelExportHandler(BaseHandler):
   @gen.coroutine
   def get(self):
-    # user = self.get_current_user()
-    # if user is None:
-    #   self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
-    #   return
-
     export_samples = []
     for sample_id, sample in enumerate(self.db['samples']):
       export_sample = {
@@ -652,7 +647,8 @@ def label_server_start(
     task_metas,
     sample_metas,
     label_metas,
-    samples=[],
+    sample_folder=None,
+    sample_list=[],
     running_metas=None,
     white_users=None):
   # register sig
@@ -670,8 +666,27 @@ def label_server_start(
     # 2.step launch show server
     db = {}
     # 添加默认样本列表
-    db['samples'] = samples
-
+    db['samples'] = []
+    if len(sample_list) > 0 and sample_folder is not None:
+      # 为样本所在目录建立软连接到static下面
+      os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
+                  
+      # 将默认导入的样本直转换成新格式,并写入本地数据库
+      for sample_i, sample_info in enumerate(sample_list):
+        db['samples'].append({
+              'image_file': f'/static/dataset/{sample_info["image_file"]}' if sample_info['image_file'] != '' else sample_info['image_url'],
+              'height': sample_info['height'],
+              'width': sample_info['width'],
+              'sample_id': sample_i,
+              'completed_time': 0,
+              'created_time': 0,
+              'update_time': 0,
+              'operators': [],
+              'assigner': '',
+              'state': 'waiting',
+              'label_info': [],
+        })
+    
     # 设置样本基本信息
     db['sample_metas'] = sample_metas
 

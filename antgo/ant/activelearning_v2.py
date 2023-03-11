@@ -150,7 +150,7 @@ class AntActiveLearningV2(AntBase):
         if response['content']['project_state']['stage'] == 'finish':
           break
         # 等待10分钟后检查
-        time.sleep(30)
+        time.sleep(10)
         
     if not os.path.exists(os.path.join(self.ant_dump_dir, 'label', f'{self._round}')):
       os.makedirs(os.path.join(self.ant_dump_dir, 'label', f'{self._round}'))
@@ -166,7 +166,7 @@ class AntActiveLearningV2(AntBase):
 
       return content
 
-  def start(self):
+  def start(self, **kwargs):
     # 0.step loading challenge task
     running_ant_task = None
     if self.token is not None:
@@ -245,6 +245,14 @@ class AntActiveLearningV2(AntBase):
         'task_name': self.running_task.task_name,
         'label_type': self.context.params.activelearning.label_type
       }
+      
+      data_json_file = kwargs.get('json_file', None)
+      if data_json_file is not None:
+        # 直接使用来自于data_json_file中的样本
+        with open(data_json_file, 'r') as fp:
+          sample_list = json.load(fp)      
+        sample_folder = os.path.dirname(data_json_file)
+        
       self.p = \
         multiprocessing.Process(
           target=label_server_start,
@@ -253,7 +261,8 @@ class AntActiveLearningV2(AntBase):
                 task_metas,
                 sample_metas,
                 metas,
-                [],
+                sample_folder,
+                sample_list,
                 {
                   'state': 'running', 
                   'stage': 'waiting'    # 标注服务启动后，处在等待状态。之后数据推送好后，重制状态使其处在标注状态

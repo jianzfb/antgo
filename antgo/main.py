@@ -63,6 +63,8 @@ DEFINE_string("tags", None, "tag info")
 DEFINE_string("no-tags", None, "tag info")
 DEFINE_indicator("feedback", True, "")
 DEFINE_int('num', 0, "number")
+DEFINE_indicator("to", True, "")
+DEFINE_indicator("from", True, "")
 
 #############################################
 DEFINE_nn_args()
@@ -291,18 +293,6 @@ def main():
           logging.error(f'Tool {sub_action_name} not exist.')
           return
         tool_func(args.src, args.tags, args.white_users, args.feedback)
-      elif sub_action_name.startswith('annotation'):
-        # annotation/ls, annotation/browser, annotation
-        if sub_action_name == 'annotation':
-          tool_func = getattr(tools, f'annotation', None)
-        else:
-          tool_func = getattr(tools, f'annotation_from_{sub_action_name.split("/")[1]}', None)
-        
-        if tool_func is None:
-          logging.error(f'Tool {sub_action_name} not exist.')
-          return
-        # src: data folder, tgt: annotation file
-        tool_func(args.src, args.tgt)
       elif sub_action_name.startswith('filter'):
         tool_func = getattr(tools, f'filter_by_{sub_action_name.split("/")[1]}', None)
 
@@ -332,6 +322,28 @@ def main():
           return
         
         tool_func(args.tgt, args.tags)
+      elif sub_action_name.startswith('label'):
+        if sub_action_name.split("/")[1] == 'start':
+          tool_func = getattr(tools, f'label_{sub_action_name.split("/")[1]}', None)
+          if tool_func is None:
+            logging.error(f'Tool {sub_action_name} not exist.')
+            return
+          
+          tool_func(args.src, args.tgt, args.tags, args.type, args.white_users)
+          return
+        else:
+          tool_func = None
+          if args.to:
+            tool_func = getattr(tools, f'label_to_{sub_action_name.split("/")[1]}', None)
+          else:
+            tool_func = getattr(tools, f'label_from_{sub_action_name.split("/")[1]}', None)
+            
+          if tool_func is None:
+            logging.error(f'Tool {sub_action_name} not exist.')
+            return
+          
+          tool_func(args.src, args.tgt, prefix=args.prefix, tags=args.tags)
 
+      
 if __name__ == '__main__':
   main()

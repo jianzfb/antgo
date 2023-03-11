@@ -9,18 +9,24 @@ import glob
 import logging
 import numpy as np
 from pprint import pprint
+import imagesize
 
 
 def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
     # 输出
     # -data
     # -annotation.json
+    if target_folder is None:
+        target_folder = './'
+    
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
 
     # 不支持多级目录
     # 抽帧过程
     support_video_ext = ['mp4', 'avi']
+    frame_height = 0
+    frame_width = 0
     for video_file_name in os.listdir(video_folder):
         if video_file_name[0] == '.':
             continue
@@ -38,7 +44,8 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
             ret, frame = cap.read() 
             if not ret:
                 break
-
+            
+            frame_height, frame_width = frame.shape[:2]
             if count % frame_rate == 0:
                 cv2.imwrite(os.path.join(target_folder, video_file_pure_name, f'{video_file_pure_name}_rate-{frame_rate}_frame-{count}.png'), frame)
 
@@ -68,6 +75,8 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
             sample_gt_cp.update({
                 'image_file': f'{video_name}/{file_name}'
             })
+            sample_gt_cp['height'] = frame_height
+            sample_gt_cp['width'] = frame_width
             annotation_list.append(sample_gt_cp)
 
     print(f'extract frame number {len(annotation_list)}')
@@ -86,6 +95,12 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
         
         support_image_ext = temp
 
+    if target_folder is None:
+        target_folder = './'
+
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+        
     # 遍历source_folder 所有文件并保留文件目录结构复制
     sample_file_list = []
     for root, dirnames, filenames in os.walk(source_folder):
@@ -126,10 +141,15 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
         sample_gt = json.load(fp)
 
     for sample_file_name in sample_file_list:
+        sample_file_path = os.path.join(target_folder, sample_file_name)
+        width, height = imagesize.get(sample_file_path)
+        
         sample_gt_cp = copy.deepcopy(sample_gt)
         sample_gt_cp.update({
             'image_file': sample_file_name
         })
+        sample_gt_cp['height'] = height
+        sample_gt_cp['width'] = width
         annotation_list.append(sample_gt_cp)
 
     print(f'extract image number {len(annotation_list)}')

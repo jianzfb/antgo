@@ -460,7 +460,7 @@ class InteractContext(Context):
               cc.dump_dir,
               cc.api_token,
               cc.task)
-            self.handler.start()          
+            self.handler.start(**kwargs)          
 
       def exit(self):
         if self.handler is not None:

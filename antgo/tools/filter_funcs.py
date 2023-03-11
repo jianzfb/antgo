@@ -45,7 +45,7 @@ def filter_by_tags(src_file, tgt_file, tags, no_tags):
         remain_sample_list.append(sample)
     
     src_folder = os.path.dirname(src_file)
-    src_name = src_file.split('/')[-1]
+    src_name = src_file.split('/')[-1].split('.')[0]
     
     prefix = f'{src_name}_filter'
     if tags is not None:

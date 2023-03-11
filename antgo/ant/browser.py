@@ -270,10 +270,9 @@ class AntBrowser(AntBase):
 
     # 3.1.step 准备web服务资源
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
+    if os.path.exists(self.dump_dir):
+      shutil.rmtree(self.dump_dir)
     browser_static_dir = os.path.join(self.dump_dir, 'browser', 'static')
-    if os.path.exists(browser_static_dir):
-      shutil.rmtree(browser_static_dir)
-
     shutil.copytree(os.path.join(static_folder, 'resource', 'app'), browser_static_dir)
 
     # 3.2.step 准备有效端口
@@ -388,6 +387,7 @@ class AntBrowser(AntBase):
               profile_config,
               sample_folder, sample_list, white_users)
       )
+    self.p.daemon = True
     self.p.start()
 
     # 等待直到http服务开启

@@ -38,6 +38,7 @@ def browser_images(src_file, tags, white_users_str, feedback=True):
         content = ctx.browser.download()
         
         src_folder = os.path.dirname(src_file)
-        src_name = src_file.split('/')[-1]
+        src_name = src_file.split('/')[-1].split('.')[0]
         with open(os.path.join(src_folder, f'{src_name}_browser.json'), 'w') as fp:
             json.dump(content, fp)
+    ctx.browser.exit()

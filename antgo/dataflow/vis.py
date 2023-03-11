@@ -12,8 +12,6 @@ import cv2
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
-# import matplotlib
-# matplotlib.use('TKAgg')
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import matplotlib.patches as patches
@@ -171,13 +169,28 @@ def vis_3d_keypoints(kps_3d, score, skeleton, filename, score_thr=0.4, line_widt
     # z
     ax = fig.add_subplot(224)
     __render_2d_xyz(kps_3d,score, skeleton, ax, rgb_dict,score_thr, axis='z')
-
-
-    #plt.show()
-    #cv2.waitKey(0)
     
     fig.savefig(osp.join(save_path, filename), dpi=fig.dpi)
     plt.close()
+
+
+def vis_2d_boxes_in_image(image, boxes):
+    pass
+
+def vis_3d_boxes_in_image(image, boxes, camera_param, camera_model):
+    pass
+
+def vis_3d_points_in_image(image, points, skeleton, camera_param, camera_model='fisheye'):
+    
+    pass
+
+def vis_2d_points_in_image(image, points, skeleton):
+    pass
+
+
+def vis_mano_in_image(image, pose, shape, trans, camera_param, camera_model='fisheye'):
+    pass
+
 
 
 def imshow(image, bboxes=None, keypoints=None):
