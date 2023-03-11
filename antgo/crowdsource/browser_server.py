@@ -605,6 +605,7 @@ def browser_server_start(browser_dump_dir,
     # 2.step launch show server
     db = {'data': [], 'users': {}, 'dataset': {}, 'user_record': {}}
 
+    sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径
     if sample_list is not None and sample_folder is not None:
       # 为样本所在目录建立软连接到static下面
       os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')

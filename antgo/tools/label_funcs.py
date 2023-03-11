@@ -31,10 +31,13 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     if len(white_users) == 0:
         white_users = None
     
-    assert(label_type in ['RECT','POINT','POLYGON'])
     if label_type == 'POINT':
         print(f'Now not support {label_type}')
         return 
+    if label_type is None:
+        label_type = ''
+    
+    assert(label_type in ['', 'RECT','POINT','POLYGON'])
     
     # label_name:0,label_name;1,...
     label_name_and_label_id_map = {}
@@ -61,7 +64,8 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     # label_type: 设置标注类型，目前仅支持'RECT','POINT','POLYGON'   
     ctx.activelearning.start(src_json_file_name, config={
             'metas':{
-                'category': inner_category
+                'category': inner_category,
+                'level': 'image-level' if label_type == '' else 'instance-level'
             },
             'white_users': white_users,
             'label_type': label_type,   # 设置标注类型，'RECT','POINT','POLYGON'
@@ -84,10 +88,10 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         standard_gt = sgtt.get()
         standard_gt['image_file'] = '/'.join(anno_info['file_upload'].split('/')[3:])
         standard_gt['tag'] = src_json_file_name
-
+        
         sample_anno_info = anno_info['annotations'][0]
-        if label_type == 'RECT':
-            for sample_anno_instance in sample_anno_info['result']:  
+        for sample_anno_instance in sample_anno_info['result']:  
+            if sample_anno_instance['type'] == 'RECT':
                 standard_gt['height'] = 0 if 'height' not in sample_anno_instance else sample_anno_instance['height']
                 standard_gt['width'] = 0 if 'width' not in sample_anno_instance else sample_anno_instance['width']
                             
@@ -100,9 +104,7 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
                 label_id = sample_anno_instance['value']['labels']
                 standard_gt['labels'].append(label_id)
                 standard_gt['label_names'].append(label_id_and_label_name_map[label_id])
-            
-        elif label_type == 'POLYGON':
-            for sample_anno_instance in sample_anno_info['result']:    
+            elif sample_anno_instance['type'] == 'POLYGON':
                 standard_gt['height'] = 0 if 'height' not in sample_anno_instance else sample_anno_instance['height']
                 standard_gt['width'] = 0 if 'width' not in sample_anno_instance else sample_anno_instance['width']
                                 
@@ -123,12 +125,20 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
 
                 standard_gt['segments'].append(points)
                 standard_gt['has_segments'].append(1)
-                        
-        elif label_type == 'POINT':
-            pass
-        
-        total_gt_list.append(standard_gt)
+            elif sample_anno_instance['type'] == 'POINT':
+                pass
+            elif sample_anno_instance['type'] == 'CHOICES':
+                standard_gt['height'] = 0 if 'height' not in sample_anno_instance else sample_anno_instance['height']
+                standard_gt['width'] = 0 if 'width' not in sample_anno_instance else sample_anno_instance['width']
+                                
+                image_labe_name = ','.join(sample_anno_instance['value']['labels'])
+                standard_gt['image_label_name'] = image_labe_name
+                standard_gt['image_label'] = label_name_and_label_id_map[image_labe_name] if image_labe_name in label_name_and_label_id_map else -1
+
+        total_gt_list.append(standard_gt)    
     
+    if not os.path.exists(tgt_folder):
+        os.makedirs(tgt_folder)
     with open(os.path.join(tgt_folder, f'{src_json_file_name}_label.json'), 'w') as fp:
         json.dump(total_gt_list, fp)
         

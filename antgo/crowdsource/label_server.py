@@ -135,8 +135,20 @@ class LabelStateHandler(BaseHandler):
           completed_num += 1
         
       if sample_num != completed_num:
-        self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+        self.response(
+          RESPONSE_STATUS_CODE.SUCCESS, 
+          content={
+            'finish': False,
+            'completed_num': completed_num,
+            'sample_num': sample_num
+          })
         return 
+      else:
+        self.response(
+          RESPONSE_STATUS_CODE.SUCCESS, 
+          content={
+            'finish': True
+          })
   
     if running_stage == 'waiting':
       # 切换运行状态为等待, 清空标注样本
@@ -597,7 +609,19 @@ class LabelExportHandler(BaseHandler):
             v = copy.deepcopy(label_result['shape'])
             v['labels'] = label_result['label']
             temp['result'].append({
-              'value': v
+              'value': v,
+              'width': sample['width'],
+              'height': sample['height'],           
+              'type': label_result['type']
+            })
+          elif label_result['type'] == 'CHOICES':
+            v = {}
+            v['labels'] = label_result['label']
+            temp['result'].append({
+              'value': v,
+              'width': sample['width'],
+              'height': sample['height'],
+              'type': label_result['type']
             })
 
         export_sample['annotations'].append(temp)
@@ -667,14 +691,92 @@ def label_server_start(
     db = {}
     # 添加默认样本列表
     db['samples'] = []
+
+    sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径
     if len(sample_list) > 0 and sample_folder is not None:
       # 为样本所在目录建立软连接到static下面
       os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
                   
       # 将默认导入的样本直转换成新格式,并写入本地数据库
       for sample_i, sample_info in enumerate(sample_list):
+        label_info = []
+        # 添加目标框标注信息
+        if len(sample_info['bboxes']) > 0:
+          box_num = len(sample_info['bboxes'])
+          for bi in range(box_num):
+            box = sample_info['bboxes'][bi]
+            label = sample_info['labels'][bi]
+            label_info.append({
+                  'type': 'RECT',
+                  'shape': {
+                    'x': box[0],
+                    'y': box[1],
+                    'width': box[2]-box[0],
+                    'height': box[3]-box[1]
+                  },
+                  'label': label
+            })
+        elif 'bboxes' in sample_info['predictions']:
+          box_num = len(sample_info['predictions']['bboxes'])
+          for bi in range(box_num):
+            box = sample_info['predictions']['bboxes'][bi]
+            label = sample_info['predictions']['labels'][bi]
+            label_info.append({
+                  'type': 'RECT',
+                  'shape': {
+                    'x': box[0],
+                    'y': box[1],
+                    'width': box[2]-box[0],
+                    'height': box[3]-box[1]
+                  },
+                  'label': label
+            })
+        
+        # 添加多边形标注信息
+        if len(sample_info['segments']) > 0:
+          segment_num = len(sample_info['segments'])
+          for bi in range(segment_num):
+            points = sample_info['segments'][bi]
+            label = sample_info['labels'][bi]
+            label_info.append({
+                  'type': 'POLYGON',
+                  'shape': {
+                    'points': points
+                  },
+                  'label': label
+            })
+        elif 'segments' in sample_info['predictions']:
+          box_num = len(sample_info['predictions']['segments'])
+          for bi in range(box_num):
+            points = sample_info['predictions']['segments'][bi]
+            label = sample_info['predictions']['segments'][bi]
+            label_info.append({
+                  'type': 'POLYGON',
+                  'shape': {
+                    'points': points
+                  },
+                  'label': label
+            })
+        
+        # 添加关键点标注信息
+        # pass
+        
+        # 添加图片类别
+        if sample_info['image_label_name'] != '':
+          label_info.append({
+              'type': 'CHOICES',
+              'choices': [sample_info['image_label_name']]
+          })     
+        elif 'image_label_name' in sample_info['predictions']:
+          label_info.append({
+              'type': 'CHOICES',
+              'choices': [sample_info['predictions']['image_label_name']]
+          })          
+        
+        # 加入数据库中
         db['samples'].append({
               'image_file': f'/static/dataset/{sample_info["image_file"]}' if sample_info['image_file'] != '' else sample_info['image_url'],
+              # 'image_file': 'https://www.ssfiction.com/wp-content/uploads/2020/08/20200805_5f2b1669e9a24.jpg',
               'height': sample_info['height'],
               'width': sample_info['width'],
               'sample_id': sample_i,
@@ -684,7 +786,7 @@ def label_server_start(
               'operators': [],
               'assigner': '',
               'state': 'waiting',
-              'label_info': [],
+              'label_info': label_info,
         })
     
     # 设置样本基本信息
