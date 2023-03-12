@@ -613,7 +613,7 @@ def browser_server_start(browser_dump_dir,
       # 将数据信息写如本地数据库
       
       for sample_id, sample in enumerate(sample_list):
-        file_name = sample['image_file'].split('/')[-1] if sample['image_file'] != '' else sample['image_url'].split('/')[-1]
+        file_name = sample['image_file'] if sample['image_file'] != '' else sample['image_url']
         sample_label = sample['image_label'] if sample['image_label_name'] == '' else sample['image_label_name']
         convert_sample = [{
           'type': 'IMAGE',

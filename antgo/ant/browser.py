@@ -348,7 +348,7 @@ class AntBrowser(AntBase):
     sample_folder = None
     if data_json_file is not None:
       # 直接使用来自于data_json_file中的样本
-      with open(data_json_file, 'r') as fp:
+      with open(data_json_file, 'r', encoding="utf-8") as fp:
         sample_list = json.load(fp)
         self.context.recorder.dataset_size = len(sample_list)
       

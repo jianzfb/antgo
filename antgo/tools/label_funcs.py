@@ -294,8 +294,8 @@ def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, **kwargs)
                 
         total_gt_list.append(standard_gt)
         
-    with open(os.path.join(tgt_folder, f'{src_json_file_name}_convert.json'), 'w') as fp:
-        json.dump(total_gt_list, fp)
+    with open(os.path.join(tgt_folder, f'{src_json_file_name}_convert.json'), 'w', encoding='utf-8') as fp:
+        json.dump(total_gt_list, fp, ensure_ascii=False)
         
 
 # 测试检测标注

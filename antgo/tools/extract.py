@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/Users/bytedance/Downloads/workspace/my/antgo')
 from fileinput import filename
 from random import shuffle
 import shutil
@@ -12,6 +14,7 @@ from pprint import pprint
 import imagesize
 import requests
 from antgo.utils.sample_gt import *
+from pycocotools.coco import COCO
 
 
 def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
@@ -60,7 +63,7 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
     annotation_list = []
     # 加载默认标准格式
     sample_gt_file = os.path.join('/'.join(os.path.dirname(__file__).split('/')[:-1]), 'resource', 'templates', 'sample_gt.json')
-    with open(sample_gt_file, 'r') as fp:
+    with open(sample_gt_file, 'r', encoding="utf-8") as fp:
         sample_gt = json.load(fp)
 
     for video_name in os.listdir(target_folder):
@@ -81,9 +84,9 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
             sample_gt_cp['width'] = frame_width
             annotation_list.append(sample_gt_cp)
 
-    print(f'extract frame number {len(annotation_list)}')
+    print(f'Extract frame number {len(annotation_list)}')
 
-    with open(os.path.join(target_folder, annotation_file_name), 'w') as fp:
+    with open(os.path.join(target_folder, annotation_file_name), 'w', encoding="utf-8") as fp:
         json.dump(annotation_list, fp)
 
 
@@ -139,7 +142,7 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
     annotation_list = []
     # 加载默认标准格式
     sample_gt_file = os.path.join('/'.join(os.path.dirname(__file__).split('/')[:-1]), 'resource', 'templates', 'sample_gt.json')
-    with open(sample_gt_file, 'r') as fp:
+    with open(sample_gt_file, 'r', encoding="utf-8") as fp:
         sample_gt = json.load(fp)
 
     for sample_file_name in sample_file_list:
@@ -156,8 +159,75 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
 
     print(f'extract image number {len(annotation_list)}')
 
-    with open(os.path.join(target_folder, annotation_file_name), 'w') as fp:
+    with open(os.path.join(target_folder, annotation_file_name), 'w', encoding="utf-8") as fp:
         json.dump(annotation_list, fp)
+
+
+def extract_from_coco(source_file, target_folder, filter_label, **kwargs):
+    if not source_file.endswith('json'):
+        logging.error('Source file must be json file')
+        return
+
+    if filter_label is None:
+        filter_label = ''    
+    filter_label_map = {}
+    for ll in filter_label.split(','):
+        label_name, label_index = ll.split(":")
+        filter_label_map[label_name] = int(label_index)
+    
+    if target_folder is None:
+        target_folder = './'
+    
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+    
+    total_samples = []
+    sgt = SampleGTTemplate() 
+    db = COCO(source_file)
+    for aid in db.anns.keys():
+        ann = db.anns[aid]
+        image_id = ann['image_id']
+        img_info = db.loadImgs(image_id)[0]
+        file_name = img_info['file_name']
+        width = img_info['width']
+        height = img_info['height']
+        
+        gt_template = sgt.get()
+        gt_template['image_file'] = file_name
+        gt_template['width'] = width
+        gt_template['height'] = height
+        anns = db.imgToAnns[image_id]
+        
+        is_ignore = True
+        for ins_info in anns:
+            ins_segmentation = ins_info['segmentation']
+            ins_bbox = ins_info['bbox']
+            box_x, box_y, box_w, box_h = ins_bbox
+            ins_category = ins_info['category_id']
+            ins_category_name = db.cats[ins_category]['name']
+            
+            if len(filter_label_map) > 0:
+                if ins_category_name not in filter_label_map:
+                    continue
+                ins_category = filter_label_map[ins_category_name]
+                
+            is_ignore = False
+            if len(ins_bbox) > 0:
+                gt_template['labels'].append(ins_category)
+                gt_template['label_names'].append(ins_category_name)
+                gt_template['bboxes'].append([box_x, box_y, box_x+box_w, box_y+box_h])
+            
+                gt_template['segments'].append(ins_segmentation)
+                if len(ins_segmentation) > 0:
+                    gt_template['has_segments'].append(1)
+                else:
+                    gt_template['has_segments'].append(0)
+
+        if not is_ignore:
+            total_samples.append(gt_template)
+        
+    with open(os.path.join(target_folder, './annotation.json'), 'w', encoding="utf-8") as fp:
+        json.dump(total_samples, fp)
 
 
 def extract_from_crop(source_file, target_folder, **kwargs):
@@ -178,7 +248,7 @@ def extract_from_crop(source_file, target_folder, **kwargs):
     if not os.path.exists(os.path.join(target_folder, 'images')):
         os.makedirs(os.path.join(target_folder, 'images'))
 
-    with open(source_file, 'r') as fp:
+    with open(source_file, 'r', encoding="utf-8") as fp:
         content = json.load(fp)
 
     src_folder = os.path.dirname(source_file)
@@ -195,8 +265,12 @@ def extract_from_crop(source_file, target_folder, **kwargs):
         file_name = f'{str(sample_i)}.png'
         if sample['image_file'] != '':
             image_path = os.path.join(src_folder, sample['image_file'])
-            image = cv2.imread(image_path)
-            file_name = image_path.split('/')[-1]
+            try:
+                image = cv2.imread(image_path)
+                file_name = image_path.split('/')[-1]
+            except:
+                logging.error("Couldnt imread %s."%sample['image_file'])
+                image = None
         else:
             try:
                 pic = requests.get(sample['image_url'], timeout=20)
@@ -208,7 +282,8 @@ def extract_from_crop(source_file, target_folder, **kwargs):
         if image is None:
             continue
         
-        pure_file_name = file_name.split('.')[0]
+        ext_name = file_name.split('.')[-1]
+        pure_file_name = file_name.split(f'.{ext_name}')[0]
         height, width = image.shape[:2]
         
         for box_i, (box, label, label_name) in enumerate(zip(bboxes, labels, label_names)):
@@ -226,6 +301,9 @@ def extract_from_crop(source_file, target_folder, **kwargs):
             x1 = int(min(cx+box_size/2, width))
             y1 = int(min(cy+box_size/2, height))
             
+            if x0 == x1 or y0 == y1:
+                continue
+                        
             patch_image = image[y0:y1,x0:x1]
             patch_file_name = f'{pure_file_name}_box_{box_i}_label_{label_name}.png'
             subfolder = label_name
@@ -258,7 +336,7 @@ def extract_from_crop(source_file, target_folder, **kwargs):
             
             total_gt_list.append(standard_gt)
 
-    with open(os.path.join(target_folder, 'annotation.json'), 'w') as fp:
+    with open(os.path.join(target_folder, 'annotation.json'), 'w', encoding="utf-8") as fp:
         json.dump(total_gt_list, fp)
         
 
@@ -278,7 +356,7 @@ def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kw
     sample_indexs = []
     total_sample_num = 0
     if ext_name == 'json':
-        with open(source_file, 'r') as fp:
+        with open(source_file, 'r', encoding="utf-8") as fp:
             content = json.load(fp)
             total_sample_num = len(content)
             sample_num = min(total_sample_num, num)
@@ -288,7 +366,7 @@ def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kw
                 samples.append(content[i])
 
         target_file_path = os.path.join(target_folder, f'{pure_file_name}_samples_{len(samples)}.{ext_name}')
-        with open(target_file_path, 'w') as fp:
+        with open(target_file_path, 'w', encoding="utf-8") as fp:
             json.dump(samples, fp)
 
         if feedback:
@@ -308,7 +386,7 @@ def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kw
             print('Samples: ')
             pprint(samples)
     else:
-        with open(source_file, 'r') as fp:
+        with open(source_file, 'r', encoding="utf-8") as fp:
             content = fp.readlines()
 
             total_sample_num = len(content)
@@ -318,7 +396,7 @@ def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kw
                 samples.append(content[i].strip())
         
         target_file_path = os.path.join(target_folder, f'{pure_file_name}_samples_{len(samples)}.{ext_name}')
-        with open(target_file_path, 'w') as fp:
+        with open(target_file_path, 'w', encoding="utf-8") as fp:
             for s in samples:
                 fp.write(f'{s}\n')
 
@@ -334,3 +412,8 @@ def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kw
             print('Samples: ')
             for s in samples:
                 print(f'{s}\n')
+
+
+# extract_from_coco('/Volumes/Elements/手势/gesture/annotations/dumix_test_face_merge_200622_bin.json', './', 'hand:1')
+# extract_from_coco('/Volumes/Elements/手势/gesture/annotations/dumix_train_face_201117_tri.json', './', 'hand:1')
+# print('sdf')

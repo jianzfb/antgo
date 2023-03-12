@@ -14,10 +14,18 @@ antgo tool extract/images --src=image-folder-path --tgt=target-folder
 // 如果同时想要指定文件名前缀，后缀，扩展名进行过滤，可以如下，
 antgo tool extract/images --src=image-folder-path --tgt=target-folder --prefix=prefix --suffix=suffix --ext=ext
 ```
-### 转换全图数据到局部小图
+### 转换COCO格式数据到标准训练格式
+```
+# --tags用于指定原格式下的类别标签映射到新格式下的类别索引
+antgo tool extract/coco --src=coco-json-path --tgt=target-folder --tags=hand:0
+```
+
+### 转换到实例图数据并重新生成标准训练格式
 ```
 antgo tool extract/crop --src=json-path --tgt=target-folder
 ```
+
+
 ### 从第三方提供的json/txt标注文件中随机采样
 ```
 // 用于查看GT格式
@@ -64,11 +72,11 @@ antgo tool label/start --src=json-path --tgt=target-folder --tags=xxx --type=REC
 ### 打包tfrecord/kv数据（仅支持标准GT格式）
 ```
 // tfrecord
-// --src  json文件地址， --tgt 打包后存放地址，--prefix 打包后文件前缀设置，--num 打包后每个文件样本数
+// --src  json文件地址(多文件的话以逗号","隔开)， --tgt 打包后存放地址，--prefix 打包后文件前缀设置，--num 打包后每个文件样本数
 antgo tool package/tfrecord --src=json-path --tgt=target-folder --prefix=xxx --num=50000
 
 // kv
-// --src  json文件地址， --tgt 打包后存放地址，--prefix 打包后文件前缀设置，--num 打包后每个文件样本数
+// --src  json文件地址(多文件的话以逗号","隔开)， --tgt 打包后存放地址，--prefix 打包后文件前缀设置，--num 打包后每个文件样本数
 antgo tool package/kv --src=json-path --tgt=target-folder --prefix=xxx --num=50000
 ```
 
