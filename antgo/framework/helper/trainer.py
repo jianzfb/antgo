@@ -275,7 +275,7 @@ class Trainer(BaseTrainer):
                     **val_dataloader_default_args,
                     **self.cfg.data.get('val_dataloader', {})
             }
-            val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
+            val_dataset = build_dataset(self.cfg.data.val)
 
             if getattr(dataset, 'is_kv', False):
                 self.val_dataloader = build_kv_dataloader(val_dataset, **val_dataloader_args)

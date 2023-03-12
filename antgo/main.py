@@ -5,11 +5,8 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from ast import parse
-from random import shuffle
 import sys
 import os
-from typing import NamedTuple
 from antgo.utils.utils import *
 from antgo.utils.args import *
 from antgo.ant.utils import *
@@ -17,13 +14,9 @@ from antgo.command import *
 from antgo.help import *
 from antgo import config
 from antgo import version
-import traceback
 from jinja2 import Environment, FileSystemLoader
-import subprocess
 import json
-import shutil
 from antgo import tools
-
 # 需要使用python3
 assert(int(sys.version[0]) >= 3)
 
@@ -40,20 +33,18 @@ DEFINE_int('cpu', 0, 'set cpu number')
 DEFINE_int('memory', 0, 'set memory size (M)')
 DEFINE_string('name', None, '')   # 名字
 DEFINE_string('type', None, '')   # 类型
-DEFINE_indicator('with-example', False, 'with example code')
+
 ############## global config ###############
 DEFINE_string('token', None, '')
-DEFINE_string('root', None, '')
 ############## project config ##############
 DEFINE_string('semi', "", 'set semi supervised method')
 DEFINE_string("distillation", "", "set distillation method")
 DEFINE_string("activelearning", "", "set activelearning method")
 DEFINE_string("ensemble", "", "set ensemble method")
 
-
 ############## tool config ##############
-DEFINE_string("src", "", "set src folder/file")
-DEFINE_string("tgt", "", "set tgt folder/file")
+DEFINE_string("src", "./", "set src folder/file")
+DEFINE_string("tgt", "./", "set tgt folder/file")
 DEFINE_int("frame-rate", 30, "video frame rate")
 DEFINE_string("prefix", None, "filter by prefixe")
 DEFINE_string("suffix", None, "filter by suffix")
@@ -75,7 +66,6 @@ action_level_2 = ['add', 'del', 'create', 'update', 'show', 'get', 'tool']
 
 def main():
   main_logo()
-
   # 解析参数
   action_name = sys.argv[1]
   sub_action_name = None
@@ -86,7 +76,7 @@ def main():
     sys.argv = [sys.argv[0]] + sys.argv[3:]
   args = parse_args()
 
-  ############################### 配置文件操作 ##########################################################
+  ######################################### 配置文件操作 ################################################
   # 检查配置文件是否存在
   if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
     # 使用指定配置文件更新
@@ -137,8 +127,13 @@ def main():
   if not os.path.exists(config.AntConfig.task_factory):
     os.makedirs(config.AntConfig.task_factory)
 
-  #################################################################################################
-  
+  ######################################### 生成最小mvp ###############################################
+  if action_name == 'create' and sub_action_name == 'mvp':
+    project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')
+    generate_project_exp_example(project_folder, args.tgt)
+    return
+
+  ####################################################################################################
   # 执行指令
   if action_name in action_level_1:
     # 检查当前环境
@@ -267,9 +262,9 @@ def main():
         os.makedirs(args.name)
 
         # 生成示例代码
-        if args.with_example:
-            project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project')
-            generate_project_exp_example(project_folder, './')
+        # if args.with_example:
+        #     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project')
+        #     generate_project_exp_example(project_folder, './')
     elif action_name == 'tool':
       # 工具相关
       if sub_action_name.startswith('extract'):

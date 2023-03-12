@@ -1,32 +1,29 @@
 # (1) 训练过程
-# 单机4卡训练
-# antgo train main.py 4 --exp=task --no-validate --config=./config.py
-# 单机1卡训练（可以自定义使用第几块卡 --gpu_id=0）
-# antgo train main.py 1 --gpu_id=0 --exp=task --no-validate --config=./config.py
+# 多机多卡训练
+# TODO
+# 单机多卡训练(4卡运行)
+# bash launch.sh ../cifar10/main.py 4 --exp=xxx --no-validate --process=train
+# 单机1卡训练(可以自定义使用第几块卡 --gpu-id=0)
+# python3 ./cifar10/main.py --exp=xxx --gpu-id=0 --no-validate --process=train
 # 单机CPU训练（仅用于调试）
-# python3 main.py --exp=task --gpu_id=-1 --no-validate --process=train --config=./config.py
+# python3 ./cifar10/main.py --exp=xxx --gpu-id=-1 --no-validate --process=train
 
 # (2) 评估过程
-# 单机4卡评估
-# antgo test main.py 4 --exp=task --config=./config.py
-# 单机1卡评估（可以自定义使用第几块卡 --gpu_id=0）
-# antgo test main.py 1 --gpu_id=0 --exp=task --config=./config.py
+# 单机多卡评估(4卡运行)
+# bash launch.sh ./cifar10/main.py 4 --exp=xxx --checkpoint=yyy --process=test
+# 单机1卡评估（可以自定义使用第几块卡 --gpu-id=0）
+# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=0 --process=test
 # 单机CPU测试（仅用于调试）
-# python3 main.py --exp=task --gpu_id=-1 --process=test -config=./config.py
+# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=-1 --process=test
 
 # (3) 模型导出过程
-# antgo export main.py --exp=task --checkpoint='' --config=./config.py
+# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --process=export
 
-from concurrent.futures import process
+# 1.step 通用模块
 import sys
 import os
-import argparse
+os.system(f'ln -sf system.py {os.path.dirname(os.path.realpath(__file__))}/system.py')
 import torch
-
-# 导入扩展模块 (包括自定义的数据集，模型，等)
-from ext import *
-
-# 导入相关包
 from antgo.utils import args
 from antgo.framework.helper.trainer import *
 from antgo.framework.helper.tester import *
@@ -35,12 +32,20 @@ from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
 
-# 定义shell参数
-# (1) 自定义扩展参数
+# 2.step 导入自定义系统后台（包括hdfs后端，KV后端）
+from system import *
+
+# 3.step 导入扩展模块 (包括自定义的模型，数据集，，等)
+from models import *
+from metrics import *
+from dataset import *
+
+# 4.step 定义shell参数
+# 4.1.step 自定义扩展参数
 # 例子：
 # args.DEFINE_string('root_hdfs', '', 'label dataset hdfs')
 
-# (2) 定义标准nn参数
+# 4.2.step 定义标准nn参数
 args.DEFINE_nn_args()
 
 def main():
@@ -48,14 +53,29 @@ def main():
     nn_args = args.parse_args()
     args.print_args(nn_args)
     assert(nn_args.exp != '')
-    print('1')
     # step2: 加载配置文件
+    if not os.path.exists(nn_args.config):
+        here_dir = os.path.dirname(os.path.realpath(__file__))
+        # step2.1: 查找位置1
+        config_file_path = os.path.join(here_dir, 'config.py')
+        if not os.path.exists(config_file_path):
+            config_file_path = ''
+
+        # step2.2: 查找位置2
+        if config_file_path == '':
+            config_file_path = os.path.join(here_dir, 'configs', 'config.py')
+            if not os.path.exists(config_file_path):
+                config_file_path = ''
+
+        nn_args.config = config_file_path
+    if nn_args.config == '':
+        print('Couldnt find correct config file.')
+        return
+
     cfg = Config.fromfile(os.path.join(nn_args.exp, nn_args.config))
 
-    print('2')
     # step3: 执行指令（训练、测试、模型导出）
     if nn_args.process == 'train':
-        print('3')
         # 创建训练过程
         trainer = Trainer(
             cfg, 
@@ -65,22 +85,19 @@ def main():
             diff_seed=nn_args.diff_seed, 
             deterministic=nn_args.deterministic, 
             find_unused_parameters=nn_args.find_unused_parameters)
-        print('1')
+
         trainer.config_dataloader(with_validate=not nn_args.no_validate)
-        print('5')
         trainer.config_model(resume_from=nn_args.resume_from, load_from=nn_args.checkpoint)
-        print('6') 
         if nn_args.max_epochs < 0:
             # 优先使用外部指定max_epochs
             nn_args.max_epochs = cfg.max_epochs
         print(f'max epochs {nn_args.max_epochs}')
 
         trainer.start_train(max_epochs=nn_args.max_epochs)
-        print('7')
     elif nn_args.process == 'test':
         # 创建测试过程
         print(f'nn_args.distributed {nn_args.distributed}')
-        print(f'nn_args.gpu_id {nn_args.gpu_id}')
+        print(f'nn_args.gpu-id {nn_args.gpu_id}')
         print(f'nn_args.checkpoint {nn_args.checkpoint}')
         tester = Tester(
             cfg, 
@@ -92,12 +109,13 @@ def main():
     elif nn_args.process == 'export':
         # 创建导出模型过程
         tester = Exporter(cfg, './')
+        checkpoint_file_name = nn_args.checkpoint.split('/')[-1].split('.')[0]
         tester.export(
             input_tensor_list=[torch.zeros(shape, dtype=torch.float32) for shape in cfg.export.input_shape_list], 
             input_name_list=cfg.export.input_name_list, 
             output_name_list=cfg.export.output_name_list, 
             checkpoint=nn_args.checkpoint, 
-            prefix=f'{nn_args.exp}-model')
+            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model')
 
 if __name__ == "__main__":
     main()

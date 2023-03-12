@@ -74,11 +74,6 @@ def DEFINE_nn_args():
         '--deterministic',
         action='store_true',
         help='whether to set deterministic options for CUDNN backend.')        
-    parser.add_argument(
-        '--launcher',
-        choices=['none', 'pytorch'],
-        default='none',
-        help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument(
         '--auto-scale-lr',
@@ -115,8 +110,14 @@ def DEFINE_nn_args():
         '--max-epochs',
         type=int,
         default=-1,
-        help='experiment name'
+        help='train max epochs'
     )    
+    parser.add_argument(
+        '--root',
+        type=str,
+        default='',
+        help='root path'        
+    )
     parser.add_argument(
         '--exp',
         type=str,

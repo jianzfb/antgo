@@ -307,5 +307,5 @@ def worker_init_fn(worker_id, num_workers, rank, seed):
 
     # 初始化
     worker_info = torch.utils.data.get_worker_info()
-    if getattr(worker_info.dataset, 'worker_init_fn'):
+    if getattr(worker_info.dataset, 'worker_init_fn', None):
         worker_info.dataset.worker_init_fn(worker_id)

@@ -8,7 +8,8 @@ def cross_entropy(pred,
                   weight=None,
                   reduction='mean',
                   avg_factor=None,
-                  class_weight=None):
+                  class_weight=None,
+                  label_smoothing=0.0):
     """Calculate the CrossEntropy loss.
 
     Args:
@@ -26,7 +27,7 @@ def cross_entropy(pred,
         torch.Tensor: The calculated loss
     """
     # element-wise losses
-    loss = F.cross_entropy(pred, label, weight=class_weight, reduction='none')
+    loss = F.cross_entropy(pred, label, weight=class_weight, reduction='none', label_smoothing=label_smoothing)
 
     # apply weights and do the reduction
     if weight is not None:

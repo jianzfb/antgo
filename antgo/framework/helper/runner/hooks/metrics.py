@@ -141,7 +141,6 @@ class COCOCompatibleEval(object):
         return tag_and_value
 
 
-
 # cc = COCOBboxEval()
 # gt_ann = '/root/paddlejob/workspace/env_run/portrait/COCO/annotations/instances_val2017.json'
 # with open(gt_ann, 'r') as f:
