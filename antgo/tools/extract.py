@@ -214,17 +214,27 @@ def extract_from_crop(source_file, target_folder, **kwargs):
         for box_i, (box, label, label_name) in enumerate(zip(bboxes, labels, label_names)):
             x0,y0,x1,y1 = box
             
-            x0 = int(max(x0, 0))
-            y0 = int(max(y0, 0))
-            x1 = int(min(x1, width))
-            y1 = int(min(y1, height))
+            box_w = x1 - x0
+            box_h = y1 - y0
+            box_size = max(box_w, box_h)
+            
+            cx = (x0+x1)/2.0
+            cy = (y0+y1)/2.0
+               
+            x0 = int(max(cx-box_size/2, 0))
+            y0 = int(max(cy-box_size/2, 0))
+            x1 = int(min(cx+box_size/2, width))
+            y1 = int(min(cy+box_size/2, height))
             
             patch_image = image[y0:y1,x0:x1]
             patch_file_name = f'{pure_file_name}_box_{box_i}_label_{label_name}.png'
-            cv2.imwrite(os.path.join(target_folder, 'images', patch_file_name), patch_image)
+            subfolder = label_name
+            if not os.path.exists(os.path.join(target_folder, 'images', subfolder)):
+                os.makedirs(os.path.join(target_folder, 'images', subfolder))
+            cv2.imwrite(os.path.join(target_folder, 'images', subfolder, patch_file_name), patch_image)
             
             standard_gt = sgtt.get()
-            standard_gt['image_file'] = f'images/{patch_file_name}'
+            standard_gt['image_file'] = f'images/{subfolder}/{patch_file_name}'
             standard_gt['height'] = patch_image.shape[0]
             standard_gt['width'] = patch_image.shape[1]
             standard_gt['image_label'] = label
