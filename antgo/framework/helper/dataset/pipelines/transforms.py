@@ -5,9 +5,9 @@ import numbers
 from numbers import Number
 from typing import Sequence
 import numpy as np
+from PIL import Image
 import cv2
 from ..builder import PIPELINES
-import torchvision.transforms as transforms
 
 
 def imflip(img, direction='horizontal'):
@@ -212,7 +212,7 @@ def impad(img,
 
 
 @PIPELINES.register_module()
-class RandomResizedCrop(object):
+class IRandomResizedCrop(object):
     """Crop the given image to random size and aspect ratio.
 
     A crop of random size (default: of 0.08 to 1.0) of the original size and a
@@ -461,7 +461,7 @@ class RandomResizedCrop(object):
         return repr_str
 
 @PIPELINES.register_module()
-class RandomFlip(object):
+class IRandomFlip(object):
     """Flip the image randomly.
 
     Flip the image randomly based on flip probaility and flip direction.
@@ -503,7 +503,7 @@ class RandomFlip(object):
 
 
 @PIPELINES.register_module()
-class RandomErasing(object):
+class IRandomErasing(object):
     """Randomly selects a rectangle region in an image and erase pixels.
 
     Args:
@@ -683,7 +683,7 @@ def imnormalize_(img, mean, std, to_rgb=True):
 
 
 @PIPELINES.register_module()
-class Normalize(object):
+class INormalize(object):
     """Normalize the image.
 
     Args:
@@ -693,13 +693,14 @@ class Normalize(object):
             default is true.
     """
 
-    def __init__(self, mean, std, to_rgb=False):
+    def __init__(self, mean, std, to_rgb=False, keys=['image']):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
         self.to_rgb = to_rgb
+        self.keys = keys
 
     def __call__(self, results):
-        for key in ['image']:
+        for key in self.keys:
             results[key] = imnormalize(results[key], self.mean, self.std,
                                             self.to_rgb)
 
@@ -717,7 +718,7 @@ class Normalize(object):
 
 
 @PIPELINES.register_module()
-class Resize(object):
+class IResize(object):
     """Resize images.
 
     Args:
@@ -828,8 +829,9 @@ class Resize(object):
     def get(self):
         return self.size
 
+
 @PIPELINES.register_module()
-class CenterCrop(object):
+class ICenterCrop(object):
     r"""Center crop the image.
 
     Args:
@@ -874,7 +876,8 @@ class CenterCrop(object):
                  crop_size,
                  efficientnet_style=False,
                  crop_padding=32,
-                 interpolation='bilinear'):
+                 interpolation='bilinear',
+                 keys=['image']):
         if efficientnet_style:
             assert isinstance(crop_size, int)
             assert crop_padding >= 0
@@ -890,10 +893,11 @@ class CenterCrop(object):
         self.efficientnet_style = efficientnet_style
         self.crop_padding = crop_padding
         self.interpolation = interpolation
+        self.keys = keys
 
     def __call__(self, results):
         crop_height, crop_width = self.crop_size[0], self.crop_size[1]
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             # img.shape has length 2 for grayscale, length 3 for color
             img_height, img_width = img.shape[:2]
@@ -932,14 +936,30 @@ class CenterCrop(object):
         repr_str += f', interpolation={self.interpolation}'
         return repr_str
 
+
 @PIPELINES.register_module()
-class ToGray(object):
-    def __init__(self):
-        pass
+class IToGray(object):
+    def __init__(self, keys=['image']):
+        self.keys = keys
 
     def __call__(self, results):
-        for key in ['image']:
+        for key in self.keys:
             image = results[key]
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             results[key] = np.expand_dims(gray, -1)
         return results
+
+@PIPELINES.register_module()
+class INumpyToPIL(object):
+    def __init__(self, keys=['image'], mode=None):
+        self.keys = keys
+        if mode is None:
+            mode = 'RGB'
+        assert(mode in ['RGB', 'L'])
+        self.mode = mode
+
+    def __call__(self, samples):
+        for key in self.keys:
+            samples[key] = Image.fromarray(samples[key]).convert(self.mode)
+                
+        return samples

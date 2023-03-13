@@ -1,14 +1,12 @@
 # 优化器配置
-optimizer = dict(type='Adam', lr=0.001,  weight_decay=0.0005)
+optimizer = dict(type='SGD', lr=0.05,  weight_decay=5e-4, momentum=0.01, nesterov=True)
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
 lr_config = dict(
-    policy='step',
-    warmup='linear',
-    warmup_iters=5,
-    warmup_ratio=0.001,
-    step=[40,45])             # 25, 35; 15, 25 ; 5,10
+    policy='CosineAnnealing',
+    min_lr=1e-5,
+)
 
 # 日志配置
 log_config = dict(
@@ -22,11 +20,11 @@ model = dict(
     type='ImageClassifier',
     backbone=dict(
         type='WideResNet',
-        num_classes=10,
+        num_classes=10,     # TODO 28
         depth=28,
-        widen_factor=2,
+        widen_factor=2,     # TODO 8
         dropout=0,
-        dense_dropout=0          
+        dense_dropout=0.2          
     ),
     head=dict(
         type='ClsHead'
@@ -43,8 +41,11 @@ data=dict(
         train_or_test='train',
         dir='./dataset',
         pipeline=[    
-            dict(type='Normalize', mean=[0.0], std=[255.0],to_rgb=False),
-            dict(type='ImageToTensor', keys=['image']),
+            dict(type='INumpyToPIL', keys=['image'], mode='RGB'),
+            dict(type='RandomHorizontalFlip', keys=['image']),
+            dict(type='RandomCrop', size=(32,32), padding=int(32*0.125), fill=128, padding_mode='constant', keys=['image']), 
+            dict(type='ToTensor', keys=['image']),
+            dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
         ],
         inputs_def={'fields': ['image', 'label']}     
     ),
@@ -59,8 +60,9 @@ data=dict(
         train_or_test='test',
         dir='./dataset',
         pipeline=[    
-            dict(type='Normalize', mean=[0.0], std=[255.0],to_rgb=False),
-            dict(type='ImageToTensor', keys=['image']),
+            dict(type='INumpyToPIL', keys=['image'], mode='RGB'),                  
+            dict(type='ToTensor', keys=['image']),
+            dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
         ],
         inputs_def={'fields': ['image', 'label']}  
     ),
@@ -75,8 +77,9 @@ data=dict(
         train_or_test='test',
         dir='./dataset',
         pipeline=[    
-            dict(type='Normalize', mean=[0.0], std=[255.0],to_rgb=False),
-            dict(type='ImageToTensor', keys=['image']),
+            dict(type='INumpyToPIL', keys=['image'], mode='RGB'),                  
+            dict(type='ToTensor', keys=['image']),
+            dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
         ],
         inputs_def={'fields': ['image', 'label']}  
     ),

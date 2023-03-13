@@ -164,7 +164,7 @@ class Reader(torch.utils.data.Dataset):
             sample = self.proxy_dataset.sample(idx)
         except:
             print(f'sample error {idx}')
-
+        
         weak_sample = None
         strong_sample = None
         if len(self.weak_pipeline) > 0 or len(self.strong_pipeline) > 0:
@@ -186,10 +186,10 @@ class Reader(torch.utils.data.Dataset):
             weak_sample = self._arrange(weak_sample, self._fields)
             strong_sample = self._arrange(strong_sample, self._fields)
             return [weak_sample, strong_sample]
-        else:
+        else:    
             for transform in self.pipeline:
                 sample = transform(sample)
-            
+
             # arange warp
             sample = self._arrange(sample, self._fields)
             return sample

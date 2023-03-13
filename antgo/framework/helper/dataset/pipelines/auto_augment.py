@@ -10,7 +10,7 @@ from antgo.dataflow.imgaug.geometric import *
 from antgo.dataflow.imgaug.photometric import *
 
 from ..builder import PIPELINES
-from .compose import Compose
+from .builder import Compose
 
 # Default hyperparameters for all Ops
 _HPARAMS_DEFAULT = dict(pad_val=128)
@@ -44,7 +44,7 @@ def merge_hparams(policy: dict, hparams: dict):
 
 
 @PIPELINES.register_module()
-class AutoAugment(object):
+class IAutoAugment(object):
     """Auto augmentation.
 
     This data augmentation is proposed in `AutoAugment: Learning Augmentation
@@ -92,7 +92,7 @@ class AutoAugment(object):
 
 
 @PIPELINES.register_module()
-class RandAugment(object):
+class IRandAugment(object):
     r"""Random augmentation.
 
     This data augmentation is proposed in `RandAugment: Practical automated
@@ -233,7 +233,7 @@ class RandAugment(object):
 
 
 @PIPELINES.register_module()
-class Shear(object):
+class IShear(object):
     """Shear images.
 
     Args:
@@ -257,7 +257,7 @@ class Shear(object):
                  prob=0.5,
                  direction='horizontal',
                  random_negative_prob=0.5,
-                 interpolation='bicubic'):
+                 interpolation='bicubic', keys=['image']):
         assert isinstance(magnitude, (int, float)), 'The magnitude type must '\
             f'be int or float, but got {type(magnitude)} instead.'
         if isinstance(pad_val, int):
@@ -282,12 +282,13 @@ class Shear(object):
         self.direction = direction
         self.random_negative_prob = random_negative_prob
         self.interpolation = interpolation
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
         magnitude = random_negative(self.magnitude, self.random_negative_prob)
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_sheared = imshear(
                 img,
@@ -310,7 +311,7 @@ class Shear(object):
 
 
 @PIPELINES.register_module()
-class Translate(object):
+class ITranslate(object):
     """Translate images.
 
     Args:
@@ -337,7 +338,7 @@ class Translate(object):
                  prob=0.5,
                  direction='horizontal',
                  random_negative_prob=0.5,
-                 interpolation='nearest'):
+                 interpolation='nearest', keys=['image']):
         assert isinstance(magnitude, (int, float)), 'The magnitude type must '\
             f'be int or float, but got {type(magnitude)} instead.'
         if isinstance(pad_val, int):
@@ -362,12 +363,13 @@ class Translate(object):
         self.direction = direction
         self.random_negative_prob = random_negative_prob
         self.interpolation = interpolation
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
         magnitude = random_negative(self.magnitude, self.random_negative_prob)
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             height, width = img.shape[:2]
             if self.direction == 'horizontal':
@@ -395,7 +397,7 @@ class Translate(object):
 
 
 @PIPELINES.register_module()
-class Rotate(object):
+class IRotate(object):
     """Rotate images.
 
     Args:
@@ -423,7 +425,7 @@ class Rotate(object):
                  pad_val=128,
                  prob=0.5,
                  random_negative_prob=0.5,
-                 interpolation='nearest'):
+                 interpolation='nearest', keys=['image']):
         assert isinstance(angle, float), 'The angle type must be float, but ' \
             f'got {type(angle)} instead.'
         if isinstance(center, tuple):
@@ -455,12 +457,13 @@ class Rotate(object):
         self.prob = prob
         self.random_negative_prob = random_negative_prob
         self.interpolation = interpolation
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
         angle = random_negative(self.angle, self.random_negative_prob)
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_rotated = imrotate(
                 img,
@@ -485,7 +488,7 @@ class Rotate(object):
 
 
 @PIPELINES.register_module()
-class AutoContrast(object):
+class IAutoContrast(object):
     """Auto adjust image contrast.
 
     Args:
@@ -493,16 +496,17 @@ class AutoContrast(object):
              be in range [0, 1]. Defaults to 0.5.
     """
 
-    def __init__(self, prob=0.5):
+    def __init__(self, prob=0.5, keys=['image']):
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
             f'got {prob} instead.'
 
         self.prob = prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_contrasted = auto_contrast(img)
             results[key] = img_contrasted.astype(img.dtype)
@@ -515,7 +519,7 @@ class AutoContrast(object):
 
 
 @PIPELINES.register_module()
-class Invert(object):
+class IInvert(object):
     """Invert images.
 
     Args:
@@ -523,16 +527,17 @@ class Invert(object):
              be in range [0, 1]. Defaults to 0.5.
     """
 
-    def __init__(self, prob=0.5):
+    def __init__(self, prob=0.5, keys=['image']):
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
             f'got {prob} instead.'
 
         self.prob = prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_inverted = iminvert(img)
             results[key] = img_inverted.astype(img.dtype)
@@ -545,7 +550,7 @@ class Invert(object):
 
 
 @PIPELINES.register_module()
-class Equalize(object):
+class IEqualize(object):
     """Equalize the image histogram.
 
     Args:
@@ -553,16 +558,17 @@ class Equalize(object):
              be in range [0, 1]. Defaults to 0.5.
     """
 
-    def __init__(self, prob=0.5):
+    def __init__(self, prob=0.5, keys=['image']):
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
             f'got {prob} instead.'
 
         self.prob = prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_equalized = imequalize(img)
             results[key] = img_equalized.astype(img.dtype)
@@ -575,7 +581,7 @@ class Equalize(object):
 
 
 @PIPELINES.register_module()
-class Solarize(object):
+class ISolarize(object):
     """Solarize images (invert all pixel values above a threshold).
 
     Args:
@@ -585,7 +591,7 @@ class Solarize(object):
             range [0, 1]. Defaults to 0.5.
     """
 
-    def __init__(self, thr, prob=0.5):
+    def __init__(self, thr, prob=0.5, keys=['image']):
         assert isinstance(thr, (int, float)), 'The thr type must '\
             f'be int or float, but got {type(thr)} instead.'
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
@@ -593,11 +599,12 @@ class Solarize(object):
 
         self.thr = thr
         self.prob = prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_solarized = solarize(img, thr=self.thr)
             results[key] = img_solarized.astype(img.dtype)
@@ -611,7 +618,7 @@ class Solarize(object):
 
 
 @PIPELINES.register_module()
-class SolarizeAdd(object):
+class ISolarizeAdd(object):
     """SolarizeAdd images (add a certain value to pixels below a threshold).
 
     Args:
@@ -622,7 +629,7 @@ class SolarizeAdd(object):
             range [0, 1]. Defaults to 0.5.
     """
 
-    def __init__(self, magnitude, thr=128, prob=0.5):
+    def __init__(self, magnitude, thr=128, prob=0.5, keys=['image']):
         assert isinstance(magnitude, (int, float)), 'The thr magnitude must '\
             f'be int or float, but got {type(magnitude)} instead.'
         assert isinstance(thr, (int, float)), 'The thr type must '\
@@ -633,11 +640,12 @@ class SolarizeAdd(object):
         self.magnitude = magnitude
         self.thr = thr
         self.prob = prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_solarized = np.where(img < self.thr,
                                      np.minimum(img + self.magnitude, 255),
@@ -654,7 +662,7 @@ class SolarizeAdd(object):
 
 
 @PIPELINES.register_module()
-class Posterize(object):
+class IPosterize(object):
     """Posterize images (reduce the number of bits for each color channel).
 
     Args:
@@ -664,7 +672,7 @@ class Posterize(object):
             range [0, 1]. Defaults to 0.5.
     """
 
-    def __init__(self, bits, prob=0.5):
+    def __init__(self, bits, prob=0.5, keys=['image']):
         assert bits <= 8, f'The bits must be less than 8, got {bits} instead.'
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
             f'got {prob} instead.'
@@ -672,11 +680,12 @@ class Posterize(object):
         # To align timm version, we need to round up to integer here.
         self.bits = ceil(bits)
         self.prob = prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_posterized = posterize(img, bits=self.bits)
             results[key] = img_posterized.astype(img.dtype)
@@ -690,7 +699,7 @@ class Posterize(object):
 
 
 @PIPELINES.register_module()
-class Contrast(object):
+class IContrast(object):
     """Adjust images contrast.
 
     Args:
@@ -704,7 +713,7 @@ class Contrast(object):
             negative, which should be in range [0,1]. Defaults to 0.5.
     """
 
-    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5):
+    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5, keys=['image']):
         assert isinstance(magnitude, (int, float)), 'The magnitude type must '\
             f'be int or float, but got {type(magnitude)} instead.'
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
@@ -715,12 +724,13 @@ class Contrast(object):
         self.magnitude = magnitude
         self.prob = prob
         self.random_negative_prob = random_negative_prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
         magnitude = random_negative(self.magnitude, self.random_negative_prob)
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_contrasted = adjust_contrast(img, factor=1 + magnitude)
             results[key] = img_contrasted.astype(img.dtype)
@@ -735,7 +745,7 @@ class Contrast(object):
 
 
 @PIPELINES.register_module()
-class ColorTransform(object):
+class IColorTransform(object):
     """Adjust images color balance.
 
     Args:
@@ -748,7 +758,7 @@ class ColorTransform(object):
             negative, which should be in range [0,1]. Defaults to 0.5.
     """
 
-    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5):
+    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5, keys=['image']):
         assert isinstance(magnitude, (int, float)), 'The magnitude type must '\
             f'be int or float, but got {type(magnitude)} instead.'
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
@@ -759,12 +769,13 @@ class ColorTransform(object):
         self.magnitude = magnitude
         self.prob = prob
         self.random_negative_prob = random_negative_prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
         magnitude = random_negative(self.magnitude, self.random_negative_prob)
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_color_adjusted = adjust_color(img, alpha=1 + magnitude)
             results[key] = img_color_adjusted.astype(img.dtype)
@@ -779,7 +790,7 @@ class ColorTransform(object):
 
 
 @PIPELINES.register_module()
-class Brightness(object):
+class IBrightness(object):
     """Adjust images brightness.
 
     Args:
@@ -793,7 +804,7 @@ class Brightness(object):
             negative, which should be in range [0,1]. Defaults to 0.5.
     """
 
-    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5):
+    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5, keys=['image']):
         assert isinstance(magnitude, (int, float)), 'The magnitude type must '\
             f'be int or float, but got {type(magnitude)} instead.'
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
@@ -804,12 +815,13 @@ class Brightness(object):
         self.magnitude = magnitude
         self.prob = prob
         self.random_negative_prob = random_negative_prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
         magnitude = random_negative(self.magnitude, self.random_negative_prob)
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_brightened = adjust_brightness(img, factor=1 + magnitude)
             results[key] = img_brightened.astype(img.dtype)
@@ -824,7 +836,7 @@ class Brightness(object):
 
 
 @PIPELINES.register_module()
-class Sharpness(object):
+class ISharpness(object):
     """Adjust images sharpness.
 
     Args:
@@ -838,7 +850,7 @@ class Sharpness(object):
             negative, which should be in range [0,1]. Defaults to 0.5.
     """
 
-    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5):
+    def __init__(self, magnitude, prob=0.5, random_negative_prob=0.5, keys=['image']):
         assert isinstance(magnitude, (int, float)), 'The magnitude type must '\
             f'be int or float, but got {type(magnitude)} instead.'
         assert 0 <= prob <= 1.0, 'The prob should be in range [0,1], ' \
@@ -849,12 +861,13 @@ class Sharpness(object):
         self.magnitude = magnitude
         self.prob = prob
         self.random_negative_prob = random_negative_prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
         magnitude = random_negative(self.magnitude, self.random_negative_prob)
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_sharpened = adjust_sharpness(img, factor=1 + magnitude)
             results[key] = img_sharpened.astype(img.dtype)
@@ -869,7 +882,7 @@ class Sharpness(object):
 
 
 @PIPELINES.register_module()
-class Cutout(object):
+class ICutout(object):
     """Cutout images.
 
     Args:
@@ -883,7 +896,7 @@ class Cutout(object):
             be in range [0, 1]. Defaults to 0.5.
     """
 
-    def __init__(self, shape, pad_val=128, prob=0.5):
+    def __init__(self, shape, pad_val=128, prob=0.5, keys=['image']):
         if isinstance(shape, float):
             shape = int(shape)
         elif isinstance(shape, tuple):
@@ -903,11 +916,12 @@ class Cutout(object):
         self.shape = shape
         self.pad_val = tuple(pad_val)
         self.prob = prob
+        self.keys = keys
 
     def __call__(self, results):
         if np.random.rand() > self.prob:
             return results
-        for key in ['image']:
+        for key in self.keys:
             img = results[key]
             img_cutout = cutout(img, self.shape, pad_val=self.pad_val)
             results[key] = img_cutout.astype(img.dtype)
