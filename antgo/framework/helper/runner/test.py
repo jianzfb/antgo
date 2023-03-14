@@ -54,6 +54,7 @@ def single_gpu_test(model, data_loader, needed_info=None):
                 
                 results[key].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in data[key]])
 
+        break
         for _ in range(batch_size):
             prog_bar.update()
     

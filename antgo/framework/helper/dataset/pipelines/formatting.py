@@ -36,7 +36,7 @@ def to_tensor(data):
 @PIPELINES.register_module()
 class IAnyToTensor(object):
 
-    def __init__(self, keys):
+    def __init__(self, keys=['image']):
         self.keys = keys
 
     def __call__(self, results):
@@ -51,7 +51,7 @@ class IAnyToTensor(object):
 @PIPELINES.register_module()
 class IImageToTensor(object):
 
-    def __init__(self, keys):
+    def __init__(self, keys=['image']):
         self.keys = keys
 
     def __call__(self, results):

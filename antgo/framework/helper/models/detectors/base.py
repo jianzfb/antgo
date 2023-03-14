@@ -50,7 +50,7 @@ class BaseDetector(BaseModule):
         assert isinstance(imgs, list)
         return [self.extract_feat(img) for img in imgs]
 
-    def forward_train(self, imgs, img_metas, **kwargs):
+    def forward_train(self, image, image_meta, **kwargs):
         """
         Args:
             img (list[Tensor]): List of tensors of shape (1, C, H, W).
@@ -62,45 +62,32 @@ class BaseDetector(BaseModule):
                 :class:`mmdet.datasets.pipelines.Collect`.
             kwargs (keyword arguments): Specific to concrete implementation.
         """
-        batch_input_shape = tuple(imgs[0].size()[-2:])
-        for img_meta in img_metas:
+        batch_input_shape = tuple(image[0].size()[-2:])
+        for img_meta in image_meta:
             img_meta['batch_input_shape'] = batch_input_shape
 
     @abstractmethod
-    def simple_test(self, img, img_metas, **kwargs):
+    def simple_test(self, image, image_meta, **kwargs):
         pass
 
-    def forward_test(self, imgs, img_metas, **kwargs):
+    def forward_test(self, image, image_meta, **kwargs):
         """
         Args:
-            imgs (List[Tensor]): the outer list indicates test-time
+            image (List[Tensor]): the outer list indicates test-time
                 augmentations and inner Tensor should have a shape NxCxHxW,
                 which contains all images in the batch.
-            img_metas (List[List[dict]]): the outer list indicates test-time
+            image_meta (List[List[dict]]): the outer list indicates test-time
                 augs (multiscale, flip, etc.) and the inner list indicates
                 images in a batch.
         """
-        # for var, name in [(imgs, 'imgs'), (img_metas, 'img_metas')]:
-        #     if not isinstance(var, list):
-        #         raise TypeError(f'{name} must be a list, but got {type(var)}')
-        if not isinstance(imgs, list):
-            imgs = [imgs]
-            img_metas = [img_metas]
+        batch_size = len(image_meta)
+        for img_id in range(batch_size):
+            image_meta[img_id]['batch_input_shape'] = tuple(image.size()[-2:])
 
-        num_augs = len(imgs)
-        if num_augs != len(img_metas):
-            raise ValueError(f'num of augmentations ({len(imgs)}) '
-                             f'!= num of image meta ({len(img_metas)})')
+        # assert(num_augs == 1)
+        return self.simple_test(image, image_meta, **kwargs)
 
-        for img, img_meta in zip(imgs, img_metas):
-            batch_size = len(img_meta)
-            for img_id in range(batch_size):
-                img_meta[img_id]['batch_input_shape'] = tuple(img.size()[-2:])
-
-        assert(num_augs == 1)
-        return self.simple_test(imgs[0], img_metas[0], **kwargs)
-
-    def forward(self, image, image_metas, return_loss=True, **kwargs):
+    def forward(self, image, image_meta, return_loss=True, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending
         on whether ``return_loss`` is ``True``.
 
@@ -111,13 +98,13 @@ class BaseDetector(BaseModule):
         the outer list indicating test time augmentations.
         """
         if torch.onnx.is_in_onnx_export():
-            assert len(image_metas) == 1
-            return self.onnx_export(image[0], image_metas[0])
+            assert len(image_meta) == 1
+            return self.onnx_export(image[0], image_meta[0])
 
         if return_loss:
-            return self.forward_train(image, image_metas, **kwargs)
+            return self.forward_train(image, image_meta, **kwargs)
         else:
-            return self.forward_test(image, image_metas, **kwargs)
+            return self.forward_test(image, image_meta, **kwargs)
 
     def _parse_losses(self, losses):
         """Parse the raw outputs (losses) of the network.
@@ -199,7 +186,7 @@ class BaseDetector(BaseModule):
                 
         loss, log_vars = self._parse_losses(losses)
         outputs = dict(
-            loss=loss, log_vars=log_vars, num_samples=len(data['image_metas']))
+            loss=loss, log_vars=log_vars, num_samples=len(data['image_meta']))
 
         return outputs
 
@@ -218,6 +205,6 @@ class BaseDetector(BaseModule):
 
         return results
         
-    def onnx_export(self, img, img_metas):
+    def onnx_export(self, image, image_meta):
         raise NotImplementedError(f'{self.__class__.__name__} does '
                                   f'not support ONNX EXPORT')

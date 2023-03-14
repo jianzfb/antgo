@@ -39,6 +39,7 @@ from antgo.utils import logger
 import cv2
 from PIL import Image, ImageEnhance, ImageDraw
 from .functional import *
+from antgo.dataflow.vis import *
 
 from .op_helper import (satisfy_sample_constraint, filter_and_process,
                         generate_sample_bbox, clip_bbox, data_anchor_sampling,
@@ -85,9 +86,17 @@ class BaseOperator(Node):
         sample.pop('image')
         return image, sample
 
+class AddImageMeta(BaseOperator):
+    def __init__(self, inputs=None):
+        super().__init__(inputs)
+
+    def __call__(self, sample, context=None):
+        sample['image_meta'] = {}
+        return sample
+        
 
 class DecodeImage(BaseOperator):
-    def __init__(self, to_rgb=True, with_mixup=False, with_cutmix=False, inputs=None):
+    def __init__(self, to_rgb=True, with_mixup=False, with_cutmix=False, backend="cv", inputs=None):
         """ Transform the image data to numpy format.
         Args:
             to_rgb (bool): whether to convert BGR to RGB
@@ -103,6 +112,7 @@ class DecodeImage(BaseOperator):
             raise TypeError("{}: input type is invalid.".format(self))
         if not isinstance(self.with_mixup, bool):
             raise TypeError("{}: input type is invalid.".format(self))
+        self.backend = backend # cv,pil
 
     def __call__(self, sample, context=None):
         """ load image if 'image_file' field is not empty but 'image' is"""
@@ -118,27 +128,28 @@ class DecodeImage(BaseOperator):
             im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
         sample['image'] = im
 
-        if 'h' not in sample:
-            sample['h'] = im.shape[0]
-        elif sample['h'] != im.shape[0]:
+        if 'height' not in sample:
+            sample['height'] = im.shape[0]
+        elif sample['height'] != im.shape[0]:
             # logger.warn(
             #     "The actual image height: {} is not equal to the "
             #     "height: {} in annotation, and update sample['h'] by actual "
             #     "image height.".format(im.shape[0], sample['h']))
-            sample['h'] = im.shape[0]
-        if 'w' not in sample:
-            sample['w'] = im.shape[1]
-        elif sample['w'] != im.shape[1]:
+            sample['height'] = im.shape[0]
+        if 'width' not in sample:
+            sample['width'] = im.shape[1]
+        elif sample['width'] != im.shape[1]:
             # logger.warn(
             #     "The actual image width: {} is not equal to the "
             #     "width: {} in annotation, and update sample['w'] by actual "
             #     "image width.".format(im.shape[1], sample['w']))
-            sample['w'] = im.shape[1]
+            sample['width'] = im.shape[1]
 
-        # make default im_info with [h, w, 1]
-        sample['im_info'] = np.array(
-            [im.shape[0], im.shape[1], 1.], dtype=np.float32)
-
+        # make default im_info with [h, w]
+        if 'image_meta' not in sample:
+            sample['image_meta'] = {}
+        sample['image_meta']['image_shape'] = (im.shape[0], im.shape[1])
+            
         # decode mixup image
         if self.with_mixup and 'mixup' in sample:
             self.__call__(sample['mixup'], context)
@@ -148,16 +159,16 @@ class DecodeImage(BaseOperator):
             self.__call__(sample['cutmix'], context)
 
         # decode semantic label 
-        if 'semantic_file' in sample.keys():
-            sem_file = sample['semantic_file']
-            sem = cv2.imread(sem_file, cv2.IMREAD_GRAYSCALE)
+        if 'semantic' in sample.keys():
+            data = np.frombuffer(sample['semantic'], dtype='uint8')
+            sem = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)  # BGR mode, but need RGB mode
             sample['semantic'] = sem
 
         return sample
 
 
 class KeepRatio(BaseOperator):
-    def __init__(self, aspect_ratio=1, training=False, inputs=None):
+    def __init__(self, aspect_ratio=1, focus_on_objects=False,inputs=None):
         """ Transform the image data to numpy format.
 
         Args:
@@ -167,44 +178,31 @@ class KeepRatio(BaseOperator):
 
         super(KeepRatio, self).__init__(inputs=inputs)
         self.aspect_ratio = aspect_ratio
-        self.training = training
+        self.focus_on_objects = focus_on_objects
         if not isinstance(self.aspect_ratio, float):
             raise TypeError("{}: input type is invalid.".format(self.aspect_ratio))
-        if not isinstance(self.training, bool):
-            raise TypeError("{}: input type is invalid.".format(self.training))
-
-        # 控制目标占图像空间的0.4~0.9
-        self.area_ratio = [0.4, 0.7]
 
     def _random_crop_or_padding_image(self, sample):
         im = sample['image']
-        height = sample['h']
-        width = sample['w']
+        height, width = im.shape[:2]
         cur_ratio = width / height
-        gt_bbox = sample['gt_bbox']
-        gt_kpts = sample['gt_keypoint']
-        gt_class = sample['gt_class']
+        gt_bbox = sample['bboxes']
 
-        # 获得人像区域高度区域
-        person_idx = gt_class[:, 0] == 2
-        person_bbox = gt_bbox[person_idx, :]
-        
         # 获得目标范围
-        min_x = width - 1
-        min_y = height - 1
-        max_x = 0
-        max_y = 0
-        for bbox in gt_bbox:
-            x1 = bbox[0]
-            y1 = bbox[1]
-            x2 = bbox[2]
-            y2 = bbox[3]
-            min_x = max(min(min_x, x1), 1)
-            min_y = max(min(min_y, y1), 1)
-            max_x = min(max(max_x, x2), width - 1)
-            max_y = min(max(max_y, y2), height - 1)
-        rwi = max_x - min_x
-        rhi = max_y - min_y
+        if gt_bbox.shape[0] != 0 and self.focus_on_objects:
+            min_x = max(np.min(gt_bbox[:,0]), 1)
+            min_y = max(np.min(gt_bbox[:,1]), 1)
+            max_x = min(np.max(gt_bbox[:,2]), width - 1)
+            max_y = min(np.max(gt_bbox[:,3]), height -1 )
+            rwi = max_x - min_x
+            rhi = max_y - min_y
+        else:
+            min_x = 1
+            min_y = 1
+            max_x = width - 1
+            max_y = height - 1
+            rwi = max_x - min_x
+            rhi = max_y - min_y
 
         # 随机裁切
         left, right, top, bottom = 0,0,0,0
@@ -227,33 +225,26 @@ class KeepRatio(BaseOperator):
                 dwi = rwi + 20
                 dhi = int(dwi / self.aspect_ratio)
 
-            # top = 0
-            # bottom = min(height - 1, dhi - 1)     
             top = np.random.randint(0, min_y)
             bottom = np.random.randint(min(max_y, min(height-1, dhi-1)), height)
 
             left = np.random.randint(max(0, max_x - dwi), min_x+1)
             right = min(left + dwi, width - 1)
 
-        for i in range(len(gt_bbox)):
-            gt_bbox[i, 0] = int(gt_bbox[i, 0]) - left
-            gt_bbox[i, 1] = int(gt_bbox[i, 1]) - top
-            gt_bbox[i, 2] = int(gt_bbox[i, 2]) - left
-            gt_bbox[i, 3] = int(gt_bbox[i, 3]) - top
+        if len(gt_bbox) > 0:
+            gt_bbox[:, [0,2]] = gt_bbox[:, [0,2]] - left
+            gt_bbox[:, [1,3]] = gt_bbox[:, [1,3]] - top
+            
+        if 'joints2d' in sample and len(sample['joints2d']) != 0:
+            sample['joints2d'][:, 0] = sample['joints2d'][:, 0] - left
+            sample['joints2d'][:, 1] = sample['joints2d'][:, 1] - top
+            
+            if 'joints_vis' in sample and len(sample['joints_vis']) != 0:
+                pos_outlie_x = sample['joints2d'][:, 0] <= 0
+                pos_outlie_y = sample['joints2d'][:, 1] <= 0
 
-        if person_bbox.shape[0]> 0:
-            person_bbox[:,0] = person_bbox[:,0] - left
-            person_bbox[:,1] = person_bbox[:,1] - top
-            person_bbox[:,2] = person_bbox[:,2] - left
-            person_bbox[:,3] = person_bbox[:,3] - top
-
-        gt_kpts[:, :, 0] = gt_kpts[:, :, 0] - left
-        gt_kpts[:, :, 1] = gt_kpts[:, :, 1] - top
-        pos_outlie_x = gt_kpts[:, :, 0] <= 0
-        pos_outlie_y = gt_kpts[:, :, 1] <= 0
-        pos_outlie_z = gt_kpts[:, :, 2] <= 0
-        pos_outlie = pos_outlie_x | pos_outlie_y | pos_outlie_z
-        gt_kpts[pos_outlie, 2] = 0
+                pos_outlie = pos_outlie_x | pos_outlie_y | sample['joints_vis'] == 0
+                sample['joints_vis'][pos_outlie] = 0
 
         top = int(top)
         bottom = int(bottom)
@@ -263,37 +254,6 @@ class KeepRatio(BaseOperator):
         rhi, rwi = im.shape[:2]
         height, width = im.shape[:2]
 
-        # 保持人像比例
-        if person_bbox.shape[0] > 0:
-            person_min_y = np.min(person_bbox[:, 1])
-            person_max_y = np.max(person_bbox[:, 3])
-            person_height = person_max_y - person_min_y
-
-            # 随机调整人的面积比例
-            if person_height / height > 0.7:
-                # 如果人高的比例大于图像高度的0.6，则需要随机调整
-                # random_area_ratio = np.random.random() * (0.9 - 0.4) + 0.4
-                random_area_ratio = np.random.random() * (0.9 - 0.7) + 0.7
-                # 修正后的图像高度
-                new_height = (int)(person_height / random_area_ratio)
-
-                if new_height > height:
-                    new_im = np.zeros((new_height, (int)(width), 3), dtype=im.dtype)
-                    random_y = (int)(np.random.randint(0, (int)(new_height) - (int)(height)))
-                    new_im[random_y:random_y+(int)(height), :, :] = im
-
-                    for i in range(len(gt_bbox)):
-                        gt_bbox[i, 0] = int(gt_bbox[i, 0])
-                        gt_bbox[i, 1] = int(gt_bbox[i, 1]) + random_y
-                        gt_bbox[i, 2] = int(gt_bbox[i, 2])
-                        gt_bbox[i, 3] = int(gt_bbox[i, 3]) + random_y
-
-                    gt_kpts[:, :, 0] = gt_kpts[:, :, 0]
-                    gt_kpts[:, :, 1] = gt_kpts[:, :, 1] + random_y
-
-                    im = new_im
-                    height = new_height
-        
         # 随机填充，保持比例
         image_new = im
         rhi, rwi = image_new.shape[:2]
@@ -323,85 +283,41 @@ class KeepRatio(BaseOperator):
                                          cv2.BORDER_CONSTANT, value=(128, 128, 128))
 
             # 调整bbox
-            for i in range(len(gt_bbox)):
-                gt_bbox[i, 0] = int(gt_bbox[i, 0]) + left_padding
-                gt_bbox[i, 1] = int(gt_bbox[i, 1]) + top_padding
-                gt_bbox[i, 2] = int(gt_bbox[i, 2]) + left_padding
-                gt_bbox[i, 3] = int(gt_bbox[i, 3]) + top_padding
-            gt_kpts[:, :, 0] = gt_kpts[:, :, 0] + left_padding
-            gt_kpts[:, :, 1] = gt_kpts[:, :, 1] + top_padding
-            pos_outlie_x = gt_kpts[:, :, 0] <= 0
-            pos_outlie_y = gt_kpts[:, :, 1] <= 0
-            pos_outlie_z = gt_kpts[:, :, 2] <= 0
-            pos_outlie = pos_outlie_x | pos_outlie_y | pos_outlie_z
-            gt_kpts[pos_outlie, 2] = 0
+            if len(gt_bbox) > 0:
+                gt_bbox[:, [0,2]] = gt_bbox[:, [0,2]] + left_padding
+                gt_bbox[:, [1,3]] = gt_bbox[:, [1,3]] + top_padding
+            
+            if 'joints2d' in sample and len(sample['joints2d']) > 0:
+                gt_kpts = sample['joints2d']
+                gt_kpts[:, 0] = gt_kpts[:, 0] + left_padding
+                gt_kpts[:, 1] = gt_kpts[:, 1] + top_padding
+                sample['joints2d'] = gt_kpts
+                
+                if 'joints_vis' in sample and len(sample['joints_vis']) > 0:
+                    pos_outlie_x = sample['joints2d'][:, 0] <= 0
+                    pos_outlie_y = sample['joints2d'][:, 1] <= 0
 
-        sample['im_info'] = np.array(
-            [image_new.shape[0], image_new.shape[1], 1.], dtype=np.float32)
-        sample['image'] = image_new
-        sample['gt_bbox'] = gt_bbox
-        sample['gt_keypoint'] = gt_kpts
-        sample['h'] = image_new.shape[0]
-        sample['w'] = image_new.shape[1]
-        return sample
+                    pos_outlie = pos_outlie_x | pos_outlie_y | sample['joints_vis'] == 0
+                    sample['joints_vis'][pos_outlie] = 0                    
 
-    def _padding_image(self, sample):
-        im = sample['image']
-        height = sample['h']
-        width = sample['w']
-        cur_ratio = width / height
-        gt_bbox = sample['gt_bbox']
-        gt_kpts = sample['gt_keypoint']
-        left = 0
-        top = 0
-        right = width
-        bottom = height
-        new_width = width
-        new_height = height
-        if cur_ratio < self.aspect_ratio:
-            new_width = int(self.aspect_ratio * height)
-            new_height = height
-            left = (new_width - width) // 2
-            right = left + width
-        elif cur_ratio > self.aspect_ratio:
-            new_width = width
-            new_height = int(width / self.aspect_ratio)
-            top = (new_height - height) // 2
-            bottom = top + height
-        top = int(top)
-        bottom = int(bottom)
-        left = int(left)
-        right = int(right)
-        image_new = np.random.randint(0, 255, size=(int(new_height), int(new_width), 3), dtype=np.uint8)
-        image_new[top:bottom, left:right, :] = im.copy()
-        for i in range(len(gt_bbox)):
-            gt_bbox[i, 0] = int(gt_bbox[i, 0]) + left
-            gt_bbox[i, 1] = int(gt_bbox[i, 1]) + top
-            gt_bbox[i, 2] = int(gt_bbox[i, 2]) + left
-            gt_bbox[i, 3] = int(gt_bbox[i, 3]) + top
-        gt_kpts[:, :, 0] = gt_kpts[:, :, 0] + left
-        gt_kpts[:, :, 1] = gt_kpts[:, :, 1] + top
-        sample['im_info'] = np.array(
-            [image_new.shape[0], image_new.shape[1], 1.], dtype=np.float32)
         sample['image'] = image_new
-        sample['gt_bbox'] = gt_bbox
-        sample['gt_keypoint'] = gt_kpts
-        sample['h'] = image_new.shape[0]
-        sample['w'] = image_new.shape[1]
+        sample['bboxes'] = gt_bbox
+        sample['height'] = image_new.shape[0]
+        sample['width'] = image_new.shape[1]
+        
+        # vis_2d_boxes_in_image(image_new, gt_bbox, './a.png')        
+        if 'image_meta' in sample:
+            sample['image_meta']['image_shape'] = (image_new.shape[0], image_new.shape[1])
         return sample
 
     def __call__(self, sample, context=None):
-        """ load image if 'im_file' field is not empty but 'image' is"""
         im = sample['image']
-        height = sample['h']
-        width = sample['w']
+        height, width = im.shape[:2]
         np.random.seed(int(time.time()))
         cur_ratio = width / height
         if abs(cur_ratio - self.aspect_ratio) > 0.000001:
-            if self.training:
-                sample = self._random_crop_or_padding_image(sample)
-            else:
-                sample = self._padding_image(sample)
+            sample = self._random_crop_or_padding_image(sample)
+
         return sample
 
 
@@ -417,8 +333,7 @@ class Rotation(BaseOperator):
 
     def __call__(self, sample, context=None):
         im = sample['image']
-        height = sample['h']
-        width = sample['w']
+        height, width = im.shape[:2]
         cx, cy = width // 2, height // 2
         angle = np.random.randint(0, self._degree * 2) - self._degree
         rot_mat = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
@@ -428,8 +343,8 @@ class Rotation(BaseOperator):
                 dsize=im.shape[1::-1],
                 flags=cv2.INTER_AREA)
 
-        if 'gt_bbox' in sample:
-            gt_bbox = sample['gt_bbox']
+        if 'bboxes' in sample:
+            gt_bbox = sample['bboxes']
             for i, bbox in enumerate(gt_bbox):
                 x1, y1, x2, y2 = bbox
                 coor = [[x1, x2, x1, x2], [y1, y1, y2, y2], [1, 1, 1, 1]]
@@ -455,19 +370,19 @@ class Rotation(BaseOperator):
                 gt_bbox[i, 2] = xmax
                 gt_bbox[i, 3] = ymax
             
-            sample['gt_bbox'] = gt_bbox
+            sample['bboxes'] = gt_bbox
 
-        if 'gt_keypoint' in sample and sample['gt_keypoint'].shape[0] > 0:
-            gt_kpts = sample['gt_keypoint']
+        if 'joints2d' in sample and sample['joints2d'].shape[0] > 0:
+            gt_kpts = sample['joints2d']
             for instance_i in range(gt_kpts.shape[0]):
                 for i, kpt in enumerate(gt_kpts[instance_i]):
-                    x1, y1, _ = kpt
+                    x1, y1 = kpt
                     coor = [[x1, x1, x1, x1], [y1, y1, y1, y1], [1, 1, 1, 1]]
                     coor_new = np.matmul(rot_mat, coor)
                     gt_kpts[instance_i, i, 0] = coor_new[0, 0]
                     gt_kpts[instance_i, i, 1] = coor_new[1, 0]
 
-            sample['gt_keypoint'] = gt_kpts
+            sample['joints2d'] = gt_kpts
 
         if 'semantic' in sample:
             label = cv2.warpAffine(
@@ -479,8 +394,12 @@ class Rotation(BaseOperator):
                 borderValue=self._label_border_value)
             sample['semantic'] = label
 
-        sample['h'] = image_rotated.shape[0]
-        sample['w'] = image_rotated.shape[1]
+        sample['height'] = image_rotated.shape[0]
+        sample['width'] = image_rotated.shape[1]
+        if 'image_meta' in sample:
+            sample['image_shape'] = (image_rotated.shape[0], image_rotated.shape[1])
+        
+        # vis_2d_boxes_in_image(image_rotated, sample['bboxes'], './a.png') 
         sample['image'] = image_rotated
         return sample
 
@@ -785,8 +704,8 @@ class RandomFlipImage(BaseOperator):
             height, width, _ = im.shape
             if np.random.uniform(0, 1) < self.prob:
                 im = im[:, ::-1, :]
-                if 'gt_bbox' in sample.keys() and sample['gt_bbox'].shape[0] > 0:
-                    gt_bbox = sample['gt_bbox']
+                if 'bboxes' in sample.keys() and sample['bboxes'].shape[0] > 0:
+                    gt_bbox = sample['bboxes']
                     oldx1 = gt_bbox[:, 0].copy()
                     oldx2 = gt_bbox[:, 2].copy()
                     if self.is_normalized:
@@ -799,17 +718,17 @@ class RandomFlipImage(BaseOperator):
                         m = "{}: invalid box, x2 should be greater than x1".format(
                             self)
                         raise BboxError(m)
-                    sample['gt_bbox'] = gt_bbox
+                    sample['bboxes'] = gt_bbox
 
-                if 'gt_poly' in sample.keys():
-                    if self.is_mask_flip and len(sample['gt_poly']) != 0:
-                        sample['gt_poly'] = self.flip_segms(sample['gt_poly'],
+                if 'segments' in sample.keys():
+                    if self.is_mask_flip and len(sample['segments']) != 0:
+                        sample['segments'] = self.flip_segms(sample['segments'],
                                                             height, width)
 
-                if 'gt_keypoint' in sample.keys() and sample['gt_keypoint'].shape[0] > 0:
+                if 'joints2d' in sample.keys() and sample['joints2d'].shape[0] > 0:
                     # sample['gt_keypoint'] = self.flip_keypoint(
                     #     sample['gt_keypoint'], width)
-                    gt_keypoints = sample['gt_keypoint']
+                    gt_keypoints = sample['joints2d']
                     gt_keypoints[:, :, 0] = width - gt_keypoints[:, :, 0] - 1.0
 
                     # 更换keypoints位置 (图像水平翻转后，需要对调关键点位置)
@@ -821,7 +740,7 @@ class RandomFlipImage(BaseOperator):
                     gt_keypoints[:,swap_k1,:] = gt_keypoints[:,swap_k2,:]
                     gt_keypoints[:,swap_k2,:] = temp
 
-                    sample['gt_keypoint'] = gt_keypoints.copy()
+                    sample['joints2d'] = gt_keypoints.copy()
 
                 if 'semantic' in sample.keys() and sample[
                         'semantic'] is not None:
@@ -858,7 +777,7 @@ class RandomErasingImage(BaseOperator):
             batch_input = False
             samples = [samples]
         for sample in samples:
-            gt_bbox = sample['gt_bbox']
+            gt_bbox = sample['bboxes']
             im = sample['image']
             if not isinstance(im, np.ndarray):
                 raise TypeError("{}: image is not a numpy array.".format(self))
@@ -974,7 +893,7 @@ class AutoAugmentImage(BaseOperator):
             batch_input = False
             samples = [samples]
         for sample in samples:
-            gt_bbox = sample['gt_bbox']
+            gt_bbox = sample['bboxes']
             im = sample['image']
             if not isinstance(im, np.ndarray):
                 raise TypeError("{}: image is not a numpy array.".format(self))
@@ -1012,7 +931,7 @@ class AutoAugmentImage(BaseOperator):
                 gt_bbox[:, 2] = norm_gt_bbox[:, 3]
                 gt_bbox[:, 3] = norm_gt_bbox[:, 2]
 
-            sample['gt_bbox'] = gt_bbox
+            sample['bboxes'] = gt_bbox
             sample['image'] = im
 
         sample = samples if batch_input else samples[0]
@@ -1077,7 +996,6 @@ class NormalizeImage(BaseOperator):
         return samples
 
 class RandomDistort(BaseOperator):
-    # FINISH CORRET (JIAN)
     def __init__(self,
                  brightness_lower=0.5,
                  brightness_upper=1.5,
@@ -1111,6 +1029,7 @@ class RandomDistort(BaseOperator):
             is_order (bool): whether determine the order of distortion
         """
         super(RandomDistort, self).__init__(inputs=inputs)
+        # only support PIL format
         self.brightness_lower = brightness_lower
         self.brightness_upper = brightness_upper
         self.contrast_lower = contrast_lower
@@ -1185,10 +1104,8 @@ class RandomDistort(BaseOperator):
             ops = random.sample(ops, count)
         assert 'image' in sample, "image data not found"
         im = sample['image']
-        im = Image.fromarray(im)
         for id in range(count):
             im = ops[id](im)
-        im = np.asarray(im)
         sample['image'] = im
         return sample
 
@@ -1225,10 +1142,9 @@ class ExpandImage(BaseOperator):
         prob = np.random.uniform(0, 1)
         assert 'image' in sample, 'not found image data'
         im = sample['image']
-        gt_bbox = sample['gt_bbox']
-        gt_class = sample['gt_class']
-        im_width = sample['w']
-        im_height = sample['h']
+        gt_bbox = sample['bboxes']
+        gt_class = sample['labels']
+        im_height, im_width = im.shape[:2]
         if prob < self.prob:
             if self.max_ratio - 1 >= 0.01:
                 expand_ratio = np.random.uniform(1, self.max_ratio)
@@ -1247,21 +1163,21 @@ class ExpandImage(BaseOperator):
                 expand_im.paste(im, (int(w_off), int(h_off)))
                 expand_im = np.asarray(expand_im)
 
-                if 'gt_keypoint' in sample.keys() and 'keypoint_ignore' in sample.keys():
-                    keypoints = (sample['gt_keypoint'],
-                                 sample['keypoint_ignore'])
+                if 'joints2d' in sample.keys() and 'joints_ignore' in sample.keys():
+                    keypoints = (sample['joints2d'],
+                                 sample['joints_ignore'])
                     gt_bbox, gt_class, _, gt_keypoints = filter_and_process(
                         expand_bbox, gt_bbox, gt_class, keypoints=keypoints)
-                    sample['gt_keypoint'] = gt_keypoints[0]
-                    sample['keypoint_ignore'] = gt_keypoints[1]
+                    sample['joints2d'] = gt_keypoints[0]
+                    sample['joints_ignore'] = gt_keypoints[1]
                 else:
                     gt_bbox, gt_class, _ = filter_and_process(expand_bbox,
                                                               gt_bbox, gt_class)
                 sample['image'] = expand_im
-                sample['gt_bbox'] = gt_bbox
-                sample['gt_class'] = gt_class
-                sample['w'] = width
-                sample['h'] = height
+                sample['bboxes'] = gt_bbox
+                sample['labels'] = gt_class
+                sample['width'] = width
+                sample['height'] = height
 
         return sample
 
@@ -1605,25 +1521,24 @@ class NormalizeBox(BaseOperator):
         super(NormalizeBox, self).__init__(inputs=inputs)
 
     def __call__(self, sample, context):
-        gt_bbox = sample['gt_bbox']
-        width = sample['w']
-        height = sample['h']
+        gt_bbox = sample['bboxes']
+        height, width = sample['image'].shape[:2]
         for i in range(gt_bbox.shape[0]):
             gt_bbox[i][0] = gt_bbox[i][0] / width
             gt_bbox[i][1] = gt_bbox[i][1] / height
             gt_bbox[i][2] = gt_bbox[i][2] / width
             gt_bbox[i][3] = gt_bbox[i][3] / height
-        sample['gt_bbox'] = gt_bbox
+        sample['bboxes'] = gt_bbox
 
-        if 'gt_keypoint' in sample.keys():
-            gt_keypoint = sample['gt_keypoint']
+        if 'joints2d' in sample.keys():
+            gt_keypoint = sample['joints2d']
 
             for i in range(gt_keypoint.shape[1]):
                 if i % 2:
                     gt_keypoint[:, i] = gt_keypoint[:, i] / height
                 else:
                     gt_keypoint[:, i] = gt_keypoint[:, i] / width
-            sample['gt_keypoint'] = gt_keypoint
+            sample['joints2d'] = gt_keypoint
 
         return sample
 
@@ -1964,7 +1879,7 @@ class RandomInterpImage(BaseOperator):
         return resizer(sample, context)
 
 
-class ResizeExt(BaseOperator):
+class ResizeS(BaseOperator):
     """Resize image and bbox.
     Args:
         target_dim (int or list): target size, can be a single number or a list
@@ -1983,7 +1898,7 @@ class ResizeExt(BaseOperator):
     }
 
     def __init__(self, target_dim=[], interp='LINEAR', inputs=None):
-        super(ResizeExt, self).__init__(inputs=inputs)
+        super(ResizeS, self).__init__(inputs=inputs)
         if type(target_dim) == list or type(target_dim) == tuple:
             self.target_dim = target_dim                # w,h
         else:
@@ -2006,46 +1921,45 @@ class ResizeExt(BaseOperator):
         resize_w, resize_h = self.target_dim
         scale_x = resize_w / w
         scale_y = resize_h / h
-        if 'gt_bbox' in sample and len(sample['gt_bbox']) > 0:
+        if 'bboxes' in sample and len(sample['bboxes']) > 0:
             scale_array = np.array([scale_x, scale_y] * 2, dtype=np.float32)
-            sample['gt_bbox'] = sample['gt_bbox'] * scale_array
-            x1 = sample['gt_bbox'][:, 0:1]
+            sample['bboxes'] = sample['bboxes'] * scale_array
+            x1 = sample['bboxes'][:, 0:1]
             x1 = np.clip(x1, 0, resize_w-1)
 
-            y1 = sample['gt_bbox'][:, 1:2]
+            y1 = sample['bboxes'][:, 1:2]
             y1 = np.clip(y1, 0, resize_h-1)
 
-            x2 = sample['gt_bbox'][:, 2:3]
+            x2 = sample['bboxes'][:, 2:3]
             x2 = np.clip(x2, 0, resize_w-1)
 
-            y2 = sample['gt_bbox'][:, 3:4]
+            y2 = sample['bboxes'][:, 3:4]
             y2 = np.clip(y2, 0, resize_h-1)
-            sample['gt_bbox'] = np.concatenate([x1, y1, x2, y2], axis=-1)
+            sample['bboxes'] = np.concatenate([x1, y1, x2, y2], axis=-1)
         
-        if 'gt_keypoint' in sample and len(sample['gt_keypoint']) > 0:
+        if 'joints2d' in sample and len(sample['joints2d']) > 0:
             scale_array = np.array([scale_x, scale_y, 1], dtype=np.float32)
-            sample['gt_keypoint'] = sample['gt_keypoint'] * scale_array
-            x = sample['gt_keypoint'][:, :, 0:1]
+            sample['joints2d'] = sample['joints2d'] * scale_array
+            x = sample['joints2d'][:, :, 0:1]
             x = np.clip(x, 0, resize_w - 1)
 
-            y = sample['gt_keypoint'][:, :, 1:2]
+            y = sample['joints2d'][:, :, 1:2]
             y = np.clip(y, 0, resize_h - 1)
 
-            v = sample['gt_keypoint'][:, :, 2:3]
-            sample['gt_keypoint'] = np.concatenate([x, y, v], axis=-1)
+            if len(sample['joints2d'].shape) == 3:
+                v = sample['joints2d'][:, :, 2:3]
+                sample['joints2d'] = np.concatenate([x, y, v], axis=-1)
+            else:
+                sample['joints2d'] = np.concatenate([x, y], axis=-1)
 
-        if 'semantic' in sample:
-            sample['semantic'] = cv2.resize(
-                sample['semantic'], (resize_w, resize_h), interpolation=cv2.INTER_NEAREST)
-
-        if 'image_metas' in sample:
-            sample['image_metas']['image_shape'] = (resize_h, resize_w)
-            sample['image_metas']['scale_factor'] =  [scale_x, scale_y] * 2
-            sample['image_metas']['h'] = resize_h
-            sample['image_metas']['w'] = resize_w
+        sample['image_meta']['image_shape'] = (resize_h, resize_w)
+        sample['image_meta']['scale_factor'] =  [scale_x, scale_y] * 2
+        sample['height'] = resize_h
+        sample['width'] = resize_w
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
         
+        # vis_2d_boxes_in_image(sample['image'], sample['bboxes'], './a.png')
         return sample
 
     def reset(self, target_dim):
@@ -2070,7 +1984,6 @@ class ColorDistort(BaseOperator):
             in [lower, upper, probability] format.
         random_apply (bool): whether to apply in random (yolov7) or fixed (SSD)
             order.
-        hsv_format (bool): whether to convert color from BGR to HSV
         random_channel (bool): whether to swap channels randomly
     """
 
@@ -2080,7 +1993,6 @@ class ColorDistort(BaseOperator):
                  contrast=[0.5, 1.5, 0.5],
                  brightness=[0.5, 1.5, 0.5],
                  random_apply=True,
-                 hsv_format=False,
                  random_channel=False, inputs=None):
         super(ColorDistort, self).__init__(inputs=inputs)
         self.hue = hue
@@ -2088,7 +2000,6 @@ class ColorDistort(BaseOperator):
         self.contrast = contrast
         self.brightness = brightness
         self.random_apply = random_apply
-        self.hsv_format = hsv_format
         self.random_channel = random_channel
 
     def apply_hue(self, img):
@@ -2097,23 +2008,9 @@ class ColorDistort(BaseOperator):
             return img
 
         img = img.astype(np.float32)
-        if self.hsv_format:
-            img[..., 0] += random.uniform(low, high)
-            img[..., 0][img[..., 0] > 360] -= 360
-            img[..., 0][img[..., 0] < 0] += 360
-            return img
-
-        # XXX works, but result differ from HSV version
-        delta = np.random.uniform(low, high)
-        u = np.cos(delta * np.pi)
-        w = np.sin(delta * np.pi)
-        bt = np.array([[1.0, 0.0, 0.0], [0.0, u, -w], [0.0, w, u]])
-        tyiq = np.array([[0.299, 0.587, 0.114], [0.596, -0.274, -0.321],
-                         [0.211, -0.523, 0.311]])
-        ityiq = np.array([[1.0, 0.956, 0.621], [1.0, -0.272, -0.647],
-                          [1.0, -1.107, 1.705]])
-        t = np.dot(np.dot(ityiq, bt), tyiq).T
-        img = np.dot(img, t)
+        img[..., 0] += random.uniform(low, high)
+        img[..., 0][img[..., 0] > 360] -= 360
+        img[..., 0][img[..., 0] < 0] += 360
         return img
 
     def apply_saturation(self, img):
@@ -2122,16 +2019,9 @@ class ColorDistort(BaseOperator):
             return img
         delta = np.random.uniform(low, high)
         img = img.astype(np.float32)
-        if self.hsv_format:
-            img[..., 1] *= delta
-            return img
-        gray = img * np.array([[[0.299, 0.587, 0.114]]], dtype=np.float32)
-        gray = gray.sum(axis=2, keepdims=True)
-        gray *= (1.0 - delta)
-        img *= delta
-        img += gray
+        img[..., 1] *= delta
         return img
-
+        
     def apply_contrast(self, img):
         low, high, prob = self.contrast
         if np.random.uniform(0., 1.) < prob:
@@ -2154,36 +2044,22 @@ class ColorDistort(BaseOperator):
 
     def __call__(self, sample, context=None):
         img = sample['image']
-        if self.random_apply:
-            functions = [
-                self.apply_brightness,
-                self.apply_contrast,
-                self.apply_saturation,
-                self.apply_hue,
-            ]
-            distortions = np.random.permutation(functions)
-            for func in distortions:
-                img = func(img)
-            sample['image'] = img
-            return sample
-
         img = self.apply_brightness(img)
-
         if np.random.randint(0, 2):
             img = self.apply_contrast(img)
-            if self.hsv_format:
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+            # to hsv
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
             img = self.apply_saturation(img)
             img = self.apply_hue(img)
-            if self.hsv_format:
-                img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
+            # to rgb
+            img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
         else:
-            if self.hsv_format:
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+            # to hsv
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
             img = self.apply_saturation(img)
             img = self.apply_hue(img)
-            if self.hsv_format:
-                img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
+            # to rgb
+            img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
             img = self.apply_contrast(img)
 
         if self.random_channel:

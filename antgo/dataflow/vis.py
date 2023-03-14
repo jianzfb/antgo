@@ -174,8 +174,12 @@ def vis_3d_keypoints(kps_3d, score, skeleton, filename, score_thr=0.4, line_widt
     plt.close()
 
 
-def vis_2d_boxes_in_image(image, boxes):
-    pass
+def vis_2d_boxes_in_image(image, boxes, save_path='./'):
+    for box in boxes:
+        x1,y1,x2,y2 = box
+        cv2.rectangle(image, (int(x1),int(y1)), (int(x2), int(y2)), (255,0,0), 2)
+    cv2.imwrite(save_path, image)
+
 
 def vis_3d_boxes_in_image(image, boxes, camera_param, camera_model):
     pass

@@ -60,7 +60,8 @@ class ClsHead(nn.Module):
     def forward_train(self, cls_score, gt_label, **kwargs):
         if isinstance(cls_score, tuple):
             cls_score = cls_score[-1]
-        losses = self.loss(cls_score, gt_label, **kwargs)
+            
+        losses = self.loss(cls_score, gt_label.view(-1), **kwargs)
         return losses
 
     def simple_test(self, x, softmax=True, post_process=True, **kwargs):

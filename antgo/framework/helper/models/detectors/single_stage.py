@@ -50,15 +50,15 @@ class SingleStageDetector(BaseDetector):
 
     def forward_train(self,
                       image,
-                      image_metas,                      
-                      gt_bbox,
-                      gt_class,
-                      gt_bboxes_ignore=None, **kwargs):
+                      image_meta,                      
+                      bboxes,
+                      labels,
+                      bboxes_ignore=None, **kwargs):
         """
         Args:
             image (Tensor): Input images of shape (N, C, H, W).
                 Typically these should be mean centered and std scaled.
-            image_metas (list[dict]): A List of image info dict where each dict
+            image_meta (list[dict]): A List of image info dict where each dict
                 has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
                 For details on the values of these keys see
@@ -72,17 +72,17 @@ class SingleStageDetector(BaseDetector):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
-        super(SingleStageDetector, self).forward_train(image, image_metas)
+        super(SingleStageDetector, self).forward_train(image, image_meta)
         x = self.extract_feat(image)
         
-        if gt_bbox is None or gt_class is None:
+        if bboxes is None or labels is None:
             return self.bbox_head(x)
 
-        losses = self.bbox_head.forward_train(x, image_metas, gt_bbox,
-                                              gt_class, gt_bboxes_ignore)
+        losses = self.bbox_head.forward_train(x, image_meta, bboxes,
+                                              labels, bboxes_ignore)
         return losses
 
-    def simple_test(self, image, image_metas, rescale=True, **kwargs):
+    def simple_test(self, image, image_meta, rescale=True, **kwargs):
         """Test function without test-time augmentation.
 
         Args:
@@ -98,7 +98,7 @@ class SingleStageDetector(BaseDetector):
         """
         feat = self.extract_feat(image)
         results_list = self.bbox_head.simple_test(
-            feat, image_metas, rescale=rescale)
+            feat, image_meta, rescale=rescale)
         
         bbox_results = {
             'box': torch.stack([a for a, _ in results_list], dim=0),

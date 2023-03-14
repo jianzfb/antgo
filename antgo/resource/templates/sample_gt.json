@@ -1,6 +1,8 @@
 {
     "image_url": "",
     "image_file": "",
+    "semantic_file": "",
+    "semantic_url": "",
     "height": 0,
     "width": 0,
     "image_label": -1, 

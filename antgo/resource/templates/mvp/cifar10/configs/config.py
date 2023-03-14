@@ -10,7 +10,7 @@ lr_config = dict(
 
 # 日志配置
 log_config = dict(
-    interval=1,    
+    interval=50,    
     hooks=[
         dict(type='TextLoggerHook'),
     ])
@@ -50,8 +50,8 @@ data=dict(
         inputs_def={'fields': ['image', 'label']}     
     ),
     train_dataloader=dict(
-        samples_per_gpu=2, 
-        workers_per_gpu=1,
+        samples_per_gpu=128, 
+        workers_per_gpu=2,
         drop_last=True,
         shuffle=True,
     ),
@@ -67,8 +67,8 @@ data=dict(
         inputs_def={'fields': ['image', 'label']}  
     ),
     val_dataloader=dict(
-        samples_per_gpu=2, 
-        workers_per_gpu=1,
+        samples_per_gpu=128, 
+        workers_per_gpu=2,
         drop_last=False,
         shuffle=False,
     ),
@@ -84,8 +84,8 @@ data=dict(
         inputs_def={'fields': ['image', 'label']}  
     ),
     test_dataloader=dict(
-        samples_per_gpu=2, 
-        workers_per_gpu=1,
+        samples_per_gpu=128, 
+        workers_per_gpu=2,
         drop_last=False,
         shuffle=False,
     ),    
@@ -101,4 +101,4 @@ export=dict(
     output_name_list=["pred"]
 )
 
-max_epochs = 2
+max_epochs = 1500

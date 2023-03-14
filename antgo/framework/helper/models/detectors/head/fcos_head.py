@@ -120,8 +120,6 @@ class FcosHead(BaseDenseHead):
                  feat_channel,
                  num_classes,
                  down_stride,
-                 img_width,
-                 img_height,
                  rescale=1.0,
                  score_thresh=0.15,
                  loss_wh=dict(type='L1Loss', loss_weight=0.1),
@@ -133,8 +131,6 @@ class FcosHead(BaseDenseHead):
         self.rescale_x, self.rescale_y = rescale if type(rescale) == list or type(rescale) == tuple else (rescale, rescale)
         self.score_thresh = score_thresh
         self.down_stride = down_stride
-        self.img_width = img_width
-        self.img_height = img_height      
         self.last_channel = in_channel  
         self._build_head()
         self.loss_reg = build_loss(loss_wh)
@@ -169,7 +165,7 @@ class FcosHead(BaseDenseHead):
 
     def _build_head(self):
         self.heatmap_head = nn.Sequential(
-            nn.Conv2d(self.last_channel, self.num_classes, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(self.last_channel, self.num_classes+1, kernel_size=3, stride=1, padding=1),
         )
         self.reg_head = nn.Sequential(
             nn.Conv2d(self.last_channel,self.last_channel,kernel_size=3,padding=1,bias=False),
@@ -228,7 +224,7 @@ class FcosHead(BaseDenseHead):
              img_metas,
              gt_bboxes_ignore=None):
         target_result, avg_factor = \
-            self.get_targets(gt_bboxes, gt_labels, center_heatmap_pred.shape, (self.img_height,self.img_width), img_metas)
+            self.get_targets(gt_bboxes, gt_labels, center_heatmap_pred.shape, img_metas)
 
         center_heatmap_target = target_result['center_heatmap_target']
         center_heatmap_target_weight = target_result['center_heatmap_target_weight']
@@ -266,14 +262,13 @@ class FcosHead(BaseDenseHead):
         coords = torch.stack([shift_x, shift_y], -1) + stride // 2
         return coords
 
-    def get_targets(self, gt_bboxes, gt_labels, feat_shape, img_shape, image_metas):
+    def get_targets(self, gt_bboxes, gt_labels, feat_shape, image_metas):
         """Compute regression and classification targets in multiple images.
 
         Args:
             gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
                 shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
             gt_labels (list[Tensor]): class indices corresponding to each box.
-            feat_shape (list[int]): feature map shape with value [B, _, H, W]
             img_shape (list[int]): image shape in [h, w] format.
 
         Returns:
@@ -288,14 +283,15 @@ class FcosHead(BaseDenseHead):
                - wh_offset_target_weight (Tensor): weights of wh and offset \
                    predict, shape (B, 2, H, W).
         """
-        img_h, img_w = img_shape[:2]
+        img_h = image_metas[0]['image_shape'][0]
+        img_w = image_metas[0]['image_shape'][1]
         bs, _, feat_h, feat_w = feat_shape
 
         width_ratio = float(feat_w / img_w)
         height_ratio = float(feat_h / img_h)
 
         center_heatmap_target = gt_bboxes[-1].new_zeros(
-            [bs, self.num_classes, feat_h, feat_w])
+            [bs, self.num_classes+1, feat_h, feat_w])
         center_heatmap_target_weight = gt_bboxes[-1].new_ones(
             [bs, 1, feat_h, feat_w]
         )
@@ -356,7 +352,6 @@ class FcosHead(BaseDenseHead):
             center_y = (gt_bbox[:, [1]] + gt_bbox[:, [3]]) * height_ratio / 2
             gt_centers = torch.cat((center_x, center_y), dim=1)
 
-            box_confidence = 1.0
             for j, ct in enumerate(gt_centers):
                 ctx_int, cty_int = ct.int()
                 ctx, cty = ct
@@ -369,11 +364,10 @@ class FcosHead(BaseDenseHead):
                 ind = gt_label[j]
                 ind = ind + 1
 
-                k = 1
-                gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius, k=k)
+                gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius)
 
             reg_target_list.append(reg_target)
-            reg_weight_list.append(mask_pos_2*box_confidence)
+            reg_weight_list.append(mask_pos_2)
 
             # 重新设置背景
             center_heatmap_target[batch_id, 0] = \
@@ -396,7 +390,7 @@ class FcosHead(BaseDenseHead):
     def get_bboxes(self,
                    center_heatmap_preds,
                    reg_pred,
-                   img_metas,
+                   image_meta,
                    rescale=True,
                    with_nms=False):
         """Transform network output for a batch into bbox predictions.
@@ -425,12 +419,12 @@ class FcosHead(BaseDenseHead):
         """
         assert len(center_heatmap_preds) == len(reg_pred)
         result_list = []
-        for img_id in range(len(img_metas)):
+        for img_id in range(len(image_meta)):
             result_list.append(
                 self._get_bboxes_single(
-                    center_heatmap_preds[0][img_id:img_id + 1, ...],
-                    reg_pred[0][img_id:img_id + 1, ...],
-                    img_metas[img_id],
+                    center_heatmap_preds[img_id:img_id + 1, ...],
+                    reg_pred[img_id:img_id + 1, ...],
+                    image_meta[img_id],
                     rescale=rescale,
                     with_nms=with_nms))
         return result_list
@@ -466,7 +460,7 @@ class FcosHead(BaseDenseHead):
         """
         center_heatmap_pred = torch.sigmoid(center_heatmap_pred)
         center_heatmap_pred = center_heatmap_pred[:,1:,:,:]
-        batch_det_bboxes, batch_labels, batch_around_det_bboxes = self.decode_heatmap(
+        batch_det_bboxes, batch_labels = self.decode_heatmap(
             center_heatmap_pred,
             reg_pred,
             img_meta['image_shape'],            # batch_input_shape->input_shape
@@ -476,10 +470,6 @@ class FcosHead(BaseDenseHead):
         det_bboxes = batch_det_bboxes.view([-1, 5])
         det_labels = batch_labels.view(-1)
 
-        # batch_border = det_bboxes.new_tensor(img_meta['border'])[...,
-        #                                                          [2, 0, 2, 0]]
-        # det_bboxes[..., :4] -= batch_border
-
         if rescale:
             det_bboxes[..., :4] *= det_bboxes.new_tensor((self.rescale_x, self.rescale_y, self.rescale_x, self.rescale_y))
 
@@ -487,6 +477,7 @@ class FcosHead(BaseDenseHead):
             det_bboxes, det_labels = \
                 self._bboxes_nms(det_bboxes, det_labels, self.test_cfg)
         
+        # only for debug
         # image = cv2.imread(img_meta['image_file'])
         # det_bboxes_numpy = det_bboxes.detach().cpu().numpy()
         # for i in range(det_bboxes_numpy.shape[0]):
@@ -532,28 +523,6 @@ class FcosHead(BaseDenseHead):
             center_heatmap_pred, k=k)
         batch_scores, batch_index, batch_topk_labels = batch_dets
 
-        # topk_ys Bx100 -> around_topk_yxs Bx100x2
-        around_topk_yxs = torch.stack([topk_ys, topk_xs], dim=-1)
-        around_topk_yxs = torch.unsqueeze(around_topk_yxs, 2)     # BxMx1x2
-        # center_offset_yx Bx1x8x2
-        around_num = self.center_offset_yx.shape[-2]
-        around_topk_yxs = around_topk_yxs + self.center_offset_yx # BxMx8x2
-        around_batch_index = around_topk_yxs[:,:,:,0] * width + around_topk_yxs[:,:,:,1]
-        around_batch_index = torch.maximum(around_batch_index, torch.zeros_like(around_batch_index))
-        around_batch_index = torch.minimum(around_batch_index, torch.ones_like(around_batch_index)*width*height-1)
-        around_batch_index = around_batch_index.long().view(batch, -1)
-
-        # reg_pred Bx4xHxW
-        # wh = transpose_and_gather_feat(wh_pred, batch_index)
-        # offset_pred = (offset_pred - 0.5) * 2
-        # offset = transpose_and_gather_feat(offset_pred, batch_index)
-        # topk_xs = topk_xs + offset[..., 0]
-        # topk_ys = topk_ys + offset[..., 1]
-        # tl_x = (topk_xs - wh[..., 0] / 2) * (inp_w / width)
-        # tl_y = (topk_ys - wh[..., 1] / 2) * (inp_h / height)
-        # br_x = (topk_xs + wh[..., 0] / 2) * (inp_w / width)
-        # br_y = (topk_ys + wh[..., 1] / 2) * (inp_h / height)
-
         ltrb_off = transpose_and_gather_feat(reg_pred, batch_index)     # BxHxWx4
         tl_x = (topk_xs - ltrb_off[..., 0]) * (inp_w / width)
         tl_y = (topk_ys - ltrb_off[..., 1]) * (inp_h / height)
@@ -564,21 +533,7 @@ class FcosHead(BaseDenseHead):
         batch_bboxes = torch.cat((batch_bboxes, batch_scores[..., None]),
                                  dim=-1)
         
-        # around_wh = transpose_and_gather_feat(wh_pred, around_batch_index)
-        # around_offset = transpose_and_gather_feat(offset_pred, around_batch_index)
-        around_ltrb_off = transpose_and_gather_feat(reg_pred, around_batch_index)
-        around_top_ys = around_topk_yxs[:,:,:,0].view(batch, -1)
-        around_top_xs = around_topk_yxs[:,:,:,1].view(batch, -1)
-        around_topk_xs = around_top_xs
-        around_topk_ys = around_top_ys
-        around_tl_x = (around_topk_xs - around_ltrb_off[..., 0]) * (inp_w / width)
-        around_tl_y = (around_topk_ys - around_ltrb_off[..., 1]) * (inp_h / height)
-        around_br_x = (around_topk_xs + around_ltrb_off[..., 2]) * (inp_w / width)
-        around_br_y = (around_topk_ys + around_ltrb_off[..., 3]) * (inp_h / height)
-
-        around_batch_bboxes = torch.stack([around_tl_x, around_tl_y, around_br_x, around_br_y], dim=2)
-        around_batch_bboxes = torch.reshape(around_batch_bboxes,(-1, around_num, 4))
-        return batch_bboxes, batch_topk_labels, around_batch_bboxes
+        return batch_bboxes, batch_topk_labels
 
     def _bboxes_nms(self, bboxes, labels, cfg):
         if labels.numel() > 0:

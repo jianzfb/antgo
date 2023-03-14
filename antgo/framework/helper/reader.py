@@ -130,6 +130,14 @@ class Reader(torch.utils.data.Dataset):
                         raise TypeError('strong_pipeline must be a dict')
 
         self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
+        self._alias = None
+        if self._fields is not None and 'alias' in inputs_def:
+            self._alias = copy.deepcopy(inputs_def['alias'])
+        
+        if self._fields is not None:
+            if self._alias is None:
+                self._alias = copy.deepcopy(self._fields)
+                
         self.flag = np.zeros(len(self), dtype=np.uint8)
         if hasattr(self.proxy_dataset, 'flag'):
             self.flag = self.proxy_dataset.flag
@@ -138,23 +146,26 @@ class Reader(torch.utils.data.Dataset):
         if hasattr(self.proxy_dataset, 'CLASSES'):
             self.CLASSES = self.proxy_dataset.CLASSES
 
-    def _arrange(self, sample, fields):
+    def _arrange(self, sample, fields, alias):
+        if fields is None:
+            return sample      
+          
         if type(fields[0]) == list or type(fields[0]) == tuple:
             warp_ins = []
-            for field in fields:
+            for alia, field in zip(alias, fields):
                 one_ins = {}
-                for ff in field:
-                    one_ins[ff] = sample[ff]
+                for aa, ff in zip(alia, field):
+                    one_ins[aa] = sample[ff]
                 
                 warp_ins.append(one_ins)
             return warp_ins
         
         warp_ins = {}
-        for field in fields:
-            warp_ins[field] = sample[field]
+        for alia, field in zip(alias, fields):
+            warp_ins[alia] = sample[field]
 
         return warp_ins
-
+    
     def __len__(self):
         return self.proxy_dataset.size
     
@@ -183,15 +194,15 @@ class Reader(torch.utils.data.Dataset):
                 strong_sample = transform(strong_sample)
 
             # arange warp
-            weak_sample = self._arrange(weak_sample, self._fields)
-            strong_sample = self._arrange(strong_sample, self._fields)
+            weak_sample = self._arrange(weak_sample, self._fields, self._alias)
+            strong_sample = self._arrange(strong_sample, self._fields, self._alias)
             return [weak_sample, strong_sample]
         else:    
             for transform in self.pipeline:
                 sample = transform(sample)
 
             # arange warp
-            sample = self._arrange(sample, self._fields)
+            sample = self._arrange(sample, self._fields, self._alias)
             return sample
 
     def get_cat_ids(self, idx):

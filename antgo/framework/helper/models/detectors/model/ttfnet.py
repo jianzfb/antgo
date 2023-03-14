@@ -39,7 +39,7 @@ class TTFNet(SingleStageDetector):
             'box': [a for a, _ in results_list],
             'label': [b for _, b in results_list],
         }
-        # {'box', 'prob', 'label'}
+        # {'box', 'label'}
         return bbox_results
 
     def onnx_export(self, img):

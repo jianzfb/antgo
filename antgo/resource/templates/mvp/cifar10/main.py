@@ -73,6 +73,10 @@ def main():
         return
 
     cfg = Config.fromfile(os.path.join(nn_args.exp, nn_args.config))
+    if 'checkpoint_config' in cfg:
+        cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
+    if 'evaluation' in cfg:
+        cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
 
     # step3: 执行指令（训练、测试、模型导出）
     if nn_args.process == 'train':

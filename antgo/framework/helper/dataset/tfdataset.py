@@ -128,7 +128,8 @@ class TFDataset(torch.utils.data.IterableDataset):
                  strong_pipeline: typing.Optional[typing.List]=None, 
                  sequence_description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
                  compression_type: typing.Optional[str] = None,
-                 infinite: typing.Optional[bool] = False
+                 infinite: typing.Optional[bool] = False,
+                 inputs_def=None
                  ) -> None:
         super().__init__()
         self.data_path_list = data_path_list
@@ -200,6 +201,15 @@ class TFDataset(torch.utils.data.IterableDataset):
             ratios = [1] * len(data_path_list)
         self.ratios = ratios
 
+        self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
+        self._alias = None
+        if self._fields is not None and 'alias' in inputs_def:
+            self._alias = copy.deepcopy(inputs_def['alias'])
+        
+        if self._fields is not None:
+            if self._alias is None:
+                self._alias = copy.deepcopy(self._fields)
+        
         self.pipeline = []
         self.weak_pipeline = []
         self.strong_pipeline = []
@@ -258,6 +268,26 @@ class TFDataset(torch.utils.data.IterableDataset):
             self.data_path_list = [self.data_path_list[i] for i in use_data_path_index_list]
             self.index_path_list = [self.index_path_list[i] for i in use_data_path_index_list]
             self.ratios = [self.ratios[i] for i in use_data_path_index_list]
+
+    def _arrange(self, sample, fields, alias):
+        if fields is None:
+            return sample      
+          
+        if type(fields[0]) == list or type(fields[0]) == tuple:
+            warp_ins = []
+            for alia, field in zip(alias, fields):
+                one_ins = {}
+                for aa, ff in zip(alia, field):
+                    one_ins[aa] = sample[ff]
+                
+                warp_ins.append(one_ins)
+            return warp_ins
+        
+        warp_ins = {}
+        for alia, field in zip(alias, fields):
+            warp_ins[alia] = sample[field]
+
+        return warp_ins
             
     def __transform(self, sample):
         new_sample = {}
@@ -266,7 +296,7 @@ class TFDataset(torch.utils.data.IterableDataset):
                 if self.raw_description[k] == 'numpy':
                     dtype = numpy_dtype_map[sample[f'__{k}_type'][0]]
                     shape = tuple(sample[f'__{k}_shape'])
-                    new_sample[k] = np.frombuffer(sample[k].tobytes(), dtype=dtype).reshape(shape)
+                    new_sample[k] = np.frombuffer(bytearray(sample[k].tobytes()), dtype=dtype).reshape(shape).copy()
                 elif self.raw_description[k] == 'str':
                     new_sample[k] = sample[k].tobytes().decode('utf-8')
                 elif self.raw_description[k] == 'dict':
@@ -292,11 +322,15 @@ class TFDataset(torch.utils.data.IterableDataset):
             for transform in self.pipeline:
                 strong_sample = transform(strong_sample)
 
+            weak_sample = self._arrange(weak_sample, self._fields, self._alias)
+            strong_sample = self._arrange(strong_sample, self._fields, self._alias)
             return [weak_sample, strong_sample]
         else:
             for transform in self.pipeline:
                 sample = transform(sample)
-        
+                
+            # arange warp
+            sample = self._arrange(sample, self._fields, self._alias)        
             return sample
 
     def __iter__(self):

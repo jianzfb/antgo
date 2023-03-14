@@ -222,6 +222,7 @@ def build_kv_dataloader(dataset,
                      seed=0,
                      runner_type='EpochBasedRunner',
                      persistent_workers=False,
+                     ignore_stack=[],
                      **kwargs):
     sampler = None
     if dist:
@@ -273,7 +274,7 @@ def build_kv_dataloader(dataset,
         num_workers=num_workers,
         batch_sampler=None,
         pin_memory=kwargs.pop('pin_memory', False),
-        collate_fn=partial(collate, samples_per_gpu=samples_per_gpu),
+        collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
         worker_init_fn=init_fn)
 
     return data_loader
@@ -282,6 +283,7 @@ def build_kv_dataloader(dataset,
 def build_iter_dataloader(dataset,   
                           samples_per_gpu,
                           workers_per_gpu,
+                          ignore_stack=[],
                           **kwargs):
     batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else int(np.sum(samples_per_gpu))
     dataset.samples_per_gpu = samples_per_gpu
@@ -290,7 +292,7 @@ def build_iter_dataloader(dataset,
         batch_size=batch_size, 
         num_workers=workers_per_gpu,
         pin_memory=kwargs.pop('pin_memory', False),
-        collate_fn=partial(collate, samples_per_gpu=batch_size),
+        collate_fn=partial(collate, samples_per_gpu=batch_size, ignore_stack=ignore_stack),
         drop_last=kwargs.get('drop_last', True))
 
     return data_loader
