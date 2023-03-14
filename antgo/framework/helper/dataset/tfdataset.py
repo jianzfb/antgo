@@ -122,7 +122,7 @@ class TFDataset(torch.utils.data.IterableDataset):
                  data_path_list: typing.List[str],
                  ratios: typing.Union[typing.List[float], None]=None,
                  description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
-                 shuffle_queue_size: typing.Optional[int] = None,
+                 shuffle_queue_size: typing.Optional[int] = 1024,
                  pipeline: typing.Optional[typing.List]=None, 
                  weak_pipeline: typing.Optional[typing.List]=None, 
                  strong_pipeline: typing.Optional[typing.List]=None, 

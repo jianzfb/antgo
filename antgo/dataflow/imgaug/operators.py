@@ -40,6 +40,7 @@ import cv2
 from PIL import Image, ImageEnhance, ImageDraw
 from .functional import *
 from antgo.dataflow.vis import *
+from io import StringIO, BytesIO
 
 from .op_helper import (satisfy_sample_constraint, filter_and_process,
                         generate_sample_bbox, clip_bbox, data_anchor_sampling,
@@ -86,15 +87,8 @@ class BaseOperator(Node):
         sample.pop('image')
         return image, sample
 
-class AddImageMeta(BaseOperator):
-    def __init__(self, inputs=None):
-        super().__init__(inputs)
 
-    def __call__(self, sample, context=None):
-        sample['image_meta'] = {}
-        return sample
-        
-
+# FINISH FIX
 class DecodeImage(BaseOperator):
     def __init__(self, to_rgb=True, with_mixup=False, with_cutmix=False, backend="cv", inputs=None):
         """ Transform the image data to numpy format.
@@ -113,6 +107,7 @@ class DecodeImage(BaseOperator):
         if not isinstance(self.with_mixup, bool):
             raise TypeError("{}: input type is invalid.".format(self))
         self.backend = backend # cv,pil
+        assert(self.backend.lower() in ['cv', 'pil'])
 
     def __call__(self, sample, context=None):
         """ load image if 'image_file' field is not empty but 'image' is"""
@@ -121,13 +116,15 @@ class DecodeImage(BaseOperator):
                 sample['image'] = f.read()
 
         im = sample['image']
-        data = np.frombuffer(im, dtype='uint8')
-        im = cv2.imdecode(data, 1)  # BGR mode, but need RGB mode
-
-        if self.to_rgb:
-            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        if self.backend.lower() == 'cv':
+            data = np.frombuffer(im, dtype='uint8')
+            im = cv2.imdecode(data, 1)  # BGR mode, but need RGB mode
+            if self.to_rgb:
+                im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)               
+        else:
+            im = Image.open(BytesIO(im))
+        
         sample['image'] = im
-
         if 'height' not in sample:
             sample['height'] = im.shape[0]
         elif sample['height'] != im.shape[0]:
@@ -160,13 +157,16 @@ class DecodeImage(BaseOperator):
 
         # decode semantic label 
         if 'semantic' in sample.keys():
-            data = np.frombuffer(sample['semantic'], dtype='uint8')
-            sem = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)  # BGR mode, but need RGB mode
+            if self.backend.lower() == 'cv':
+                data = np.frombuffer(sample['semantic'], dtype='uint8')
+                sem = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)  # BGR mode, but need RGB mode
+            else:
+                im = Image.open(BytesIO(im))
             sample['semantic'] = sem
 
         return sample
 
-
+# FINISH FIX
 class KeepRatio(BaseOperator):
     def __init__(self, aspect_ratio=1, focus_on_objects=False,inputs=None):
         """ Transform the image data to numpy format.
@@ -320,7 +320,7 @@ class KeepRatio(BaseOperator):
 
         return sample
 
-
+# FINISH FIX
 class Rotation(BaseOperator):
     """
     Rotate the image with bounding box
@@ -510,120 +510,14 @@ class MultiscaleTestResize(BaseOperator):
         return sample
 
 
-class ResizeImage(BaseOperator):
-    # FINISH CORRET (JIAN)
-    def __init__(self,
-                 target_size=0,
-                 max_size=0,
-                 interp=cv2.INTER_LINEAR,
-                 use_cv2=True, inputs=None):
-        """
-        Rescale image to the specified target size, and capped at max_size
-        if max_size != 0.
-        If target_size is list, selected a scale randomly as the specified
-        target size.
-        Args:
-            target_size (int|list): the target size of image's short side,
-                multi-scale training is adopted when type is list.
-            max_size (int): the max size of image
-            interp (int): the interpolation method
-            use_cv2 (bool): use the cv2 interpolation method or use PIL
-                interpolation method
-        """
-        super(ResizeImage, self).__init__(inputs=inputs)
-        self.max_size = int(max_size)
-        self.interp = int(interp)
-        self.use_cv2 = use_cv2
-        if not (isinstance(target_size, int) or isinstance(target_size, list)):
-            raise TypeError(
-                "Type of target_size is invalid. Must be Integer or List, now is {}".
-                format(type(target_size)))
-        self.target_size = target_size
-        if not (isinstance(self.max_size, int) and isinstance(self.interp,
-                                                              int)):
-            raise TypeError("{}: input type is invalid.".format(self))
-
-    def __call__(self, sample, context=None):
-        """ Resize the image numpy.
-        """
-        im = sample['image']
-        if not isinstance(im, np.ndarray):
-            raise TypeError("{}: image type is not numpy.".format(self))
-        if len(im.shape) != 3 and len(im.shape) != 2:
-            raise ImageError('{}: image is not 3/2-dimensional.'.format(self))
-        im_shape = im.shape
-        im_size_min = np.min(im_shape[0:2])
-        im_size_max = np.max(im_shape[0:2])
-        if isinstance(self.target_size, list):
-            # Case for multi-scale training
-            selected_size = random.choice(self.target_size)
-        else:
-            selected_size = self.target_size
-        if float(im_size_min) == 0:
-            raise ZeroDivisionError('{}: min size of image is 0'.format(self))
-        if self.max_size != 0:
-            im_scale = float(selected_size) / float(im_size_min)
-            # Prevent the biggest axis from being more than max_size
-            if np.round(im_scale * im_size_max) > self.max_size:
-                im_scale = float(self.max_size) / float(im_size_max)
-            im_scale_x = im_scale
-            im_scale_y = im_scale
-
-            resize_w = im_scale_x * float(im_shape[1])
-            resize_h = im_scale_y * float(im_shape[0])
-            im_info = [resize_h, resize_w, im_scale]
-            if 'im_info' in sample and sample['im_info'][2] != 1.:
-                sample['im_info'] = np.append(
-                    list(sample['im_info']), im_info).astype(np.float32)
-            else:
-                sample['im_info'] = np.array(im_info).astype(np.float32)
-        else:
-            im_scale_x = float(selected_size) / float(im_shape[1])
-            im_scale_y = float(selected_size) / float(im_shape[0])
-
-            resize_w = selected_size
-            resize_h = selected_size
-
-        if self.use_cv2:
-            im = cv2.resize(
-                im,
-                None,
-                None,
-                fx=im_scale_x,
-                fy=im_scale_y,
-                interpolation=self.interp)
-            if 'semantic' in sample.keys() and sample['semantic'] is not None:
-                semantic = sample['semantic']
-                semantic = cv2.resize(
-                    semantic.astype('float32'),
-                    None,
-                    None,
-                    fx=im_scale_x,
-                    fy=im_scale_y,
-                    interpolation=self.interp)
-                semantic = np.asarray(semantic).astype('int32')
-                semantic = np.expand_dims(semantic, 0)
-                sample['semantic'] = semantic
-        else:
-            if self.max_size != 0:
-                raise TypeError(
-                    'If you set max_size to cap the maximum size of image,'
-                    'please set use_cv2 to True to resize the image.')
-            im = im.astype('uint8')
-            im = Image.fromarray(im)
-            im = im.resize((int(resize_w), int(resize_h)), self.interp)
-            im = np.array(im)
-        sample['image'] = im
-        return sample
-
-
+# FINISH FIX
 class RandomFlipImage(BaseOperator):
-    # FINISH CORRET (JIAN)
     def __init__(self, 
                 prob=0.5, 
                 is_normalized=False, 
                 is_mask_flip=False, 
                 swap_ids=[[1,3,19,5,7,9,11,13,15],[2,4,20,6,8,10,12,14,16]], 
+                swap_labels=[[0,1],[1,0]],
                 inputs=None):
         """
         Args:
@@ -636,6 +530,7 @@ class RandomFlipImage(BaseOperator):
         self.is_normalized = is_normalized
         self.is_mask_flip = is_mask_flip
         self.swap_ids = swap_ids
+        self.swap_labels = swap_labels
         if not (isinstance(self.prob, float) and
                 isinstance(self.is_normalized, bool) and
                 isinstance(self.is_mask_flip, bool)):
@@ -690,70 +585,68 @@ class RandomFlipImage(BaseOperator):
                     in sample are flipped.
         """
 
-        samples = sample
-        batch_input = True
-        if not isinstance(samples, Sequence):
-            batch_input = False
-            samples = [samples]
-        for sample in samples:
-            im = sample['image']
-            if not isinstance(im, np.ndarray):
-                raise TypeError("{}: image is not a numpy array.".format(self))
-            if len(im.shape) != 3:
-                raise ImageError("{}: image is not 3-dimensional.".format(self))
-            height, width, _ = im.shape
-            if np.random.uniform(0, 1) < self.prob:
-                im = im[:, ::-1, :]
-                if 'bboxes' in sample.keys() and sample['bboxes'].shape[0] > 0:
-                    gt_bbox = sample['bboxes']
-                    oldx1 = gt_bbox[:, 0].copy()
-                    oldx2 = gt_bbox[:, 2].copy()
-                    if self.is_normalized:
-                        gt_bbox[:, 0] = 1 - oldx2
-                        gt_bbox[:, 2] = 1 - oldx1
-                    else:
-                        gt_bbox[:, 0] = width - oldx2 - 1
-                        gt_bbox[:, 2] = width - oldx1 - 1
-                    if gt_bbox.shape[0] != 0 and (gt_bbox[:, 2] < gt_bbox[:, 0]).all():
-                        m = "{}: invalid box, x2 should be greater than x1".format(
-                            self)
-                        raise BboxError(m)
-                    sample['bboxes'] = gt_bbox
+        im = sample['image']
+        if not isinstance(im, np.ndarray):
+            raise TypeError("{}: image is not a numpy array.".format(self))
+        if len(im.shape) != 3:
+            raise ImageError("{}: image is not 3-dimensional.".format(self))
+        height, width, _ = im.shape
+        if np.random.uniform(0, 1) < self.prob:
+            im = im[:, ::-1, :]
+            if 'bboxes' in sample.keys() and sample['bboxes'].shape[0] > 0:
+                gt_bbox = sample['bboxes']
+                oldx1 = gt_bbox[:, 0].copy()
+                oldx2 = gt_bbox[:, 2].copy()
+                if self.is_normalized:
+                    gt_bbox[:, 0] = 1 - oldx2
+                    gt_bbox[:, 2] = 1 - oldx1
+                else:
+                    gt_bbox[:, 0] = width - oldx2 - 1
+                    gt_bbox[:, 2] = width - oldx1 - 1
+                if gt_bbox.shape[0] != 0 and (gt_bbox[:, 2] < gt_bbox[:, 0]).all():
+                    m = "{}: invalid box, x2 should be greater than x1".format(
+                        self)
+                    raise BboxError(m)
+                sample['bboxes'] = gt_bbox
+                
+                if len(self.swap_labels) > 0:
+                    for before_label, after_label in self.swap_labels:
+                        selected_ids = sample['labels'] == before_label
+                        sample['labels'][selected_ids] = after_label
 
-                if 'segments' in sample.keys():
-                    if self.is_mask_flip and len(sample['segments']) != 0:
-                        sample['segments'] = self.flip_segms(sample['segments'],
-                                                            height, width)
+            if 'segments' in sample.keys():
+                if self.is_mask_flip and len(sample['segments']) != 0:
+                    sample['segments'] = self.flip_segms(sample['segments'],
+                                                        height, width)
 
-                if 'joints2d' in sample.keys() and sample['joints2d'].shape[0] > 0:
-                    # sample['gt_keypoint'] = self.flip_keypoint(
-                    #     sample['gt_keypoint'], width)
-                    gt_keypoints = sample['joints2d']
-                    gt_keypoints[:, :, 0] = width - gt_keypoints[:, :, 0] - 1.0
+            if 'joints2d' in sample.keys() and sample['joints2d'].shape[0] > 0:
+                gt_keypoints = sample['joints2d']
+                gt_keypoints[:, :, 0] = width - gt_keypoints[:, :, 0] - 1.0
 
-                    # 更换keypoints位置 (图像水平翻转后，需要对调关键点位置)
-                    # swap_k1 = [1,3,19,5,7,9,11,13,15]
-                    # swap_k2 = [2,4,20,6,8,10,12,14,16] 
+                # 更换keypoints位置 (图像水平翻转后，需要对调关键点位置)
+                # swap_k1 = [1,3,19,5,7,9,11,13,15]
+                # swap_k2 = [2,4,20,6,8,10,12,14,16] 
+                if len(self.swap_ids) > 0:
                     swap_k1 = self.swap_ids[0]
                     swap_k2 = self.swap_ids[1]
                     temp = gt_keypoints[:,swap_k1,:].copy()
                     gt_keypoints[:,swap_k1,:] = gt_keypoints[:,swap_k2,:]
                     gt_keypoints[:,swap_k2,:] = temp
 
-                    sample['joints2d'] = gt_keypoints.copy()
+                sample['joints2d'] = gt_keypoints.copy()
 
-                if 'semantic' in sample.keys() and sample[
-                        'semantic'] is not None:
-                    sample['semantic'] = sample['semantic'][:, ::-1]
+            if 'semantic' in sample.keys() and sample['semantic'] is not None:
+                sample['semantic'] = sample['semantic'][:, ::-1]
 
-                sample['flipped'] = True
-                sample['image'] = im
-        sample = samples if batch_input else samples[0]
+            if 'image_metas' in sample:
+                sample['image_metas']['flipped'] = True
+            sample['image'] = im
+
         return sample
 
 
+# FINISH FIX
 class RandomErasingImage(BaseOperator):
-    # FINISH CORRET (JIAN)
     # only for det task
     def __init__(self, prob=0.5, sl=0.02, sh=0.4, r1=0.3, inputs=None):
         """
@@ -771,47 +664,38 @@ class RandomErasingImage(BaseOperator):
         self.r1 = r1
 
     def __call__(self, sample, context=None):
-        samples = sample
-        batch_input = True
-        if not isinstance(samples, Sequence):
-            batch_input = False
-            samples = [samples]
-        for sample in samples:
-            gt_bbox = sample['bboxes']
-            im = sample['image']
-            if not isinstance(im, np.ndarray):
-                raise TypeError("{}: image is not a numpy array.".format(self))
-            if len(im.shape) != 3:
-                raise ImageError("{}: image is not 3-dimensional.".format(self))
+        gt_bbox = sample['bboxes']
+        im = sample['image']
+        if not isinstance(im, np.ndarray):
+            raise TypeError("{}: image is not a numpy array.".format(self))
+        if len(im.shape) != 3:
+            raise ImageError("{}: image is not 3-dimensional.".format(self))
 
-            for idx in range(gt_bbox.shape[0]):
-                if self.prob <= np.random.rand():
-                    continue
+        for idx in range(gt_bbox.shape[0]):
+            if self.prob <= np.random.rand():
+                continue
 
-                x1, y1, x2, y2 = gt_bbox[idx, :]
-                w_bbox = x2 - x1 + 1
-                h_bbox = y2 - y1 + 1
-                area = w_bbox * h_bbox
+            x1, y1, x2, y2 = gt_bbox[idx, :]
+            w_bbox = x2 - x1 + 1
+            h_bbox = y2 - y1 + 1
+            area = w_bbox * h_bbox
 
-                target_area = random.uniform(self.sl, self.sh) * area
-                aspect_ratio = random.uniform(self.r1, 1 / self.r1)
+            target_area = random.uniform(self.sl, self.sh) * area
+            aspect_ratio = random.uniform(self.r1, 1 / self.r1)
 
-                h = int(round(math.sqrt(target_area * aspect_ratio)))
-                w = int(round(math.sqrt(target_area / aspect_ratio)))
+            h = int(round(math.sqrt(target_area * aspect_ratio)))
+            w = int(round(math.sqrt(target_area / aspect_ratio)))
 
-                if w < w_bbox and h < h_bbox:
-                    off_y1 = random.randint(0, int(h_bbox - h))
-                    off_x1 = random.randint(0, int(w_bbox - w))
-                    im[int(y1 + off_y1):int(y1 + off_y1 + h), int(x1 + off_x1):
-                       int(x1 + off_x1 + w), :] = 0
-            sample['image'] = im
-
-        sample = samples if batch_input else samples[0]
+            if w < w_bbox and h < h_bbox:
+                off_y1 = random.randint(0, int(h_bbox - h))
+                off_x1 = random.randint(0, int(w_bbox - w))
+                im[int(y1 + off_y1):int(y1 + off_y1 + h), int(x1 + off_x1):
+                    int(x1 + off_x1 + w), :] = 0
+        sample['image'] = im
         return sample
 
-
+# FINISH FIX
 class GridMaskOp(BaseOperator):
-    # FINISH CORRET (JIAN)
     def __init__(self,
                  use_h=True,
                  use_w=True,
@@ -855,22 +739,14 @@ class GridMaskOp(BaseOperator):
             upper_iter=upper_iter)
 
     def __call__(self, sample, context=None):
-        samples = sample
-        batch_input = True
-        if not isinstance(samples, Sequence):
-            batch_input = False
-            samples = [samples]
-        for sample in samples:
-            sample['image'] = self.gridmask_op(sample['image'],
-                                               sample['curr_iter'])
-        if not batch_input:
-            samples = samples[0]
+        # now, ignore curr_iter
+        curr_iter = sample['curr_iter'] if 'curr_iter' in sample else 0
+        sample['image'] = self.gridmask_op(sample['image'], curr_iter)
         return sample
 
 
+# FINISH FIX
 class AutoAugmentImage(BaseOperator):
-    # FINISH CORRET (JIAN)
-    # only for det task
     def __init__(self, is_normalized=False, autoaug_type="v1", inputs=None):
         """
         Args:
@@ -887,114 +763,50 @@ class AutoAugmentImage(BaseOperator):
         """
         Learning Data Augmentation Strategies for Object Detection, see https://arxiv.org/abs/1906.11172
         """
-        samples = sample
-        batch_input = True
-        if not isinstance(samples, Sequence):
-            batch_input = False
-            samples = [samples]
-        for sample in samples:
-            gt_bbox = sample['bboxes']
-            im = sample['image']
-            if not isinstance(im, np.ndarray):
-                raise TypeError("{}: image is not a numpy array.".format(self))
-            if len(im.shape) != 3:
-                raise ImageError("{}: image is not 3-dimensional.".format(self))
-            if len(gt_bbox) == 0:
-                continue
+        gt_bbox = sample['bboxes']
+        im = sample['image']
+        if not isinstance(im, np.ndarray):
+            raise TypeError("{}: image is not a numpy array.".format(self))
+        if len(im.shape) != 3:
+            raise ImageError("{}: image is not 3-dimensional.".format(self))
+        if len(gt_bbox) == 0:
+            return sample
 
-            # gt_boxes : [x1, y1, x2, y2]
-            # norm_gt_boxes: [y1, x1, y2, x2]
-            height, width, _ = im.shape
-            norm_gt_bbox = np.ones_like(gt_bbox, dtype=np.float32)
-            if not self.is_normalized:
-                norm_gt_bbox[:, 0] = gt_bbox[:, 1] / float(height)
-                norm_gt_bbox[:, 1] = gt_bbox[:, 0] / float(width)
-                norm_gt_bbox[:, 2] = gt_bbox[:, 3] / float(height)
-                norm_gt_bbox[:, 3] = gt_bbox[:, 2] / float(width)
-            else:
-                norm_gt_bbox[:, 0] = gt_bbox[:, 1]
-                norm_gt_bbox[:, 1] = gt_bbox[:, 0]
-                norm_gt_bbox[:, 2] = gt_bbox[:, 3]
-                norm_gt_bbox[:, 3] = gt_bbox[:, 2]
+        # gt_boxes : [x1, y1, x2, y2]
+        # norm_gt_boxes: [y1, x1, y2, x2]
+        height, width, _ = im.shape
+        norm_gt_bbox = np.ones_like(gt_bbox, dtype=np.float32)
+        if not self.is_normalized:
+            norm_gt_bbox[:, 0] = gt_bbox[:, 1] / float(height)
+            norm_gt_bbox[:, 1] = gt_bbox[:, 0] / float(width)
+            norm_gt_bbox[:, 2] = gt_bbox[:, 3] / float(height)
+            norm_gt_bbox[:, 3] = gt_bbox[:, 2] / float(width)
+        else:
+            norm_gt_bbox[:, 0] = gt_bbox[:, 1]
+            norm_gt_bbox[:, 1] = gt_bbox[:, 0]
+            norm_gt_bbox[:, 2] = gt_bbox[:, 3]
+            norm_gt_bbox[:, 3] = gt_bbox[:, 2]
 
-            from .autoaugment_utils import distort_image_with_autoaugment
-            im, norm_gt_bbox = distort_image_with_autoaugment(im, norm_gt_bbox,
-                                                              self.autoaug_type)
-            if not self.is_normalized:
-                gt_bbox[:, 0] = norm_gt_bbox[:, 1] * float(width)
-                gt_bbox[:, 1] = norm_gt_bbox[:, 0] * float(height)
-                gt_bbox[:, 2] = norm_gt_bbox[:, 3] * float(width)
-                gt_bbox[:, 3] = norm_gt_bbox[:, 2] * float(height)
-            else:
-                gt_bbox[:, 0] = norm_gt_bbox[:, 1]
-                gt_bbox[:, 1] = norm_gt_bbox[:, 0]
-                gt_bbox[:, 2] = norm_gt_bbox[:, 3]
-                gt_bbox[:, 3] = norm_gt_bbox[:, 2]
+        from .autoaugment_utils import distort_image_with_autoaugment
+        im, norm_gt_bbox = distort_image_with_autoaugment(im, norm_gt_bbox,
+                                                            self.autoaug_type)
+        if not self.is_normalized:
+            gt_bbox[:, 0] = norm_gt_bbox[:, 1] * float(width)
+            gt_bbox[:, 1] = norm_gt_bbox[:, 0] * float(height)
+            gt_bbox[:, 2] = norm_gt_bbox[:, 3] * float(width)
+            gt_bbox[:, 3] = norm_gt_bbox[:, 2] * float(height)
+        else:
+            gt_bbox[:, 0] = norm_gt_bbox[:, 1]
+            gt_bbox[:, 1] = norm_gt_bbox[:, 0]
+            gt_bbox[:, 2] = norm_gt_bbox[:, 3]
+            gt_bbox[:, 3] = norm_gt_bbox[:, 2]
 
-            sample['bboxes'] = gt_bbox
-            sample['image'] = im
-
-        sample = samples if batch_input else samples[0]
+        sample['bboxes'] = gt_bbox
+        sample['image'] = im
         return sample
 
 
-class NormalizeImage(BaseOperator):
-    # FINISH CORRET (JIAN)
-    def __init__(self,
-                 mean=[0.485, 0.456, 0.406],
-                 std=[1, 1, 1],
-                 is_scale=True,
-                 is_channel_first=True, inputs=None):
-        """
-        Args:
-            mean (list): the pixel mean
-            std (list): the pixel variance
-        """
-        super(NormalizeImage, self).__init__(inputs=inputs)
-        self.mean = mean
-        self.std = std
-        self.is_scale = is_scale
-        self.is_channel_first = is_channel_first
-        if not (isinstance(self.mean, list) and isinstance(self.std, list) and
-                isinstance(self.is_scale, bool)):
-            raise TypeError("{}: input type is invalid.".format(self))
-        from functools import reduce
-        if reduce(lambda x, y: x * y, self.std) == 0:
-            raise ValueError('{}: std is invalid!'.format(self))
-
-    def __call__(self, sample, context=None):
-        """Normalize the image.
-        Operators:
-            1.(optional) Scale the image to [0,1]
-            2. Each pixel minus mean and is divided by std
-        """
-        samples = sample
-        batch_input = True
-        if not isinstance(samples, Sequence):
-            batch_input = False
-            samples = [samples]
-        for sample in samples:
-            for k in sample.keys():
-                # hard code
-                if k.startswith('image'):
-                    im = sample[k]
-                    im = im.astype(np.float32, copy=False)
-                    if self.is_channel_first:
-                        mean = np.array(self.mean)[:, np.newaxis, np.newaxis]
-                        std = np.array(self.std)[:, np.newaxis, np.newaxis]
-                    else:
-                        mean = np.array(self.mean)[np.newaxis, np.newaxis, :]
-                        std = np.array(self.std)[np.newaxis, np.newaxis, :]
-                    if self.is_scale:
-                        im = im / 255.0
-                    im -= mean
-                    im /= std
-                    sample[k] = im
-
-        if not batch_input:
-            samples = samples[0]
-        return samples
-
+# FINISH FIX
 class RandomDistort(BaseOperator):
     def __init__(self,
                  brightness_lower=0.5,
@@ -1110,6 +922,7 @@ class RandomDistort(BaseOperator):
         return sample
 
 
+# FINISH FIX
 class ExpandImage(BaseOperator):
     # FINISH CORRET (JIAN)
     # only for det task
@@ -1171,8 +984,7 @@ class ExpandImage(BaseOperator):
                     sample['joints2d'] = gt_keypoints[0]
                     sample['joints_ignore'] = gt_keypoints[1]
                 else:
-                    gt_bbox, gt_class, _ = filter_and_process(expand_bbox,
-                                                              gt_bbox, gt_class)
+                    gt_bbox, gt_class, _ = filter_and_process(expand_bbox, gt_bbox, gt_class)
                 sample['image'] = expand_im
                 sample['bboxes'] = gt_bbox
                 sample['labels'] = gt_class
@@ -1182,6 +994,7 @@ class ExpandImage(BaseOperator):
         return sample
 
 
+# FINISH FIX
 class CropImage(BaseOperator):
     # 已经完成验证
     def __init__(self, prob, batch_sampler, satisfy_all=False, avoid_no_bbox=True, inputs=None):
@@ -1252,7 +1065,6 @@ class CropImage(BaseOperator):
         trans = trans.astype(np.float32)
         return trans
 
-
     def __call__(self, sample):
         """
         Crop the image and modify bounding box.
@@ -1269,12 +1081,13 @@ class CropImage(BaseOperator):
 
         assert 'image' in sample, "image data not found"
         im = sample['image']
-        gt_bbox = sample['gt_bbox']
-        gt_class = sample['gt_class']
+        gt_bbox = sample['bboxes']
+        gt_class = sample['labels']
         im_height, im_width = im.shape[:2]
-        gt_score = None
-        if 'gt_score' in sample:
-            gt_score = sample['gt_score']
+        # gt_score = None
+        # if 'gt_score' in sample:
+        #     gt_score = sample['gt_score']
+    
         sampled_bbox = []
         for sampler in self.batch_sampler:
             found = 0
@@ -1305,7 +1118,7 @@ class CropImage(BaseOperator):
                 filter_and_process(
                     sample_bbox, 
                     gt_bbox/np.array([[im_width, im_height, im_width, im_height]]) if gt_bbox.shape[0] > 0 else gt_bbox, 
-                    gt_class, scores=gt_score)
+                    gt_class)
             if self.avoid_no_bbox:
                 if len(crop_bbox) < 1:
                     continue
@@ -1318,16 +1131,16 @@ class CropImage(BaseOperator):
             sample['image'] = im
             if crop_bbox.shape[0] > 0:
                 crop_bbox *= np.array([[im.shape[1], im.shape[0], im.shape[1], im.shape[0]]])
-            sample['gt_bbox'] = crop_bbox
-            sample['gt_class'] = crop_class[:,0]
-            if 'gt_score' in sample:
-                sample['gt_score'] = crop_score[:,0]
-
-            if 'image_metas' in sample and 'transform_matrix' in sample['image_metas']:
-                base_trans = sample['image_metas']['transform_matrix']
+            sample['bboxes'] = crop_bbox
+            sample['labels'] = crop_class[:,0]
+            sample['width'] = im.shape[1]
+            sample['height'] = im.shape[0]
+                
+            if 'image_meta' in sample and 'transform_matrix' in sample['image_meta']:
+                base_trans = sample['image_meta']['transform_matrix']
                 crop_trans = self.gen_trans_from_bbox((xmin+xmax)/2.0, (ymin+ymax)/2.0, im_width, im_height, im.shape[1], im.shape[0], 1.0, 0.0, inv=False)
                 crop_trans = np.matmul(crop_trans, base_trans)
-                sample['image_metas']['transform_matrix'] = crop_trans
+                sample['image_meta']['transform_matrix'] = crop_trans
 
             # # 测试可视化
             # for bi in range(len(crop_bbox)):
@@ -1346,172 +1159,7 @@ class CropImage(BaseOperator):
         return sample
 
 
-class CropImageWithDataAchorSampling(BaseOperator):
-    def __init__(self,
-                 batch_sampler,
-                 anchor_sampler=None,
-                 target_size=None,
-                 das_anchor_scales=[16, 32, 64, 128],
-                 sampling_prob=0.5,
-                 min_size=8.,
-                 avoid_no_bbox=True, inputs=None):
-        """
-        Args:
-            anchor_sampler (list): anchor_sampling sets of different
-                                  parameters for cropping.
-            batch_sampler (list): Multiple sets of different
-                                  parameters for cropping.
-              e.g.[[1, 10, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.2, 0.0]]
-                  [[1, 50, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
-                   [1, 50, 0.3, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
-                   [1, 50, 0.3, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
-                   [1, 50, 0.3, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0],
-                   [1, 50, 0.3, 1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]]
-              [max sample, max trial, min scale, max scale,
-               min aspect ratio, max aspect ratio,
-               min overlap, max overlap, min coverage, max coverage]
-            target_size (bool): target image size.
-            das_anchor_scales (list[float]): a list of anchor scales in data
-                anchor smapling.
-            min_size (float): minimum size of sampled bbox.
-            avoid_no_bbox (bool): whether to to avoid the
-                                  situation where the box does not appear.
-        """
-        super(CropImageWithDataAchorSampling, self).__init__(inputs=inputs)
-        self.anchor_sampler = anchor_sampler
-        self.batch_sampler = batch_sampler
-        self.target_size = target_size
-        self.sampling_prob = sampling_prob
-        self.min_size = min_size
-        self.avoid_no_bbox = avoid_no_bbox
-        self.das_anchor_scales = np.array(das_anchor_scales)
-
-    def __call__(self, sample, context):
-        """
-        Crop the image and modify bounding box.
-        Operators:
-            1. Scale the image width and height.
-            2. Crop the image according to a radom sample.
-            3. Rescale the bounding box.
-            4. Determine if the new bbox is satisfied in the new image.
-        Returns:
-            sample: the image, bounding box are replaced.
-        """
-        assert 'image' in sample, "image data not found"
-        im = sample['image']
-        gt_bbox = sample['gt_bbox']
-        gt_class = sample['gt_class']
-        image_width = sample['w']
-        image_height = sample['h']
-        gt_score = None
-        if 'gt_score' in sample:
-            gt_score = sample['gt_score']
-        sampled_bbox = []
-        gt_bbox = gt_bbox.tolist()
-
-        prob = np.random.uniform(0., 1.)
-        if prob > self.sampling_prob:  # anchor sampling
-            assert self.anchor_sampler
-            for sampler in self.anchor_sampler:
-                found = 0
-                for i in range(sampler[1]):
-                    if found >= sampler[0]:
-                        break
-                    sample_bbox = data_anchor_sampling(
-                        gt_bbox, image_width, image_height,
-                        self.das_anchor_scales, self.target_size)
-                    if sample_bbox == 0:
-                        break
-                    if satisfy_sample_constraint_coverage(sampler, sample_bbox,
-                                                          gt_bbox):
-                        sampled_bbox.append(sample_bbox)
-                        found = found + 1
-            im = np.array(im)
-            while sampled_bbox:
-                idx = int(np.random.uniform(0, len(sampled_bbox)))
-                sample_bbox = sampled_bbox.pop(idx)
-
-                if 'gt_keypoint' in sample.keys():
-                    keypoints = (sample['gt_keypoint'],
-                                 sample['keypoint_ignore'])
-                    crop_bbox, crop_class, crop_score, gt_keypoints = \
-                        filter_and_process(sample_bbox, gt_bbox, gt_class,
-                                scores=gt_score,
-                                keypoints=keypoints)
-                else:
-                    crop_bbox, crop_class, crop_score = filter_and_process(
-                        sample_bbox, gt_bbox, gt_class, scores=gt_score)
-                crop_bbox, crop_class, crop_score = bbox_area_sampling(
-                    crop_bbox, crop_class, crop_score, self.target_size,
-                    self.min_size)
-
-                if self.avoid_no_bbox:
-                    if len(crop_bbox) < 1:
-                        continue
-                im = crop_image_sampling(im, sample_bbox, image_width,
-                                         image_height, self.target_size)
-                sample['image'] = im
-                sample['gt_bbox'] = crop_bbox
-                sample['gt_class'] = crop_class
-                sample['gt_score'] = crop_score
-                if 'gt_keypoint' in sample.keys():
-                    sample['gt_keypoint'] = gt_keypoints[0]
-                    sample['keypoint_ignore'] = gt_keypoints[1]
-                return sample
-            return sample
-
-        else:
-            for sampler in self.batch_sampler:
-                found = 0
-                for i in range(sampler[1]):
-                    if found >= sampler[0]:
-                        break
-                    sample_bbox = generate_sample_bbox_square(
-                        sampler, image_width, image_height)
-                    if satisfy_sample_constraint_coverage(sampler, sample_bbox,
-                                                          gt_bbox):
-                        sampled_bbox.append(sample_bbox)
-                        found = found + 1
-            im = np.array(im)
-            while sampled_bbox:
-                idx = int(np.random.uniform(0, len(sampled_bbox)))
-                sample_bbox = sampled_bbox.pop(idx)
-                sample_bbox = clip_bbox(sample_bbox)
-
-                if 'gt_keypoint' in sample.keys():
-                    keypoints = (sample['gt_keypoint'],
-                                 sample['keypoint_ignore'])
-                    crop_bbox, crop_class, crop_score, gt_keypoints = \
-                        filter_and_process(sample_bbox, gt_bbox, gt_class,
-                                scores=gt_score,
-                                keypoints=keypoints)
-                else:
-                    crop_bbox, crop_class, crop_score = filter_and_process(
-                        sample_bbox, gt_bbox, gt_class, scores=gt_score)
-                # sampling bbox according the bbox area
-                crop_bbox, crop_class, crop_score = bbox_area_sampling(
-                    crop_bbox, crop_class, crop_score, self.target_size,
-                    self.min_size)
-
-                if self.avoid_no_bbox:
-                    if len(crop_bbox) < 1:
-                        continue
-                xmin = int(sample_bbox[0] * image_width)
-                xmax = int(sample_bbox[2] * image_width)
-                ymin = int(sample_bbox[1] * image_height)
-                ymax = int(sample_bbox[3] * image_height)
-                im = im[ymin:ymax, xmin:xmax]
-                sample['image'] = im
-                sample['gt_bbox'] = crop_bbox
-                sample['gt_class'] = crop_class
-                sample['gt_score'] = crop_score
-                if 'gt_keypoint' in sample.keys():
-                    sample['gt_keypoint'] = gt_keypoints[0]
-                    sample['keypoint_ignore'] = gt_keypoints[1]
-                return sample
-            return sample
-
-
+# FINISH FIX
 class NormalizeBox(BaseOperator):
     # FINISH CORRET (JIAN)
     # only for det task
@@ -1543,6 +1191,7 @@ class NormalizeBox(BaseOperator):
         return sample
 
 
+# FINISH FIX
 class Permute(BaseOperator):
     # FINISH CORRET (JIAN)
     def __init__(self, to_bgr=True, channel_first=True, inputs=None):
@@ -1560,36 +1209,30 @@ class Permute(BaseOperator):
             raise TypeError("{}: input type is invalid.".format(self))
 
     def __call__(self, sample, context=None):
-        samples = sample
-        batch_input = True
-        if not isinstance(samples, Sequence):
-            batch_input = False
-            samples = [samples]
-        for sample in samples:
-            assert 'image' in sample, "image data not found"
-            for k in sample.keys():
-                # hard code
-                if k.startswith('image'):
-                    im = sample[k]
-                    if self.channel_first:
-                        im = np.swapaxes(im, 1, 2)
-                        im = np.swapaxes(im, 1, 0)
-                    if self.to_bgr:
-                        im = im[[2, 1, 0], :, :]
-                    sample[k] = im
-                if k == 'semantic':
-                    label = sample[k]
-                    if self.channel_first:
-                        label = np.expand_dims(label, 0)
-                    else:
-                        label = np.expand_dims(label, -1)
-                    sample[k] = label
+        assert 'image' in sample, "image data not found"
+        for k in sample.keys():
+            # hard code
+            if k == 'image':
+                im = sample[k]
+                if self.channel_first:
+                    im = np.swapaxes(im, 1, 2)
+                    im = np.swapaxes(im, 1, 0)
+                if self.to_bgr:
+                    im = im[[2, 1, 0], :, :]
+                sample[k] = im
+                
+            if k == 'semantic':
+                label = sample[k]
+                if self.channel_first:
+                    label = np.expand_dims(label, 0)
+                else:
+                    label = np.expand_dims(label, -1)
+                sample[k] = label
 
-        if not batch_input:
-            samples = samples[0]
-        return samples
+        return sample
 
 
+# FINISH FIX
 class MixupImage(BaseOperator):
     def __init__(self, prob=0.5, alpha=1.5, beta=1.5, inputs=None):
         """ Mixup image and gt_bbbox/gt_score
@@ -1634,38 +1277,23 @@ class MixupImage(BaseOperator):
         if factor <= 0.0:
             return sample['mixup']
         im = self._mixup_img(sample['image'], sample['mixup']['image'], factor)
-        gt_bbox1 = sample['gt_bbox']
-        gt_bbox2 = sample['mixup']['gt_bbox']
+        gt_bbox1 = sample['bboxes']
+        gt_bbox2 = sample['mixup']['bboxes']
         gt_bbox = gt_bbox1
         if gt_bbox2.shape[0] > 0:
             gt_bbox = np.concatenate((gt_bbox1, gt_bbox2), axis=0)
 
-        gt_class1 = sample['gt_class']
-        gt_class2 = sample['mixup']['gt_class']
+        gt_class1 = sample['labels']
+        gt_class2 = sample['mixup']['labels']
         gt_class = gt_class1
         if gt_bbox2.shape[0] > 0:
-            gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
-
-        if 'gt_score' in sample:
-            gt_score1 = sample['gt_score']
-            gt_score2 = sample['mixup']['gt_score']
-            gt_score = gt_score1
-            if gt_bbox2.shape[0] > 0:
-                gt_score = np.concatenate(
-                    (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
-            sample['gt_score'] = gt_score
-
-        if 'is_crowd' in sample:
-            is_crowd1 = sample['is_crowd']
-            is_crowd2 = sample['mixup']['is_crowd']
-            is_crowd = np.concatenate((is_crowd1, is_crowd2), axis=0)
-            sample['is_crowd'] = is_crowd            
+            gt_class = np.concatenate((gt_class1, gt_class2), axis=0)           
 
         sample['image'] = im
-        sample['gt_bbox'] = gt_bbox
-        sample['gt_class'] = gt_class
-        sample['h'] = im.shape[0]
-        sample['w'] = im.shape[1]
+        sample['boxes'] = gt_bbox
+        sample['labels'] = gt_class
+        sample['height'] = im.shape[0]
+        sample['width'] = im.shape[1]
         sample.pop('mixup')
 
         if 'cutmix' in sample:
@@ -1673,6 +1301,7 @@ class MixupImage(BaseOperator):
         return sample
 
 
+# FINISH FIX
 class CutmixImage(BaseOperator):
     def __init__(self, prob=0.5, alpha=1.5, beta=1.5, around_obj_size=True, mix_ann=False, avoid_overlap=True, inputs=None):
         """ 
@@ -1803,8 +1432,8 @@ class CutmixImage(BaseOperator):
         img1 = sample['image']
         img2 = sample['cutmix']['image']
 
-        gt_bbox1 = sample['gt_bbox']
-        gt_bbox2 = sample['cutmix']['gt_bbox']
+        gt_bbox1 = sample['boxes']
+        gt_bbox2 = sample['cutmix']['boxes']
         img = None
         if self.mix_ann:
             # ignore avoid_overlap, around_obj_size
@@ -1824,12 +1453,12 @@ class CutmixImage(BaseOperator):
         # gt_score2 = sample['cutmix']['gt_score']
         # gt_score = np.concatenate(
         #     (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
-        gt_class1 = sample['gt_class']
+        gt_class1 = sample['labels']
         gt_class = gt_class1
         # gt_score1 = sample['gt_score']
         # gt_score = gt_score1
         if gt_bbox2.shape[0] != 0 and self.mix_ann:
-            gt_class2 = sample['cutpaste']['gt_class']
+            gt_class2 = sample['cutpaste']['labels']
             gt_class = np.concatenate((gt_class1, gt_class2), axis=0)
 
             # gt_score2 = sample['cutpaste']['gt_score']
@@ -1837,10 +1466,10 @@ class CutmixImage(BaseOperator):
             #     (gt_score1 * factor, gt_score2 * (1. - factor)), axis=0)
 
         sample['image'] = img
-        sample['gt_bbox'] = gt_bbox
-        sample['gt_class'] = gt_class
-        sample['h'] = img.shape[0]
-        sample['w'] = img.shape[1]
+        sample['boxes'] = gt_bbox
+        sample['labels'] = gt_class
+        sample['height'] = img.shape[0]
+        sample['width'] = img.shape[1]
         sample.pop('cutmix')
 
         if 'mixup' in sample:
@@ -1848,37 +1477,7 @@ class CutmixImage(BaseOperator):
         return sample
 
 
-class RandomInterpImage(BaseOperator):
-    def __init__(self, target_size=0, max_size=0, inputs=None):
-        """
-        Random reisze image by multiply interpolate method.
-        Args:
-            target_size (int): the taregt size of image's short side
-            max_size (int): the max size of image
-        """
-        super(RandomInterpImage, self).__init__(inputs=inputs)
-        self.target_size = target_size
-        self.max_size = max_size
-        if not (isinstance(self.target_size, int) and
-                isinstance(self.max_size, int)):
-            raise TypeError('{}: input type is invalid.'.format(self))
-        interps = [
-            cv2.INTER_NEAREST,
-            cv2.INTER_LINEAR,
-            cv2.INTER_AREA,
-            cv2.INTER_CUBIC,
-            cv2.INTER_LANCZOS4,
-        ]
-        self.resizers = []
-        for interp in interps:
-            self.resizers.append(ResizeImage(target_size, max_size, interp))
-
-    def __call__(self, sample, context=None):
-        """Resise the image numpy by random resizer."""
-        resizer = random.choice(self.resizers)
-        return resizer(sample, context)
-
-
+# FINSH FIX
 class ResizeS(BaseOperator):
     """Resize image and bbox.
     Args:
@@ -1971,6 +1570,7 @@ class ResizeS(BaseOperator):
     def get(self):
         return self.target_dim
 
+# FINSH FIX
 class ColorDistort(BaseOperator):
     """Random color distortion.
     Args:
@@ -2067,465 +1667,6 @@ class ColorDistort(BaseOperator):
                 img = img[..., np.random.permutation(3)]
         sample['image'] = img
         return sample
-
-
-class CornerRandColor(ColorDistort):
-    """Random color for CornerNet series models.
-    Args:
-        saturation (float): saturation settings.
-        contrast (float): contrast settings.
-        brightness (float): brightness settings.
-        is_scale (bool): whether to scale the input image.
-    """
-
-    def __init__(self,
-                 saturation=0.4,
-                 contrast=0.4,
-                 brightness=0.4,
-                 is_scale=True, inputs=None):
-        super(CornerRandColor, self).__init__(
-            saturation=saturation, contrast=contrast, brightness=brightness, inputs=inputs)
-        self.is_scale = is_scale
-
-    def apply_saturation(self, img, img_gray):
-        alpha = 1. + np.random.uniform(
-            low=-self.saturation, high=self.saturation)
-        self._blend(alpha, img, img_gray[:, :, None])
-        return img
-
-    def apply_contrast(self, img, img_gray):
-        alpha = 1. + np.random.uniform(low=-self.contrast, high=self.contrast)
-        img_mean = img_gray.mean()
-        self._blend(alpha, img, img_mean)
-        return img
-
-    def apply_brightness(self, img, img_gray):
-        alpha = 1 + np.random.uniform(
-            low=-self.brightness, high=self.brightness)
-        img *= alpha
-        return img
-
-    def _blend(self, alpha, img, img_mean):
-        img *= alpha
-        img_mean *= (1 - alpha)
-        img += img_mean
-
-    def __call__(self, sample, context=None):
-        img = sample['image']
-        if self.is_scale:
-            img = img.astype(np.float32, copy=False)
-            img /= 255.
-        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        functions = [
-            self.apply_brightness,
-            self.apply_contrast,
-            self.apply_saturation,
-        ]
-        distortions = np.random.permutation(functions)
-        for func in distortions:
-            img = func(img, img_gray)
-        sample['image'] = img
-        return sample
-
-
-class NormalizePermute(BaseOperator):
-    """Normalize and permute channel order.
-    Args:
-        mean (list): mean values in RGB order.
-        std (list): std values in RGB order.
-    """
-
-    def __init__(self,
-                 mean=[123.675, 116.28, 103.53],
-                 std=[58.395, 57.120, 57.375], inputs=None):
-        super(NormalizePermute, self).__init__(inputs=inputs)
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, sample, context=None):
-        img = sample['image']
-        img = img.astype(np.float32)
-
-        img = img.transpose((2, 0, 1))
-        mean = np.array(self.mean, dtype=np.float32)
-        std = np.array(self.std, dtype=np.float32)
-        invstd = 1. / std
-        for v, m, s in zip(img, mean, invstd):
-            v.__isub__(m).__imul__(s)
-        sample['image'] = img
-        return sample
-
-
-class RandomExpand(BaseOperator):
-    """Random expand the canvas.
-    Args:
-        ratio (float): maximum expansion ratio.
-        prob (float): probability to expand.
-        fill_value (list): color value used to fill the canvas. in RGB order.
-        is_mask_expand(bool): whether expand the segmentation.
-    """
-
-    def __init__(self,
-                 ratio=4.,
-                 prob=0.5,
-                 fill_value=(127.5, ) * 3,
-                 is_mask_expand=False, inputs=None):
-        super(RandomExpand, self).__init__(inputs=inputs)
-        assert ratio > 1.01, "expand ratio must be larger than 1.01"
-        self.ratio = ratio
-        self.prob = prob
-        assert isinstance(fill_value, (Number, Sequence)), \
-            "fill value must be either float or sequence"
-        if isinstance(fill_value, Number):
-            fill_value = (fill_value, ) * 3
-        if not isinstance(fill_value, tuple):
-            fill_value = tuple(fill_value)
-        self.fill_value = fill_value
-        self.is_mask_expand = is_mask_expand
-
-    def expand_segms(self, segms, x, y, height, width, ratio):
-        def _expand_poly(poly, x, y):
-            expanded_poly = np.array(poly)
-            expanded_poly[0::2] += x
-            expanded_poly[1::2] += y
-            return expanded_poly.tolist()
-
-        def _expand_rle(rle, x, y, height, width, ratio):
-            if 'counts' in rle and type(rle['counts']) == list:
-                rle = mask_util.frPyObjects(rle, height, width)
-            mask = mask_util.decode(rle)
-            expanded_mask = np.full((int(height * ratio), int(width * ratio)),
-                                    0).astype(mask.dtype)
-            expanded_mask[y:y + height, x:x + width] = mask
-            rle = mask_util.encode(
-                np.array(
-                    expanded_mask, order='F', dtype=np.uint8))
-            return rle
-
-        expanded_segms = []
-        for segm in segms:
-            if is_poly(segm):
-                # Polygon format
-                expanded_segms.append(
-                    [_expand_poly(poly, x, y) for poly in segm])
-            else:
-                # RLE format
-                import pycocotools.mask as mask_util
-                expanded_segms.append(
-                    _expand_rle(segm, x, y, height, width, ratio))
-        return expanded_segms
-
-    def __call__(self, sample, context=None):
-        if np.random.uniform(0., 1.) < self.prob:
-            return sample
-
-        img = sample['image']
-        height = int(sample['h'])
-        width = int(sample['w'])
-
-        expand_ratio = np.random.uniform(1., self.ratio)
-        h = int(height * expand_ratio)
-        w = int(width * expand_ratio)
-        if not h > height or not w > width:
-            return sample
-        y = np.random.randint(0, h - height)
-        x = np.random.randint(0, w - width)
-        canvas = np.ones((h, w, 3), dtype=np.uint8)
-        canvas *= np.array(self.fill_value, dtype=np.uint8)
-        canvas[y:y + height, x:x + width, :] = img.astype(np.uint8)
-
-        sample['h'] = h
-        sample['w'] = w
-        sample['image'] = canvas
-        if 'gt_bbox' in sample and len(sample['gt_bbox']) > 0:
-            sample['gt_bbox'] += np.array([x, y] * 2, dtype=np.float32)
-        if self.is_mask_expand and 'gt_poly' in sample and len(sample[
-                'gt_poly']) > 0:
-            sample['gt_poly'] = self.expand_segms(sample['gt_poly'], x, y,
-                                                  height, width, expand_ratio)
-        return sample
-
-
-class RandomCrop(BaseOperator):
-    """Random crop image and bboxes.
-    Args:
-        aspect_ratio (list): aspect ratio of cropped region.
-            in [min, max] format.
-        thresholds (list): iou thresholds for decide a valid bbox crop.
-        scaling (list): ratio between a cropped region and the original image.
-             in [min, max] format.
-        num_attempts (int): number of tries before giving up.
-        allow_no_crop (bool): allow return without actually cropping them.
-        cover_all_box (bool): ensure all bboxes are covered in the final crop.
-        is_mask_crop(bool): whether crop the segmentation.
-    """
-
-    def __init__(self,
-                 aspect_ratio=[.6, 1.4],
-                 thresholds=[.1, .3, .5, .7, .9],
-                 scaling=[.3, 1.],
-                 num_attempts=50,
-                 allow_no_crop=True,
-                 cover_all_box=False,
-                 is_mask_crop=False, inputs=None):
-        super(RandomCrop, self).__init__(inputs=inputs)
-        self.aspect_ratio = aspect_ratio
-        self.thresholds = thresholds
-        self.scaling = scaling
-        self.num_attempts = num_attempts
-        self.allow_no_crop = allow_no_crop
-        self.cover_all_box = cover_all_box
-        self.is_mask_crop = is_mask_crop
-
-    def crop_segms(self, segms, valid_ids, crop, height, width):
-        def _crop_poly(segm, crop):
-            xmin, ymin, xmax, ymax = crop
-            crop_coord = [xmin, ymin, xmin, ymax, xmax, ymax, xmax, ymin]
-            crop_p = np.array(crop_coord).reshape(4, 2)
-            crop_p = Polygon(crop_p)
-
-            crop_segm = list()
-            for poly in segm:
-                poly = np.array(poly).reshape(len(poly) // 2, 2)
-                polygon = Polygon(poly)
-                if not polygon.is_valid:
-                    exterior = polygon.exterior
-                    multi_lines = exterior.intersection(exterior)
-                    polygons = shapely.ops.polygonize(multi_lines)
-                    polygon = MultiPolygon(polygons)
-                multi_polygon = list()
-                if isinstance(polygon, MultiPolygon):
-                    multi_polygon = copy.deepcopy(polygon)
-                else:
-                    multi_polygon.append(copy.deepcopy(polygon))
-                for per_polygon in multi_polygon:
-                    inter = per_polygon.intersection(crop_p)
-                    if not inter:
-                        continue
-                    if isinstance(inter, (MultiPolygon, GeometryCollection)):
-                        for part in inter:
-                            if not isinstance(part, Polygon):
-                                continue
-                            part = np.squeeze(
-                                np.array(part.exterior.coords[:-1]).reshape(1,
-                                                                            -1))
-                            part[0::2] -= xmin
-                            part[1::2] -= ymin
-                            crop_segm.append(part.tolist())
-                    elif isinstance(inter, Polygon):
-                        crop_poly = np.squeeze(
-                            np.array(inter.exterior.coords[:-1]).reshape(1, -1))
-                        crop_poly[0::2] -= xmin
-                        crop_poly[1::2] -= ymin
-                        crop_segm.append(crop_poly.tolist())
-                    else:
-                        continue
-            return crop_segm
-
-        def _crop_rle(rle, crop, height, width):
-            if 'counts' in rle and type(rle['counts']) == list:
-                rle = mask_util.frPyObjects(rle, height, width)
-            mask = mask_util.decode(rle)
-            mask = mask[crop[1]:crop[3], crop[0]:crop[2]]
-            rle = mask_util.encode(np.array(mask, order='F', dtype=np.uint8))
-            return rle
-
-        crop_segms = []
-        for id in valid_ids:
-            segm = segms[id]
-            if is_poly(segm):
-                import copy
-                import shapely.ops
-                from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
-                logging.getLogger("shapely").setLevel(logging.WARNING)
-                # Polygon format
-                crop_segms.append(_crop_poly(segm, crop))
-            else:
-                # RLE format
-                import pycocotools.mask as mask_util
-                crop_segms.append(_crop_rle(segm, crop, height, width))
-        return crop_segms
-
-    def __call__(self, sample, context=None):
-        if 'gt_bbox' in sample and len(sample['gt_bbox']) == 0:
-            # compatible with no bbox
-            return sample
-
-        h,w = sample['image'].shape[:2]
-        gt_bbox = sample['gt_bbox']
-
-        # NOTE Original method attempts to generate one candidate for each
-        # threshold then randomly sample one from the resulting list.
-        # Here a short circuit approach is taken, i.e., randomly choose a
-        # threshold and attempt to find a valid crop, and simply return the
-        # first one found.
-        # The probability is not exactly the same, kinda resembling the
-        # "Monty Hall" problem. Actually carrying out the attempts will affect
-        # observability (just like opening doors in the "Monty Hall" game).
-        thresholds = list(self.thresholds)
-        if self.allow_no_crop:
-            thresholds.append('no_crop')
-        np.random.shuffle(thresholds)
-
-        cropped_box = None
-        valid_ids = None
-        for thresh in thresholds:
-            if thresh == 'no_crop':
-                return sample
-
-            found = False
-            for i in range(self.num_attempts):
-                scale = np.random.uniform(*self.scaling)
-                if self.aspect_ratio is not None:
-                    min_ar, max_ar = self.aspect_ratio
-                    aspect_ratio = np.random.uniform(
-                        max(min_ar, scale**2), min(max_ar, scale**-2))
-                    h_scale = scale / np.sqrt(aspect_ratio)
-                    w_scale = scale * np.sqrt(aspect_ratio)
-                else:
-                    h_scale = np.random.uniform(*self.scaling)
-                    w_scale = np.random.uniform(*self.scaling)
-                crop_h = h * h_scale
-                crop_w = w * w_scale
-                if self.aspect_ratio is None:
-                    if crop_h / crop_w < 0.5 or crop_h / crop_w > 2.0:
-                        continue
-
-                crop_h = int(crop_h)
-                crop_w = int(crop_w)
-                crop_y = np.random.randint(0, h - crop_h)
-                crop_x = np.random.randint(0, w - crop_w)
-                crop_box = [crop_x, crop_y, crop_x + crop_w, crop_y + crop_h]
-                iou = self._iou_matrix(
-                    gt_bbox, np.array(
-                        [crop_box], dtype=np.float32))
-
-                if iou.max() < thresh:
-                    continue
-
-                if self.cover_all_box and iou.min() < thresh:
-                    continue
-
-                cropped_box, valid_ids = self._crop_box_with_center_constraint(
-                    gt_bbox.astype(np.float32), np.array(
-                        crop_box, dtype=np.float32))
-                if valid_ids.size > 0:
-                    found = True
-                    break
-
-            if found:
-                if self.is_mask_crop and 'gt_poly' in sample and len(sample[
-                        'gt_poly']) > 0:
-                    crop_polys = self.crop_segms(
-                        sample['gt_poly'],
-                        valid_ids,
-                        np.array(
-                            crop_box, dtype=np.int64),
-                        h,
-                        w)
-                    if [] in crop_polys:
-                        delete_id = list()
-                        valid_polys = list()
-                        for id, crop_poly in enumerate(crop_polys):
-                            if crop_poly == []:
-                                delete_id.append(id)
-                            else:
-                                valid_polys.append(crop_poly)
-                        valid_ids = np.delete(valid_ids, delete_id)
-                        if len(valid_polys) == 0:
-                            return sample
-                        sample['gt_poly'] = valid_polys
-                    else:
-                        sample['gt_poly'] = crop_polys
-                
-                # before_img = cv2.rectangle(sample['image'], ((int)(sample['gt_bbox'][0,0]),(int)(sample['gt_bbox'][0,1])),((int)(sample['gt_bbox'][0,2]),(int)(sample['gt_bbox'][0,3])), (255,0,0), 5)
-                # cv2.imwrite("./before.png", before_img)
-                sample['image'] = self._crop_image(sample['image'], crop_box)
-                sample['gt_bbox'] = np.take(cropped_box, valid_ids, axis=0)
-                sample['gt_class'] = np.take(sample['gt_class'], valid_ids, axis=0)
-                # after_img = cv2.rectangle(sample['image'], ((int)(sample['gt_bbox'][0,0]),(int)(sample['gt_bbox'][0,1])),((int)(sample['gt_bbox'][0,2]),(int)(sample['gt_bbox'][0,3])), (255,0,0), 5)
-                # cv2.imwrite("./after.png", after_img)
-
-                if 'gt_keypoint' in sample:
-                    invers_id_map = {}
-                    for ii in range(len(valid_ids)):
-                        invers_id_map[valid_ids[ii]] = ii
-
-                    remain_from_box_id = []
-                    remain_keypoint_id = []
-                    for ii in range(len(sample['gt_keypoint_from_bbox_i'])):
-                        from_box_id = sample['gt_keypoint_from_bbox_i'][ii]
-                        if from_box_id in invers_id_map:
-                            remain_from_box_id.append(invers_id_map[from_box_id])
-                            remain_keypoint_id.append(ii)
-
-                    sample['gt_keypoint_from_bbox_i'] = np.array(remain_from_box_id)
-                    sample['gt_keypoint'] = np.take(sample['gt_keypoint'], remain_keypoint_id, axis=0)
-
-                if 'gt_score' in sample:
-                    sample['gt_score'] = np.take(
-                        sample['gt_score'], valid_ids, axis=0)
-                
-                if 'is_crowd' in sample:
-                    sample['is_crowd'] = np.take(
-                        sample['is_crowd'], valid_ids, axis=0)
-
-                sample['w'] = crop_box[2] - crop_box[0]
-                sample['h'] = crop_box[3] - crop_box[1]
-                if 'image_metas' in sample:
-                    # image_metas 保存sample相关信息
-                    # 'image_shape','scale_factor','pad_shape'
-                    sample['image_metas']['image_shape'] = (sample['h'], sample['w'])
-                    sample['image_metas']['pad_shape'] = (sample['h'], sample['w'])
-                    
-                if 'gt_keypoint' in sample:
-                    sample_gt_keypoint = sample['gt_keypoint']
-                    if len(sample_gt_keypoint) > 0:
-                        for human_i in range(sample_gt_keypoint.shape[0]):
-                            for ki in range(sample_gt_keypoint.shape[1]):
-                                x,y = sample_gt_keypoint[human_i, ki, :2]
-                                if x < crop_box[0] or x > crop_box[2] or y < crop_box[1] or y > crop_box[3]:
-                                    sample_gt_keypoint[human_i, ki, 2] = 0.0
-
-                                sample_gt_keypoint[human_i, ki,0] = sample_gt_keypoint[human_i, ki,0] - crop_box[0]
-                                sample_gt_keypoint[human_i, ki,1] = sample_gt_keypoint[human_i, ki,1] - crop_box[1]                            
-
-                        sample['gt_keypoint'] = sample_gt_keypoint
-
-                return sample
-
-        return sample
-
-    def _iou_matrix(self, a, b):
-        tl_i = np.maximum(a[:, np.newaxis, :2], b[:, :2])
-        br_i = np.minimum(a[:, np.newaxis, 2:], b[:, 2:])
-
-        area_i = np.prod(br_i - tl_i, axis=2) * (tl_i < br_i).all(axis=2)
-        area_a = np.prod(a[:, 2:] - a[:, :2], axis=1)
-        area_b = np.prod(b[:, 2:] - b[:, :2], axis=1)
-        area_o = (area_a[:, np.newaxis] + area_b - area_i)
-        return area_i / (area_o + 1e-10)
-
-    def _crop_box_with_center_constraint(self, box, crop):
-        cropped_box = box.copy()
-
-        cropped_box[:, :2] = np.maximum(box[:, :2], crop[:2])
-        cropped_box[:, 2:] = np.minimum(box[:, 2:], crop[2:])
-        cropped_box[:, :2] -= crop[:2]
-        cropped_box[:, 2:] -= crop[:2]
-
-        centers = (box[:, :2] + box[:, 2:]) / 2
-        valid = np.logical_and(crop[:2] <= centers,
-                               centers < crop[2:]).all(axis=1)
-        valid = np.logical_and(
-            valid, (cropped_box[:, :2] < cropped_box[:, 2:]).all(axis=1))
-
-        return cropped_box, np.where(valid)[0]
-
-    def _crop_image(self, img, crop):
-        x1, y1, x2, y2 = crop
-        return img[y1:y2, x1:x2]
-
 
 
 class PadBox(BaseOperator):
@@ -2870,145 +2011,6 @@ class RandomScaledCrop(BaseOperator):
         sample['w'] = dim
         sample['image'] = canvas
         sample['im_info'] = [resize_h, resize_w, scale]
-        return sample
-
-
-class ResizeAndPad(BaseOperator):
-    """Resize image and bbox, then pad image to target size.
-    Args:
-        target_dim (int): target size
-        interp (int): interpolation method, default to `cv2.INTER_LINEAR`.
-    """
-
-    def __init__(self, target_dim=512, interp=cv2.INTER_LINEAR, inputs=None):
-        super(ResizeAndPad, self).__init__(inputs=inputs)
-        self.target_dim = target_dim
-        self.interp = interp
-
-    def __call__(self, sample, context=None):
-        w = sample['w']
-        h = sample['h']
-        interp = self.interp
-        dim = self.target_dim
-        dim_max = max(h, w)
-        scale = self.target_dim / dim_max
-        resize_w = int(round(w * scale))
-        resize_h = int(round(h * scale))
-        if 'gt_bbox' in sample and len(sample['gt_bbox']) > 0:
-            scale_array = np.array([scale, scale] * 2, dtype=np.float32)
-            sample['gt_bbox'] = np.clip(sample['gt_bbox'] * scale_array, 0,
-                                        dim - 1)
-        img = sample['image']
-        img = cv2.resize(img, (resize_w, resize_h), interpolation=interp)
-        img = np.array(img)
-        canvas = np.zeros((dim, dim, 3), dtype=img.dtype)
-        canvas[:resize_h, :resize_w, :] = img
-        sample['h'] = dim
-        sample['w'] = dim
-        sample['image'] = canvas
-        sample['im_info'] = [resize_h, resize_w, scale]
-        return sample
-
-
-class TargetAssign(BaseOperator):
-    """Assign regression target and labels.
-    Args:
-        image_size (int or list): input image size, a single integer or list of
-            [h, w]. Default: 512
-        min_level (int): min level of the feature pyramid. Default: 3
-        max_level (int): max level of the feature pyramid. Default: 7
-        anchor_base_scale (int): base anchor scale. Default: 4
-        num_scales (int): number of anchor scales. Default: 3
-        aspect_ratios (list): aspect ratios.
-            Default: [(1, 1), (1.4, 0.7), (0.7, 1.4)]
-        match_threshold (float): threshold for foreground IoU. Default: 0.5
-    """
-
-    def __init__(self,
-                 image_size=512,
-                 min_level=3,
-                 max_level=7,
-                 anchor_base_scale=4,
-                 num_scales=3,
-                 aspect_ratios=[(1, 1), (1.4, 0.7), (0.7, 1.4)],
-                 match_threshold=0.5, inputs=None):
-        super(TargetAssign, self).__init__(inputs=inputs)
-        assert image_size % 2 ** max_level == 0, \
-            "image size should be multiple of the max level stride"
-        self.image_size = image_size
-        self.min_level = min_level
-        self.max_level = max_level
-        self.anchor_base_scale = anchor_base_scale
-        self.num_scales = num_scales
-        self.aspect_ratios = aspect_ratios
-        self.match_threshold = match_threshold
-
-    @property
-    def anchors(self):
-        if not hasattr(self, '_anchors'):
-            anchor_grid = AnchorGrid(self.image_size, self.min_level,
-                                     self.max_level, self.anchor_base_scale,
-                                     self.num_scales, self.aspect_ratios)
-            self._anchors = np.concatenate(anchor_grid.generate())
-        return self._anchors
-
-    def iou_matrix(self, a, b):
-        tl_i = np.maximum(a[:, np.newaxis, :2], b[:, :2])
-        br_i = np.minimum(a[:, np.newaxis, 2:], b[:, 2:])
-        area_i = np.prod(br_i - tl_i, axis=2) * (tl_i < br_i).all(axis=2)
-        area_a = np.prod(a[:, 2:] - a[:, :2], axis=1)
-        area_b = np.prod(b[:, 2:] - b[:, :2], axis=1)
-        area_o = (area_a[:, np.newaxis] + area_b - area_i)
-        # return area_i / (area_o + 1e-10)
-        return np.where(area_i == 0., np.zeros_like(area_i), area_i / area_o)
-
-    def match(self, anchors, gt_boxes):
-        # XXX put smaller matrix first would be a little bit faster
-        mat = self.iou_matrix(gt_boxes, anchors)
-        max_anchor_for_each_gt = mat.argmax(axis=1)
-        max_for_each_anchor = mat.max(axis=0)
-        anchor_to_gt = mat.argmax(axis=0)
-        anchor_to_gt[max_for_each_anchor < self.match_threshold] = -1
-        # XXX ensure each gt has at least one anchor assigned,
-        # see `force_match_for_each_row` in TF implementation
-        one_hot = np.zeros_like(mat)
-        one_hot[np.arange(mat.shape[0]), max_anchor_for_each_gt] = 1.
-        max_anchor_indices = one_hot.sum(axis=0).nonzero()[0]
-        max_gt_indices = one_hot.argmax(axis=0)[max_anchor_indices]
-        anchor_to_gt[max_anchor_indices] = max_gt_indices
-        return anchor_to_gt
-
-    def encode(self, anchors, boxes):
-        wha = anchors[..., 2:] - anchors[..., :2] + 1
-        ca = anchors[..., :2] + wha * .5
-        whb = boxes[..., 2:] - boxes[..., :2] + 1
-        cb = boxes[..., :2] + whb * .5
-        offsets = np.empty_like(anchors)
-        offsets[..., :2] = (cb - ca) / wha
-        offsets[..., 2:] = np.log(whb / wha)
-        return offsets
-
-    def __call__(self, sample, context=None):
-        gt_boxes = sample['gt_bbox']
-        gt_labels = sample['gt_class']
-        labels = np.full((self.anchors.shape[0], 1), 0, dtype=np.int32)
-        targets = np.full((self.anchors.shape[0], 4), 0., dtype=np.float32)
-        sample['gt_label'] = labels
-        sample['gt_target'] = targets
-
-        if len(gt_boxes) < 1:
-            sample['fg_num'] = np.array(0, dtype=np.int32)
-            return sample
-
-        anchor_to_gt = self.match(self.anchors, gt_boxes)
-        matched_indices = (anchor_to_gt >= 0).nonzero()[0]
-        labels[matched_indices] = gt_labels[anchor_to_gt[matched_indices]]
-
-        matched_boxes = gt_boxes[anchor_to_gt[matched_indices]]
-        matched_anchors = self.anchors[matched_indices]
-        matched_targets = self.encode(matched_anchors, matched_boxes)
-        targets[matched_indices] = matched_targets
-        sample['fg_num'] = np.array(len(matched_targets), dtype=np.int32)
         return sample
 
 

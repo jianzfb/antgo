@@ -8,9 +8,15 @@ from .operators import (
   RandomFlipImage, 
   RandomDistort, 
   Rotation,
-  AddImageMeta, 
   KeepRatio, 
-  ColorDistort)
+  ColorDistort,
+  AutoAugmentImage,
+  RandomErasingImage,
+  CropImage,
+  ExpandImage,
+  Permute,
+  MixupImage,
+  CutmixImage)
 
 __all__ = [
   'DecodeImage', 
@@ -18,7 +24,13 @@ __all__ = [
   'RandomFlipImage', 
   'RandomDistort', 
   'Rotation', 
-  'AddImageMeta', 
   'KeepRatio', 
-  'ColorDistort'
+  'ColorDistort',
+  'AutoAugmentImage',
+  'RandomErasingImage',
+  'CropImage',
+  'ExpandImage',
+  'Permute',
+  'MixupImage',
+  'CutmixImage'
 ]
