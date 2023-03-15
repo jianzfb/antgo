@@ -242,7 +242,7 @@ class FcosHead(BaseDenseHead):
             reg_pred,
             reg_targets,
             reg_weights,
-            avg_factor=avg_factor * 10)
+            avg_factor=avg_factor)
 
         # 
         total_loss = dict(

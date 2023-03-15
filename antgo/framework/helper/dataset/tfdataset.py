@@ -248,8 +248,6 @@ class TFDataset(torch.utils.data.IterableDataset):
         self.real_num_samples = self.num_samples
 
         rank, world_size = get_dist_info()
-        # rank = 0
-        # world_size = 2
         if world_size > 1:
             # TODO，现在多卡实现基于文件级别的拆分，粒度较粗
             assert(len(self.data_path_list) >= world_size)

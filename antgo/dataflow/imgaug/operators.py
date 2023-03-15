@@ -41,6 +41,7 @@ from PIL import Image, ImageEnhance, ImageDraw
 from .functional import *
 from antgo.dataflow.vis import *
 from io import StringIO, BytesIO
+import copy
 
 from .op_helper import (satisfy_sample_constraint, filter_and_process,
                         generate_sample_bbox, clip_bbox, data_anchor_sampling,
@@ -399,7 +400,7 @@ class Rotation(BaseOperator):
         if 'image_meta' in sample:
             sample['image_shape'] = (image_rotated.shape[0], image_rotated.shape[1])
         
-        # vis_2d_boxes_in_image(image_rotated, sample['bboxes'], './a.png') 
+        # vis_2d_boxes_in_image(image_rotated, sample['bboxes'], sample['labels'], './a.png') 
         sample['image'] = image_rotated
         return sample
 
@@ -610,9 +611,12 @@ class RandomFlipImage(BaseOperator):
                 sample['bboxes'] = gt_bbox
                 
                 if len(self.swap_labels) > 0:
+                    temp = copy.deepcopy(sample['labels'])
                     for before_label, after_label in self.swap_labels:
                         selected_ids = sample['labels'] == before_label
-                        sample['labels'][selected_ids] = after_label
+                        temp[selected_ids] = after_label
+                    
+                    sample['labels'] = temp
 
             if 'segments' in sample.keys():
                 if self.is_mask_flip and len(sample['segments']) != 0:
@@ -642,6 +646,7 @@ class RandomFlipImage(BaseOperator):
                 sample['image_metas']['flipped'] = True
             sample['image'] = im
 
+        # vis_2d_boxes_in_image(sample['image'].copy(), sample['bboxes'], sample['labels'], './d.png') 
         return sample
 
 
@@ -1558,7 +1563,7 @@ class ResizeS(BaseOperator):
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
         
-        # vis_2d_boxes_in_image(sample['image'], sample['bboxes'], './a.png')
+        # vis_2d_boxes_in_image(sample['image'], sample['bboxes'],sample['labels'], './b.png')
         return sample
 
     def reset(self, target_dim):
@@ -1666,6 +1671,8 @@ class ColorDistort(BaseOperator):
             if np.random.randint(0, 2):
                 img = img[..., np.random.permutation(3)]
         sample['image'] = img
+        
+        # vis_2d_boxes_in_image(sample['image'], sample['bboxes'], sample['labels'], './c.png')
         return sample
 
 

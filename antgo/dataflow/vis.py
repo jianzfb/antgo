@@ -174,10 +174,13 @@ def vis_3d_keypoints(kps_3d, score, skeleton, filename, score_thr=0.4, line_widt
     plt.close()
 
 
-def vis_2d_boxes_in_image(image, boxes, save_path='./'):
-    for box in boxes:
+def vis_2d_boxes_in_image(image, boxes, labels, save_path='./'):
+    color_map = [(255,0,0),(0,0,255),(0,255,0),(255,255,0),(0,255,255),(255,0,255),(0,0,0),(255,255,255)]
+    for box, label in zip(boxes, labels):
         x1,y1,x2,y2 = box
-        cv2.rectangle(image, (int(x1),int(y1)), (int(x2), int(y2)), (255,0,0), 2)
+        
+        color_index = int(label) % len(color_map)
+        cv2.rectangle(image, (int(x1),int(y1)), (int(x2), int(y2)), color_map[color_index], 2)
     cv2.imwrite(save_path, image)
 
 

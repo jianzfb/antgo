@@ -22,7 +22,7 @@ class ClsHead(nn.Module):
     """
 
     def __init__(self,
-                 loss=dict(type='CrossEntropyLoss', loss_weight=1.0),
+                 loss=dict(type='CrossEntropyLoss', loss_weight=1.0, class_weight=None),
                  topk=(1, ),
                  cal_acc=False,
                  init_cfg=None):
@@ -36,7 +36,7 @@ class ClsHead(nn.Module):
             assert _topk > 0, 'Top-k should be larger than 0'
         self.topk = topk
 
-        self.compute_loss = CrossEntropyLoss(loss_weight=loss['loss_weight'])
+        self.compute_loss = CrossEntropyLoss(loss_weight=loss['loss_weight'], class_weight=loss['class_weight'])
         self.compute_accuracy = Accuracy(topk=self.topk)
         self.cal_acc = cal_acc
 

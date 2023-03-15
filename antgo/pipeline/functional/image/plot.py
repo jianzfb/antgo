@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import random
+from sqlite3 import register_adapter
 from antgo.pipeline.engine import *
 import cv2
 
@@ -26,9 +27,10 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3):
 
 @register
 class plot_bbox(object):
-  def __init__(self, color=None, line_thickness=1):
+  def __init__(self, thres=0.0, color=None, line_thickness=1):
     self.color = color
     self.line_thickness = line_thickness
+    self.thres = thres
 
   def __call__(self, image, detbbox, detlabel=None):
     assert(detbbox.shape[1] == 6 or detbbox.shape[1] == 5)
@@ -44,12 +46,38 @@ class plot_bbox(object):
         plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
     else:
       for (*xyxy, conf), label in zip(detbbox, detlabel):
+        if conf < self.thres:
+          continue
+        
         bbox_label = str(int(label))
-
         bbox_color = [random.randint(0, 255) for _ in range(3)]
         if self.color is not None:
           bbox_color = self.color[int(label)]
         plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
 
 
+    return image
+  
+
+@register
+class plot_text(object):
+  def __init__(self, label_map=None, color=None, pos=None, font_scale=1, thickness=1):
+    self.pos = pos
+    self.color = color
+    self.thickness = thickness
+    self.font_scale = font_scale
+    self.label_map = label_map
+  
+  def __call__(self, image, text):
+    pos = self.pos
+    if pos is None:
+      pos = (int(image.shape[1]/2), int(image.shape[0]/2))
+    
+    color = self.color
+    if color is None:
+      color = (0, 0, 255)
+    
+    if not isinstance(text, str):
+      text = self.label_map[int(text)]
+    image = cv2.putText(image, text, pos, cv2.FONT_HERSHEY_COMPLEX, self.font_scale, color, self.thickness)
     return image

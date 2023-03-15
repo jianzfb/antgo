@@ -5,6 +5,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+from random import shuffle
 from antgo.resource.html import *
 from antgo.ant.base import *
 from antgo.dataflow.common import *
@@ -23,8 +24,7 @@ from antgo.dataflow.dataset.proxy_dataset import *
 import requests
 from io import BytesIO
 import numpy as np
-import msgpack
-import msgpack_numpy as ms
+import pickle
 
 
 class EnsembleMergeRecorder(object):
@@ -52,58 +52,135 @@ class EnsembleMergeRecorder(object):
         self.feedback = feedback
         self.prefix = prefix
         self.worker_number = f'{uuid.uuid4()}'
+        
+        self.data_uuid = 0          # 用于数据分发
+        self.avg_data_uuid = 0      # 用于数据聚合
 
-    def avg(self, data):
-        assert('id' in data or 'image_file' in data)
-        id = ''
-        result = {}
-        if 'id' in data:
-            id = data['id']
-            data.pop('id')
-            result = {'id': id}
-        if 'image_file' in data:
-            id = data['image_file']
-            data.pop('image_file')
-            result = {'image_file': id}
-
-        for k, v in data.items():
-            if type(v) != np.ndarray:
-                print('Only support np.ndarray.')
-                continue
-
-            proxies = {
+    # 等待数据ready后，返回
+    def get(self):
+        proxies = {
                 "http": None,
                 'https': None
             }
 
-            # 将数据以文件流模式上传
-            data = msgpack.packb(v, default=ms.encode)
+        try_count = 0
+        while True:
             response = \
-                requests.post('%s/antgo/api/ensemble/avg/'%(self.url),
-                              headers={'file_id': f'{id}',
-                                       'worker_number': self.worker_number,
-                                       'worker_prefix': f'{self.prefix}',
-                                       'id': f'{id}',
-                                       'name': f'{k}',
-                                       'weight': f"{self.model_weight}",
-                                       'feedback': f"{self.feedback}"},
-                              data=data,
-                              proxies=proxies, stream=True)
+                requests.get('%s/antgo/api/ensemble/get/'%(self.url),
+                                headers={'id': f'{self.data_uuid}'},
+                                proxies=proxies, stream=True)
 
-            if response.status_code != 200:
-                continue
-
-            result[k] = None
-            if self.feedback:
+            if response.status_code == 200:
                 with BytesIO() as pdf:
                     for chunk in response.iter_content(chunk_size=1024*1024):
                         if chunk:
                             pdf.write(chunk)
-                    data = msgpack.unpackb(pdf.getvalue(), object_hook=ms.decode)
+                    
+                    data = pickle.loads(pdf.getvalue())
+                
+                # 索引编号++
+                self.data_uuid += 1
+                return data
 
-                result[k] = data
+            logging.warn(f'Get data ID-{self.data_uuid} overtime.')
+            try_count += 1
+            
+            if try_count > 5:
+                break
+                
+        self.data_uuid += 1
+        # TODO, 对于失败获取数据的情况，外部应该直接跳此样本
+        # 如何补救留给外部调用者
+        # 即使当前数据失败，索引编号++
+        return None
+    
+    # 推送成功后，立即返回
+    def put(self, data):
+        proxies = {
+            "http": None,
+            'https': None
+        }
 
-        return result
+        # 将数据以文件流模式上传
+        data = pickle.dumps(data)
+        response = \
+            requests.post('%s/antgo/api/ensemble/put/'%(self.url),
+                            headers={'id': f'{self.data_uuid}'},
+                            data=data,
+                            proxies=proxies, stream=True)
+
+        if response.status_code != 200:
+            logging.error(f'Put data ID-{self.data_uuid} error.')
+            self.data_uuid += 1
+            return False
+                        
+        self.data_uuid += 1
+        return True
+    
+    def avg(self, data=None):
+        proxies = {
+            "http": None,
+            'https': None
+        }
+
+        if data is None:
+            response = \
+                requests.post('%s/antgo/api/ensemble/avg/'%(self.url),
+                                headers={
+                                    'file_id': f'{self.avg_data_uuid}',
+                                    'id': f'{self.avg_data_uuid}',
+                                    'feedback': f"{self.feedback}"
+                                },
+                                proxies=proxies)           
+
+            self.avg_data_uuid += 1
+            if response.status_code != 200:
+                logging.warn(f'Get ensemble data erro.')
+                # TODO, 对于失败获取数据的情况，外部应该直接跳此样本
+                # 如何补救留给外部调用者
+                return None
+
+            with BytesIO() as pdf:
+                for chunk in response.iter_content(chunk_size=1024*1024):
+                    if chunk:
+                        pdf.write(chunk)
+                data = pickle.loads(pdf.getvalue())
+            
+            return data
+        
+        # check data type
+        for _, v in data.items():
+            if not isinstance(v, np.ndarray):
+                logging.error("Has non np.ndarray data.")
+                return None
+        
+        # start ensemble
+        data = pickle.dumps(data)
+        response = \
+            requests.post('%s/antgo/api/ensemble/avg/'%(self.url),
+                            headers={
+                                'file_id': f'{self.avg_data_uuid}',
+                                'id': f'{self.avg_data_uuid}',
+                                'worker_prefix': f'{self.prefix}',
+                                'weight': f"{self.model_weight}",
+                                'feedback': f"{self.feedback}"
+                            },
+                            data=data,
+                            proxies=proxies, stream=True)
+
+        self.avg_data_uuid += 1
+        if response.status_code != 200:
+            logging.warn(f'Get ensemble data erro.')
+            return
+    
+        if self.feedback:
+            with BytesIO() as pdf:
+                for chunk in response.iter_content(chunk_size=1024*1024):
+                    if chunk:
+                        pdf.write(chunk)
+                data = pickle.loads(pdf.getvalue())
+                return data
+        return None
 
     def record(self, data):
         assert('id' in data or 'image_file' in data)
@@ -352,8 +429,7 @@ class AntEnsemble(AntBase):
                                         args=(self.ant_dump_dir,
                                               server_port,
                                               worker_num,
-                                              self.context.params.ensemble.get('uncertain_vote', None),
-                                              self.context.params.ensemble.get('enable_data_record', False)))
+                                              self.context.params.ensemble.get('uncertain_vote', None)))
             if not self.context.params.ensemble.get('background', True):
                 # 后台服务
                 background_server_process.daemon = True
@@ -429,6 +505,8 @@ class AntEnsemble(AntBase):
         self.stage = 'ENSEMBLE-%s' % self.ensemble_stage
         if self.ensemble_stage == 'merge':
             dump_dir = os.path.join(self.ant_dump_dir, 'ensemble', 'merge')
+            if os.path.exists(dump_dir):
+                shutil.rmtree(dump_dir)
             if not os.path.exists(dump_dir):
                 os.makedirs(dump_dir)
 
