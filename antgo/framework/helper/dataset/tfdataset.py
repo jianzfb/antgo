@@ -49,7 +49,7 @@ def _sample_iterators(iterators, ratios, infinite, remain_sample_num):
     
     ratios = np.array(ratios)
     ratios = ratios / ratios.sum()
-    
+        
     in_remain_sample_mode = False
     while iterators or in_remain_sample_mode:
         try:
@@ -338,10 +338,11 @@ class TFDataset(torch.utils.data.IterableDataset):
             shard = worker_info.id, worker_info.num_workers
             np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
             remain_sample_num = int(self.num_samples - self.real_num_samples)
-            if worker_info.id != worker_info.num_workers - 1:
-                remain_sample_num = remain_sample_num // worker_info.num_workers
-            else:
-                remain_sample_num = remain_sample_num - remain_sample_num // worker_info.num_workers * worker_info.num_workers
+            if worker_info.num_workers != 1:
+                if worker_info.id != worker_info.num_workers - 1:
+                    remain_sample_num = remain_sample_num // worker_info.num_workers
+                else:
+                    remain_sample_num = (remain_sample_num // worker_info.num_workers) + (remain_sample_num - remain_sample_num // worker_info.num_workers * worker_info.num_workers)
         else:
             shard = None
 

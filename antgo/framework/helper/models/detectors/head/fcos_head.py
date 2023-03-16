@@ -122,6 +122,7 @@ class FcosHead(BaseDenseHead):
                  down_stride,
                  rescale=1.0,
                  score_thresh=0.15,
+                 loss_ht_weight=1.0,
                  loss_wh=dict(type='L1Loss', loss_weight=0.1),
                  train_cfg=None,
                  test_cfg=None,
@@ -133,6 +134,7 @@ class FcosHead(BaseDenseHead):
         self.down_stride = down_stride
         self.last_channel = in_channel  
         self._build_head()
+        self.loss_ht_weight = loss_ht_weight
         self.loss_reg = build_loss(loss_wh)
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
@@ -246,7 +248,7 @@ class FcosHead(BaseDenseHead):
 
         # 
         total_loss = dict(
-            loss_center_heatmap=loss_center_heatmap,
+            loss_center_heatmap=loss_center_heatmap * self.loss_ht_weight,
             loss_reg=loss_reg_v)
 
         return total_loss
