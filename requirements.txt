@@ -16,7 +16,7 @@ imageio
 sklearn
 matplotlib
 prettytable
-opencv-python
+opencv-contrib-python
 antvis
 qiniu
 pycocotools

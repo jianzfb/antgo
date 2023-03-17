@@ -80,7 +80,7 @@ class __SampleDataGenerator(object):
                             image_content = fp.read()
                             sample['image'] = image_content
                     else:
-                        print(f'Missing image {image_path}')
+                        logging.error(f'Missing image {image_path}')
                         sample['image'] = b''
                 
                 if sample['image'] == b'':
