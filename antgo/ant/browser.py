@@ -398,7 +398,8 @@ class AntBrowser(AntBase):
       self.context.params.browser.white_users.get() if self.context.params.browser.white_users is not None else None
     if len(white_users) == 0:
       white_users = None
-      
+    
+    user_input = self.context.params.browser.user_input.get()
     # 在独立进程中启动webserver
     self.p = \
       multiprocessing.Process(
@@ -408,7 +409,7 @@ class AntBrowser(AntBase):
               self.host_port,
               offset_configs,
               profile_config,
-              sample_folder, sample_list, sample_meta, white_users)
+              sample_folder, sample_list, sample_meta, user_input, white_users)
       )
     self.p.daemon = True
     self.p.start()
