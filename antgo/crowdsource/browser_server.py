@@ -561,7 +561,8 @@ class ProjectInfoHandler(BaseHandler):
         'stage': \
           'finish' if len(self.db['data']) > 0 and \
             self.db['dataset'][self.db['state']]['samples_num_checked'] == len(self.db['data'])  else 'checking'
-      }
+      },
+      'need_input': self.settings.get('need_input', False),
     })
     return
 
@@ -582,7 +583,7 @@ def browser_server_start(browser_dump_dir,
                          server_port,
                          offset_configs,
                          profile_config,
-                         sample_folder=None, sample_list=None,
+                         sample_folder=None, sample_list=None, sample_meta={}, need_input=False,
                          white_users=None):
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
@@ -611,37 +612,97 @@ def browser_server_start(browser_dump_dir,
       os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
       
       # 将数据信息写如本地数据库
-      
+      # 1.step 尝试加载meta信息
+      meta_info = sample_meta
+      # 2.step 样本信息写入数据库
       for sample_id, sample in enumerate(sample_list):
         file_name = sample['image_file'] if sample['image_file'] != '' else sample['image_url']
+        data_source = ''
+        if sample['image_url'] != '':
+          data_source = sample['image_url']
+        else:
+          data_source = f'/static/dataset/{sample["image_file"]}'
+
         sample_label = sample['image_label'] if sample['image_label_name'] == '' else sample['image_label_name']
         convert_sample = [{
           'type': 'IMAGE',
-          'data': f'/static/dataset/{sample["image_file"]}' if sample['image_file'] != '' else sample['image_url'],
+          'data': data_source,
           'tag': [sample_label],
           'title': file_name,
           'id': sample_id
         }]
+        
+        #############################  标准信息  ###############################
+        # 添加框元素
         if 'bboxes' in sample:
           convert_sample[0].update({
             'bboxes': sample['bboxes']
           })
+        # 添加多边形元素
+        if 'segments' in sample:
+            convert_sample[0].update({
+            'segments': sample['segments']
+          })          
+        # 添加框标签信息
         if 'labels' in sample:
           convert_sample[0].update({
             'labels': sample['labels']
           })
-        if 'joints2d' in sample:
-          convert_sample[0].update({
-            'joints2d': sample['joints2d']
-          })
-        if 'segments' in sample:
-            convert_sample[0].update({
-            'segments': sample['segments']
-          })
+        # 添加样本标签
         if 'image_label' in sample:
             convert_sample[0].update({
             'image_label': sample['image_label']
           })
+            
+        #############################  扩展信息 1  #############################
+        # 添加2d关键点元素
+        if 'joints2d' in sample:
+          convert_sample[0].update({
+            'joints2d': sample['joints2d'],
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else []
+          })
+        
+        #############################  扩展信息 2  #############################
+        # 添加3d关键点元素（需要相机参数）
+        if 'joints3d' in sample and \
+          'cam_param' in sample and len(sample['cam_param']) > 0:
+          convert_sample.append({
+            'type': 'IMAGE',
+            'data': data_source,
+            'tag': [sample_label],
+            'title': f'3D-POINTS-({file_name})',
+            'id': sample_id
+          })
+          convert_sample[-1].update({
+            'joints3d': sample['joints3d'],
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'cam_param': sample['cam_param']
+          })
+        
+        #############################  扩展信息 3  #############################    
+        # 添加3d关键点元素（mano）(需要相机参数)
+        if 'pose' in sample and 'trans' in sample and 'shape' in sample and \
+          'cam_param' in sample and len(sample['cam_param']) > 0 and \
+          'model' in meta_info['meta']:
+          
+          pose_shape_model = meta_info['meta']['model']
+          convert_sample.append({
+            'type': 'IMAGE',
+            'data': data_source,
+            'tag': [sample_label],
+            'title': f'{pose_shape_model}-({file_name})',
+            'id': sample_id
+          })
+          convert_sample[-1].update({
+            'joints3d': sample['joints3d'],
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'pose': sample['pose'],
+            'shape': sample['shape'],
+            'trans': sample['trans'],
+            'cam_param': sample['cam_param'],
+            'model': pose_shape_model
+          })          
+                
         db['data'].append({
           'value': convert_sample,
           'status': False,
@@ -670,6 +731,7 @@ def browser_server_start(browser_dump_dir,
       'dump_path': browser_dump_dir,
       'port': server_port,
       'tags': tags,
+      'need_input': need_input,
       'cookie_secret': cookie_secret,
       'cookie_max_age_days': 30,
       'Content-Security-Policy': "frame-ancestors 'self' {}".format('http://localhost:8080/'),
