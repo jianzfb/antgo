@@ -7,9 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 import time
-
 import cv2
-
 from antgo.resource.html import *
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port

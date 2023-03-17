@@ -28,6 +28,7 @@ import json
 import time
 import base64
 import requests
+import cv2
 
 
 # # 新用户，从队列中获取新数据并加入用户队列中
@@ -102,7 +103,7 @@ class EntryApiHandler(BaseHandler):
           logger.error('Fail to download from html.')
           self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
           return
-      elif input_info.lower().starswith("htfs") and input_info.endswith('json'):
+      elif input_info.lower().startswith("htfs") and input_info.endswith('json'):
         # step 1.2: 下载 (from htfs, jsonfile)
         try:
           static_path = self.settings.get('static_path')
@@ -119,7 +120,7 @@ class EntryApiHandler(BaseHandler):
           logger.error('Fail to download from htfs.')
           self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
           return
-      elif input_info.lower().starswith("htfs"):
+      elif input_info.lower().startswith("htfs"):
         # step 1.3: 下载（from htfs, folder)
         try:
           static_path = self.settings.get('static_path')          
@@ -161,7 +162,7 @@ class EntryApiHandler(BaseHandler):
 
     # 构建返回数据
     response_content = {
-      'value': self.db['data'][entry_id]['value'],
+      'value': update_vis_elem(self.db['data'][entry_id]['value']),
       'step': len(self.db['user_record'][user_name]) - 1,
       'tags': self.settings.get('tags', []),
       'operators': [],
@@ -232,7 +233,13 @@ class EntryApiHandler(BaseHandler):
       for sample_id, sample in enumerate(sample_list):
         # 仅考虑image_url
         data_source = sample['image_url']
-        sample_label = sample['image_label'] if sample['image_label_name'] == '' else sample['image_label_name']
+        file_name = data_source
+        sample_label = ''
+        if 'image_label_name' in sample:
+          sample_label = sample['image_label_name']
+        elif 'image_label' in sample:
+          sample_label = sample['image_label']
+ 
         convert_sample = [{
           'type': 'IMAGE',
           'data': data_source,
@@ -273,50 +280,95 @@ class EntryApiHandler(BaseHandler):
         
         #############################  扩展信息 2  #############################
         # 添加3d关键点元素（需要相机参数）
-        if 'joints3d' in sample and \
-          'cam_param' in sample and len(sample['cam_param']) > 0:
-          convert_sample.append({
-            'type': 'IMAGE',
-            'data': data_source,
-            'tag': [sample_label],
-            'title': f'3D-POINTS-({file_name})',
-            'id': sample_id
-          })
-          convert_sample[-1].update({
-            'joints3d': sample['joints3d'],
-            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
-            'cam_param': sample['cam_param']
-          })
+        # if 'joints3d' in sample and \
+        #   'cam_param' in sample and len(sample['cam_param']) > 0:
+        #   convert_sample.append({
+        #     'type': 'IMAGE',
+        #     'data': data_source,
+        #     'tag': [sample_label],
+        #     'title': f'3D-POINTS-({file_name})',
+        #     'id': sample_id
+        #   })
+        #   convert_sample[-1].update({
+        #     'joints3d': sample['joints3d'],
+        #     'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+        #     'cam_param': sample['cam_param']
+        #   })
         
         #############################  扩展信息 3  #############################    
         # 添加3d关键点元素（mano）(需要相机参数)
-        if 'pose' in sample and 'trans' in sample and 'shape' in sample and \
-          'cam_param' in sample and len(sample['cam_param']) > 0 and \
-          'model' in meta_info['meta']:
+        # if 'pose' in sample and 'trans' in sample and 'shape' in sample and \
+        #   'cam_param' in sample and len(sample['cam_param']) > 0 and \
+        #   'model' in meta_info['meta']:
           
-          pose_shape_model = meta_info['meta']['model']
-          convert_sample.append({
-            'type': 'IMAGE',
-            'data': data_source,
-            'tag': [sample_label],
-            'title': f'{pose_shape_model}-({file_name})',
-            'id': sample_id
-          })
-          convert_sample[-1].update({
-            'joints3d': sample['joints3d'],
-            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
-            'pose': sample['pose'],
-            'shape': sample['shape'],
-            'trans': sample['trans'],
-            'cam_param': sample['cam_param'],
-            'model': pose_shape_model
-          })          
+        #   pose_shape_model = meta_info['meta']['model']
+        #   convert_sample.append({
+        #     'type': 'IMAGE',
+        #     'data': data_source,
+        #     'tag': [sample_label],
+        #     'title': f'{pose_shape_model}-({file_name})',
+        #     'id': sample_id
+        #   })
+        #   convert_sample[-1].update({
+        #     'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+        #     'pose': sample['pose'],
+        #     'shape': sample['shape'],
+        #     'trans': sample['trans'],
+        #     'cam_param': sample['cam_param'],
+        #     'model': pose_shape_model
+        #   })          
                 
         self.db['data'].append({
           'value': convert_sample,
           'status': False,
           'time': time.time()
         })
+
+
+def update_vis_elem(data_group):
+  data_group = copy.deepcopy(data_group)
+  for data in data_group:
+    if 'joints3d' in data and 'cam_param' in data:
+      # 基于相机模型，进行投影
+      if 'D' in data['cam_param'] and 'Xi' in data['cam_param'] and 'K' in data['cam_param']:
+        # 鱼眼模型(omni)
+        # points_3d: Nx21x3
+        K = np.array(data['cam_param']['K']).astype(np.float32)
+        Xi = data['cam_param']['Xi']
+        D = np.array(data['cam_param']['D']).astype(np.float32)
+        points_2d_list = []
+        for i in range(len(data['joints3d'])):
+          points_3d = np.array(data['joints3d'][i]).astype(np.float32)
+          points_3d = points_3d.reshape(points_3d.shape[0],1,3).astype(np.float32)
+          uv,_ = cv2.omnidir.projectPoints(points_3d, np.zeros(3), np.zeros(3), K, Xi, D)
+          points_2d = uv[:,0,:].tolist()
+          points_2d_list.append(points_2d)
+        
+        # update elem
+        data.update({
+          'joints2d': points_2d_list
+        })
+      elif 'K' in data['cam_param']:
+        # 小孔成像模型
+        # points_3d: Nx21x3
+        K = np.array(data['cam_param']['K']).astype(np.float32)
+        points_2d_list = []
+        for i in range(len(data['joints3d'])):
+          points_3d = np.array(data['joints3d'][i])
+          points_2d = np.matmul(K, np.transpose(points_3d))
+          points_2d = np.transpose(points_2d).tolist()
+          points_2d_list.append(points_2d)
+        
+        # update elem
+        data.update({
+          'joints2d': points_2d_list
+        })
+    elif 'model' in data and 'cam_param' in data:
+      # 基于物体模型（mano,smpl）->绘制3D点->绘制2D点
+      pass 
+    
+  return data_group
+
 
 class PrevApiHandler(BaseHandler):
   @gen.coroutine
@@ -377,7 +429,7 @@ class PrevApiHandler(BaseHandler):
     pre_step = step - 1
     pre_entry_id = self.db['user_record'][user_name][pre_step]
     response_content = {
-      'value': self.db['data'][pre_entry_id]['value'],
+      'value': update_vis_elem(self.db['data'][pre_entry_id]['value']),
       'step': pre_step,
       'tags': self.settings.get('tags', []),
       'operators': [],
@@ -451,7 +503,7 @@ class NextApiHandler(BaseHandler):
       next_step = step + 1
       next_entry_id = self.db['user_record'][user_name][next_step]
       response_content = {
-        'value': self.db['data'][next_entry_id]['value'],
+        'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
         'step': next_step,
         'tags': self.settings.get('tags', []),
         'operators': [],
@@ -471,7 +523,7 @@ class NextApiHandler(BaseHandler):
 
     if next_entry_id == -1:
       self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
-        'value': self.db['data'][self.db['user_record'][user_name][-1]]['value'],
+        'value': update_vis_elem(self.db['data'][self.db['user_record'][user_name][-1]]['value']),
         'step': len(self.db['user_record'][user_name]) - 1,
         'tags': self.settings.get('tags', []),
         'operators': [],
@@ -486,7 +538,7 @@ class NextApiHandler(BaseHandler):
 
     #
     response_content = {
-      'value': self.db['data'][next_entry_id]['value'],
+      'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
       'step': len(self.db['user_record'][user_name]) - 1,
       'tags': self.settings.get('tags', []),
       'operators': [],
@@ -497,7 +549,8 @@ class NextApiHandler(BaseHandler):
 
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
     return
-
+  
+  
 class RandomApiHandler(BaseHandler):
   @gen.coroutine
   def get(self):
@@ -567,7 +620,7 @@ class RandomApiHandler(BaseHandler):
 
     #
     response_content = {
-      'value': self.db['data'][next_entry_id]['value'],
+      'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
       'step': len(self.db['user_record'][user_name]) - 1,
       'tags': self.settings.get('tags', []),
       'operators': [],
@@ -837,7 +890,11 @@ def browser_server_start(browser_dump_dir,
         else:
           data_source = f'/static/dataset/{sample["image_file"]}'
 
-        sample_label = sample['image_label'] if sample['image_label_name'] == '' else sample['image_label_name']
+        sample_label = ''
+        if 'image_label_name' in sample:
+          sample_label = sample['image_label_name']
+        elif 'image_label' in sample:
+          sample_label = sample['image_label']        
         convert_sample = [{
           'type': 'IMAGE',
           'data': data_source,
