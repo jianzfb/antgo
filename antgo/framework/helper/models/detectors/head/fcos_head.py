@@ -167,7 +167,7 @@ class FcosHead(BaseDenseHead):
 
     def _build_head(self):
         self.heatmap_head = nn.Sequential(
-            nn.Conv2d(self.last_channel, self.num_classes+1, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(self.last_channel, self.num_classes, kernel_size=3, stride=1, padding=1),
         )
         self.reg_head = nn.Sequential(
             nn.Conv2d(self.last_channel,self.last_channel,kernel_size=3,padding=1,bias=False),
@@ -229,22 +229,21 @@ class FcosHead(BaseDenseHead):
             self.get_targets(gt_bboxes, gt_labels, center_heatmap_pred.shape, img_metas)
 
         center_heatmap_target = target_result['center_heatmap_target']
-        center_heatmap_target_weight = target_result['center_heatmap_target_weight']
         reg_targets = target_result['reg_targets']
         reg_weights = target_result['reg_weights']
 
         loss_center_heatmap = sigmoid_focal_loss(
             center_heatmap_pred,
-            center_heatmap_target
+            center_heatmap_target,
+            alpha=0.8
         )
-        loss_center_heatmap = loss_center_heatmap * center_heatmap_target_weight
         loss_center_heatmap = torch.sum(loss_center_heatmap) / (avg_factor+1e-5)
 
         loss_reg_v = self.loss_reg(
             reg_pred,
             reg_targets,
             reg_weights,
-            avg_factor=avg_factor)
+            avg_factor=avg_factor*5)
 
         # 
         total_loss = dict(
@@ -293,16 +292,11 @@ class FcosHead(BaseDenseHead):
         height_ratio = float(feat_h / img_h)
 
         center_heatmap_target = gt_bboxes[-1].new_zeros(
-            [bs, self.num_classes+1, feat_h, feat_w])
-        center_heatmap_target_weight = gt_bboxes[-1].new_ones(
-            [bs, 1, feat_h, feat_w]
-        )
-
+            [bs, self.num_classes, feat_h, feat_w])
         reg_target_list = []
         reg_weight_list = []
         for batch_id in range(bs):
             gt_bbox = gt_bboxes[batch_id]       # gt_bbox shape: Nx4
-            center_heatmap_target[batch_id, 0] = 1.0        # 设置背景区域类别
             if gt_bbox.shape[0] == 0:
                 # 防止无目标样本
                 reg_target_list.append(gt_bboxes[-1].new_zeros([4, feat_h, feat_w]))
@@ -359,24 +353,15 @@ class FcosHead(BaseDenseHead):
                 ctx, cty = ct
                 scale_box_h = (gt_bbox[j][3] - gt_bbox[j][1]) * height_ratio
                 scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
-                # radius = gaussian_radius([scale_box_h, scale_box_w], min_overlap=0.3)
-                # radius = max(1, int(radius))
+
                 radius = max(max(scale_box_h, scale_box_w)/2, 2)
                 radius = (int)(radius)
                 ind = gt_label[j]
-                ind = ind + 1
 
                 gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius)
 
             reg_target_list.append(reg_target)
             reg_weight_list.append(mask_pos_2)
-
-            # 重新设置背景
-            center_heatmap_target[batch_id, 0] = \
-                torch.maximum(
-                    1.0 - torch.sum(center_heatmap_target[batch_id, 1:],dim=0,keepdim=False), 
-                    torch.zeros_like(center_heatmap_target[batch_id, 0])
-                )
 
         reg_targets = torch.stack(reg_target_list, 0)           #Bx4xHxW
         reg_weights = torch.stack(reg_weight_list, 0)
@@ -384,7 +369,6 @@ class FcosHead(BaseDenseHead):
         avg_factor = max(1, center_heatmap_target.eq(1).sum())
         target_result = dict(
             center_heatmap_target=center_heatmap_target,
-            center_heatmap_target_weight=center_heatmap_target_weight,
             reg_targets=reg_targets,
             reg_weights=reg_weights)
         return target_result, avg_factor
@@ -461,7 +445,7 @@ class FcosHead(BaseDenseHead):
                 corresponding box.
         """
         center_heatmap_pred = torch.sigmoid(center_heatmap_pred)
-        center_heatmap_pred = center_heatmap_pred[:,1:,:,:]
+        # center_heatmap_pred = center_heatmap_pred[:,1:,:,:]
         batch_det_bboxes, batch_labels = self.decode_heatmap(
             center_heatmap_pred,
             reg_pred,

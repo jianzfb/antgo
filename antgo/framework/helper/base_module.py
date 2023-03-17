@@ -101,8 +101,6 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                     # from being overwritten by
                     # the `init_weights`
                     if self.init_cfg['type'] == 'Pretrained':
-                        for sub_module in self.modules():
-                            del sub_module._params_init_info
                         return
 
             for m in self.children():

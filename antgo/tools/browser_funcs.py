@@ -3,7 +3,7 @@ import logging
 import json
 from antgo.interactcontext import InteractContext
 
-def browser_images(src_file, tags, white_users_str, feedback=True):
+def browser_images(src_file, tags, white_users_str, feedback=True, user_input=False):
     # src check
     if not os.path.exists(src_file):
         logging.error(f"{src_file} not existed")
@@ -28,6 +28,7 @@ def browser_images(src_file, tags, white_users_str, feedback=True):
     ctx = InteractContext()
     ctx.browser.start(f"{title}", config = {
             'tags': tags,
+            'user_input': user_input,
             'white_users': white_users,
         }, json_file=src_file)
     

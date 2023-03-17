@@ -54,6 +54,7 @@ DEFINE_string("white-users", None, "name:password,name:password")
 DEFINE_string("tags", None, "tag info")
 DEFINE_string("no-tags", None, "tag info")
 DEFINE_indicator("feedback", True, "")
+DEFINE_indicator("user-input", True, "")
 DEFINE_int('num', 0, "number")
 DEFINE_indicator("to", True, "")
 DEFINE_indicator("from", True, "")
@@ -288,7 +289,7 @@ def main():
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return
-        tool_func(args.src, args.tags, args.white_users, args.feedback)
+        tool_func(args.src, args.tags, args.white_users, args.feedback, args.user_input)
       elif sub_action_name.startswith('filter'):
         tool_func = getattr(tools, f'filter_by_{sub_action_name.split("/")[1]}', None)
 

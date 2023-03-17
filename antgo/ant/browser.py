@@ -344,16 +344,39 @@ class AntBrowser(AntBase):
     if not os.path.exists(self.context.recorder.tag_dir):
       os.makedirs(self.context.recorder.tag_dir)
 
+    sample_meta = {}
     sample_list = []
     sample_folder = None
     if data_json_file is not None:
+      # step1: 加载样本信息
       # 直接使用来自于data_json_file中的样本
-      with open(data_json_file, 'r', encoding="utf-8") as fp:
-        sample_list = json.load(fp)
-        self.context.recorder.dataset_size = len(sample_list)
-      
+      # 兼容两种常用的存储样本信息方式（1.纯json格式，所有样本以list形式存储；2.样本按行存储，每个样本的信息是json格式）
+      try:
+        # try 1 (纯json格式，所有样本以list形式存储)
+        with open(data_json_file, 'r', encoding="utf-8") as fp:
+          sample_list = json.load(fp)
+          self.context.recorder.dataset_size = len(sample_list)
+      except:
+        # try 2 (样本信息按行存储，每个样本信息是json格式)
+        with open(data_json_file, 'r', encoding="utf-8") as fp:
+          sample_info_str = fp.readline()
+          sample_info_str = sample_info_str.strip()
+          
+          while sample_info_str:
+            sample_info = json.loads(sample_info_str)
+            sample_list.append(sample_info)
+            sample_info_str = fp.readline()
+            sample_info_str = sample_info_str.strip()
+            if sample_info_str == '':
+              break        
+            
+      # step2: 尝试加载样本集meta信息
       sample_folder = os.path.dirname(data_json_file)
-
+      data_meta_file = os.path.join(sample_folder, 'meta.json')
+      if os.path.exists(data_meta_file):
+        with open(data_meta_file, 'r', encoding="utf-8") as fp:
+          sample_meta = json.load(fp)
+              
     sample_offset = train_offset
     if dataset_flag == 'test':
       sample_offset = test_offset
@@ -375,7 +398,8 @@ class AntBrowser(AntBase):
       self.context.params.browser.white_users.get() if self.context.params.browser.white_users is not None else None
     if len(white_users) == 0:
       white_users = None
-      
+    
+    user_input = self.context.params.browser.user_input.get()
     # 在独立进程中启动webserver
     self.p = \
       multiprocessing.Process(
@@ -385,7 +409,7 @@ class AntBrowser(AntBase):
               self.host_port,
               offset_configs,
               profile_config,
-              sample_folder, sample_list, white_users)
+              sample_folder, sample_list, sample_meta, user_input, white_users)
       )
     self.p.daemon = True
     self.p.start()
