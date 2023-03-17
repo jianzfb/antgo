@@ -20,12 +20,16 @@ import shutil
 import signal
 from antgo.crowdsource.base_server import *
 from antgo.utils import logger
+from antgo.ant import environment
 import traceback
 import sys
 import uuid
 import json
 import time
 import base64
+import requests
+
+
 # # 新用户，从队列中获取新数据并加入用户队列中
 # self.db['data'].append({
 #   'value': self.response_queue.get(),
@@ -75,6 +79,72 @@ class EntryApiHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
       return
 
+    # 检查是否有输入，如果有先下载，在更新数据库
+    input_info = self.get_argument('input', '')
+    if input_info != '':
+      # step 1: 下载 
+      if input_info.startswith('http') and input_info.endswith('json'):
+        # step 1.1: 下载 (from url)
+        try:
+          static_path = self.settings.get('static_path')
+          if not input_info.endswith('.json'):
+            self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
+            return
+          input_ext_name = input_info.split('.')[-1]          
+          local_path = os.path.join(static_path, f'download.{input_ext_name}')
+          
+          data = requests.get(input_info, timeout=7)
+          with open(local_path, 'wb') as fp:
+            fp.write(data.content)     
+          
+          input_info = local_path
+        except:
+          logger.error('Fail to download from html.')
+          self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
+          return
+      elif input_info.lower().starswith("htfs") and input_info.endswith('json'):
+        # step 1.2: 下载 (from htfs, jsonfile)
+        try:
+          static_path = self.settings.get('static_path')
+          environment.hdfs_client.get(input_info, static_path)
+          file_name = input_info.split('/')[-1]
+          local_path = os.path.join(static_path, file_name)
+          if not os.path.exists(local_path):
+            logger.error('Fail to download from htfs.')
+            self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
+            return
+          
+          input_info = local_path
+        except:
+          logger.error('Fail to download from htfs.')
+          self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
+          return
+      elif input_info.lower().starswith("htfs"):
+        # step 1.3: 下载（from htfs, folder)
+        try:
+          static_path = self.settings.get('static_path')          
+          sub_folder = 'json-folder'
+          if os.path.exists(os.path.join(static_path, sub_folder)):
+            shutil.rmtree(os.path.join(static_path, sub_folder))
+          os.makedirs(os.path.join(static_path, sub_folder))
+          
+          loal_path = os.path.join(static_path, sub_folder)
+          if input_info.endswith('/'):
+            input_info = input_info[:-1]            
+          environment.hdfs_client.get(f'{input_info}/*', loal_path)
+          input_info = local_path
+        except:
+          logger.error('Fail to download folder from htfs.')
+          self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
+      else:
+        # step 1.4: 本地路径
+        if not os.path.exists(input_info):
+          self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
+          return
+        
+      # step 2: 更新数据库
+      self.update_db(self.settings.get('static_path'), input_info)
+    
     if len(self.db['data']) == 0:
       # 当前无数据，直接返回
       self.response(RESPONSE_STATUS_CODE.RESOURCE_NOT_FOUND)
@@ -103,6 +173,150 @@ class EntryApiHandler(BaseHandler):
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
     return
 
+  def update_db(self, dump_dir, json_file_path):
+    # 1.step 清空数据
+    self.db['data'] = []
+    
+    # 2.step 解析下载数据（json, or tar）
+    if not os.path.exists(json_file_path):
+      return
+    if os.path.isdir(json_file_path):
+      for file_name in os.listdir(json_file_path):
+        if file_name.endswith('json'):
+          json_file_path = os.path.join(json_file_path, file_name)
+          break
+              
+    sample_anno_json_file = json_file_path
+    sample_list = []
+    # step2.1: 加载样本信息
+    # 兼容两种常用的存储样本信息方式（1.纯json格式，所有样本以list形式存储；2.样本按行存储，每个样本的信息是json格式）
+    try:
+      # try 1 (纯json格式，所有样本以list形式存储)
+      with open(sample_anno_json_file, 'r', encoding="utf-8") as fp:
+        sample_list = json.load(fp)
+    except:
+      # try 2 (样本信息按行存储，每个样本信息是json格式)
+      with open(sample_anno_json_file, 'r', encoding="utf-8") as fp:
+        sample_info_str = fp.readline()
+        sample_info_str = sample_info_str.strip()
+        
+        while sample_info_str:
+          sample_info = json.loads(sample_info_str)
+          sample_list.append(sample_info)
+          sample_info_str = fp.readline()
+          sample_info_str = sample_info_str.strip()
+          if sample_info_str == '':
+            break        
+          
+    # step2.2: 尝试加载样本集meta信息
+    sample_meta = {'meta': {}}
+    sample_folder = os.path.dirname(sample_anno_json_file)
+    data_meta_file = os.path.join(sample_folder, 'meta.json')
+    if os.path.exists(data_meta_file):
+      with open(data_meta_file, 'r', encoding="utf-8") as fp:
+        sample_meta = json.load(fp)
+            
+    # 3.step 加载数据
+    sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径
+    static_dir = self.settings.get('static_path')
+    if sample_list is not None and sample_folder is not None:
+      # 为样本所在目录建立软连接到static下面
+      if not sample_folder.startswith(static_dir):
+        # 建立软连接
+        os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
+      
+      # 将数据信息写如本地数据库
+      # 1.step 尝试加载meta信息
+      meta_info = sample_meta
+      # 2.step 样本信息写入数据库
+      for sample_id, sample in enumerate(sample_list):
+        # 仅考虑image_url
+        data_source = sample['image_url']
+        sample_label = sample['image_label'] if sample['image_label_name'] == '' else sample['image_label_name']
+        convert_sample = [{
+          'type': 'IMAGE',
+          'data': data_source,
+          'tag': [sample_label],
+          'title': sample['image_url'],
+          'id': sample_id
+        }]
+        
+        #############################  标准信息  ###############################
+        # 添加框元素
+        if 'bboxes' in sample:
+          convert_sample[0].update({
+            'bboxes': sample['bboxes']
+          })
+        # 添加多边形元素
+        if 'segments' in sample:
+            convert_sample[0].update({
+            'segments': sample['segments']
+          })          
+        # 添加框标签信息
+        if 'labels' in sample:
+          convert_sample[0].update({
+            'labels': sample['labels']
+          })
+        # 添加样本标签
+        if 'image_label' in sample:
+            convert_sample[0].update({
+            'image_label': sample['image_label']
+          })
+            
+        #############################  扩展信息 1  #############################
+        # 添加2d关键点元素
+        if 'joints2d' in sample:
+          convert_sample[0].update({
+            'joints2d': sample['joints2d'],
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else []
+          })
+        
+        #############################  扩展信息 2  #############################
+        # 添加3d关键点元素（需要相机参数）
+        if 'joints3d' in sample and \
+          'cam_param' in sample and len(sample['cam_param']) > 0:
+          convert_sample.append({
+            'type': 'IMAGE',
+            'data': data_source,
+            'tag': [sample_label],
+            'title': f'3D-POINTS-({file_name})',
+            'id': sample_id
+          })
+          convert_sample[-1].update({
+            'joints3d': sample['joints3d'],
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'cam_param': sample['cam_param']
+          })
+        
+        #############################  扩展信息 3  #############################    
+        # 添加3d关键点元素（mano）(需要相机参数)
+        if 'pose' in sample and 'trans' in sample and 'shape' in sample and \
+          'cam_param' in sample and len(sample['cam_param']) > 0 and \
+          'model' in meta_info['meta']:
+          
+          pose_shape_model = meta_info['meta']['model']
+          convert_sample.append({
+            'type': 'IMAGE',
+            'data': data_source,
+            'tag': [sample_label],
+            'title': f'{pose_shape_model}-({file_name})',
+            'id': sample_id
+          })
+          convert_sample[-1].update({
+            'joints3d': sample['joints3d'],
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'pose': sample['pose'],
+            'shape': sample['shape'],
+            'trans': sample['trans'],
+            'cam_param': sample['cam_param'],
+            'model': pose_shape_model
+          })          
+                
+        self.db['data'].append({
+          'value': convert_sample,
+          'status': False,
+          'time': time.time()
+        })
 
 class PrevApiHandler(BaseHandler):
   @gen.coroutine
@@ -560,9 +774,9 @@ class ProjectInfoHandler(BaseHandler):
       'project_state': {
         'stage': \
           'finish' if len(self.db['data']) > 0 and \
-            self.db['dataset'][self.db['state']]['samples_num_checked'] == len(self.db['data'])  else 'checking'
-      },
-      'need_input': self.settings.get('need_input', False),
+            self.db['dataset'][self.db['state']]['samples_num_checked'] == len(self.db['data'])  else 'checking',
+        'need_input': self.settings.get('need_input', False),
+      },      
     })
     return
 
@@ -606,9 +820,9 @@ def browser_server_start(browser_dump_dir,
     # 2.step launch show server
     db = {'data': [], 'users': {}, 'dataset': {}, 'user_record': {}}
 
-    sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径
     if sample_list is not None and sample_folder is not None:
       # 为样本所在目录建立软连接到static下面
+      sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径    
       os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
       
       # 将数据信息写如本地数据库

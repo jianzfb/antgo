@@ -8,11 +8,15 @@ def browser_images(src_file, tags, white_users_str, feedback=True, user_input=Fa
     if not os.path.exists(src_file):
         logging.error(f"{src_file} not existed")
         return
-    if not src_file.endswith('.json'):
-        logging.error(f"{src_file} must be json file")
-        return
-    
-    title = src_file.split('/')[-1].split('.')[0]
+
+    if src_file is None or src_file == '' or src_file == './':
+         title = 'default'
+         src_file = None
+    else:
+        if not src_file.endswith('.json'):
+            logging.error(f"{src_file} must be json file")
+            return
+        title = src_file.split('/')[-1].split('.')[0]
 
     if tags is not None:
         tags = tags.split(',')
