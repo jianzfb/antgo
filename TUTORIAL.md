@@ -45,6 +45,9 @@ antgo tool browser/images --src=json-path
 // 如果想要在浏览数据时，给样本快速打标签（一般用于审核数据时使用）
 // 使用--tags来设置标签
 antgo tool browser/images --src=json-path --tags=valid,invalid --feedback
+
+// 仅web页面显示，并允许在页面输入GT格式文件
+antgo tool browser/images --user-input
 ```
 
 ### 使用标签过滤样本（仅支持标准GT格式）

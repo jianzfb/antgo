@@ -245,6 +245,8 @@ class AntActiveLearningV2(AntBase):
       }
       
       data_json_file = kwargs.get('json_file', None)
+      sample_folder = None
+      sample_list = []
       if data_json_file is not None:
         # 直接使用来自于data_json_file中的样本
         with open(data_json_file, 'r') as fp:

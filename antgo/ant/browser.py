@@ -7,16 +7,13 @@ from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
-from antgo.crowdsource.browser_server import *
-from antgo.dataflow import dataset
+# from antgo.dataflow import dataset
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
-from antgo.dataflow.dataset.parallel_read import MultiprocessReader
 from antvis.client.httprpc import *
-from antgo.dataflow.dataset.parallel_read import *
+from antgo.crowdsource.browser_server import *
 import requests
 import json
-from jinja2 import Environment, FileSystemLoader
 import traceback
 import threading
 import cv2
