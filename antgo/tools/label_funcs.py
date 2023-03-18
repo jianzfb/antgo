@@ -141,7 +141,9 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         os.makedirs(tgt_folder)
     with open(os.path.join(tgt_folder, f'{src_json_file_name}_label.json'), 'w') as fp:
         json.dump(total_gt_list, fp)
-        
+    
+    with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
+        json.dump(sgtt.meta(), fp)
     # 全局结束
     ctx.activelearning.exit()    
 
@@ -297,7 +299,9 @@ def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, **kwargs)
     with open(os.path.join(tgt_folder, f'{src_json_file_name}_convert.json'), 'w', encoding='utf-8') as fp:
         json.dump(total_gt_list, fp, ensure_ascii=False)
         
-
+    with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
+        json.dump(sgtt.meta(), fp)
+        
 # 测试检测标注
 # label_from_studio('/Users/bytedance/Downloads/project-1-at-2023-03-11-02-17-0c19afd8.json', None, '', "Airplane:0,Car:1")
 # 测试分割

@@ -88,7 +88,7 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
 
     with open(os.path.join(target_folder, annotation_file_name), 'w', encoding="utf-8") as fp:
         json.dump(annotation_list, fp)
-
+    
 
 def extract_from_images(source_folder, target_folder, filter_prefix=None, filter_suffix=None, filter_ext=None, **kwargs):
     support_image_ext = ['png', 'jpeg', 'jpg']
@@ -229,6 +229,9 @@ def extract_from_coco(source_file, target_folder, filter_label, **kwargs):
     with open(os.path.join(target_folder, './annotation.json'), 'w', encoding="utf-8") as fp:
         json.dump(total_samples, fp)
 
+    with open(os.path.join(target_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
+        json.dump(sgt.meta(), fp)
+
 
 def extract_from_crop(source_file, target_folder, **kwargs):
     # 仅支持标准GT
@@ -338,7 +341,10 @@ def extract_from_crop(source_file, target_folder, **kwargs):
 
     with open(os.path.join(target_folder, 'annotation.json'), 'w', encoding="utf-8") as fp:
         json.dump(total_gt_list, fp)
-        
+
+    with open(os.path.join(target_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
+        json.dump(sgtt.meta(), fp)
+
 
 def extract_from_samples(source_file, target_folder, num=1, feedback=False, **kwargs):
     source_file_name = source_file.split('/')[-1]
