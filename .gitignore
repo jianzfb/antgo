@@ -11,3 +11,6 @@ build
 example/dump
 test
 dump
+extend
+*.tar
+*.zip

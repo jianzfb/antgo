@@ -57,6 +57,7 @@ DEFINE_indicator("user-input", True, "")
 DEFINE_int('num', 0, "number")
 DEFINE_indicator("to", True, "")
 DEFINE_indicator("from", True, "")
+DEFINE_indicator("extend", True, "load extend package(mano,smpl,...)")
 
 #############################################
 DEFINE_nn_args()
@@ -128,6 +129,11 @@ def main():
   if not os.path.exists(config.AntConfig.task_factory):
     os.makedirs(config.AntConfig.task_factory)
 
+  ######################################### 支持扩展模型 ###############################################
+  if args.extend and not os.path.exists('extend'):
+    logging.info('download extend package')
+    os.system('wget http://image.mltalker.com/extend.tar; tar -xf extend.tar; cd extend/manopth; python3 setup.py install')
+    
   ######################################### 生成最小mvp ###############################################
   if action_name == 'create' and sub_action_name == 'mvp':
     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')

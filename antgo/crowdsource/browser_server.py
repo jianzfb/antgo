@@ -29,6 +29,8 @@ import time
 import base64
 import requests
 import cv2
+import torch
+mano_layer_map = None
 
 
 # # 新用户，从队列中获取新数据并加入用户队列中
@@ -311,6 +313,8 @@ class EntryApiHandler(BaseHandler):
           })
           convert_sample[-1].update({
             'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'labels': sample['labels'] if 'labels' in sample else [],
+            'category': meta_info['meta']['category'] if 'category' in meta_info['meta'] else {},            
             'pose': sample['pose'],
             'shape': sample['shape'],
             'trans': sample['trans'],
@@ -365,7 +369,47 @@ def update_vis_elem(data_group):
         })
     elif 'model' in data and 'cam_param' in data:
       # 基于物体模型（mano,smpl）->绘制3D点->绘制2D点
-      pass 
+      global mano_layer_map
+      if data['model'] == 'mano' and mano_layer_map is not None:
+        try:
+          category_names = []
+          if len(data['labels']) > 0 and len(data['category']) > 0:
+            # left or right
+            category_names = [data['category'][str(label)] for label in data['labels']]
+                    
+          points_2d_list = []
+          for i in range(len(data['pose'])):
+            category_name = category_names[i]
+            mano_layer = mano_layer_map[category_name]
+            pose = np.array(data['pose'][i])
+            shape = np.array(data['shape'][i])
+            trans = np.array(data['trans'][i])
+            _, joints_fk = mano_layer.forward(
+                torch.tensor(pose.reshape(1, -1), dtype=torch.float32),
+                torch.tensor(shape.reshape(1,-1), dtype=torch.float32),
+                torch.tensor(trans.reshape(1,-1), dtype=torch.float32)
+            )
+            joints_fk = 0.001 * joints_fk[0].numpy()    
+            if 'D' in data['cam_param'] and 'Xi' in data['cam_param'] and 'K' in data['cam_param']:
+              K = np.array(data['cam_param']['K']).astype(np.float32)
+              Xi = data['cam_param']['Xi']
+              D = np.array(data['cam_param']['D']).astype(np.float32)
+              
+              joints_fk = joints_fk.reshape(joints_fk.shape[0],1,3).astype(np.float32)
+              uv,_ = cv2.omnidir.projectPoints(joints_fk, np.zeros(3), np.zeros(3), K, Xi, D)
+              points_2d = uv[:,0,:].tolist()
+              points_2d_list.append(points_2d)
+            elif 'K' in data['cam_param']:
+              points_2d = np.matmul(K, np.transpose(joints_fk))
+              points_2d = np.transpose(points_2d).tolist()
+              points_2d_list.append(points_2d)
+            
+          #update elem
+          data.update({
+            'joints2d': points_2d_list
+          })      
+        except:
+          logger.error('Couldnt process by mano')
     
   return data_group
 
@@ -855,6 +899,24 @@ def browser_server_start(browser_dump_dir,
   # register sig
   signal.signal(signal.SIGTERM, GracefulExitException.sigterm_handler)
 
+  # local ext module
+  global mano_layer_map
+  try:
+    from manopth.manolayer import ManoLayer
+    left_mano_layer = ManoLayer(
+      mano_root="extend/models/mano", use_pca=False, flat_hand_mean=False, side='left'
+    )   
+    right_mano_layer = ManoLayer(
+      mano_root="extend/models/mano", use_pca=False, flat_hand_mean=False, side='right'
+    )   
+    mano_layer_map = {
+      'left': left_mano_layer,
+      'right': right_mano_layer
+    }
+  except:
+    logger.warn('Couldnt load mano model.')
+
+
   # 0.step define http server port
   define('port', default=server_port, help='run on port')
 
@@ -967,6 +1029,8 @@ def browser_server_start(browser_dump_dir,
           convert_sample[-1].update({
             'joints3d': sample['joints3d'],
             'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'labels': sample['labels'] if 'labels' in sample else [],
+            'category': meta_info['meta']['category'] if 'category' in meta_info['meta'] else {},
             'pose': sample['pose'],
             'shape': sample['shape'],
             'trans': sample['trans'],
