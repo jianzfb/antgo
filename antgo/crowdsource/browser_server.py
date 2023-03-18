@@ -943,6 +943,10 @@ def browser_server_start(browser_dump_dir,
       # 将数据信息写如本地数据库
       # 1.step 尝试加载meta信息
       meta_info = sample_meta
+      if len(meta_info) == 0:
+        meta_info.update({
+          'meta': {}
+        })
       # 2.step 样本信息写入数据库
       for sample_id, sample in enumerate(sample_list):
         file_name = sample['image_file'] if sample['image_file'] != '' else sample['image_url']

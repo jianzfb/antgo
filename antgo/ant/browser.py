@@ -95,18 +95,9 @@ class BrowserDataRecorder(object):
             data[data_name]['type'] = value['type']
           else:
             data[data_name]['type'] = value['TYPE']
-
-        # if 'tag' in value or 'TAG' in value:
-        #   if 'tag' in value:
-        #     data[data_name]['tag'] = value['tag']
-        #   else:
-        #     data[data_name]['tag'] = value['TAG']
-
-        # if 'id' in value or 'ID' in value:
-        #   if 'id' in value:
-        #     data[data_name]['id'] = value['id']
-        #   else:
-        #     data[data_name]['id'] = value['ID']
+        
+          if 'bboxes' in value and data[data_name]['type'] == 'IMAGE':
+            data[data_name]['bboxes'] = value['bboxes']
 
         data[data_name]['title'] = data_name
 
