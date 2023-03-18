@@ -280,43 +280,43 @@ class EntryApiHandler(BaseHandler):
         
         #############################  扩展信息 2  #############################
         # 添加3d关键点元素（需要相机参数）
-        # if 'joints3d' in sample and \
-        #   'cam_param' in sample and len(sample['cam_param']) > 0:
-        #   convert_sample.append({
-        #     'type': 'IMAGE',
-        #     'data': data_source,
-        #     'tag': [sample_label],
-        #     'title': f'3D-POINTS-({file_name})',
-        #     'id': sample_id
-        #   })
-        #   convert_sample[-1].update({
-        #     'joints3d': sample['joints3d'],
-        #     'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
-        #     'cam_param': sample['cam_param']
-        #   })
+        if 'joints3d' in sample and \
+          'cam_param' in sample and len(sample['cam_param']) > 0:
+          convert_sample.append({
+            'type': 'IMAGE',
+            'data': data_source,
+            'tag': [sample_label],
+            'title': f'3D-POINTS-({file_name})',
+            'id': sample_id
+          })
+          convert_sample[-1].update({
+            'joints3d': sample['joints3d'],
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'cam_param': sample['cam_param']
+          })
         
         #############################  扩展信息 3  #############################    
         # 添加3d关键点元素（mano）(需要相机参数)
-        # if 'pose' in sample and 'trans' in sample and 'shape' in sample and \
-        #   'cam_param' in sample and len(sample['cam_param']) > 0 and \
-        #   'model' in meta_info['meta']:
+        if 'pose' in sample and 'trans' in sample and 'shape' in sample and \
+          'cam_param' in sample and len(sample['cam_param']) > 0 and \
+          'model' in meta_info['meta']:
           
-        #   pose_shape_model = meta_info['meta']['model']
-        #   convert_sample.append({
-        #     'type': 'IMAGE',
-        #     'data': data_source,
-        #     'tag': [sample_label],
-        #     'title': f'{pose_shape_model}-({file_name})',
-        #     'id': sample_id
-        #   })
-        #   convert_sample[-1].update({
-        #     'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
-        #     'pose': sample['pose'],
-        #     'shape': sample['shape'],
-        #     'trans': sample['trans'],
-        #     'cam_param': sample['cam_param'],
-        #     'model': pose_shape_model
-        #   })          
+          pose_shape_model = meta_info['meta']['model']
+          convert_sample.append({
+            'type': 'IMAGE',
+            'data': data_source,
+            'tag': [sample_label],
+            'title': f'{pose_shape_model}-({file_name})',
+            'id': sample_id
+          })
+          convert_sample[-1].update({
+            'skeleton': meta_info['meta']['skeleton'] if 'skeleton' in meta_info['meta'] else [],
+            'pose': sample['pose'],
+            'shape': sample['shape'],
+            'trans': sample['trans'],
+            'cam_param': sample['cam_param'],
+            'model': pose_shape_model
+          })          
                 
         self.db['data'].append({
           'value': convert_sample,
