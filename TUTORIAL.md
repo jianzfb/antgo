@@ -157,7 +157,7 @@ antgo tool package/kv --src=json-path --tgt=target-folder --prefix=xxx --num=500
         })
     
     # 只有在web页面上，对所有数据检查完备后返回
-    ctx.browser.waiting()
+    ctx.browser.waiting(True)
 
     # 下载检查结果
     content = ctx.browser.download()
