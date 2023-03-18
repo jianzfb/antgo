@@ -692,8 +692,8 @@ def label_server_start(
     # 添加默认样本列表
     db['samples'] = []
 
-    sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径
     if len(sample_list) > 0 and sample_folder is not None:
+      sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径    
       # 为样本所在目录建立软连接到static下面
       os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
                   

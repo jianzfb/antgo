@@ -24,6 +24,7 @@ import socket
 import requests
 import json
 import zipfile
+import imagesize
 
 
 class ActivelearningDataRecorder(object):
