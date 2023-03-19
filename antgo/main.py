@@ -58,7 +58,9 @@ DEFINE_int('num', 0, "number")
 DEFINE_indicator("to", True, "")
 DEFINE_indicator("from", True, "")
 DEFINE_indicator("extend", True, "load extend package(mano,smpl,...)")
-
+DEFINE_indicator("shuffle", True, "")
+DEFINE_int("max-size", 0, "")
+DEFINE_indicator("ignore-incomplete", True, "")
 #############################################
 DEFINE_nn_args()
 
@@ -288,7 +290,9 @@ def main():
           filter_suffix=args.suffix, 
           filter_ext=args.ext,
           feedback=args.feedback,
-          num=args.num)
+          num=args.num,
+          shuffle=args.shuffle,
+          max_size=args.max_size)
       elif sub_action_name.startswith('browser'):
         tool_func = getattr(tools, f'browser_{sub_action_name.split("/")[-1]}', None)
         if tool_func is None:
@@ -344,7 +348,7 @@ def main():
             logging.error(f'Tool {sub_action_name} not exist.')
             return
           
-          tool_func(args.src, args.tgt, prefix=args.prefix, tags=args.tags)
+          tool_func(args.src, args.tgt, prefix=args.prefix, tags=args.tags, ignore_incomplete=args.ignore_incomplete)
 
       
 if __name__ == '__main__':

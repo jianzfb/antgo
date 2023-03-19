@@ -134,7 +134,7 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
                 image_labe_name = ','.join(sample_anno_instance['value']['labels'])
                 standard_gt['image_label_name'] = image_labe_name
                 standard_gt['image_label'] = label_name_and_label_id_map[image_labe_name] if image_labe_name in label_name_and_label_id_map else -1
-
+ 
         total_gt_list.append(standard_gt)    
     
     if not os.path.exists(tgt_folder):
@@ -148,7 +148,94 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     ctx.activelearning.exit()    
 
 
-def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, **kwargs):
+def label_from_native(src_json_file, tgt_folder, tags, ignore_incomplete=False, **kwargs):
+    # 加载原生标注工具的结果
+    with open(src_json_file, 'r') as fp:
+        result = json.load(fp)
+    
+    # label_name:0,label_name;1,...
+    label_name_and_label_id_map = {}
+    label_id_and_label_name_map = {}
+    for label_name_and_label_id in tags.split(','):
+        label_name, label_id = label_name_and_label_id.split(':')
+        label_name_and_label_id_map[label_name] = int(label_id)
+        label_id_and_label_name_map[int(label_id)] = label_name
+        
+    # 转换到标准GT格式
+    total_gt_list = []
+    src_json_file_name = src_json_file.split('/')[-1].split('.')[0]
+    sgtt = SampleGTTemplate()
+    for anno_id, anno_info in enumerate(result):
+        standard_gt = sgtt.get()
+        standard_gt['image_file'] = '/'.join(anno_info['file_upload'].split('/')[3:])
+        standard_gt['tag'] = src_json_file_name
+        
+        if len(anno_info['annotations']) == 0:
+            continue
+        
+        sample_anno_info = anno_info['annotations'][0]
+        for sample_anno_instance in sample_anno_info['result']:  
+            if sample_anno_instance['type'] == 'RECT':
+                standard_gt['height'] = 0 if 'height' not in sample_anno_instance else sample_anno_instance['height']
+                standard_gt['width'] = 0 if 'width' not in sample_anno_instance else sample_anno_instance['width']
+                            
+                bbox_x = sample_anno_instance['value']['x']
+                bbox_y = sample_anno_instance['value']['y']
+                bbox_width = sample_anno_instance['value']['width']
+                bbox_height = sample_anno_instance['value']['height']
+                standard_gt['bboxes'].append([bbox_x,bbox_y,bbox_x+bbox_width,bbox_y+bbox_height])
+
+                label_id = sample_anno_instance['value']['labels']
+                standard_gt['labels'].append(label_id)
+                standard_gt['label_names'].append(label_id_and_label_name_map[label_id])
+            elif sample_anno_instance['type'] == 'POLYGON':
+                standard_gt['height'] = 0 if 'height' not in sample_anno_instance else sample_anno_instance['height']
+                standard_gt['width'] = 0 if 'width' not in sample_anno_instance else sample_anno_instance['width']
+                                
+                points = []
+                for xxyy in sample_anno_instance['value']['points']:
+                    points.append([xxyy['x'], xxyy['y']])
+                    
+                points_array = np.array(points) 
+                bbox_x1 = float(np.min(points_array[:,0]))
+                bbox_y1 = float(np.min(points_array[:,1]))
+                bbox_x2 = float(np.max(points_array[:,0]))
+                bbox_y2 = float(np.max(points_array[:,1]))
+                standard_gt['bboxes'].append([bbox_x1, bbox_y1, bbox_x2, bbox_y2])
+
+                label_id = sample_anno_instance['value']['labels']
+                standard_gt['labels'].append(label_id)
+                standard_gt['label_names'].append(label_id_and_label_name_map[label_id])
+
+                standard_gt['segments'].append(points)
+                standard_gt['has_segments'].append(1)
+            elif sample_anno_instance['type'] == 'POINT':
+                pass
+            elif sample_anno_instance['type'] == 'CHOICES':
+                standard_gt['height'] = 0 if 'height' not in sample_anno_instance else sample_anno_instance['height']
+                standard_gt['width'] = 0 if 'width' not in sample_anno_instance else sample_anno_instance['width']
+                                
+                image_labe_name = ','.join(sample_anno_instance['value']['labels'])
+                standard_gt['image_label_name'] = image_labe_name
+                standard_gt['image_label'] = label_name_and_label_id_map[image_labe_name] if image_labe_name in label_name_and_label_id_map else -1
+
+        if ignore_incomplete:
+            if len(standard_gt['bboxes']) == 0 and standard_gt['image_label'] == -1:
+                # 忽略空标注样本
+                continue
+            
+        total_gt_list.append(standard_gt)    
+    
+    if not os.path.exists(tgt_folder):
+        os.makedirs(tgt_folder)
+    with open(os.path.join(tgt_folder, f'{src_json_file_name}_label.json'), 'w') as fp:
+        json.dump(total_gt_list, fp)
+    
+    with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
+        json.dump(sgtt.meta(), fp)
+
+
+def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, ignore_incomplete=False, **kwargs):
     # 将label-studio转换到标注GT
     if tgt_folder is None:
         tgt_folder = './'

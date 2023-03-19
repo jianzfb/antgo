@@ -125,7 +125,9 @@ class LabelStateHandler(BaseHandler):
       self.db['running']['round'] = (int)(running_round)
       self.response(RESPONSE_STATUS_CODE.SUCCESS)
       return
-  
+
+    
+    # TODO，引入强制完成标记
     if running_stage == 'finish':
       # 检查是否每个数据已经完成审核或标注
       sample_num = len(self.db['samples'])

@@ -17,7 +17,7 @@ from antgo.utils.sample_gt import *
 from pycocotools.coco import COCO
 
 
-def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
+def extract_from_videos(video_folder, target_folder, frame_rate=10, max_size=0, **kwargs):
     # 输出
     # -data
     # -annotation.json
@@ -51,6 +51,15 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
                 break
             
             frame_height, frame_width = frame.shape[:2]
+            
+            if max_size > 0:
+                scale = 1.0
+                if frame_height > frame_width:
+                    scale = max_size / frame_height
+                else:
+                    scale = max_size / frame_width
+                frame = cv2.resize(frame, None, None, fx=scale, fy=scale)
+                
             if count % frame_rate == 0:
                 cv2.imwrite(os.path.join(target_folder, video_file_pure_name, f'{video_file_pure_name}_rate-{frame_rate}_frame-{count}.png'), frame)
 
@@ -90,7 +99,13 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, **kwargs):
         json.dump(annotation_list, fp)
     
 
-def extract_from_images(source_folder, target_folder, filter_prefix=None, filter_suffix=None, filter_ext=None, **kwargs):
+def extract_from_images(
+    source_folder, 
+    target_folder, 
+    filter_prefix=None, 
+    filter_suffix=None, 
+    filter_ext=None, 
+    shuffle=False, num=0, max_size=0, **kwargs):
     support_image_ext = ['png', 'jpeg', 'jpg']
     if filter_ext is not None:
         temp = []
@@ -129,14 +144,14 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
             # copy to 对应目录
             source_path = os.path.join(root, filename)
             rel_path = os.path.relpath(source_path, source_folder)
-            target_path = os.path.join(target_folder, rel_path)
-            dir_path = os.path.dirname(target_path)
-            if not os.path.exists(os.path.join(dir_path)):
-                os.makedirs(dir_path)
-            
-            shutil.copy(source_path, target_path)
             sample_file_list.append(rel_path)
 
+    if shuffle:
+        np.random.shuffle(sample_file_list)
+    
+    if num <= 0:
+        num = len(sample_file_list)
+    
     # 生成默认格式解析json
     annotation_file_name = 'annotation.json'
     annotation_list = []
@@ -145,10 +160,29 @@ def extract_from_images(source_folder, target_folder, filter_prefix=None, filter
     with open(sample_gt_file, 'r', encoding="utf-8") as fp:
         sample_gt = json.load(fp)
 
-    for sample_file_name in sample_file_list:
+    for sample_file_name in sample_file_list[:num]:
+        source_path = os.path.join(source_folder, sample_file_name)
+        target_path = os.path.join(target_folder, sample_file_name)
+        dir_path = os.path.dirname(target_path)
+        if not os.path.exists(os.path.join(dir_path)):
+            os.makedirs(dir_path)
+        
+        if max_size > 0:
+            image = cv2.imread(source_path)
+            height, width = image.shape[:2]
+            scale = 1.0
+            if height > width:
+                scale = max_size / height
+            else:
+                scale = max_size / width
+            image = cv2.resize(image, None, None, fx=scale, fy=scale)
+            cv2.imwrite(target_path, image)
+        else:  
+            shutil.copy(source_path, target_path)
+            
         sample_file_path = os.path.join(target_folder, sample_file_name)
         width, height = imagesize.get(sample_file_path)
-        
+    
         sample_gt_cp = copy.deepcopy(sample_gt)
         sample_gt_cp.update({
             'image_file': sample_file_name
