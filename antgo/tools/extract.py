@@ -1,5 +1,4 @@
 import sys
-sys.path.append('/Users/bytedance/Downloads/workspace/my/antgo')
 from fileinput import filename
 from random import shuffle
 import shutil

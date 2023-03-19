@@ -6,13 +6,19 @@
 ### 转换视频数据到标准训练格式
 ```
 antgo tool extract/videos --src=video-folder-path --tgt=target-folder --frame-rate=15 
+// 如果需要指定抽取后的最长边大小，可以调用
+antgo tool extract/videos --src=video-folder-path --tgt=target-folder --frame-rate=15 --max-size=512
 ```
 ### 转换松散数据到标准训练格式
 ```
 antgo tool extract/images --src=image-folder-path --tgt=target-folder
 
 // 如果同时想要指定文件名前缀，后缀，扩展名进行过滤，可以如下，
-antgo tool extract/images --src=image-folder-path --tgt=target-folder --prefix=prefix --suffix=suffix --ext=ext
+antgo tool extract/images --src=image-folder-path --tgt=target-folder --prefix=prefix --suffix=suffix 
+--ext=ext
+
+// 如果想要指定是否乱序，最大抽取图像数，以及最长边大小，可以调用
+antgo tool extract/images --src=image-folder-path --tgt=target-folder --shuffle --num=5000 --max-size=512
 ```
 ### 转换COCO格式数据到标准训练格式
 ```
@@ -69,7 +75,7 @@ antgo tool label/studio --src=json-path --tgt=target-folder --to
 // 启动标注服务
 // --type 支持RECT,POLYGON
 // --tags 设置类型标签，例如Car:0,Train:1
-antgo tool label/start --src=json-path --tgt=target-folder --tags=xxx --type=RECT 
+antgo tool label/start --src=json-path --tgt=target-folder --tags=Car:0,Train:1 --type=RECT 
 ```
 
 ### 打包tfrecord/kv数据（仅支持标准GT格式）
