@@ -107,10 +107,10 @@ class ComputerVisionMixin:
 
   def to_video(self,
                output_path,
+               width,
+               height,
+               rate=30,
                codec=None,
-               rate=None,
-               width=None,
-               height=None,
                format=None,
                template=None,
                audio_src=None):
@@ -135,6 +135,7 @@ class ComputerVisionMixin:
         audio_src:
             The audio to encode with the video.
     """
+    assert(width is not None and height is not None)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 用于mp4格式的生成的参数
     out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
 
