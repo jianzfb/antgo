@@ -63,10 +63,18 @@ class image_save(object):
     if not os.path.exists(self.folder):
       os.makedirs(self.folder)
 
-  def __call__(self, file_path, x):
+    self.count = 0
+    
+  def __call__(self, x, file_path=None):
     if self.to_bgr:
       image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)    
-    file_name = file_path.split('/')[-1].split('.')[0]
+
+    file_name = ''
+    if file_path is not None:
+      file_name = file_path.split('/')[-1].split('.')[0]
+    else:
+      file_name = f'frame_{self.count}'
+      self.count += 1
     cv2.imwrite(os.path.join(self.folder, f'{file_name}.png'), x)
 
 

@@ -13,40 +13,6 @@ import torch.nn.functional as F
 import numpy as np
 import cv2 
 
-def gen_k_target(heatmap, center, radius, k=1):
-    """Generate 2D gaussian heatmap.
-
-    Args:
-        heatmap (Tensor): Input heatmap, the gaussian kernel will cover on
-            it and maintain the max value.
-        center (list[int]): Coord of gaussian kernel's center.
-        radius (int): Radius of gaussian kernel.
-        k (int): Coefficient of gaussian kernel. Default: 1.
-
-    Returns:
-        out_heatmap (Tensor): Updated heatmap covered by gaussian kernel.
-    """
-    diameter = 2 * radius + 1
-    # gaussian_kernel = gaussian2D(
-    #     radius, sigma=diameter / 6, dtype=heatmap.dtype, device=heatmap.device)
-
-    x, y = center
-
-    height, width = heatmap.shape[:2]
-
-    left, right = min(x, radius), min(width - x, radius + 1)
-    top, bottom = min(y, radius), min(height - y, radius + 1)
-
-    masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
-    k_heatmap = torch.ones_like(masked_heatmap) * k
-    out_heatmap = heatmap
-    torch.max(
-        masked_heatmap,
-        k_heatmap,
-        out=out_heatmap[y - top:y + bottom, x - left:x + right])
-
-    return out_heatmap
-
 
 def sigmoid_focal_loss(
     inputs: torch.Tensor,
@@ -122,7 +88,8 @@ class FcosHead(BaseDenseHead):
                  down_stride,
                  rescale=1.0,
                  score_thresh=0.15,
-                 loss_ht_weight=1.0,
+                 loss_ch=dict(
+                     type='GaussianFocalLoss', loss_weight=1.0),
                  loss_wh=dict(type='L1Loss', loss_weight=0.1),
                  train_cfg=None,
                  test_cfg=None,
@@ -132,9 +99,10 @@ class FcosHead(BaseDenseHead):
         self.rescale_x, self.rescale_y = rescale if type(rescale) == list or type(rescale) == tuple else (rescale, rescale)
         self.score_thresh = score_thresh
         self.down_stride = down_stride
-        self.last_channel = in_channel  
+        self.in_channel = in_channel  
+        self.feat_channel = feat_channel
         self._build_head()
-        self.loss_ht_weight = loss_ht_weight
+        self.loss_center_heatmap=build_loss(loss_ch)
         self.loss_reg = build_loss(loss_wh)
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
@@ -167,16 +135,17 @@ class FcosHead(BaseDenseHead):
 
     def _build_head(self):
         self.heatmap_head = nn.Sequential(
-            nn.Conv2d(self.last_channel, self.num_classes, kernel_size=3, stride=1, padding=1),
-        )
-        self.reg_head = nn.Sequential(
-            nn.Conv2d(self.last_channel,self.last_channel,kernel_size=3,padding=1,bias=False),
-            nn.BatchNorm2d(self.last_channel),
+            nn.Conv2d(self.in_channel, self.feat_channel, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(self.last_channel, 4, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(self.feat_channel, self.num_classes, kernel_size=1, bias=True))
+
+        self.reg_head = nn.Sequential(
+            nn.Conv2d(self.in_channel,self.feat_channel,kernel_size=3,padding=1,bias=False),
+            nn.BatchNorm2d(self.feat_channel),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(self.feat_channel, 4, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(4),
-            nn.ReLU(inplace=True)
-        )
+            nn.ReLU(inplace=True))
 
     def init_weights(self):
         """Initialize weights of the head."""
@@ -221,33 +190,28 @@ class FcosHead(BaseDenseHead):
     def loss(self,
              center_heatmap_pred,
              reg_pred,
-             gt_bboxes,
-             gt_labels,
-             img_metas,
+             bboxes,
+             labels,
+             image_meta,
              gt_bboxes_ignore=None):
         target_result, avg_factor = \
-            self.get_targets(gt_bboxes, gt_labels, center_heatmap_pred.shape, img_metas)
+            self.get_targets(bboxes, labels, center_heatmap_pred.shape, image_meta)
 
         center_heatmap_target = target_result['center_heatmap_target']
         reg_targets = target_result['reg_targets']
         reg_weights = target_result['reg_weights']
 
-        loss_center_heatmap = sigmoid_focal_loss(
-            center_heatmap_pred,
-            center_heatmap_target,
-            alpha=0.8
-        )
-        loss_center_heatmap = torch.sum(loss_center_heatmap) / (avg_factor+1e-5)
-
+        loss_center_heatmap = self.loss_center_heatmap(
+            center_heatmap_pred.sigmoid(), center_heatmap_target, avg_factor=avg_factor)
         loss_reg_v = self.loss_reg(
             reg_pred,
             reg_targets,
             reg_weights,
-            avg_factor=avg_factor*5)
+            avg_factor=avg_factor*2)
 
         # 
         total_loss = dict(
-            loss_center_heatmap=loss_center_heatmap * self.loss_ht_weight,
+            loss_center_heatmap=loss_center_heatmap,
             loss_reg=loss_reg_v)
 
         return total_loss
@@ -337,6 +301,8 @@ class FcosHead(BaseDenseHead):
             reg_target = ltrb_off[torch.zeros_like(areas,dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1),1)]#[h*w,4]
             reg_target = torch.reshape(reg_target,(-1,4))       #[h*w,4]
             mask_pos_2 = mask_pos.long().sum(dim=-1)            #[h*w]
+            mask_pos_2 = mask_pos_2 >= 1
+            
             reg_target[~(mask_pos_2.to(torch.bool))] = 0
 
             # reshape
@@ -354,10 +320,10 @@ class FcosHead(BaseDenseHead):
                 scale_box_h = (gt_bbox[j][3] - gt_bbox[j][1]) * height_ratio
                 scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
 
-                radius = max(max(scale_box_h, scale_box_w)/2, 2)
-                radius = (int)(radius)
-                ind = gt_label[j]
+                radius = gaussian_radius([scale_box_h, scale_box_w], min_overlap=0.3)
+                radius = max(1, int(radius))
 
+                ind = gt_label[j]
                 gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius)
 
             reg_target_list.append(reg_target)

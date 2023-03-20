@@ -20,7 +20,6 @@
     "bboxes3d_rotation": [],
     "bboxes3d_size": [],
     "labels": [],
-    "label_names": [],
     "has_joints2d": [],
     "joints2d": [],
     "has_joints3d": [],

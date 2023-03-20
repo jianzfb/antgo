@@ -904,10 +904,10 @@ def browser_server_start(browser_dump_dir,
   try:
     from manopth.manolayer import ManoLayer
     left_mano_layer = ManoLayer(
-      mano_root="extend/models/mano", use_pca=False, flat_hand_mean=False, side='left'
+      mano_root="extra/models/mano", use_pca=False, flat_hand_mean=False, side='left'
     )   
     right_mano_layer = ManoLayer(
-      mano_root="extend/models/mano", use_pca=False, flat_hand_mean=False, side='right'
+      mano_root="extra/models/mano", use_pca=False, flat_hand_mean=False, side='right'
     )   
     mano_layer_map = {
       'left': left_mano_layer,

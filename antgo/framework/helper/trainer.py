@@ -29,6 +29,7 @@ from antgo.framework.helper.models.dummy_module import *
 from antgo.framework.helper.models.proxy_module import *
 from antgo.framework.helper.models.distillation import *
 from antgo.framework.helper.runner.hooks.hook import *
+from antgo.framework.helper.parallel.utils import is_module_wrapper
 from .base_trainer import *
 from thop import profile
 import copy
@@ -52,69 +53,7 @@ except:
     print('Dont support aimet.')
     pass
 
-'''
-cfg_dict = dict(
-    optimizer = dict(type='Adam', lr=1e-4),
-    optimizer_config = dict(grad_clip=None),
-    lr_config = dict(
-        policy='step',
-        by_epoch=True,
-        warmup=None,
-        gamma=0.1,
-        step=[15, 17]),
-    log_config = dict(
-        interval=5,    
-        hooks=[
-            dict(type='TextLoggerHook'),
-        ]),
-    checkpoint_config = dict(interval=1,out_dir='./'),        
-    seed=0,
-    data = dict(
-        train=dict(
-                    type='InterHand26MReader',
-                    dir='/root/paddlejob/workspace/env_run/portrait/InterHand2.6M/data/InterHand2.6M',
-                    trans_test='rootnet',
-                    output_hm_shape=(64, 64, 64),
-                    input_img_shape=(256, 256),
-                    bbox_3d_size=400,      
-                    output_root_hm_shape=64, 
-                    bbox_3d_size_root=400,
-                    pipeline=[dict(type='Compose', processes=[['ToTensor', {}]])],
-                    inputs_def = {
-                        'fields': [
-                            ['image'],
-                            ['joint_coord','rel_root_depth','hand_type'],
-                            ['joint_valid', 'root_valid', 'hand_type_valid', 'inv_trans', 'capture', 'cam', 'frame']
-                        ]
-                    }
-                ),
-        train_dataloader=dict(samples_per_gpu=32,workers_per_gpu=2),
-        val=dict(
-                type='InterHand26MReader',
-                dir='/root/paddlejob/workspace/env_run/portrait/InterHand2.6M/data/InterHand2.6M',
-                train_or_test='val',
-                trans_test='rootnet',
-                output_hm_shape=(64, 64, 64),
-                input_img_shape=(256, 256),
-                bbox_3d_size=400,  
-                output_root_hm_shape=64, 
-                bbox_3d_size_root=400,
-                pipeline=[dict(type='Compose', processes=[['ToTensor', {}]])],
-                inputs_def = {
-                    'fields': [
-                        ['image'],
-                        ['joint_coord','rel_root_depth','hand_type'],
-                        ['joint_valid', 'root_valid', 'hand_type_valid', 'inv_trans', 'capture', 'cam', 'frame', 'TID']
-                    ]
-                }
-            ),
-        val_dataloader=dict(samples_per_gpu=16, workers_per_gpu=1),
-        ),
-    gpu_ids=[0],
-    log_level=logging.INFO,
-    evaluation=dict(out_dir='./out')
-)
-'''
+
 def _default_forward_pass_callback(model, data_loader):
     # switch to eval state
     model.eval()
@@ -313,8 +252,42 @@ class Trainer(BaseTrainer):
         auto_scale_lr(self.cfg, self.distributed, logger)
 
         # build optimizer
-        optimizer = build_optimizer(model, self.cfg.optimizer)
-
+        # 如果构造optimizer调度，则不在全局hook中注册
+        optimizer = None
+        if 'type' in self.cfg.optimizer:
+            # optimizer 简单，全局控制
+            optimizer = build_optimizer(model, self.cfg.optimizer)
+        else:
+            # optimizer 复合，对多个子模块独立控制
+            # 需要模型自己控制
+            optimizer = {}
+            if is_module_wrapper(model):
+                model = model.module
+                        
+            for submodule_name, optimizer_dict in self.cfg.optimizer.items():
+                optimizer[submodule_name] = build_optimizer(getattr(model, submodule_name), optimizer_dict)
+        
+        # build lr scheduler
+        # 如果构造复合lr调度，则不在全局hook中注册
+        lr_scheduler = {}
+        if 'policy' not in self.cfg.lr_config:
+            # lr schedule 复合，对多个子模块独立控制
+            for submodule_name, lr_config in self.cfg.lr_config.items():
+                assert('policy' in lr_config)
+                
+                policy_type = lr_config.pop('policy')
+                # If the type of policy is all in lower case, e.g., 'cyclic',
+                # then its first letter will be capitalized, e.g., to be 'Cyclic'.
+                # This is for the convenient usage of Lr updater.
+                # Since this is not applicable for `
+                # CosineAnnealingLrUpdater`,
+                # the string will not be changed if it contains capital letters.
+                if policy_type == policy_type.lower():
+                    policy_type = policy_type.title()
+                hook_type = policy_type + 'LrUpdaterHook'
+                lr_config['type'] = hook_type
+                lr_scheduler[submodule_name] = build_from_cfg(lr_config, HOOKS)         
+                
         # build training strategy
         custom_runner = self.cfg.get('runner', dict(type='EpochBasedRunner', max_epochs=1))
         self.runner = build_runner(
@@ -324,18 +297,23 @@ class Trainer(BaseTrainer):
                 optimizer=optimizer,
                 work_dir=self.work_dir,
                 logger=logger,
-                meta=self.meta))
+                meta=self.meta,
+                lr_scheduler=lr_scheduler))
 
         # an ugly workaround to make .log and .log.json filenames the same
         self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
-        optimizer_config = self.cfg.get('optimizer_config', {})
-        if 'type' not in optimizer_config:
-            optimizer_config = OptimizerHook(**optimizer_config)
+        optimizer_config = None
+        if not isinstance(optimizer, dict):
+            # 对于复合optimizer，不进行后台hook
+            # 对于optimizer的控制由模型的train_step内部自己控制
+            optimizer_config = self.cfg.get('optimizer_config', {})
+            if 'type' not in optimizer_config:
+                optimizer_config = OptimizerHook(**optimizer_config)
 
         custom_hooks = self.cfg.get('custom_hooks', None)        
         self.runner.register_training_hooks(
-            self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等
+            self.cfg.lr_config if len(lr_scheduler) == 0 else None,   # 学习率调整策略，比如step,warmup等
             optimizer_config,                                       # 优化器的相关后处理，比如限制梯度操作等
             self.cfg.checkpoint_config,                             # checkpoint相关处理
             self.cfg.log_config,                                         

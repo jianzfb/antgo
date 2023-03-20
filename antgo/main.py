@@ -5,6 +5,7 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+from inspect import trace
 import sys
 import os
 from antgo.utils.utils import *
@@ -18,6 +19,8 @@ from antgo import version
 from jinja2 import Environment, FileSystemLoader
 import json
 from antgo import tools
+import traceback
+
 # 需要使用python3
 assert(int(sys.version[0]) >= 3)
 
@@ -58,10 +61,11 @@ DEFINE_indicator("user-input", True, "")
 DEFINE_int('num', 0, "number")
 DEFINE_indicator("to", True, "")
 DEFINE_indicator("from", True, "")
-DEFINE_indicator("extend", True, "load extend package(mano,smpl,...)")
+DEFINE_indicator("extra", True, "load extra package(mano,smpl,...)")
 DEFINE_indicator("shuffle", True, "")
 DEFINE_int("max-size", 0, "")
 DEFINE_indicator("ignore-incomplete", True, "")
+
 #############################################
 DEFINE_nn_args()
 
@@ -133,14 +137,14 @@ def main():
     os.makedirs(config.AntConfig.task_factory)
 
   ######################################### 支持扩展 ###############################################
-  if args.extend and not os.path.exists('extend'):
-    logging.info('download extend package')
-    os.system('wget http://image.mltalker.com/extend.tar; tar -xf extend.tar; cd extend/manopth; python3 setup.py install')
+  if args.extra and not os.path.exists('extra'):
+    logging.info('download extra package')
+    os.system('wget http://image.mltalker.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
   
   if args.ext_module != '':
     logging.info('import extent module')
     load_extmodule(args.ext_module)
-  
+
   ######################################### 生成最小mvp ###############################################
   if action_name == 'create' and sub_action_name == 'mvp':
     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')

@@ -8,6 +8,8 @@ from .losses.quality_focal_loss import QualityFocalLoss
 class DenseTeacher(MultiSteamModule):
     def __init__(self, model: dict, train_cfg=None, test_cfg=None):
         # 默认使用teacher模型作为最佳模型
+        if test_cfg is None:
+            test_cfg = dict()
         test_cfg.update(
             {
                 'inference_on': 'teacher'
@@ -22,15 +24,15 @@ class DenseTeacher(MultiSteamModule):
             test_cfg=test_cfg,
         )
         self.freeze("teacher")
-        self.key = train_cfg.get('key', 0)
-        self.use_sigmoid = train_cfg.get('use_sigmoid', True)
+        self.key = train_cfg.get('key', 0)                                  # 挑选model进入loss前的featuremap list中的哪个作为半监督信号
+        self.use_sigmoid = train_cfg.get('use_sigmoid', True)               # 是否将挑选出来的featuremap 使用sigmoid 
 
-        self.label_batch_size = train_cfg.get('label_batch_size', 5)
-        self.unlabel_batch_size = train_cfg.get('unlabel_batch_size', 3)
+        self.label_batch_size = train_cfg.get('label_batch_size', 5)        # 有标签数据量 在一个batch里
+        self.unlabel_batch_size = train_cfg.get('unlabel_batch_size', 3)    # 无标签数据量 在一个batch里
 
-        self.semi_ratio = train_cfg.get('semi_ratio',0.5)
-        self.heatmap_n_thr = train_cfg.get('heatmap_n_thr', 0.25)
-        self.semi_loss_w = train_cfg.get('semi_loss_w', 1.0)
+        self.semi_ratio = train_cfg.get('semi_ratio',0.5)                   # 挑选出绝对负样本的最大数量
+        self.heatmap_n_thr = train_cfg.get('heatmap_n_thr', 0.25)           # heatmap中，小于此值视为绝对负样本，其余位置通过半监督信号监督
+        self.semi_loss_w = train_cfg.get('semi_loss_w', 1.0)                # 半监督损失的权重
 
     def _get_unsup_dense_loss(self, student_heatmap_, teacher_heatmap_):
         # student_heatmap_: N,C,H,W
@@ -67,29 +69,47 @@ class DenseTeacher(MultiSteamModule):
 
         return {"loss_heatmap": loss_heatmap}
 
-    def forward_train(self, images, image_metas, **kwargs):
+    def forward_train(self, images, image_meta, **kwargs):
         label_images, unlabel_weak_strong_images = \
             torch.split(images, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
-        label_metas = image_metas[:self.label_batch_size]
+        label_metas = image_meta[:self.label_batch_size]
 
         unlabel_weak_images=torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
         unlabel_strong_images=torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
 
-        unlabel_weak_strong_metas = image_metas[self.label_batch_size:]
+        unlabel_weak_strong_metas = image_meta[self.label_batch_size:]
         unlabel_weak_metas = [unlabel_weak_strong_metas[i] for i in range(0, 2*self.unlabel_batch_size, 2)]
         unlabel_strong_metas = [unlabel_weak_strong_metas[i] for i in range(1, 2*self.unlabel_batch_size, 2)]
+        
+        # ignore epoch,iter key in kwargs
+        if 'epoch' in kwargs:
+            kwargs.pop('epoch')
+        if 'iter' in kwargs:
+            kwargs.pop('iter')
         
         label_kwargs = {}
         unlabel_weak_kwargs = {}
         unlabel_strong_kwargs = {}
         for k, v in kwargs.items():
-            v_label_kwargs, v_unlabel_weak_strong_kwargs = \
-                torch.split(v, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
+            if isinstance(v, torch.Tensor):
+                v_label_kwargs, v_unlabel_weak_strong_kwargs = \
+                    torch.split(v, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
+            elif isinstance(v, list):
+                v_label_kwargs = v[:self.label_batch_size]
+                v_unlabel_weak_strong_kwargs = v[self.label_batch_size:]
+            else:
+                # ignore other
+                continue
+            
             label_kwargs[k] = v_label_kwargs
 
-            v_unlabel_weak_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
-            v_unlabel_strong_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
-
+            if isinstance(v, torch.Tensor):
+                v_unlabel_weak_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
+                v_unlabel_strong_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
+            else:
+                v_unlabel_weak_kwargs = v_unlabel_weak_strong_kwargs[:self.unlabel_batch_size]
+                v_unlabel_strong_kwargs = v_unlabel_weak_strong_kwargs[self.unlabel_batch_size:]
+            
             unlabel_weak_kwargs[k] = v_unlabel_weak_kwargs
             unlabel_strong_kwargs[k] = v_unlabel_strong_kwargs
 
@@ -132,8 +152,8 @@ class DenseTeacher(MultiSteamModule):
 
         return losses
     
-    def simple_test(self, images, image_metas, rescale=True, **kwargs):
-        return self.teacher(images, image_metas, rescale, **kwargs)
+    def simple_test(self, images, image_meta, rescale=True, **kwargs):
+        return self.teacher(images, image_meta, rescale, **kwargs)
 
     def _load_from_state_dict(
         self,

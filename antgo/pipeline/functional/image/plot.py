@@ -6,8 +6,8 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import random
-from sqlite3 import register_adapter
 from antgo.pipeline.engine import *
+from antgo.utils import colormap
 import cv2
 
 

@@ -63,10 +63,10 @@ class SingleStageDetector(BaseDetector):
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
                 For details on the values of these keys see
                 :class:`mmdet.datasets.pipelines.Collect`.
-            gt_bbox (list[Tensor]): Each item are the truth boxes for each
+            bboxes (list[Tensor]): Each item are the truth boxes for each
                 image in [tl_x, tl_y, br_x, br_y] format.
-            gt_class (list[Tensor]): Class indices corresponding to each box
-            gt_bboxes_ignore (None | list[Tensor]): Specify which bounding
+            labels (list[Tensor]): Class indices corresponding to each box
+            bboxes_ignore (None | list[Tensor]): Specify which bounding
                 boxes can be ignored when computing the loss.
 
         Returns:
@@ -81,13 +81,17 @@ class SingleStageDetector(BaseDetector):
         losses = self.bbox_head.forward_train(x, image_meta, bboxes,
                                               labels, bboxes_ignore)
         return losses
-
+    
+    def loss(self, *args, image_meta, bboxes, labels):
+        losses = self.bbox_head.loss(*args, bboxes, labels, image_meta)
+        return losses
+    
     def simple_test(self, image, image_meta, rescale=True, **kwargs):
         """Test function without test-time augmentation.
 
         Args:
-            img (torch.Tensor): Images with shape (N, C, H, W).
-            img_metas (list[dict]): List of image information.
+            image (torch.Tensor): Images with shape (N, C, H, W).
+            image_meta (list[dict]): List of image information.
             rescale (bool, optional): Whether to rescale the results.
                 Defaults to False.
 

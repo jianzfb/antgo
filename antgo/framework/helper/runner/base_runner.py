@@ -56,7 +56,7 @@ class BaseRunner(metaclass=ABCMeta):
                  logger=None,
                  meta=None,
                  max_iters=None,
-                 max_epochs=None):
+                 max_epochs=None, lr_scheduler=None):
         # check the type of `optimizer`
         if isinstance(optimizer, dict):
             for name, optim in optimizer.items():
@@ -81,6 +81,7 @@ class BaseRunner(metaclass=ABCMeta):
 
         self.model = model
         self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
         self.logger = logger
         self.meta = meta
         # create work_dir
