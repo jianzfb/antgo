@@ -126,8 +126,8 @@ class LabelStateHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.SUCCESS)
       return
 
-    
-    # TODO，引入强制完成标记
+    # 强制完成标记 （如果是true，则即使是未完成所有样本标注，也强制设置完成标记）
+    is_force = self.get_argument('force', False)
     if running_stage == 'finish':
       # 检查是否每个数据已经完成审核或标注
       sample_num = len(self.db['samples'])
@@ -136,7 +136,7 @@ class LabelStateHandler(BaseHandler):
         if sample['state'] == 'completed':
           completed_num += 1
         
-      if sample_num != completed_num:
+      if sample_num != completed_num and not is_force:
         self.response(
           RESPONSE_STATUS_CODE.SUCCESS, 
           content={

@@ -14,7 +14,7 @@ def label_to_studio(src_json_file, tgt_folder, prefix='',  **kwargs):
     pass
 
 
-def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=None):
+def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=None, ignore_incomplete=False):
     # 检查参数
     assert(tags is not None)
     
@@ -89,6 +89,9 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         standard_gt['image_file'] = '/'.join(anno_info['file_upload'].split('/')[3:])
         standard_gt['tag'] = src_json_file_name
         
+        if len(anno_info['annotations']) == 0:
+            continue
+        
         sample_anno_info = anno_info['annotations'][0]
         for sample_anno_instance in sample_anno_info['result']:  
             if sample_anno_instance['type'] == 'RECT':
@@ -135,6 +138,11 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
                 standard_gt['image_label_name'] = image_labe_name
                 standard_gt['image_label'] = label_name_and_label_id_map[image_labe_name] if image_labe_name in label_name_and_label_id_map else -1
  
+        if ignore_incomplete:
+            if len(standard_gt['bboxes']) == 0 and standard_gt['image_label'] == -1:
+                # 忽略空标注样本
+                continue
+        
         total_gt_list.append(standard_gt)    
     
     if not os.path.exists(tgt_folder):

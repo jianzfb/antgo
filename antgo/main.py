@@ -335,7 +335,7 @@ def main():
             logging.error(f'Tool {sub_action_name} not exist.')
             return
           
-          tool_func(args.src, args.tgt, args.tags, args.type, args.white_users)
+          tool_func(args.src, args.tgt, args.tags, args.type, args.white_users, ignore_incomplete=args.ignore_incomplete)
           return
         else:
           tool_func = None
