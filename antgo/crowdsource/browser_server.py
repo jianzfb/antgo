@@ -113,13 +113,13 @@ class EntryApiHandler(BaseHandler):
           file_name = input_info.split('/')[-1]
           local_path = os.path.join(static_path, file_name)
           if not os.path.exists(local_path):
-            logger.error('Fail to download from htfs.')
+            logger.error('Fail to download from hdfs.')
             self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
             return
           
           input_info = local_path
         except:
-          logger.error('Fail to download from htfs.')
+          logger.error('Fail to download from hdfs.')
           self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
           return
       elif input_info.lower().startswith("hdfs"):
@@ -131,14 +131,26 @@ class EntryApiHandler(BaseHandler):
             shutil.rmtree(os.path.join(static_path, sub_folder))
           os.makedirs(os.path.join(static_path, sub_folder))
           
-          loal_path = os.path.join(static_path, sub_folder)
+          temp_path = os.path.join(static_path, sub_folder)
           if input_info.endswith('/'):
             input_info = input_info[:-1]            
-          environment.hdfs_client.get(f'{input_info}/*', loal_path)
-          input_info = local_path
+          environment.hdfs_client.get(f'{input_info}/*', temp_path)
+
+          json_file_path = ''
+          if os.path.isdir(temp_path):
+            for file_name in os.listdir(temp_path):
+              if file_name.endswith('json'):
+                json_file_path = os.path.join(temp_path, file_name)
+                shutil.copyfile(json_file_path, os.path.join(static_path, file_name))
+                json_file_path = os.path.join(static_path, file_name)
+                break
+          
+          assert(json_file_path != '')
+          input_info = json_file_path
         except:
-          logger.error('Fail to download folder from htfs.')
+          logger.error('Fail to download folder from hdfs.')
           self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
+          return
       else:
         # step 1.4: 本地路径
         if not os.path.exists(input_info):
