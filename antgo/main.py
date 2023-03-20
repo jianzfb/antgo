@@ -11,6 +11,7 @@ from antgo.utils.utils import *
 from antgo.utils.args import *
 from antgo.ant.utils import *
 from antgo.command import *
+from antgo.framework.helper.tools.util import *
 from antgo.help import *
 from antgo import config
 from antgo import version
@@ -131,11 +132,15 @@ def main():
   if not os.path.exists(config.AntConfig.task_factory):
     os.makedirs(config.AntConfig.task_factory)
 
-  ######################################### 支持扩展模型 ###############################################
+  ######################################### 支持扩展 ###############################################
   if args.extend and not os.path.exists('extend'):
     logging.info('download extend package')
     os.system('wget http://image.mltalker.com/extend.tar; tar -xf extend.tar; cd extend/manopth; python3 setup.py install')
-    
+  
+  if args.ext_module != '':
+    logging.info('import extent module')
+    load_extmodule(args.ext_module)
+  
   ######################################### 生成最小mvp ###############################################
   if action_name == 'create' and sub_action_name == 'mvp':
     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')

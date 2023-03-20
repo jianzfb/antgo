@@ -129,7 +129,7 @@ def DEFINE_nn_args():
         action='store_true',
         help='only work on multi gpu training process'
     )
-    parser.add_argument('--ext-module', type=str, default='ext_module.py', help='introduce ext module py file')
+    parser.add_argument('--ext-module', type=str, default='', help='introduce ext module py file')
 
 
 def parse_args():
