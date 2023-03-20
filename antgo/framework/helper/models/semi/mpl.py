@@ -7,6 +7,8 @@ from antgo.framework.helper.models.ema_module import *
 @MODELS.register_module()
 class MPL(MultiSteamModule):
     def __init__(self, model: dict, ema=0.0, train_cfg=None, test_cfg=None) -> None:
+        if test_cfg is None:
+            test_cfg = dict()
         test_cfg.update(
             {
                 'inference_on': 'student'
@@ -26,13 +28,15 @@ class MPL(MultiSteamModule):
             self.avg_student = ModelEMA(self.student, ema)
             self.inference_on = self.avg_student
 
-        self.temperature = train_cfg.get('temperature', 1.0)
-        self.lambda_u = train_cfg.get('lambda_u', 1.0)
-        self.uda_steps = train_cfg.get('uda_steps', 1)
+        self.temperature = train_cfg.get('temperature', 0.7)
+        self.lambda_u = train_cfg.get('lambda_u', 8.0)
+        self.uda_steps = train_cfg.get('uda_steps', 5000)
         self.grad_clip = train_cfg.get('grad_clip', 1e9)
         self.ema = train_cfg.get('ema', 0)
-        self.threshold = train_cfg.get('threshold', 0.95)
+        self.threshold = train_cfg.get('threshold', 0.6)
         self.label_batch_size = train_cfg.get('label_batch_size', 5)
+        self.label_smoothing = train_cfg.get('label_smoothing', 0.15)
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
 
     def uda_loss(self, logits_uw, logits_us):
         # logits_uw: 弱增强获得的结果
@@ -87,12 +91,13 @@ class MPL(MultiSteamModule):
             unlabel_s_kwargs[k] = v_unlabel_s_kwargs
 
         t_images = torch.cat((label_images, unlabel_w_images, unlabel_s_images))
-        t_logits = self.teacher.train_step(t_images)
+        t_logits = self.teacher.forward_train(t_images)
         t_logits_l = t_logits[:label_batch_size]
         t_logits_uw, t_logits_us = t_logits[label_batch_size:].chunk(2)
         del t_logits
         
-        t_loss_l = self.teacher.loss(t_logits_l, **label_kwargs)
+        t_loss_dict = self.teacher.loss(t_logits_l, **label_kwargs)
+        t_loss_l = sum(_value for _, _value in t_loss_dict.items())
 
         # 具体如何基于weak sample和strong sample构建损失，交给MPL自定义
         # soft_pseudo_label = torch.softmax(t_logits_uw.detach() / self.model.temperature, dim=-1)
@@ -107,14 +112,15 @@ class MPL(MultiSteamModule):
         t_loss_uda = t_loss_l + weight_u * t_loss_u
 
         s_images = torch.cat((label_images, unlabel_s_images))
-        s_logits = self.student.train_step(s_images)
+        s_logits = self.student.forward_train(s_images)
         s_logits_l = s_logits[:label_batch_size]
         s_logits_us = s_logits[label_batch_size:]
         del s_logits
 
-        # s_loss_l_old = F.cross_entropy(s_logits_l.detach(), **label_kwargs)
-        s_loss_l_old = self.student.loss(s_logits_l.detach(), **label_kwargs)
-        s_loss = self.student.loss(s_logits_us, hard_pseudo_label)
+        s_loss_dict_old = self.student.loss(s_logits_l.detach(), **label_kwargs)
+        s_loss_l_old = sum(_value for _, _value in s_loss_dict_old.items())
+        s_loss = self.criterion(s_logits_us, hard_pseudo_label)
+        
         s_loss.backward()
         if self.grad_clip > 0:
             nn.utils.clip_grad_norm_(self.student.parameters(), self.grad_clip)
@@ -125,8 +131,9 @@ class MPL(MultiSteamModule):
 
         ####
         with torch.no_grad():
-            s_logits_l = self.student.train_step(label_images)
-        s_loss_l_new = self.student.loss(s_logits_l.detach(), **label_kwargs)
+            s_logits_l = self.student.forward_train(label_images)
+            s_loss_dict_new = self.student.loss(s_logits_l.detach(), **label_kwargs)
+            s_loss_l_new = sum(_value for _, _value in s_loss_dict_new.items())
 
         # theoretically correct formula (https://github.com/kekmodel/MPL-pytorch/issues/6)
         # dot_product = s_loss_l_old - s_loss_l_new
@@ -138,7 +145,7 @@ class MPL(MultiSteamModule):
 
         # TODO，这里感觉应该改成使用弱增强来获得伪标签
         _, _, hard_pseudo_label = self.make_pseudo_label(t_logits_us.detach())
-        t_loss_mpl = dot_product * self.student.loss(t_logits_us, hard_pseudo_label)
+        t_loss_mpl = dot_product * self.criterion(t_logits_us, hard_pseudo_label)
         # test
         # t_loss_mpl = torch.tensor(0.).to(args.device)
         t_loss = t_loss_uda + t_loss_mpl
@@ -169,25 +176,10 @@ class MPL(MultiSteamModule):
 
     def make_pseudo_label(self, logits_u):
         # 返回 mask, soft_pseudo_label, hard_pseudo_label
-        mask = None
-        soft_pseudo_label = None
-        hard_pseudo_label = None
-        if getattr(self.student, 'make_pseudo_label', None):
-            return self.student.make_pseudo_label(logits_u)
-        
-        if len(logits_u.shape) == 2:
-            # NxC
-            soft_pseudo_label = torch.softmax(logits_u, dim=-1)
-            max_probs, hard_pseudo_label = torch.max(soft_pseudo_label, dim=-1)
-            mask = max_probs.ge(self.threshold).float()
-        else:
-            # NxCxHxW
-            soft_pseudo_label = torch.softmax(logits_u, dim=1)
-            max_probs, hard_pseudo_label = torch.max(soft_pseudo_label, dim=1)
-            hard_pseudo_label = F.one_hot(hard_pseudo_label, logits_u.shape[1])
-            hard_pseudo_label = hard_pseudo_label.permute(0,3,1,2)
-            mask = max_probs.ge(self.threshold).float().unsqueeze(1)
-
+        # NxC
+        soft_pseudo_label = torch.softmax(logits_u, dim=-1)
+        max_probs, hard_pseudo_label = torch.max(soft_pseudo_label, dim=-1)
+        mask = max_probs.ge(self.threshold).float()
         return mask, soft_pseudo_label, hard_pseudo_label
 
     def _load_from_state_dict(

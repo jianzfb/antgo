@@ -1,6 +1,7 @@
 from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset, build_kv_dataloader, build_iter_dataloader
 from .dataset_wrappers import (ConcatDataset, IterConcatDataset, RepeatDataset)
 from .pipelines import *
+from .dataset_split import DatasetSamplingByClass
 from .tfdataset import *
 from antgo.dataflow import dataset as local_dataset
 from antgo.framework.helper.reader import *

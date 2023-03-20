@@ -360,10 +360,10 @@ class Dataset(BaseNode):
     raise NotImplementedError
 
   def get_ann_info(self, idx=None):
-    return None
+    raise NotImplementedError
     
   def get_cat_ids(self, idx):
-    return None
+    raise NotImplementedError
   
   def sample(self, id):
     image, annotation = self.at(id)

@@ -108,7 +108,7 @@ class ImageClassifier(BaseClassifier):
             x = self.head.pre_logits(x)
         return x
 
-    def forward_train(self, image, label, **kwargs):
+    def forward_train(self, image, label=None, **kwargs):
         """Forward computation during training.
         Args:
             image (Tensor): of shape (N, C, H, W) encoding input images.
@@ -122,13 +122,21 @@ class ImageClassifier(BaseClassifier):
         """
         x = self.extract_feat(image)
 
+        if label is None:
+            return x[0]
         losses = dict()
         loss = self.head.forward_train(x, label)
 
         losses.update(loss)
-
         return losses
 
+    def loss(self, x, label, **kwargs):
+        losses = dict()
+        loss = self.head.forward_train(x, label)
+
+        losses.update(loss)
+        return losses
+    
     def simple_test(self, image, image_metas=None, **kwargs):
         """Test without augmentation."""
         x = self.extract_feat(image)
