@@ -913,7 +913,8 @@ def browser_server_start(browser_dump_dir,
       'left': left_mano_layer,
       'right': right_mano_layer
     }
-  except:
+  except Exception:
+    print(traceback.format_exc())
     logger.warn('Couldnt load mano model.')
 
 
