@@ -105,7 +105,7 @@ class EntryApiHandler(BaseHandler):
           logger.error('Fail to download from html.')
           self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
           return
-      elif input_info.lower().startswith("htfs") and input_info.endswith('json'):
+      elif input_info.lower().startswith("hdfs") and input_info.endswith('json'):
         # step 1.2: 下载 (from htfs, jsonfile)
         try:
           static_path = self.settings.get('static_path')
@@ -122,7 +122,7 @@ class EntryApiHandler(BaseHandler):
           logger.error('Fail to download from htfs.')
           self.response(RESPONSE_STATUS_CODE.EXECUTE_FORBIDDEN)
           return
-      elif input_info.lower().startswith("htfs"):
+      elif input_info.lower().startswith("hdfs"):
         # step 1.3: 下载（from htfs, folder)
         try:
           static_path = self.settings.get('static_path')          
