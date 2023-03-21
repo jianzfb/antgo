@@ -92,7 +92,9 @@ class __SampleDataGenerator(object):
 
 def package_to_kv(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs):
     # src_file json 文件 (仅支持标准格式 sample_gt.json)
-
+    if not os.path.exists(tgt_folder):
+        os.makedirs(tgt_folder)
+        
     # 创建writer 实例
     kvw = KVDataWriter(prefix, tgt_folder, -1)
 
@@ -102,7 +104,9 @@ def package_to_kv(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs):
 
 def package_to_tfrecord(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs):
     # src_file json 文件 (仅支持标准格式 sample_gt.json)
-
+    if not os.path.exists(tgt_folder):
+        os.makedirs(tgt_folder)
+    
     # 创建tfdatawriter 实例
     if size_in_shard <= 0:
         size_in_shard = 100000

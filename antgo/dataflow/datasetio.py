@@ -91,7 +91,7 @@ class TFDataWriter(object):
                 if tfwriter is not None:
                     tfwriter.close()
                 shard_i = count // size_in_shard
-                filename = os.path.join(self.output_path, "./%s-%.5d-of-%.5d-tfrecord"%(self.prefix, shard_i, self.num_shards))
+                filename = os.path.join(self.output_path, "%s-%.5d-of-%.5d-tfrecord"%(self.prefix, shard_i, self.num_shards))
                 tfwriter = tfrecord.TFRecordWriter(filename)
 
             if (index+1) % data_num == 0:
@@ -105,8 +105,8 @@ class TFDataWriter(object):
 
         # step 2: create index
         for shard_i in range(self.num_shards):
-            tfrecord_file = os.path.join(self.output_path, "./%s-%.5d-of-%.5d-tfrecord"%(self.prefix, shard_i, self.num_shards))
-            index_file = os.path.join(self.output_path, "./%s-%.5d-of-%.5d-index"%(self.prefix, shard_i, self.num_shards))
+            tfrecord_file = os.path.join(self.output_path, "%s-%.5d-of-%.5d-tfrecord"%(self.prefix, shard_i, self.num_shards))
+            index_file = os.path.join(self.output_path, "%s-%.5d-of-%.5d-index"%(self.prefix, shard_i, self.num_shards))
             create_index(tfrecord_file, index_file)
         
         print(f'Finish tfrecord index.')
@@ -152,7 +152,7 @@ class KVDataWriter(object):
                 
                 # 构建新的数据包写对象
                 shard_i = index // size_in_shard
-                filename = os.path.join(self.output_path, "./%s-%.5d-of-%.5d-kvrecord"%(self.prefix, shard_i, self.num_shards))
+                filename = os.path.join(self.output_path, "%s-%.5d-of-%.5d-kvrecord"%(self.prefix, shard_i, self.num_shards))
                 kvwriter = environment.KVWriter(filename, self.num_shards)
 
             suffix = ''

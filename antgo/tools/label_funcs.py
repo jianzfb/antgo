@@ -4,6 +4,8 @@ import json
 import numpy as np
 from antgo.utils.sample_gt import *
 from antgo.interactcontext import InteractContext
+import logging
+
 
 def label_to_studio(src_json_file, tgt_folder, prefix='',  **kwargs):
     # 将标准GT转换到label-studio格式
@@ -21,6 +23,10 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     if tgt_folder is None:
         tgt_folder = './'
     
+    if not os.path.isdir(tgt_folder):
+        logging.error(f'--tgt {tgt_folder} must be a folder.')
+        return 
+    
     white_users = {}
     if white_users_str is not None:
         for t in white_users_str.split(','):
@@ -32,7 +38,7 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         white_users = None
     
     if label_type == 'POINT':
-        print(f'Now not support {label_type}')
+        logging.error(f'Now not support {label_type}')
         return 
     if label_type is None:
         label_type = ''
@@ -247,6 +253,10 @@ def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, ignore_in
     # 将label-studio转换到标注GT
     if tgt_folder is None:
         tgt_folder = './'
+    
+    if not os.path.isdir(tgt_folder):
+        logging.error(f'--tgt {tgt_folder} must be a folder.')
+        return 
     
     if tags is None:
         tags = ''
