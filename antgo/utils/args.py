@@ -102,7 +102,7 @@ def DEFINE_nn_args():
     ) 
     parser.add_argument(
         '--process',
-        choices=['train', 'test', 'export'],
+        choices=['train', 'test', 'export', 'activelearning'],
         default='train',
         help='train or test process'
     )

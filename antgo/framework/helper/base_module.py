@@ -27,7 +27,6 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
     Args:
         init_cfg (dict, optional): Initialization config dict.
     """
-    base_stage = ''
     def __init__(self, init_cfg=None):
         """Initialize BaseModule, inherited from `torch.nn.Module`"""
 

@@ -27,16 +27,21 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3):
 
 @register
 class plot_bbox(object):
-  def __init__(self, thres=0.0, color=None, line_thickness=1, category_map=None):
+  def __init__(self, thres=0.0, color=None, line_thickness=1, category_map=None, ignore_category=-1):
     self.color = color
     self.line_thickness = line_thickness
     self.thres = thres
     self.category_map = category_map
+    self.ignore_category = ignore_category
 
   def __call__(self, image, detbbox, detlabel=None):
     assert(detbbox.shape[1] == 6 or detbbox.shape[1] == 5)
     if detbbox.shape[1] == 6:
       for (*xyxy, conf, cls), label in zip(detbbox, detlabel):
+        if self.ignore_category >= 0:
+          if int(cls) == self.ignore_category:
+            continue
+        
         bbox_label = str(int(cls))
         if label != '':
           bbox_label = label
@@ -52,7 +57,10 @@ class plot_bbox(object):
       for (*xyxy, conf), label in zip(detbbox, detlabel):
         if conf < self.thres:
           continue
-        
+        if self.ignore_category >= 0:
+          if int(label) == self.ignore_category:
+            continue
+                
         bbox_label = str(int(label))
         if self.category_map is not None:
           bbox_label = self.category_map[bbox_label]

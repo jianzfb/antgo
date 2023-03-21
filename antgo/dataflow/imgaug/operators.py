@@ -167,6 +167,21 @@ class DecodeImage(BaseOperator):
 
         return sample
 
+
+class Meta(BaseOperator):
+    def __init__(self, keys):
+        self.keys = keys
+    
+    def __call__(self, sample, context=None):
+        if 'image_meta' not in sample:
+            sample['image_meta'] = {}
+            
+        for key in self.keys:
+            sample['image_meta'][key] = sample[key]
+        
+        return sample
+
+
 # FINISH FIX
 class KeepRatio(BaseOperator):
     def __init__(self, aspect_ratio=1, focus_on_objects=False,inputs=None):

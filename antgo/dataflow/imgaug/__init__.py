@@ -16,7 +16,8 @@ from .operators import (
   ExpandImage,
   Permute,
   MixupImage,
-  CutmixImage)
+  CutmixImage,
+  Meta)
 
 __all__ = [
   'DecodeImage', 
@@ -32,5 +33,6 @@ __all__ = [
   'ExpandImage',
   'Permute',
   'MixupImage',
-  'CutmixImage'
+  'CutmixImage',
+  'Meta'
 ]

@@ -14,7 +14,7 @@ import torchvision.transforms as transforms
 from torch.nn.parallel.data_parallel import DataParallel
 from antgo.framework.helper.utils.config import Config
 from antgo.framework.helper.apis.train import *
-from antgo.framework.helper.dataset import (build_dataloader,build_kv_dataloader, build_dataset)
+from antgo.framework.helper.dataset import (build_dataloader,build_kv_dataloader, build_dataset, build_iter_dataloader)
 from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, get_device
 from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import get_dist_info, init_dist
@@ -66,8 +66,11 @@ class Tester(object):
                 **self.cfg.data.get('test_dataloader', {})
             }        
             
-            if not getattr(self.dataset, 'is_kv', False):
+            assert(not test_loader_cfg['shuffle'])
+            if getattr(self.dataset, 'is_kv', False):
                 self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
+            elif isinstance(self.dataset, torch.utils.data.IterableDataset):
+                self.data_loader = build_iter_dataloader(self.dataset, **test_loader_cfg)
             else:
                 self.data_loader = build_kv_dataloader(self.dataset, **test_loader_cfg)
 

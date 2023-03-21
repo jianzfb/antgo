@@ -13,7 +13,7 @@ requests
 tornado
 beautifulsoup4
 imageio
-sklearn
+scikit-learn
 matplotlib
 prettytable
 opencv-contrib-python
