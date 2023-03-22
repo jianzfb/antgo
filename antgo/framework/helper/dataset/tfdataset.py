@@ -73,6 +73,18 @@ def _sample_iterators(iterators, ratios, infinite, remain_sample_num):
                     in_remain_sample_mode = True
 
 
+def _order_iterators(iterators):
+    iterators = [iterator() for iterator in iterators]
+    choice = 0
+    while iterators:
+        try:
+            yield next(iterators[choice])
+        except StopIteration:
+            if iterators:
+                del iterators[choice]
+                choice += 1
+
+
 @DATASETS.register_module()
 class TFDataset(torch.utils.data.IterableDataset):
     """Parse (generic) TFRecords dataset into `IterableDataset` object,
@@ -129,7 +141,8 @@ class TFDataset(torch.utils.data.IterableDataset):
                  sequence_description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
                  compression_type: typing.Optional[str] = None,
                  infinite: typing.Optional[bool] = False,
-                 inputs_def=None
+                 inputs_def=None,
+                 sample_num_equalizer=True
                  ) -> None:
         super().__init__()
         self.data_path_list = data_path_list
@@ -196,11 +209,14 @@ class TFDataset(torch.utils.data.IterableDataset):
 
         self.sequence_description = sequence_description
         self.shuffle_queue_size = shuffle_queue_size
+        self.sample_num_equalizer = sample_num_equalizer
         self.compression_type = compression_type
-        if ratios is None:
-            ratios = [1] * len(data_path_list)
         self.ratios = ratios
-
+        if shuffle_queue_size > 0:
+            # 如果已经设置了shuffle queue，则设置默认ratios
+            if self.ratios is not None:
+                self.ratios = [1 for _ in range(len(self.data_path_list))]
+        
         self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
         self._alias = None
         if self._fields is not None and 'alias' in inputs_def:
@@ -262,10 +278,10 @@ class TFDataset(torch.utils.data.IterableDataset):
                 if self.num_samples < num:
                     self.num_samples = num
 
-            self.remain_sample_num = self.num_samples - self.real_num_samples
             self.data_path_list = [self.data_path_list[i] for i in use_data_path_index_list]
             self.index_path_list = [self.index_path_list[i] for i in use_data_path_index_list]
-            self.ratios = [self.ratios[i] for i in use_data_path_index_list]
+            if self.ratios is not None:
+                self.ratios = [self.ratios[i] for i in use_data_path_index_list]
 
     def _arrange(self, sample, fields, alias):
         if fields is None:
@@ -346,6 +362,9 @@ class TFDataset(torch.utils.data.IterableDataset):
         else:
             shard = None
 
+        if not self.sample_num_equalizer:
+            remain_sample_num = 0
+        
         loaders = [functools.partial(tfrecord_loader, data_path=data_path,
                                     index_path=index_path,
                                     shard=shard,
@@ -355,7 +374,12 @@ class TFDataset(torch.utils.data.IterableDataset):
                                     )
                 for data_path, index_path in zip(self.data_path_list, self.index_path_list)]
 
-        it = _sample_iterators(loaders, self.ratios, self.infinite, remain_sample_num)
+        it = None
+        if self.ratios is not None and len(self.ratios) > 0:
+            it = _sample_iterators(loaders, self.ratios, self.infinite, remain_sample_num)
+        else:
+            it = _order_iterators(loaders)
+
         if self.shuffle_queue_size:
             it = iterator_utils.shuffle_iterator(it, self.shuffle_queue_size)
 

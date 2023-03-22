@@ -2,6 +2,7 @@ from .builder import DATASETS, PIPELINES, build_dataloader, build_dataset, build
 from .dataset_wrappers import (ConcatDataset, IterConcatDataset, RepeatDataset)
 from .pipelines import *
 from .dataset_split import DatasetSamplingByClass
+from .dataset_filter import IterableDatasetFilter
 from .tfdataset import *
 from antgo.dataflow import dataset as local_dataset
 from antgo.framework.helper.reader import *
@@ -30,5 +31,5 @@ register_antgo_dataset()
 
 
 __all__ = [
-    'DATASETS','build_dataloader','build_dataset','ConcatDataset', 'IterConcatDataset','RepeatDataset', 'TFDataset'
+    'DATASETS','build_dataloader','build_dataset','ConcatDataset', 'IterConcatDataset','RepeatDataset', 'TFDataset', 'DatasetSamplingByClass', 'IterableDatasetFilter'
 ]

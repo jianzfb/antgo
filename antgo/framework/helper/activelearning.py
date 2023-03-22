@@ -34,8 +34,10 @@ from antgo.framework.helper.runner.hooks.samplingmethods.kcenter_greedy import *
 from antgo.framework.helper.runner import BaseModule
 from thop import profile
 from antgo.utils.sample_gt import *
+from antgo.framework.helper.dataset.builder import DATASETS
 import json
 import imagesize
+
 
 UNCERTAINTY_SAMPLING = Registry('UNCERTAINTY_SAMPLING')
 
@@ -323,7 +325,22 @@ class SamplingByComposer(object):
 
 class Activelearning(Tester):
     def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False):
-        cfg.data.test = cfg.data.unlabel
+        self.cfg = cfg
+        self.activelearning_round = self.cfg.activelearning.get("round", 0)
+        
+        # has finish round info
+        has_finish_anns = []
+        for round in range(self.activelearning_round):
+            target_folder = f'./activelearning/{round}'
+            has_finish_anns.append(os.path.join(target_folder, 'annotation.json'))
+        
+        unlabel_filter_warp = dict(
+            type='IterableDatasetFilter',
+            dataset=build_from_cfg(cfg.data.unlabel, DATASETS, None),
+            not_in_anns=has_finish_anns
+        )
+        
+        cfg.data.test = unlabel_filter_warp
         cfg.data.test_dataloader = cfg.data.unlabel_dataloader
         super().__init__(cfg, work_dir, gpu_id, distributed)
         # 采样函数
@@ -364,10 +381,13 @@ class Activelearning(Tester):
 
             # step2: 遍历数据找到挑选出的样本，并保存到目标            
             # step2.1: 清空处理管线
-            self.dataset.pipeline = []
+            from antgo.framework.helper.dataset import PIPELINES
+            self.dataset.dataset.pipeline = [build_from_cfg(dict(type='Meta', keys=['image_file', 'tag']), PIPELINES)]  # 仅添加Meta处理管线
+            self.dataset.dataset._fields = ["image", "image_meta"] #
+            self.dataset.dataset._alias = ["image", "image_meta"] #
 
             # step2.2: 保存到目标目录
-            target_folder = './activelearning'
+            target_folder = f'./activelearning/{self.activelearning_round}'
             if not os.path.exists(target_folder):
                 os.makedirs(target_folder)
 
@@ -375,23 +395,27 @@ class Activelearning(Tester):
             if not os.path.exists(image_folder):
                 os.makedirs(image_folder)
             
-            selected_image_file_map = {sample['image_file']: sample for sample in sampling_list}
+            # TODO，每个样本如何进行唯一标识
+            selected_sample_ids = [f"{sample['tag']}/{sample['image_file']}" for sample in sampling_list]
             
             image_file_name_list = []
+            compare_pos = 0
             for sample in self.dataset:
-                if sample['image_file'] in selected_image_file_map:
-                    file_name = sample['image_file'].replace('/','-')
-                    image_file_name_list.append(file_name)
+                sample_id = f"{sample['image_meta']['tag']}/{sample['image_meta']['image_file']}"
+                if sample_id == selected_sample_ids[compare_pos]:
+                    compare_pos += 1
+                    file_name = sample['image_meta']['image_file'].replace('/','-')
+                    image_file_name_list.append((file_name, sample['image_meta']['tag']))
                     with open(os.path.join(image_folder, file_name), 'wb') as fp:
                         fp.write(sample['image'])
-                        
+
             # step2.3: 生成解析文件
             # 生成默认格式解析json
             annotation_file_name = 'annotation.json'
             annotation_list = []
             # 加载默认标准格式
             sgt = SampleGTTemplate() 
-            for sample_file_name in image_file_name_list:
+            for sample_file_name, sample_file_tag in image_file_name_list:
                 sample_file_path = os.path.join(image_folder, sample_file_name)
                 width, height = imagesize.get(sample_file_path)
 
@@ -400,6 +424,7 @@ class Activelearning(Tester):
                 sample_gt_cp.update({
                     'image_file': sample_file_name
                 })
+                sample_gt_cp['tag'] = f'{sample_file_tag}/AC/{self.activelearning_round}'
                 sample_gt_cp['height'] = height
                 sample_gt_cp['width'] = width
                 annotation_list.append(sample_gt_cp)
@@ -409,3 +434,4 @@ class Activelearning(Tester):
 
             with open(os.path.join(target_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
                 json.dump(sgt.meta(), fp)
+
