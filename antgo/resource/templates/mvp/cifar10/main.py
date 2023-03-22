@@ -27,6 +27,7 @@ import torch
 from antgo.utils import args
 from antgo.framework.helper.trainer import *
 from antgo.framework.helper.tester import *
+from antgo.framework.helper.activelearning import Activelearning
 from antgo.framework.helper.exporter import *
 from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
@@ -39,6 +40,7 @@ from system import *
 from models import *
 from metrics import *
 from dataset import *
+from hooks import *
 
 # 4.step 定义shell参数
 # 4.1.step 自定义扩展参数
@@ -110,6 +112,14 @@ def main():
             distributed=nn_args.distributed)
         tester.config_model(checkpoint=nn_args.checkpoint)
         tester.evaluate()
+    elif nn_args.process == 'activelearning':
+        # 创建主动学习过程，挑选等待标注样本
+        print(f'nn_args.distributed {nn_args.distributed}')
+        print(f'nn_args.gpu-id {nn_args.gpu_id}')
+        print(f'nn_args.checkpoint {nn_args.checkpoint}')        
+        ac = Activelearning(cfg, './', nn_args.gpu_id, distributed=nn_args.distributed)
+        ac.config_model(checkpoint=nn_args.checkpoint, revise_keys=[('^','model.')])
+        ac.select()        
     elif nn_args.process == 'export':
         # 创建导出模型过程
         tester = Exporter(cfg, './')

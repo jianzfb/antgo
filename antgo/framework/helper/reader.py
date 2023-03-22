@@ -213,18 +213,3 @@ class Reader(torch.utils.data.Dataset):
 
     def evaluate(self, preds,**kwargs):
         return self.proxy_dataset.evaluate(preds, **kwargs)
-
-    def set_active_target_size(self, target_size):
-        # 从pipeline中，发现resize处理器
-        for processor, processor_type in zip(self.pipeline[::-1], self.pipeline_types[::-1]):
-            if processor_type.startswith('Resize'):
-                processor.reset(target_size)
-
-    def get_active_target_size(self):
-        # 从pipeline中，发现resize处理器
-        target_size = None
-        for processor, processor_type in zip(self.pipeline[::-1], self.pipeline_types[::-1]):
-            if processor_type.startswith('Resize'):
-                target_size = processor.get()
-        
-        return target_size
