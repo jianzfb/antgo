@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 from inspect import trace
+from random import shuffle
 import sys
 import os
 from antgo.utils.utils import *
@@ -19,7 +20,9 @@ from antgo import version
 from jinja2 import Environment, FileSystemLoader
 import json
 from antgo import tools
+from antgo.script import *
 import traceback
+import yaml
 
 # 需要使用python3
 assert(int(sys.version[0]) >= 3)
@@ -35,8 +38,15 @@ DEFINE_string('commit', None, '')
 DEFINE_string('gpu-ids', '0', 'use gpu ids')
 DEFINE_int('cpu', 0, 'set cpu number')
 DEFINE_int('memory', 0, 'set memory size (M)')
-DEFINE_string('name', None, '')   # 名字
-DEFINE_string('type', None, '')   # 类型
+DEFINE_string('name', None, '')     # 名字
+DEFINE_string('type', None, '')     # 类型
+DEFINE_indicator('cloud', True, '') # 指定云端运行
+DEFINE_string('config', '', '')     # 配置文件
+
+############## submitter ###################
+DEFINE_indicator('ssh', True, '')     # ssh 提交
+DEFINE_indicator('k8s', True, '')     # k8s 提交
+DEFINE_indicator('custom', True, '')  # 开发者自定义任务提交配置
 
 ############## global config ###############
 DEFINE_string('token', None, '')
@@ -69,12 +79,15 @@ DEFINE_indicator("ignore-incomplete", True, "")
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config']
+action_level_1 = ['train', 'eval', 'export', 'config', 'submitter']
 action_level_2 = ['add', 'del', 'create', 'update', 'show', 'get', 'tool']
 
 
 def main():
   main_logo()
+  # 备份脚本参数
+  sys_argv_cp = sys.argv
+  
   # 解析参数
   action_name = sys.argv[1]
   sub_action_name = None
@@ -145,6 +158,21 @@ def main():
     logging.info('import extent module')
     load_extmodule(args.ext_module)
 
+  ##################################### 支持任务提交脚本配置  ###########################################
+  if action_name == 'submitter':
+    if args.ssh:
+      # ssh提交配置
+      if args.config == '':
+        # 生成ssh提交配置模板
+        ssh_submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'ssh-submit-config.yaml')
+        shutil.copyfile(ssh_submit_config_file, './')
+        return
+      else:
+        # 更新ssh提交配置模板
+        assert(os.path.exists(args.config))
+        shuffle.copyfile(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
+        return 
+
   ######################################### 生成最小mvp ###############################################
   if action_name == 'create' and sub_action_name == 'mvp':
     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')
@@ -157,11 +185,17 @@ def main():
     # 检查当前环境
     if not check_project_environment(args):
       return
+    
+    # 云端任务执行
+    if args.cloud:
+        # 云端提交
+        sys_argv_new = sys_argv_cp.replace('--cloud', '')        
+        # step 1.1: 检查提交脚本配置
+        if args.ssh:
+          ssh_submit_process_func(args.project, sys_argv_new, 0 if args.gpu_ids == '' else len(args.gpu_ids.split(',')), args.cpu, args.memory)  
+        return
 
     if action_name == 'train':
-      # step 1: (TODO)在集群提交任务
-
-      # step 2: 本地执行任务
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
         # cpu run
         command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={args.exp} --gpu-id={-1} --process=train'
@@ -192,7 +226,7 @@ def main():
       else:
         # multi gpu run
         gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; bash {args.exp}/dist_run.sh main.py {gpu_num} --exp={args.exp}  --process=train'
+        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={args.exp}  --process=train'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -221,7 +255,7 @@ def main():
       else:
         # multi gpu run
         gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; bash dist_run.sh {args.exp}/main.py {gpu_num} --exp={args.exp} --process=test'
+        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={args.exp} --process=test'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)

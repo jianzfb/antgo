@@ -1,0 +1,76 @@
+{
+	"name": {
+        "image":"",
+        "web":"",
+        "git": "",
+        "expert": [],
+        "product": {
+			"exp": "", 
+            "branch": "", 
+            "commit": "", 
+            "metric": {}, 
+            "dataset": {"test": "", "train": []},
+            "checkpoint": "", 
+            "create_time": "", 
+            "finish_time": ""            
+        },
+        "baseline": {
+			"exp": "", 
+            "branch": "", 
+            "commit": "", 
+            "metric": {}, 
+            "dataset": {"test": "", "train": []},
+            "checkpoint": "", 
+            "create_time": "", 
+            "finish_time": ""
+		},
+		"type": "",
+        "tool":{
+            "semi": {
+                "method": "",
+                "config": {}
+            },
+            "activelearning": {
+                "method": "",
+                "config": {}
+            },
+            "ensemble":{
+                "method": "",
+                "config": {}
+            }
+        },
+        "dataset": {
+            "train": {
+                "label": [{"tag": "", "num": "", "status": true, "address": ""}],
+                "unlabel": [{"tag": "", "num": "", "status": true, "address": ""}],
+                "pesudo": [{"tag": "", "num": "", "status": true, "address": ""}]
+            },
+            "test": {"tag": "", "num": "", "address": ""},
+            "val": {"tag": "", "num": "", "address": ""}
+        },
+        "history": [
+            {
+                "exp": "", 
+                "branch": "", 
+                "commit": "",
+                "web":"" ,
+                "metric": {}, 
+                "dataset": {"test": "", "train": []},
+                "checkpoint": "", 
+                "create_time": "",
+                "finish_time": ""
+            }
+        ],
+        "best":{
+            "exp":"",
+            "branch":"",
+            "commit":"",
+            "web":"",
+            "metric":{},
+            "dataset": {"test": "", "train": []},
+            "checkpoint": "",
+            "create_time": "",
+            "finish_time": ""
+        }
+	}
+}

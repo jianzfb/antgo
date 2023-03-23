@@ -175,15 +175,20 @@ class EntryApiHandler(BaseHandler):
     entry_id = self.db['user_record'][user_name][-1]
 
     # 构建返回数据
-    response_content = {
-      'value': update_vis_elem(self.db['data'][entry_id]['value']),
-      'step': len(self.db['user_record'][user_name]) - 1,
-      'tags': self.settings.get('tags', []),
-      'operators': [],
-      'dataset_flag': self.db['state'],
-      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-    }
+    try:
+      response_content = {
+        'value': update_vis_elem(self.db['data'][entry_id]['value']),
+        'step': len(self.db['user_record'][user_name]) - 1,
+        'tags': self.settings.get('tags', []),
+        'operators': [],
+        'dataset_flag': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+      }
+    except Exception:
+      print(traceback.format_exc())
+      self.response(RESPONSE_STATUS_CODE.INTERNAL_SERVER_ERROR)
+      return
 
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
     return
@@ -350,7 +355,7 @@ def update_vis_elem(data_group):
         # 鱼眼模型(omni)
         # points_3d: Nx21x3
         K = np.array(data['cam_param']['K']).astype(np.float32)
-        Xi = data['cam_param']['Xi']
+        Xi = float(data['cam_param']['Xi'])
         D = np.array(data['cam_param']['D']).astype(np.float32)
         points_2d_list = []
         for i in range(len(data['joints3d'])):
@@ -404,7 +409,7 @@ def update_vis_elem(data_group):
             joints_fk = 0.001 * joints_fk[0].numpy()    
             if 'D' in data['cam_param'] and 'Xi' in data['cam_param'] and 'K' in data['cam_param']:
               K = np.array(data['cam_param']['K']).astype(np.float32)
-              Xi = data['cam_param']['Xi']
+              Xi = float(data['cam_param']['Xi'])
               D = np.array(data['cam_param']['D']).astype(np.float32)
               
               joints_fk = joints_fk.reshape(joints_fk.shape[0],1,3).astype(np.float32)
@@ -484,15 +489,22 @@ class PrevApiHandler(BaseHandler):
 
     pre_step = step - 1
     pre_entry_id = self.db['user_record'][user_name][pre_step]
-    response_content = {
-      'value': update_vis_elem(self.db['data'][pre_entry_id]['value']),
-      'step': pre_step,
-      'tags': self.settings.get('tags', []),
-      'operators': [],
-      'state': self.db['state'],
-      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-    }
+    
+    try:
+      response_content = {
+        'value': update_vis_elem(self.db['data'][pre_entry_id]['value']),
+        'step': pre_step,
+        'tags': self.settings.get('tags', []),
+        'operators': [],
+        'state': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+      }
+    except Exception:
+      print(traceback.format_exc())
+      self.response(RESPONSE_STATUS_CODE.INTERNAL_SERVER_ERROR)      
+      return
+    
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
 
 
@@ -558,15 +570,21 @@ class NextApiHandler(BaseHandler):
     if step < len(self.db['user_record'][user_name]) - 1:
       next_step = step + 1
       next_entry_id = self.db['user_record'][user_name][next_step]
-      response_content = {
-        'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
-        'step': next_step,
-        'tags': self.settings.get('tags', []),
-        'operators': [],
-        'state': self.db['state'],
-        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-      }
+      try:
+        response_content = {
+          'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
+          'step': next_step,
+          'tags': self.settings.get('tags', []),
+          'operators': [],
+          'state': self.db['state'],
+          'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+          'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+        }
+      except Exception:
+        print(traceback.format_exc())
+        self.response(RESPONSE_STATUS_CODE.INTERNAL_SERVER_ERROR)
+        return
+      
       self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
       return
 
@@ -578,30 +596,39 @@ class NextApiHandler(BaseHandler):
         break
 
     if next_entry_id == -1:
-      self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
-        'value': update_vis_elem(self.db['data'][self.db['user_record'][user_name][-1]]['value']),
-        'step': len(self.db['user_record'][user_name]) - 1,
-        'tags': self.settings.get('tags', []),
-        'operators': [],
-        'state': self.db['state'],
-        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-      })
+      try:
+        self.response(RESPONSE_STATUS_CODE.SUCCESS, content={
+          'value': update_vis_elem(self.db['data'][self.db['user_record'][user_name][-1]]['value']),
+          'step': len(self.db['user_record'][user_name]) - 1,
+          'tags': self.settings.get('tags', []),
+          'operators': [],
+          'state': self.db['state'],
+          'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+          'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+        })
+      except Exception:
+        print(traceback.format_exc())
+        self.response(RESPONSE_STATUS_CODE.INTERNAL_SERVER_ERROR)
       return
 
     # 为当前用户分配下一个审查数据
     self.db['user_record'][user_name].append(next_entry_id)
 
     #
-    response_content = {
-      'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
-      'step': len(self.db['user_record'][user_name]) - 1,
-      'tags': self.settings.get('tags', []),
-      'operators': [],
-      'state': self.db['state'],
-      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-    }
+    try:
+      response_content = {
+        'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
+        'step': len(self.db['user_record'][user_name]) - 1,
+        'tags': self.settings.get('tags', []),
+        'operators': [],
+        'state': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+      }
+    except Exception:
+      print(traceback.format_exc())
+      self.response(RESPONSE_STATUS_CODE.INTERNAL_SERVER_ERROR)
+      return
 
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
     return
@@ -675,15 +702,20 @@ class RandomApiHandler(BaseHandler):
     self.db['user_record'][user_name].append(next_entry_id)
 
     #
-    response_content = {
-      'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
-      'step': len(self.db['user_record'][user_name]) - 1,
-      'tags': self.settings.get('tags', []),
-      'operators': [],
-      'state': self.db['state'],
-      'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
-      'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
-    }
+    try:
+      response_content = {
+        'value': update_vis_elem(self.db['data'][next_entry_id]['value']),
+        'step': len(self.db['user_record'][user_name]) - 1,
+        'tags': self.settings.get('tags', []),
+        'operators': [],
+        'state': self.db['state'],
+        'samples_num': self.db['dataset'][self.db['state']]['samples_num'],
+        'samples_num_checked': self.db['dataset'][self.db['state']]['samples_num_checked'],
+      }
+    except Exception:
+      print(traceback.format_exc())
+      self.response(RESPONSE_STATUS_CODE.INTERNAL_SERVER_ERROR)      
+      return 
 
     self.response(RESPONSE_STATUS_CODE.SUCCESS, content=response_content)
     return

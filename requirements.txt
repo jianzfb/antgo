@@ -33,3 +33,5 @@ tfrecord
 GitPython
 protobuf==3.20.0
 chumpy
+onnx
+onnxruntime
