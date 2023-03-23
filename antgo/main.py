@@ -41,7 +41,7 @@ DEFINE_int('memory', 0, 'set memory size (M)')
 DEFINE_string('name', None, '')     # 名字
 DEFINE_string('type', None, '')     # 类型
 DEFINE_indicator('cloud', True, '') # 指定云端运行
-DEFINE_string('config', '', '')     # 配置文件
+
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -162,15 +162,15 @@ def main():
   if action_name == 'submitter':
     if args.ssh:
       # ssh提交配置
-      if args.config == '':
+      if args.config == '' or args.config == 'config.py':
         # 生成ssh提交配置模板
         ssh_submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'ssh-submit-config.yaml')
-        shutil.copyfile(ssh_submit_config_file, './')
+        shutil.copy(ssh_submit_config_file, './')
         return
       else:
         # 更新ssh提交配置模板
         assert(os.path.exists(args.config))
-        shuffle.copyfile(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
+        shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
         return 
 
   ######################################### 生成最小mvp ###############################################

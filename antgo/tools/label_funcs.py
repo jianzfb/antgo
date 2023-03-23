@@ -22,11 +22,14 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     
     if tgt_folder is None:
         tgt_folder = './'
-    
+
+    if not os.path.exists(tgt_folder):
+        os.makedirs(tgt_folder)
+        
     if not os.path.isdir(tgt_folder):
         logging.error(f'--tgt {tgt_folder} must be a folder.')
         return 
-    
+            
     white_users = {}
     if white_users_str is not None:
         for t in white_users_str.split(','):
@@ -151,13 +154,27 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         
         total_gt_list.append(standard_gt)    
     
-    if not os.path.exists(tgt_folder):
-        os.makedirs(tgt_folder)
-    with open(os.path.join(tgt_folder, f'{src_json_file_name}_label.json'), 'w') as fp:
+    anno_json_file_name = f'{src_json_file_name}_label.json'
+    if os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+        count = 0
+        while True:
+            anno_json_file_name = f'{src_json_file_name}_label_{count}.json'
+            if not os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+                break
+            count += 1
+            
+    with open(os.path.join(tgt_folder, anno_json_file_name), 'w',  encoding="utf-8") as fp:
         json.dump(total_gt_list, fp)
     
+    meta_info = sgtt.meta()    
+    if os.path.exists(os.path.join(tgt_folder, 'meta.json')):
+         with open(os.path.join(tgt_folder, 'meta.json'), 'r', encoding="utf-8") as fp:
+             meta_info = json.load(fp)
+
+    meta_info['extent']['total'] = len(total_gt_list)
     with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
-        json.dump(sgtt.meta(), fp)
+        json.dump(meta_info, fp)
+        
     # 全局结束
     ctx.activelearning.exit()    
 
@@ -242,11 +259,27 @@ def label_from_native(src_json_file, tgt_folder, tags, ignore_incomplete=False, 
     
     if not os.path.exists(tgt_folder):
         os.makedirs(tgt_folder)
-    with open(os.path.join(tgt_folder, f'{src_json_file_name}_label.json'), 'w') as fp:
+    
+    anno_json_file_name = f'{src_json_file_name}_label.json'
+    if os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+        count = 0
+        while True:
+            anno_json_file_name = f'{src_json_file_name}_label_{count}.json'
+            if not os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+                break
+            count += 1
+            
+    with open(os.path.join(tgt_folder, anno_json_file_name), 'w',  encoding="utf-8") as fp:
         json.dump(total_gt_list, fp)
     
+    meta_info = sgtt.meta()    
+    if os.path.exists(os.path.join(tgt_folder, 'meta.json')):
+         with open(os.path.join(tgt_folder, 'meta.json'), 'r', encoding="utf-8") as fp:
+             meta_info = json.load(fp)
+
+    meta_info['extent']['total'] = len(total_gt_list)
     with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
-        json.dump(sgtt.meta(), fp)
+        json.dump(meta_info, fp)    
 
 
 def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, ignore_incomplete=False, **kwargs):
@@ -254,6 +287,9 @@ def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, ignore_in
     if tgt_folder is None:
         tgt_folder = './'
     
+    if not os.path.exists(tgt_folder):
+        os.makedirs(tgt_folder)
+        
     if not os.path.isdir(tgt_folder):
         logging.error(f'--tgt {tgt_folder} must be a folder.')
         return 
@@ -400,13 +436,69 @@ def label_from_studio(src_json_file, tgt_folder, prefix='', tags=None, ignore_in
                 standard_gt['label_names'].append('unkown')
                 
         total_gt_list.append(standard_gt)
-        
-    with open(os.path.join(tgt_folder, f'{src_json_file_name}_convert.json'), 'w', encoding='utf-8') as fp:
-        json.dump(total_gt_list, fp, ensure_ascii=False)
-        
+
+    anno_json_file_name = f'{src_json_file_name}_label.json'
+    if os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+        count = 0
+        while True:
+            anno_json_file_name = f'{src_json_file_name}_label_{count}.json'
+            if not os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+                break
+            count += 1
+            
+    with open(os.path.join(tgt_folder, anno_json_file_name), 'w',  encoding="utf-8") as fp:
+        json.dump(total_gt_list, fp)
+    
+    meta_info = sgtt.meta()    
+    if os.path.exists(os.path.join(tgt_folder, 'meta.json')):
+         with open(os.path.join(tgt_folder, 'meta.json'), 'r', encoding="utf-8") as fp:
+             meta_info = json.load(fp)
+
+    meta_info['extent']['total'] = len(total_gt_list)
     with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
-        json.dump(sgtt.meta(), fp)
+        json.dump(meta_info, fp)  
+
+
+def label_to_merge(src_json_file, tgt_folder, **kwargs):
+    src_json_files = src_json_file.split(',')
+    total_list = []
+    for json_file in src_json_files:
+        if not json_file.endswith('json'):
+            logging.warn(f'Ignore {json_file}')
+            continue
         
+        with open(json_file, 'r', encoding='utf-8') as fp:
+            total_list.extend(json.load(fp))
+
+    if not os.path.exists(tgt_folder):
+        os.makedirs(tgt_folder)
+    
+    if not os.path.isdir(tgt_folder):
+        logging.error(f'--tgt={tgt_folder} must be a folder')
+        return
+    
+    anno_json_file_name = f'annotation_merge.json'
+    if os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+        count = 0
+        while True:
+            anno_json_file_name = f'annotation_merge_{count}.json'
+            if not os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
+                break
+            count += 1
+            
+    with open(os.path.join(tgt_folder, anno_json_file_name), 'w',  encoding="utf-8") as fp:
+        json.dump(total_list, fp)
+    
+    sgtt = SampleGTTemplate()
+    meta_info = sgtt.meta()    
+    if os.path.exists(os.path.join(tgt_folder, 'meta.json')):
+         with open(os.path.join(tgt_folder, 'meta.json'), 'r', encoding="utf-8") as fp:
+             meta_info = json.load(fp)
+
+    meta_info['extent']['total'] = len(total_list)
+    with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
+        json.dump(meta_info, fp)  
+
 # 测试检测标注
 # label_from_studio('/Users/bytedance/Downloads/project-1-at-2023-03-11-02-17-0c19afd8.json', None, '', "Airplane:0,Car:1")
 # 测试分割

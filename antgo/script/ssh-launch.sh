@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-user=$1
+username=$1
 cpu_num=$2
-memory_size=$3
+memory=$3
 gpu_num=$4
 command=$5
 image=$6
+project=$7
 
-# 拉取项目镜像
-docker pull ${image}
 # 执行
-cd /${user}/;tar -xf project.tar
-docker run -d -v ${user}:/tiger ${image} ${command}
+# TODO, 映射GPU,
+sudo docker run -d -w /tiger -m ${memory} --cpus ${cpu_num} -v /home/${username}/${project}:/tiger ${image} sh -c "cd /tiger && $command"

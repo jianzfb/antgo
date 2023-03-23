@@ -72,6 +72,9 @@ antgo tool label/studio --src=json-path --tgt=target-folder --tags=lefthand:0,ri
 // 将标准GT格式转换到label-studio标注工具结果
 antgo tool label/studio --src=json-path --tgt=target-folder --to
 
+// 合并标注结果
+antgo tool label/merge --src=json-path,json-path --tgt=target-folder --to
+
 // 启动标注服务
 // --type 支持RECT,POLYGON
 // --tags 设置类型标签，例如Car:0,Train:1

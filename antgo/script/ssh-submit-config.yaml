@@ -3,4 +3,4 @@ config:
   password: ''
   ip: ''
 
-script: native-submitter.sh
+script: ssh-submit.sh

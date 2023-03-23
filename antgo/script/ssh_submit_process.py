@@ -10,7 +10,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     
     with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
         config_content = yaml.safe_load(fp)
-            
+
     username = config_content['config']['username']
     password = config_content['config']['password']
     ip = config_content['config']['ip']
@@ -25,4 +25,4 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     if image_name == '':
         image_name = 'antgo-env:latest'
     
-    os.system(f'bash {submit_script} {image_name} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size} {sys_argv} {image_name}')
+    os.system(f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name}')
