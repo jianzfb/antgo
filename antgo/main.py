@@ -35,6 +35,7 @@ DEFINE_string('project', '', 'set project name')
 DEFINE_string('git', None, '')
 DEFINE_string('branch', None, '')
 DEFINE_string('commit', None, '')
+DEFINE_string('image', '', '')      # 镜像
 DEFINE_string('gpu-ids', '0', 'use gpu ids')
 DEFINE_int('cpu', 0, 'set cpu number')
 DEFINE_int('memory', 0, 'set memory size (M)')
@@ -80,7 +81,7 @@ DEFINE_indicator("ignore-incomplete", True, "")
 DEFINE_nn_args()
 
 action_level_1 = ['train', 'eval', 'export', 'config', 'submitter']
-action_level_2 = ['add', 'del', 'create', 'update', 'show', 'get', 'tool']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool']
 
 
 def main():
@@ -182,19 +183,38 @@ def main():
   ####################################################################################################
   # 执行指令
   if action_name in action_level_1:
-    # 检查当前环境
-    if not check_project_environment(args):
-      return
-    
     # 云端任务执行
     if args.cloud:
-        # 云端提交
-        sys_argv_new = sys_argv_cp.replace('--cloud', '')        
-        # step 1.1: 检查提交脚本配置
-        if args.ssh:
-          ssh_submit_process_func(args.project, sys_argv_new, 0 if args.gpu_ids == '' else len(args.gpu_ids.split(',')), args.cpu, args.memory)  
+      # 检查项目环境
+      if not check_project_environment(args):
+        return
+            
+      # 记录commit
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+        project_info = json.load(fp)
+
+      if args.exp not in project_info['exp']:
+        logging.error(f'Exp {args.exp} not exist in project {args.project}.')
         return
 
+      try:
+        rep = git.Repo('./')     
+        project_info['exp'][args.exp]['branch'] = rep.active_branch.name
+        project_info['exp'][args.exp]['commit'] = rep.active_branch.commit.name_rev          
+      except Exception:
+          pass
+      
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+        json.dump(project_info, fp)
+      
+      # 云端提交        
+      sys_argv_new = sys_argv_cp.replace('--cloud', '')        
+      # step 1.1: 检查提交脚本配置
+      if args.ssh:
+        ssh_submit_process_func(args.project, sys_argv_new, 0 if args.gpu_ids == '' else len(args.gpu_ids.split(',')), args.cpu, args.memory)  
+      return
+
+    # 本地任务执行
     if action_name == 'train':
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
         # cpu run
@@ -273,19 +293,19 @@ def main():
           return
 
         # 加载项目默认模板
-        with open(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project', 'project.json'), 'r') as fp:
+        with open(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project.json'), 'r') as fp:
           project_config = json.load(fp)
 
         # 配置定制化项目
         project_config['name'] = args.name
         project_config['type'] = args.type
         project_config['git'] = args.git
-        project_config['semi']['method'] = args.semi
-        project_config['distillation']['method'] = args.distillation
-        project_config['activelearning']['method'] = args.activelearning
-        project_config['ensemble']['method'] = args.ensemble
-        
-        # TODO, 项目信息保存在云端
+        project_config['image'] = args.image
+        # 设置自动优化工具
+        project_config['tool']['semi']['method'] = args.semi
+        project_config['tool']['distillation']['method'] = args.distillation
+        project_config['tool']['activelearning']['method'] = args.activelearning
+        project_config['tool']['ensemble']['method'] = args.ensemble
 
         # 在本地存储项目信息
         with open(os.path.join(config.AntConfig.task_factory,f'{args.name}.json'), 'w') as fp:
@@ -296,7 +316,7 @@ def main():
           return
 
         # 获得基本项目信息
-        if os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+        if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
           logging.error(f'Project {args.project} has not been created.')
           return
         project_info = {}
@@ -304,19 +324,31 @@ def main():
           project_info = json.load(fp) 
 
         # 项目必须存在git
-        assert(project_info['git'] != '')
-
+        assert(project_info['git'] != '')    
+        
         # 创建项目实验
         assert(args.name is not None)
-        if os.path.exists(args.name):
+        if args.name in project_info['exp']:
           logging.error(f'Experiment {args.name} existed')
-          return
-        os.makedirs(args.name)
+          return        
+        
+        if not os.path.exists(args.name):
+          # 如果不存在实验目录，创建
+          os.makedirs(args.name)
 
-        # 生成示例代码
-        # if args.with_example:
-        #     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project')
-        #     generate_project_exp_example(project_folder, './')
+        project_info['exp'][args.name] = {
+          "exp":"",
+          "branch":"",
+          "commit":"",
+          "web":"",
+          "metric":{},
+          "dataset": {"test": "", "train": []},
+          "checkpoint": "",
+          "create_time": "",
+          "finish_time": ""
+        }
+        with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+          json.dump(project_info, fp)
     elif action_name == 'tool':
       # 工具相关
       if sub_action_name.startswith('extract'):

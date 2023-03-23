@@ -16,12 +16,12 @@ import json
 
 
 def check_project_environment(args):
-    assert(args.project != '' and args.exp != '')
+    assert(args.project != '')
     if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} not exist.')
         return False
     
-    with open(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project', 'project.json'), 'r') as fp:
+    with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp)
 
     # 检查是否在项目目录下
@@ -33,7 +33,7 @@ def check_project_environment(args):
         for url_address in rep.remote().urls:
             cur_git_address = url_address
             break
-        if cur_git_address.split('/')[-1] != project_info['git']:
+        if cur_git_address.split('/')[-1] != project_info['git'].split('/')[-1]:
             logging.error('You are in an error project folder.')
             return False
 
