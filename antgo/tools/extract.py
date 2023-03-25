@@ -259,7 +259,7 @@ def extract_from_coco(source_file, target_folder, filter_label, **kwargs):
         if not is_ignore:
             total_samples.append(gt_template)
         
-    with open(os.path.join(target_folder, './annotation.json'), 'w', encoding="utf-8") as fp:
+    with open(os.path.join(target_folder, 'annotation.json'), 'w', encoding="utf-8") as fp:
         json.dump(total_samples, fp)
 
     with open(os.path.join(target_folder, 'meta.json'), 'w', encoding="utf-8") as fp:

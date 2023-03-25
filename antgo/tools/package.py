@@ -28,6 +28,7 @@ class __SampleDataGenerator(object):
     def __iter__(self):
         for json_file in self.json_file_list:
             src_folder = os.path.dirname(json_file)
+            logging.info(f'Process {src_folder}')
             with open(json_file, 'r', encoding="utf-8") as fp:
                 samples = json.load(fp)
             
@@ -85,7 +86,8 @@ class __SampleDataGenerator(object):
                 
                 if sample['image'] == b'':
                     # 图像为空时，直接忽略样本
-                    yield None
+                    logging.error(f"Sample {sample['image_file']} data abnormal")
+                    continue
                 else:            
                     yield sample
 
