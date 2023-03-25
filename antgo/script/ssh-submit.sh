@@ -20,5 +20,6 @@ rm ../project.tar
 
 # remote run
 script_folder=$( dirname "$0" ) 
+echo remote address ${username}@${ip}
 ssh ${username}@${ip} 'bash -s' < ${script_folder}/ssh-launch.sh ${username} ${cpu_num} ${memory} ${gpu_num} \"${command}\" ${image} ${project}
 

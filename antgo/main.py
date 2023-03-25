@@ -8,6 +8,7 @@ from __future__ import unicode_literals
 from inspect import trace
 from random import shuffle
 import sys
+sys.path.append('/Users/bytedance/Downloads/workspace/my/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
@@ -42,6 +43,7 @@ DEFINE_int('memory', 0, 'set memory size (M)')
 DEFINE_string('name', None, '')     # 名字
 DEFINE_string('type', None, '')     # 类型
 DEFINE_indicator('cloud', True, '') # 指定云端运行
+DEFINE_string("address", None, "")
 
 
 ############## submitter ###################
@@ -161,7 +163,7 @@ def main():
 
   ##################################### 支持任务提交脚本配置  ###########################################
   if action_name == 'submitter':
-    if args.ssh:
+    if args.ssh:     
       # ssh提交配置
       if args.config == '' or args.config == 'config.py':
         # 生成ssh提交配置模板
@@ -176,6 +178,7 @@ def main():
 
   ######################################### 生成最小mvp ###############################################
   if action_name == 'create' and sub_action_name == 'mvp':
+    # 在项目目录下生成mvp
     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')
     generate_project_exp_example(project_folder, args.tgt)
     return
@@ -188,8 +191,13 @@ def main():
       # 检查项目环境
       if not check_project_environment(args):
         return
-            
-      # 记录commit
+
+      # 检查项目和实验是否存在
+      if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+        logging.error(f'Project {args.project} hasnot create.')
+        return
+
+      project_info = {}      
       with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp)
 
@@ -197,6 +205,11 @@ def main():
         logging.error(f'Exp {args.exp} not exist in project {args.project}.')
         return
 
+      if not os.path.exists(args.exp):
+        logging.error(f'Exp code not found in current folder.')
+        return
+      
+      # 记录commit
       try:
         rep = git.Repo('./')     
         project_info['exp'][args.exp]['branch'] = rep.active_branch.name
@@ -208,12 +221,18 @@ def main():
         json.dump(project_info, fp)
       
       # 云端提交        
-      sys_argv_new = sys_argv_cp.replace('--cloud', '')        
+      sys_argv_cmd = ' '.join(sys_argv_cp[1:])
+      sys_argv_cmd = sys_argv_cmd.replace('--cloud', '')
+            
       # step 1.1: 检查提交脚本配置
       if args.ssh:
-        ssh_submit_process_func(args.project, sys_argv_new, 0 if args.gpu_ids == '' else len(args.gpu_ids.split(',')), args.cpu, args.memory)  
+        sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
+        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+        sys_argv_cmd = f'antgo {sys_argv_cmd}'        
+        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_ids == '' else len(args.gpu_ids.split(',')), args.cpu, args.memory)  
+      else:
+        logging.error("Dont set remote mode (--ssh,--custom).")
       return
-
     # 本地任务执行
     if action_name == 'train':
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
@@ -286,19 +305,18 @@ def main():
     if action_name == 'create':
       if sub_action_name == 'project':
         assert(args.name is not None)
-        assert(args.type is not None)
         assert(args.git is not None)
         if os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.name}.json')):
           logging.error(f'Project {args.name} has existed.')
           return
-
+        
         # 加载项目默认模板
         with open(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project.json'), 'r') as fp:
           project_config = json.load(fp)
 
         # 配置定制化项目
         project_config['name'] = args.name
-        project_config['type'] = args.type
+        project_config['type'] = args.type if args.type is not None else ''
         project_config['git'] = args.git
         project_config['image'] = args.image
         # 设置自动优化工具
@@ -310,6 +328,9 @@ def main():
         # 在本地存储项目信息
         with open(os.path.join(config.AntConfig.task_factory,f'{args.name}.json'), 'w') as fp:
           json.dump(project_config, fp)
+                    
+        # 准备项目代码
+        prepare_project_environment(args.git, args.branch, args.commit)
       elif sub_action_name == 'exp':
         # 检查项目环境
         if not check_project_environment(args):
@@ -336,19 +357,15 @@ def main():
           # 如果不存在实验目录，创建
           os.makedirs(args.name)
 
-        project_info['exp'][args.name] = {
-          "exp":"",
-          "branch":"",
-          "commit":"",
-          "web":"",
-          "metric":{},
-          "dataset": {"test": "", "train": []},
-          "checkpoint": "",
-          "create_time": "",
-          "finish_time": ""
-        }
+        project_info['exp'][args.name] = exp_basic_info()
         with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
           json.dump(project_info, fp)
+    elif action_name == 'add':
+      # expert, product, basline, train/label, train/unlabel, test, val
+      project_add_action(sub_action_name, args)
+    elif action_name == 'del':
+      # expert, product, basline, train/label, train/unlabel, test, val
+      project_del_action(sub_action_name, args)
     elif action_name == 'tool':
       # 工具相关
       if sub_action_name.startswith('extract'):
@@ -424,7 +441,11 @@ def main():
             return
           
           tool_func(args.src, args.tgt, prefix=args.prefix, tags=args.tags, ignore_incomplete=args.ignore_incomplete)
+    elif action_name == 'show':
+      show_action(sub_action_name, args)
+    elif action_name == 'get':
+      show_action(sub_action_name, args)
 
-      
+
 if __name__ == '__main__':
   main()

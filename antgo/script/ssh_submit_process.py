@@ -16,7 +16,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     ip = config_content['config']['ip']
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
     
-    with open(os.path.join(config.AntConfig.task_factory,f'{project_name}'), 'r') as fp:
+    with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
         project_info = json.load(fp)
 
     image_name = '' # 基础镜像
@@ -25,4 +25,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     if image_name == '':
         image_name = 'antgo-env:latest'
     
-    os.system(f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name}')
+    if password == '':
+        password = 'default'
+    submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name}'
+    os.system(submit_cmd)

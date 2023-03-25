@@ -3,26 +3,8 @@
     "web":"",
     "git": "",
     "expert": [],
-    "product": {
-        "exp": "", 
-        "branch": "", 
-        "commit": "", 
-        "metric": {}, 
-        "dataset": {"test": "", "train": []},
-        "checkpoint": "", 
-        "create_time": "", 
-        "finish_time": ""            
-    },
-    "baseline": {
-        "exp": "", 
-        "branch": "", 
-        "commit": "", 
-        "metric": {}, 
-        "dataset": {"test": "", "train": []},
-        "checkpoint": "", 
-        "create_time": "", 
-        "finish_time": ""
-    },
+    "product": "",
+    "baseline": "",
     "type": "",
     "tool":{
         "semi": {
@@ -44,12 +26,11 @@
     },
     "dataset": {
         "train": {
-            "label": [{"tag": "", "num": "", "status": true, "address": ""}],
-            "unlabel": [{"tag": "", "num": "", "status": true, "address": ""}],
-            "pesudo": [{"tag": "", "num": "", "status": true, "address": ""}]
+            "label": [],
+            "unlabel": [],
         },
-        "test": {"tag": "", "num": "", "address": ""},
-        "val": {"tag": "", "num": "", "address": ""}
+        "test": {},
+        "val": {}
     },
     "exp":{
 

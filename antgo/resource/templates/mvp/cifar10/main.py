@@ -5,15 +5,15 @@
 # bash launch.sh ../cifar10/main.py 4 --exp=xxx --no-validate --process=train
 # 单机1卡训练(可以自定义使用第几块卡 --gpu-id=0)
 # python3 ./cifar10/main.py --exp=xxx --gpu-id=0 --no-validate --process=train
-# 单机CPU训练（仅用于调试）
+# 单机CPU训练(仅用于调试)
 # python3 ./cifar10/main.py --exp=xxx --gpu-id=-1 --no-validate --process=train
 
 # (2) 评估过程
 # 单机多卡评估(4卡运行)
 # bash launch.sh ./cifar10/main.py 4 --exp=xxx --checkpoint=yyy --process=test
-# 单机1卡评估（可以自定义使用第几块卡 --gpu-id=0）
+# 单机1卡评估(可以自定义使用第几块卡 --gpu-id=0)
 # python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=0 --process=test
-# 单机CPU测试（仅用于调试）
+# 单机CPU测试(仅用于调试)
 # python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=-1 --process=test
 
 # (3) 模型导出过程
@@ -22,7 +22,8 @@
 # 1.step 通用模块
 import sys
 import os
-os.system(f'ln -sf system.py {os.path.dirname(os.path.realpath(__file__))}/system.py')
+system_path = os.path.join(os.path.abspath(os.curdir),'system.py')
+os.system(f'ln -sf {system_path}  {os.path.dirname(os.path.realpath(__file__))}/system.py')
 import torch
 from antgo.utils import args
 from antgo.framework.helper.trainer import *
@@ -33,10 +34,10 @@ from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
 
-# 2.step 导入自定义系统后台（包括hdfs后端，KV后端）
+# 2.step 导入自定义系统后台(包括hdfs后端,KV后端)
 from system import *
 
-# 3.step 导入扩展模块 (包括自定义的模型，数据集，，等)
+# 3.step 导入扩展模块 (包括自定义的模型,数据集,,等)
 from models import *
 from metrics import *
 from dataset import *
@@ -80,13 +81,13 @@ def main():
     if 'evaluation' in cfg:
         cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
 
-    # step3: 执行指令（训练、测试、模型导出）
+    # step3: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程
         trainer = Trainer(
             cfg, 
             './', 
-            nn_args.gpu_id, # 对于多卡运行环境，会自动忽略此参数数值
+            nn_args.gpu_id, # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed, 
             diff_seed=nn_args.diff_seed, 
             deterministic=nn_args.deterministic, 
@@ -108,12 +109,12 @@ def main():
         tester = Tester(
             cfg, 
             './',
-            nn_args.gpu_id, # 对于多卡运行环境，会自动忽略此参数数值
+            nn_args.gpu_id, # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed)
         tester.config_model(checkpoint=nn_args.checkpoint)
         tester.evaluate()
     elif nn_args.process == 'activelearning':
-        # 创建主动学习过程，挑选等待标注样本
+        # 创建主动学习过程,挑选等待标注样本
         print(f'nn_args.distributed {nn_args.distributed}')
         print(f'nn_args.gpu-id {nn_args.gpu_id}')
         print(f'nn_args.checkpoint {nn_args.checkpoint}')        
