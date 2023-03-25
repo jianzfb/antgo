@@ -6,30 +6,26 @@
 # require Docker Engine >= 17.05
 #
 # builder stage
-FROM nvidia/cuda:10.2-runtime-ubuntu18.04 AS builder
+FROM nvidia/cuda:10.2-runtime-ubuntu18.04
 
 # 基础容器镜像的默认用户已经是 root
 # USER root
 
 # 使用国内开源镜像站提供的 pypi 配置
 RUN mkdir -p /root/.pip/
-COPY docker/pip.conf /root/.pip/pip.conf
+COPY ./docker/pip.conf /root/.pip/pip.conf
 
 # 拷贝待安装文件到基础容器镜像中的 /tmp 目录
 COPY Miniconda3-latest-Linux-x86_64.sh /tmp
 RUN mkdir -p /tmp/antgo
-COPY  ./ /tmp/antgo/
+COPY ./ /tmp/antgo/
 
 # https://conda.io/projects/conda/en/latest/user-guide/install/linux.html#installing-on-linux
 # 安装 Miniconda3 到基础容器镜像的 /miniconda3 目录中
 RUN bash /tmp/Miniconda3-latest-Linux-x86_64.sh -b -p /miniconda3
 
 # 使用 Miniconda3 默认 python 环境
-RUN cd /tmp/antgo && apt-get update -y && apt-get install -y gcc && /miniconda3/bin/pip install --no-cache-dir -r requirements.txt && /miniconda3/bin/python setup.py build_ext install 
-
-
-# 构建最终容器镜像
-FROM nvidia/cuda:10.2-runtime-ubuntu18.04
+RUN cd /tmp/antgo && apt-get update -y && apt-get install -y gcc && /miniconda3/bin/pip install --no-cache-dir -r requirements.txt &&/miniconda3/bin/pip install opencv-python-headless && /miniconda3/bin/python setup.py build_ext install && rm -rf /tmp/* 
 
 # 安装 vim和curl 工具（依然使用华为开源镜像站）
 RUN cp -a /etc/apt/sources.list /etc/apt/sources.list.bak && \
@@ -47,4 +43,4 @@ ENV PATH=$PATH:/miniconda3/bin \
 
 # 设置容器镜像默认用户与工作目录
 USER root
-WORKDIR /home/root
+WORKDIR /tiger
