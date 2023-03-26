@@ -14,6 +14,8 @@ import shutil
 from antgo import config
 import json
 from pprint import pprint
+import time
+
 
 def prepare_project_environment(project_git, project_branch, project_commit):
     git_folder = project_git.split('/')[-1].split('.')[0]
@@ -103,13 +105,15 @@ def generate_project_exp_example(template_project_folder, target_folder):
 def exp_basic_info():
     return {
         "exp": "", 
+        "id": "",
         "branch": "", 
         "commit": "", 
         "metric": {}, 
         "dataset": {"test": "", "train": []},
         "checkpoint": "", 
-        "create_time": "", 
-        "finish_time": ""          
+        "create_time": time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), 
+        "finish_time": "",
+        "state": '',    # training, finish, stop, default
     }
 
 
@@ -133,17 +137,26 @@ def project_add_action(action_name, args):
         
     if action_name == 'expert':
         assert(args.exp in project_info['exp'])
-        if args.exp in project_info['expert']:
-            logging.error(f'{args.exp} has existed in project {args.project}')
-            return
+        assert(args.id is not None)
         
-        project_info['expert'].append(args.exp)
+        exp_with_id = f'{args.exp}/{args.id}'
+        if exp_with_id in project_info['expert']:
+            logging.error(f'{exp_with_id} has existed in project {args.project}')
+            return
+
+        project_info['expert'].append(exp_with_id)
     elif action_name == 'product':
-        assert(args.exp in project_info['exp'])        
-        project_info['product'] = args.exp
+        assert(args.exp in project_info['exp'])    
+        assert(args.id is not None)
+        exp_with_id = f'{args.exp}/{args.id}'
+        
+        project_info['product'] = exp_with_id
     elif action_name == 'baseline':
-        assert(args.exp in project_info['exp'])        
-        project_info['baseline'] = args.exp        
+        assert(args.exp in project_info['exp'])   
+        assert(args.id is not None)
+        exp_with_id = f'{args.exp}/{args.id}'
+        
+        project_info['baseline'] = exp_with_id    
     elif action_name == 'train/label':
         assert(args.address is not None)
         project_info['dataset']['train']['label'].append(
@@ -199,11 +212,14 @@ def project_del_action(action_name, args):
 
     if action_name == 'expert':
         assert(args.exp in project_info['exp'])
-        if args.exp not in project_info['expert']:
-            logging.error(f'{args.exp} not exist in project {args.project}')
+        assert(args.id is not None)
+        exp_with_id = f'{args.exp}/{args.id}'
+                
+        if exp_with_id not in project_info['expert']:
+            logging.error(f'{exp_with_id} not exist in project {args.project}')
             return
         
-        project_info['expert'].remove(args.exp)
+        project_info['expert'].remove(exp_with_id)
     elif action_name == 'train/label':
         after_list = []
         for info in project_info['dataset']['train']['label']:
@@ -267,3 +283,64 @@ def show_action(action_name, args):
 
 def get_action(action_name, args):
     logging.error('Now dont support')
+
+
+def update_project_config(sub_action_name, args):
+    assert(args.project != '')
+    if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+        logging.error(f'Project {args.project} not existed.')
+        return     
+    
+    project_info = {}
+    with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+        project_info = json.load(fp) 
+        
+    if sub_action_name == 'project/semi':
+        # 更新半监督方案配置
+        with open(args.config, 'r') as fp:
+            config_content = json.load(fp)
+        
+        # 设置半监督算法的名字        
+        project_info['tool']['semi']['method'] = args.name
+        # 设置半监督的配置
+        project_info['tool']['semi']['config'].update(
+            config_content
+        )
+    elif sub_action_name == 'project/distillation':
+        # 更新蒸馏方案配置
+        with open(args.config, 'r') as fp:
+            config_content = json.load(fp)
+            
+        # 设置蒸馏算法的名字        
+        project_info['tool']['distillation']['method'] = args.name
+        # 设置蒸馏的配置
+        project_info['tool']['distillation']['config'].update(
+            config_content
+        )        
+    elif sub_action_name == 'project/activelearning':
+        # 更新主动学习方案配置
+        with open(args.config, 'r') as fp:
+            config_content = json.load(fp)
+                   
+        # 设置主动学习算法的名字        
+        project_info['tool']['activelearning']['method'] = args.name
+        # 设置主动学习的配置
+        project_info['tool']['activelearning']['config'].update(
+            config_content
+        )                
+    elif sub_action_name == 'project/ensemble':
+        # 更新聚合方案配置
+        with open(args.config, 'r') as fp:
+            config_content = json.load(fp)
+            
+        # 设置聚合算法的名字        
+        project_info['tool']['ensemble']['method'] = args.name
+        # 设置聚合的配置
+        project_info['tool']['ensemble']['config'].update(
+            config_content
+        )                          
+    else:
+        logging.error(f"Dont support {sub_action_name}")
+        return
+    
+    logging.info(f'Success update {sub_action_name} config')    

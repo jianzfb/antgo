@@ -27,7 +27,8 @@
     "dataset": {
         "train": {
             "label": [],
-            "unlabel": [],
+            "pseudo-label":[],
+            "unlabel": []
         },
         "test": {},
         "val": {}
@@ -45,5 +46,6 @@
         "checkpoint": "",
         "create_time": "",
         "finish_time": ""
-    }
+    },
+    "auto": false
 }

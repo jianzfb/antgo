@@ -8,7 +8,6 @@ from __future__ import unicode_literals
 from inspect import trace
 from random import shuffle
 import sys
-sys.path.append('/Users/bytedance/Downloads/workspace/my/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
@@ -44,7 +43,8 @@ DEFINE_string('name', None, '')     # 名字
 DEFINE_string('type', None, '')     # 类型
 DEFINE_indicator('cloud', True, '') # 指定云端运行
 DEFINE_string("address", None, "")
-
+DEFINE_indicator("auto", True, '')  # 是否项目自动优化
+DEFINE_string('id', None, '')
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -315,10 +315,11 @@ def main():
           project_config = json.load(fp)
 
         # 配置定制化项目
-        project_config['name'] = args.name
-        project_config['type'] = args.type if args.type is not None else ''
-        project_config['git'] = args.git
-        project_config['image'] = args.image
+        project_config['name'] = args.name    # 项目名称
+        project_config['type'] = args.type if args.type is not None else '' # 项目类型
+        project_config['git'] = args.git      # 项目git地址
+        project_config['image'] = args.image  # 项目需要的定制化的镜像
+        project_config['auto'] = args.auto    # 项目是否进行自动化更新  （半监督\蒸馏\迁移）
         # 设置自动优化工具
         project_config['tool']['semi']['method'] = args.semi
         project_config['tool']['distillation']['method'] = args.distillation
@@ -357,7 +358,10 @@ def main():
           # 如果不存在实验目录，创建
           os.makedirs(args.name)
 
-        project_info['exp'][args.name] = exp_basic_info()
+        if args.name not in project_info['exp']:
+          project_info['exp'][args.name] = []
+        project_info['exp'].append(exp_basic_info())
+
         with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
           json.dump(project_info, fp)
     elif action_name == 'add':
@@ -445,7 +449,8 @@ def main():
       show_action(sub_action_name, args)
     elif action_name == 'get':
       show_action(sub_action_name, args)
-
+    elif action_name == 'update':
+      update_project_config(sub_action_name, args)
 
 if __name__ == '__main__':
   main()
