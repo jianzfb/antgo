@@ -6,6 +6,13 @@
     "product": "",
     "baseline": "",
     "type": "",
+    "submitter": {
+        "local": false,
+        "method": "ssh",
+        "gpu_num": 1,
+        "cpu_num": 10,
+        "memory": 5000
+    },
     "tool":{
         "semi": {
             "method": "",
@@ -21,7 +28,8 @@
         },
         "ensemble":{
             "method": "",
-            "config": {}
+            "config": {},
+            "best": {}
         }
     },
     "dataset": {

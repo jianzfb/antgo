@@ -5,13 +5,14 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from inspect import trace
+import multiprocessing
 from random import shuffle
 import sys
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
 from antgo.ant.utils import *
+from antgo.ant.client import get_client, launch_server
 from antgo.command import *
 from antgo.framework.helper.tools.util import *
 from antgo.help import *
@@ -45,6 +46,7 @@ DEFINE_indicator('cloud', True, '') # 指定云端运行
 DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')  # 是否项目自动优化
 DEFINE_string('id', None, '')
+DEFINE_int('port', 0, 'set port')
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -82,12 +84,14 @@ DEFINE_indicator("ignore-incomplete", True, "")
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'submitter']
+action_level_1 = ['train', 'eval', 'export', 'config', 'submitter', 'server']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool']
 
 
 def main():
+  # 显示antgo logo
   main_logo()
+  
   # 备份脚本参数
   sys_argv_cp = sys.argv
   
@@ -151,6 +155,17 @@ def main():
     os.makedirs(config.AntConfig.data_factory)
   if not os.path.exists(config.AntConfig.task_factory):
     os.makedirs(config.AntConfig.task_factory)
+
+  ######################################### 后台监控服务 ################################################
+  if action_name == 'server':
+    proc = multiprocessing.Process(target=launch_server, args=(args.port,))
+    proc.daemon = False
+    proc.start()
+    return
+
+  # 检查是否后台服务活跃
+  if not get_client().alive():
+    logging.warn('Antgo auto server not work. Please run "antgo server" to launch.')
 
   ######################################### 支持扩展 ###############################################
   if args.extra and not os.path.exists('extra'):

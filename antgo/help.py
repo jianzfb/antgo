@@ -5,16 +5,16 @@
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from genericpath import isdir
-
 import os
 import git
 import logging
 import shutil
 from antgo import config
+from antgo.ant.client import *
 import json
 from pprint import pprint
 import time
+
 
 
 def prepare_project_environment(project_git, project_branch, project_commit):
@@ -113,7 +113,8 @@ def exp_basic_info():
         "checkpoint": "", 
         "create_time": time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), 
         "finish_time": "",
-        "state": '',    # training, finish, stop, default
+        "state": "",    # training, finish, stop, default
+        "stage": "",    # which stage of progress
     }
 
 
@@ -147,10 +148,10 @@ def project_add_action(action_name, args):
         project_info['expert'].append(exp_with_id)
     elif action_name == 'product':
         assert(args.exp in project_info['exp'])    
-        assert(args.id is not None)
-        exp_with_id = f'{args.exp}/{args.id}'
-        
-        project_info['product'] = exp_with_id
+        project_info['product'] = args.exp
+        ######### trigger:start #########
+        client_handler.trigger('product')
+        ######### trigger:end   #########        
     elif action_name == 'baseline':
         assert(args.exp in project_info['exp'])   
         assert(args.id is not None)
@@ -167,6 +168,10 @@ def project_add_action(action_name, args):
                 'address': args.address
             }
         )
+        ######### trigger:start #########
+        client_handler.trigger('train/label')
+        ######### trigger:end   #########
+        
     elif action_name == 'train/unlabel':
         assert(args.address is not None)
         project_info['dataset']['train']['unlabel'].append(
@@ -177,6 +182,10 @@ def project_add_action(action_name, args):
                 'address': args.address
             }
         )
+        ######### trigger:start #########
+        client_handler.trigger('train/unlabel')
+        ######### trigger:end   #########
+                
     elif action_name == 'test':
         assert(args.address is not None)
         project_info['dataset']['test'] = {

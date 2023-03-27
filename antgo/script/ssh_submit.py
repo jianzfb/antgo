@@ -3,6 +3,7 @@ import yaml
 from antgo import config
 import json
 
+# 提交任务运行
 def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size):
     # step1: 加载ssh配置文件
     ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
@@ -29,3 +30,8 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
         password = 'default'
     submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name}'
     os.system(submit_cmd)
+    
+    
+# 检查任务资源是否满足
+def ssh_submit_resource_check_func(gpu_num, cpu_num, memory_size):
+    return True
