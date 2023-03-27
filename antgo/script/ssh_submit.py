@@ -26,12 +26,21 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     if image_name == '':
         image_name = 'antgo-env:latest'
     
+    # 添加临时配置：将当前工程信息保存到当前目录下并一同提交
+    with open('./extra-config.py', 'w') as fp:
+        json.dump(project_info, fp)
+    
+    sys_argv += " --extra-config=./extra-config.py"
     if password == '':
         password = 'default'
     submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name}'
     os.system(submit_cmd)
     
+    # 删除临时配置：
+    if os.path.exists('./extra-config.py'):
+        os.remove('./extra-config.py')
     
+
 # 检查任务资源是否满足
 def ssh_submit_resource_check_func(gpu_num, cpu_num, memory_size):
     return True

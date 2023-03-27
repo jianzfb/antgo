@@ -150,7 +150,7 @@ def project_add_action(action_name, args):
         assert(args.exp in project_info['exp'])    
         project_info['product'] = args.exp
         ######### trigger:start #########
-        client_handler.trigger('product')
+        get_client().trigger('product')
         ######### trigger:end   #########        
     elif action_name == 'baseline':
         assert(args.exp in project_info['exp'])   
@@ -169,7 +169,7 @@ def project_add_action(action_name, args):
             }
         )
         ######### trigger:start #########
-        client_handler.trigger('train/label')
+        get_client().trigger('train/label')
         ######### trigger:end   #########
         
     elif action_name == 'train/unlabel':
@@ -183,7 +183,7 @@ def project_add_action(action_name, args):
             }
         )
         ######### trigger:start #########
-        client_handler.trigger('train/unlabel')
+        get_client().trigger('train/unlabel')
         ######### trigger:end   #########
                 
     elif action_name == 'test':

@@ -48,6 +48,7 @@ def DEFINE_nn_args():
     global parser
     group_gpus = parser.add_mutually_exclusive_group()
     parser.add_argument('--config', type=str, default="config.py", help='train config file path')
+    parser.add_argument('--extra-config', type=str, default="", help='train extra config file path')
     parser.add_argument(
         '--resume-from', default=None, help='the checkpoint file to resume from')
 

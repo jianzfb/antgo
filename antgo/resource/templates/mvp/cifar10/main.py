@@ -20,6 +20,8 @@
 # python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --process=export
 
 # 1.step 通用模块
+from asyncio.format_helpers import extract_stack
+import shutil
 import sys
 import os
 system_path = os.path.join(os.path.abspath(os.curdir),'system.py')
@@ -33,6 +35,7 @@ from antgo.framework.helper.exporter import *
 from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
+from antgo.ant import environment
 
 # 2.step 导入自定义系统后台(包括hdfs后端,KV后端)
 from system import *
@@ -81,6 +84,48 @@ def main():
     if 'evaluation' in cfg:
         cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
 
+    # step2.1 检查补充配置
+    if nn_args.extra_config is not None and nn_args.extra_config != '':
+        if os.path.exists(nn_args.extra_config):
+            with open(nn_args.extra_config, 'r') as fp:
+                extra_config = json.load(fp)
+            
+            # extra_config 格式为项目信息格式
+            # part1: 数据相关 (默认TFRECORD是antgo默认标准打包格式)
+            extra_dataset_train_label = extra_config['dataset']['train']['label']
+            extra_dataset_train_pseudo_label = extra_config['dataset']['train']['pseudo-label']
+            extra_dataset_train_unlabel = extra_config['dataset']['train']['unlabel']
+                                        
+            # part2: 优化方法相关            
+            # semi,distillation,activelearning,ensemble
+            
+            #####
+        
+            if not os.path.exists('-dataset-'):
+                os.mkdir('-dataset-')
+            
+            if len(extra_dataset_train_label) > 0:
+                cfg.data.train.data_path_list = []
+                for data_info in extra_dataset_train_label:
+                    if data_info['status']:
+                        local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
+                        environment.hdfs_client.get(data_info['address'], local_path)
+                        
+                        cfg.data.train.data_path_list.append(
+                            local_path
+                        )
+            if len(extra_dataset_train_pseudo_label) > 0:
+                for data_info in extra_dataset_train_pseudo_label:
+                    if data_info['status']:
+                        local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
+                        environment.hdfs_client.get(data_info['address'], local_path)
+                                                
+                        cfg.data.train.data_path_list.append(
+                            local_path
+                        ) 
+            #####
+
+            
     # step3: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程

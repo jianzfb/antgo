@@ -248,7 +248,9 @@ def main():
       else:
         logging.error("Dont set remote mode (--ssh,--custom).")
       return
+
     # 本地任务执行
+    # TODO, 根据项目配置自动在任务配置文件中注入信息
     if action_name == 'train':
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
         # cpu run
@@ -261,7 +263,9 @@ def main():
           command_str += f' --checkpoint={args.checkpoint}'
         if args.max_epochs > 0:
           command_str += f' --max-epochs={args.max_epochs}'
-        
+
+        # 补充配置
+        command_str += f' --extra-config={args.extra_config}'
         os.system(command_str)
       elif len(args.gpu_ids.split(',')) == 1:
         # single gpu run
@@ -276,6 +280,8 @@ def main():
         if args.max_epochs > 0:
           command_str += f' --max-epochs={args.max_epochs}'
 
+        # 补充配置
+        command_str += f' --extra-config={args.extra_config}'
         os.system(command_str)
       else:
         # multi gpu run
@@ -290,6 +296,8 @@ def main():
         if args.max_epochs > 0:
           command_str += f' --max-epochs={args.max_epochs}'
         
+        # 补充配置
+        command_str += f' --extra-config={args.extra_config}'        
         os.system(command_str)
     elif action_name == 'eval':
       assert(args.checkpoint is not None)
