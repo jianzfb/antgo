@@ -5,8 +5,7 @@ from antgo.framework.helper.base_module import BaseModule
 
 class MultiSteamModule(BaseModule):
     def __init__(
-        self, model=dict(), train_cfg=None, test_cfg=None
-    ):
+        self, model=dict(), train_cfg=None, test_cfg=None, init_cfg=None):
         super(MultiSteamModule, self).__init__()
         self.submodules = list(model.keys())
         for k, v in model.items():

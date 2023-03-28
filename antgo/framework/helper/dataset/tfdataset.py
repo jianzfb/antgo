@@ -289,8 +289,9 @@ class TFDataset(torch.utils.data.IterableDataset):
             if self.ratios is not None:
                 self.ratios = [self.ratios[i] for i in use_data_path_index_list]
 
-            logging.info(f'Rank {rank} use data list')
+            logging.info(f'Rank {rank} (TOTAL NUM {self.real_num_samples} TARGET NUM {self.num_samples}), data list')
             logging.info(self.data_path_list)
+            
             
     def _select_next_set(self, num_samples_list, target_num):
         data = num_samples_list

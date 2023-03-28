@@ -24,6 +24,8 @@ from asyncio.format_helpers import extract_stack
 import shutil
 import sys
 import os
+
+from antgo.antgo.framework.helper.runner.hooks import hook
 system_path = os.path.join(os.path.abspath(os.curdir),'system.py')
 os.system(f'ln -sf {system_path}  {os.path.dirname(os.path.realpath(__file__))}/system.py')
 import torch
@@ -91,40 +93,109 @@ def main():
                 extra_config = json.load(fp)
             
             # extra_config 格式为项目信息格式
-            # part1: 数据相关 (默认TFRECORD是antgo默认标准打包格式)
-            extra_dataset_train_label = extra_config['dataset']['train']['label']
-            extra_dataset_train_pseudo_label = extra_config['dataset']['train']['pseudo-label']
-            extra_dataset_train_unlabel = extra_config['dataset']['train']['unlabel']
-                                        
-            # part2: 优化方法相关            
-            # semi,distillation,activelearning,ensemble
-            
-            #####
-        
+            # step2.1.1: 数据相关 (默认TFRECORD是antgo默认标准打包格式)
+            extra_dataset_train_label = extra_config['source']['label']
+            extra_dataset_train_pseudo_label = extra_config['source']['pseudo-label']
+            extra_dataset_train_unlabel = extra_config['source']['unlabel']
+
             if not os.path.exists('-dataset-'):
                 os.mkdir('-dataset-')
-            
+
+            label_local_path_list = []
             if len(extra_dataset_train_label) > 0:
-                cfg.data.train.data_path_list = []
+                # 下载相关数据，到训练集群
                 for data_info in extra_dataset_train_label:
                     if data_info['status']:
                         local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
-                        environment.hdfs_client.get(data_info['address'], local_path)
+                        status = environment.hdfs_client.get(data_info['address'], local_path)                        
+                        if not status:
+                            logging.error(f'Download {data_info["address"]} error.')
+                            continue
                         
-                        cfg.data.train.data_path_list.append(
-                            local_path
-                        )
+                        label_local_path_list.append(local_path)
+
+                ## 
+            pseudo_local_path_list = []
             if len(extra_dataset_train_pseudo_label) > 0:
+                # 下载相关数据，到训练集群
                 for data_info in extra_dataset_train_pseudo_label:
                     if data_info['status']:
                         local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
-                        environment.hdfs_client.get(data_info['address'], local_path)
-                                                
-                        cfg.data.train.data_path_list.append(
-                            local_path
-                        ) 
-            #####
+                        status = environment.hdfs_client.get(data_info['address'], local_path)
+                        if not status:
+                            logging.error(f'Download {data_info["address"]} error.')
+                            continue       
+                        pseudo_local_path_list.append(local_path)
 
+                ##
+            unlabel_local_path_list = []
+            if len(extra_dataset_train_unlabel)> 0:
+                # 下载相关数据，到训练集群
+                for data_info in extra_dataset_train_unlabel:
+                    if data_info['status']:
+                        local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
+                        status = environment.hdfs_client.get(data_info['address'], local_path)
+                        if not status:
+                            logging.error(f'Download {data_info["address"]} error.')
+                            continue       
+                        unlabel_local_path_list.append(local_path)
+
+                ##
+                        
+            # step2.1.2: 训练方法相关 (包括数据的使用方式)
+            if 'data' in extra_config:
+                cfg.data = extra_config['data']
+            
+            if not isinstance(cfg.data.train, list):
+                # 默认仅支持TFDataset
+                # 默认常规训练方式
+                cfg.data.train.data_path_list.extend(label_local_path_list)
+                cfg.data.train.data_path_list.extend(pseudo_local_path_list)
+            else:
+                # 默认复杂训练方式（如，半监督训练，蒸馏训练，跨域训练模式）
+                # 仅支持list size=2 （默认，0: 标签数据+伪标签数据；1: 无标签数据）
+                cfg.data.train[0].data_path_list.extend(label_local_path_list)
+                cfg.data.train[0].data_path_list.extend(pseudo_local_path_list)
+                
+                cfg.data.train[1].data_path_list.extend(unlabel_local_path_list)
+            
+            if 'model' in extra_config:
+                model_type = extra_config['model']['type']
+                model_train_cfg = extra_config['model']['train_cfg']
+                model_test_cfg = extra_config['model']['test_cfg']
+                model_init_cfg = extra_config['model']['init_cfg']
+                
+                # 更新默认配置
+                default_model_cfg = cfg.model
+                cfg.model = dict(
+                    type=model_type,
+                    model=default_model_cfg,
+                    train_cfg=model_train_cfg,
+                    test_cfg=model_test_cfg,
+                    init_cfg=model_init_cfg
+                )
+
+            if 'hooks' in extra_config:
+                hooks = extra_config['hooks']
+                if not isinstance(hooks, list):
+                    hooks = [hooks]
+                
+                # 更新默认配置
+                custom_hooks = getattr(cfg, 'custom_hooks', None)
+                if custom_hooks is None:
+                    custom_hooks = hooks
+                else:
+                    if isinstance(custom_hooks, list):
+                        custom_hooks.extend(hooks)
+                    else:
+                        custom_hooks = hooks
+            
+            if 'optimizer' in extra_config:
+                cfg.optimizer = extra_config['optimizer']
+            if 'optimizer_config' in extra_config:
+                cfg.optimizer_config = extra_config['optimizer_config']
+            if 'lr_config' in extra_config:
+                cfg.lr_config = extra_config['lr_config']
             
     # step3: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':

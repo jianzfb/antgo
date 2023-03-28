@@ -6,7 +6,7 @@ from .losses.quality_focal_loss import QualityFocalLoss
 
 @MODELS.register_module()
 class DenseTeacher(MultiSteamModule):
-    def __init__(self, model: dict, train_cfg=None, test_cfg=None):
+    def __init__(self, model: dict, train_cfg=None, test_cfg=None, init_cfg=None):
         # 默认使用teacher模型作为最佳模型
         if test_cfg is None:
             test_cfg = dict()
