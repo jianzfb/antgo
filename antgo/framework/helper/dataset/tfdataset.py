@@ -1,3 +1,6 @@
+from asyncio.log import logger
+import logging
+import sys
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -214,9 +217,9 @@ class TFDataset(torch.utils.data.IterableDataset):
         self.ratios = ratios
         if shuffle_queue_size > 0:
             # 如果已经设置了shuffle queue，则设置默认ratios
-            if self.ratios is not None:
+            if self.ratios is None:
                 self.ratios = [1 for _ in range(len(self.data_path_list))]
-        
+
         self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
         self._alias = None
         if self._fields is not None and 'alias' in inputs_def:
@@ -258,9 +261,8 @@ class TFDataset(torch.utils.data.IterableDataset):
         self.num_samples = 0
         for i, index_path in enumerate(self.index_path_list):
             index = np.loadtxt(index_path, dtype=np.int64)[:, 0]
-            self.num_samples += len(index)
-            num_samples_list.append((i, len(index)))        
-        num_samples_list.sort(reverse=True, key=lambda x: x[1])
+            self.num_samples += len(index) 
+            num_samples_list.append(len(index))
         self.real_num_samples = self.num_samples
 
         rank, world_size = get_dist_info()
@@ -268,20 +270,68 @@ class TFDataset(torch.utils.data.IterableDataset):
             # TODO，现在多卡实现基于文件级别的拆分，粒度较粗
             assert(len(self.data_path_list) >= world_size)
             
-            use_data_path_index_list = [num_samples_list[i][0] for i in range(rank, len(num_samples_list), world_size)]
-            use_data_path_num_list = [num_samples_list[i][1] for i in range(rank, len(num_samples_list), world_size)]  
+            # 公平选择，尽量确保每张卡有相同的样本数量
+            select_index_list_in_world = self._fair_select(num_samples_list, world_size)
+            select_index_list = select_index_list_in_world[rank]
+            use_data_path_index_list = select_index_list
+            use_data_path_num_list = [num_samples_list[i] for i in select_index_list]
             self.real_num_samples = np.sum(use_data_path_num_list)
 
+            # 每张卡期望使用的样本数（以最大为准，不足的通过后续重复采样补充）
             self.num_samples = 0
             for rank_i in range(world_size):
-                num = np.sum([num_samples_list[i][1] for i in range(rank_i, len(num_samples_list), world_size)])
+                num = np.sum([num_samples_list[i] for i in select_index_list_in_world[rank_i]])
                 if self.num_samples < num:
                     self.num_samples = num
-
+                        
             self.data_path_list = [self.data_path_list[i] for i in use_data_path_index_list]
             self.index_path_list = [self.index_path_list[i] for i in use_data_path_index_list]
             if self.ratios is not None:
                 self.ratios = [self.ratios[i] for i in use_data_path_index_list]
+
+            logging.info(f'Rank {rank} use data list')
+            logging.info(self.data_path_list)
+            
+    def _select_next_set(self, num_samples_list, target_num):
+        data = num_samples_list
+        dp = [[0 for i in range(target_num+1)] for _ in range(len(data)+1)]
+
+        for i in range(1,len(data)+1):
+            for j in range(0, target_num+1):
+                if j >= data[i-1]:
+                    dp[i][j] = max(dp[i-1][j], dp[i-1][j-data[i-1]]+data[i-1])
+                    pass
+                else:
+                    dp[i][j] = dp[i-1][j]
+        
+        select_list = []
+        for i in range(len(data), 0, -1):
+            if dp[i][j] > dp[i-1][j]:
+                select_list.append(i-1)
+                j -= data[i-1]
+
+        return select_list
+    
+    def _fair_select(self, num_samples_list, world_size):
+        select_index_list_in_world = []
+        
+        target_num = (sum(num_samples_list) + world_size-1)  // world_size        
+        index_list = list(range(len(num_samples_list)))     # 维持全局索引
+        num_samples_list = copy.deepcopy(num_samples_list)
+        
+        for i in range(world_size):
+            if i == world_size - 1:
+                select_index_list_in_world.append(index_list)
+                break
+
+            select_local_index = self._select_next_set(num_samples_list, target_num)
+            select_index = [index_list[j] for j in select_local_index]            
+            select_index_list_in_world.append(select_index)
+            
+            num_samples_list = [num_samples_list[j] for j in range(len(num_samples_list)) if j not in select_local_index]               
+            index_list = [k for k in index_list if k not in select_index]        
+            
+        return select_index_list_in_world
 
     def _arrange(self, sample, fields, alias):
         if fields is None:
@@ -388,3 +438,35 @@ class TFDataset(torch.utils.data.IterableDataset):
 
     def __len__(self):
         return self.num_samples
+
+
+# data = [2,4,6,7,8,5]
+# data_sum = int(np.sum(data))
+
+# dp = [[0 for i in range(data_sum//2+1)] for _ in range(len(data)+1)]
+
+# for i in range(1,len(data)+1):
+#     for j in range(0, data_sum//2+1):
+#         if j >= data[i-1]:
+#             dp[i][j] = max(dp[i-1][j], dp[i-1][j-data[i-1]]+data[i-1])
+#             pass
+#         else:
+#             dp[i][j] = dp[i-1][j]
+
+# j = data_sum//2
+# print(j)
+
+# print('select')
+# for i in range(len(data), 0, -1):
+#     if dp[i][j] > dp[i-1][j]:
+#         print(i-1)
+#         j -= data[i-1]
+
+# print('sdf')
+
+# abcd = TFDataset(data_path_list=['/root/workspace/dataset/hand-lr-det/yongchun_hand_lr-00007-of-00008-tfrecord'])
+# select_all = abcd._fair_select([2,4,6,7,8,5], 3)
+# print(select_all)
+
+# for ii in select_all:
+#     print(np.sum(np.array([2,4,6,7,8,5])[ii]))
