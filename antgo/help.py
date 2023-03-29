@@ -112,7 +112,7 @@ def exp_basic_info():
         "metric": {}, 
         "dataset": {"test": "", "train": []},
         "checkpoint": "", 
-        "create_time": time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), 
+        "create_time": time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time())), 
         "finish_time": "",
         "state": "",    # running, finish, stop, default
         "stage": "",    # which stage of progress

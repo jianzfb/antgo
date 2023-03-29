@@ -7,6 +7,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 import multiprocessing
 import sys
+sys.path.append('/root/workspace/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
@@ -156,6 +157,15 @@ def main():
   if not os.path.exists(config.AntConfig.task_factory):
     os.makedirs(config.AntConfig.task_factory)
 
+  ######################################### 支持扩展 ###############################################
+  if args.extra and not os.path.exists('extra'):
+    logging.info('download extra package')
+    os.system('wget http://image.mltalker.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
+  
+  if args.ext_module != '':
+    logging.info('import extent module')
+    load_extmodule(args.ext_module)
+
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
     proc = multiprocessing.Process(target=launch_server, args=(args.port,args.root))
@@ -166,15 +176,6 @@ def main():
   # 检查是否后台服务活跃
   if not get_client().alive():
     logging.warn('Antgo auto server not work. Please run "antgo server" to launch.')
-
-  ######################################### 支持扩展 ###############################################
-  if args.extra and not os.path.exists('extra'):
-    logging.info('download extra package')
-    os.system('wget http://image.mltalker.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
-  
-  if args.ext_module != '':
-    logging.info('import extent module')
-    load_extmodule(args.ext_module)
 
   ##################################### 支持任务提交脚本配置  ###########################################
   if action_name == 'submitter':

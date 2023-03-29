@@ -70,7 +70,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
             # 扩展模型配置/优化器/学习率等
             extra_config.update( project_info['tool']['semi']['config'])
         elif task_name == "distillation":
-            if project_info['tool']['semi']['method'] == '' or len(project_info['tool']['semi']['config']) == 0:
+            if project_info['tool']['distillation']['method'] == '' or len(project_info['tool']['distillation']['config']) == 0:
                 logging.error(f"Missing {task_name} config, couldnt launch task")
                 return False
                     

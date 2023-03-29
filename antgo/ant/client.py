@@ -12,6 +12,7 @@ from antvis.client.httprpc import *
 from antgo.ant import environment
 from antgo import config
 from antgo import script
+from antgo.help import *
 import time
 from queue import PriorityQueue
 from socketserver import StreamRequestHandler as Tcp
@@ -49,9 +50,9 @@ class BackgroundTCP(Tcp):
 
 class ServerBase(object):
     def __init__(self, *args, **kwargs) -> None:
-        super(ServerBase, self).__init__(*args, **kwargs)
-        self.root = ''
-        self.timer = 60*10 # 10分钟一次监控
+        super(ServerBase, self).__init__()
+        self.root = kwargs.get('root', '')
+        self.timer = 10         # 10分钟一次监控, debug 10*60
         self.task_queue = PriorityQueue()
         self.task_set = set()       # 用于校验是否存在同类型任务
         
@@ -59,18 +60,19 @@ class ServerBase(object):
         # semi-supervised       优先级3
         # distillation          优先级3
         # activelearning        优先级1
-        self.task_order = [('activelearning', 'supervised'),('supervised', 'activelearning'), ('supervised','semi-supervised'),('supervised','distillation')]
+        # self.task_order = [('activelearning', 'supervised'),('supervised', 'activelearning'), ('supervised','semi-supervised'),('supervised','distillation')]
+        
+        self.task_order = [('activelearning', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
         self.task_priority = {'activelearning': 1, 'supervised':2,'semi-supervised':3, 'distillation':3}
         self.task_cmd = {
             "activelearning": "antgo tool label/start",
-            "supervised": "antgo train",
-            "semi-supervised": "antgo train",
-            "distillation": "antgo train"
+            "supervised": "antgo train --process=train",
+            "semi-supervised": "antgo train --process=train",
+            "distillation": "antgo train --process=train"
         }
 
         # 启动定时任务
-        periodical_func = threading.Timer(10, self.watch)
-        periodical_func.daemon = True
+        periodical_func = threading.Timer(self.timer, self.watch)
         periodical_func.start()
 
     def submit(self):
@@ -117,7 +119,7 @@ class ServerBase(object):
     def schedule(self, project_name, project_info, exp_info):
         # exp_info 是当前已经运行完成的实验
         # 可以从project_info中获得，当前完成的实验处在哪个阶段
-        exp_name = exp_info['name']
+        exp_name = exp_info['exp']
         exp_id = exp_info['id']
 
         # 自动化迭代流程
@@ -156,8 +158,8 @@ class ServerBase(object):
         # submitter_func 已经决定了如何提交任务
         submitter_func = getattr(script, f'{submitter_method}_submit_process_func', None)
 
-        next_task_cmd = self.task_cmd[next_task[1]]
         next_task = self.task_queue.get()
+        next_task_cmd = self.task_cmd[next_task[1]]
         if next_task[1] == 'activelearning':
             # TODO，这里需要修改，先要完成无标签数据预测，再启动标注
             if len(project_info['tool']['activelearning']['config']) == 0:
@@ -173,15 +175,31 @@ class ServerBase(object):
             next_task_cmd += f" --tags={label_tags} --type={label_type}"
         else:
             next_task_cmd += f" --exp={exp_name}"
-            next_task_cmd += f" --stage={next_task}"
+            next_task_cmd += f" --stage={next_task[1]}"
             next_task_cmd += f" --root={self.root}/{project_name}"
+            # 基于提交脚本设置gpu_ids
+            gpu_ids = ','.join([str(i) for i in range(submitter_gpu_num)])
+            next_task_cmd += f" --gpu-id={gpu_ids}"
 
-        if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task):
+        # 创建新实验记录
+        auto_exp_info = exp_basic_info()
+        auto_exp_info['exp'] = exp_info['exp']
+        auto_exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
+        auto_exp_info['branch'] = exp_info['branch']
+        auto_exp_info['commit'] = exp_info['commit']
+        auto_exp_info['state'] = 'running'
+        auto_exp_info['stage'] = next_task[1]
+        project_info['exp'][exp_info['exp']].append(
+            auto_exp_info
+        )
+ 
+        if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task[1]):
             # 提交任务成功
             logging.info(f"Success submit task {self.task_cmd[next_task[1]]}")
             self.task_set.pop(next_task[1])
         else:
             # 提交任务失败 (重新加入任务队列)
+            auto_exp_info['state'] = 'stop'
             logging.error(f'Fail submit task {self.task_cmd[next_task[1]]}')
             self.task_queue.put(next_task)
 
@@ -197,7 +215,11 @@ class LocalServer(ServerBase):
         # 目录结构如下
         # root 
         #   - project
-        #        - activelearning
+        #        - label
+        #           - exp.id    # 在此实验后，进行的标注结果
+        #               annotation.json
+        #           - exp.id    # 在此实验后，进行的标注结果
+        #               annotation.json
         #        - exp.id
         #               RUNNING/FINISH/STOP
         #               - output
@@ -236,16 +258,19 @@ class LocalServer(ServerBase):
                         checkpoint_folder = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}','output', 'checkpoint')
                         is_exist = environment.hdfs_client.exists(os.path.join(project_state_folder, 'FINISH'))
                         if is_exist:
+                            # 任务完成状态
                             exp_info['state'] = 'finish'
                             exp_info['finish_time'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
 
+                            # 获得任务保存的checkpoint
                             if environment.hdfs_client.exists(os.path.join(checkpoint_folder, 'best.pth')):
                                 # 记录最佳指标模型（开启评估过程）
                                 exp_info['checkpoint'] = os.path.join(checkpoint_folder, 'best.pth')
-                            else:
+                            elif environment.hdfs_client.exists(os.path.join(checkpoint_folder, 'latest.pth')):
                                 # 记录最后的一个模型（未开启评估过程）
                                 exp_info['checkpoint'] = os.path.join(checkpoint_folder, 'latest.pth')
 
+                            # 获得任务保存的最佳指标结果
                             best_metric_record = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}','output', 'best.json')
                             if environment.hdfs_client.exists(best_metric_record):
                                 if not os.path.exists('/tmp/'):
@@ -256,9 +281,17 @@ class LocalServer(ServerBase):
                                     with open('/tmp/best.json', 'r') as fp:
                                         exp_info['metric'].update(json.load(fp))
 
-                        # 项目自动化优化流水线
-                        if project_info['auto']:
-                            self.schedule(project_name, project_info, exp_info)
+                            # 项目自动化优化流水线
+                            if project_info['auto']:
+                                self.schedule(project_name, project_info, exp_info)
+
+            # 保存项目新信息
+            with open(os.path.join(config.AntConfig.task_factory, project_file), 'w') as fp:
+                json.dump(project_info, fp)
+        
+        # 重新启动下一轮触发
+        periodical_func = threading.Timer(self.timer, self.watch)
+        periodical_func.start()
 
 
 class HttpServer(ServerBase):
