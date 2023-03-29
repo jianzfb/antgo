@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import multiprocessing
-from random import shuffle
 import sys
 import os
 from antgo.utils.utils import *
@@ -79,6 +78,8 @@ DEFINE_indicator("from", True, "")
 DEFINE_indicator("extra", True, "load extra package(mano,smpl,...)")
 DEFINE_indicator("shuffle", True, "")
 DEFINE_int("max-size", 0, "")
+DEFINE_float("ext-ratio", 0.35, "")
+DEFINE_int("ext-size", 0, "")
 DEFINE_indicator("ignore-incomplete", True, "")
 
 #############################################
@@ -225,17 +226,24 @@ def main():
         return
       
       # 记录commit
-      try:
-        rep = git.Repo('./')     
-        project_info['exp'][args.exp]['branch'] = rep.active_branch.name
-        project_info['exp'][args.exp]['commit'] = rep.active_branch.commit.name_rev          
-      except Exception:
-          pass
+      rep = git.Repo('./')     
+      if not isinstance(project_info['exp'][args.exp], list):
+        project_info['exp'][args.exp] = []
       
+      exp_info = exp_basic_info()
+      exp_info['exp'] = args.exp
+      exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
+      exp_info['branch'] = rep.active_branch.name
+      exp_info['commit'] = rep.active_branch.commit.name_rev
+      project_info['exp'][args.exp].append(
+        exp_info
+      )
+
       with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
         json.dump(project_info, fp)
       
       # 云端提交        
+      sys_argv_cp.append(f'--id={exp_info["id"]}')
       sys_argv_cmd = ' '.join(sys_argv_cp[1:])
       sys_argv_cmd = sys_argv_cmd.replace('--cloud', '')
             
@@ -248,13 +256,56 @@ def main():
       else:
         logging.error("Dont set remote mode (--ssh,--custom).")
       return
-
     # 本地任务执行
-    # TODO, 根据项目配置自动在任务配置文件中注入信息
+    elif args.project != '':
+      # 可能，运行环境就是本地
+      # 检查项目环境
+      if not check_project_environment(args):
+        return
+
+      # 检查项目和实验是否存在
+      if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+        logging.error(f'Project {args.project} hasnot create.')
+        return
+
+      project_info = {}      
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+        project_info = json.load(fp)
+
+      if args.exp not in project_info['exp']:
+        logging.error(f'Exp {args.exp} not exist in project {args.project}.')
+        return
+      
+      if not os.path.exists(args.exp):
+        logging.error(f'Exp code not found in current folder.')
+        return
+
+      # 记录commit
+      rep = git.Repo('./')             
+      if not isinstance(project_info['exp'][args.exp], list):
+        project_info['exp'][args.exp] = []
+      
+      exp_info = exp_basic_info()
+      exp_info['exp'] = args.exp
+      exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
+      exp_info['branch'] = rep.active_branch.name
+      exp_info['commit'] = rep.active_branch.commit.name_rev
+      project_info['exp'][args.exp].append(
+        exp_info
+      )
+
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+        json.dump(project_info, fp)
+
+      # exp, exp:id
+      args.id = exp_info['id']
+      
+    # 执行任务
+    auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
     if action_name == 'train':
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
         # cpu run
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={args.exp} --gpu-id={-1} --process=train'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -270,7 +321,7 @@ def main():
       elif len(args.gpu_ids.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_ids.split(',')[0]
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=train'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -286,7 +337,7 @@ def main():
       else:
         # multi gpu run
         gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={args.exp}  --process=train'
+        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=train'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -303,27 +354,27 @@ def main():
       assert(args.checkpoint is not None)
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
         # cpu run
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={args.exp} --gpu-id={-1} --process=test'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       elif len(args.gpu_ids.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_ids.split(',')[0]
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=test'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       else:
         # multi gpu run
         gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={args.exp} --process=test'
+        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
     elif action_name == 'export':
       assert(args.checkpoint is not None)
-      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={args.exp} --checkpoint={args.checkpoint} --process=export')
+      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export')
   else:
     if action_name == 'create':
       if sub_action_name == 'project':
@@ -383,7 +434,6 @@ def main():
 
         if args.name not in project_info['exp']:
           project_info['exp'][args.name] = []
-        project_info['exp'].append(exp_basic_info())
 
         with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
           json.dump(project_info, fp)
@@ -411,7 +461,8 @@ def main():
           feedback=args.feedback,
           num=args.num,
           shuffle=args.shuffle,
-          max_size=args.max_size)
+          max_size=args.max_size,
+          ext_ratio=args.ext_ratio)
       elif sub_action_name.startswith('browser'):
         tool_func = getattr(tools, f'browser_{sub_action_name.split("/")[-1]}', None)
         if tool_func is None:

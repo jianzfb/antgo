@@ -106,7 +106,7 @@ def main():
             if len(extra_dataset_train_label) > 0:
                 # 下载相关数据，到训练集群
                 for data_info in extra_dataset_train_label:
-                    if data_info['status']:
+                    if data_info['status'] and data_info['address'] != '':
                         local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
                         status = environment.hdfs_client.get(data_info['address'], local_path)                        
                         if not status:
@@ -119,7 +119,7 @@ def main():
             if len(extra_dataset_train_pseudo_label) > 0:
                 # 下载相关数据，到训练集群
                 for data_info in extra_dataset_train_pseudo_label:
-                    if data_info['status']:
+                    if data_info['status'] and data_info['address'] != '':
                         local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
                         status = environment.hdfs_client.get(data_info['address'], local_path)
                         if not status:
@@ -131,7 +131,7 @@ def main():
             if len(extra_dataset_train_unlabel)> 0:
                 # 下载相关数据，到训练集群
                 for data_info in extra_dataset_train_unlabel:
-                    if data_info['status']:
+                    if data_info['status'] and data_info['address'] != '':
                         local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
                         status = environment.hdfs_client.get(data_info['address'], local_path)
                         if not status:
@@ -191,7 +191,7 @@ def main():
                 cfg.optimizer_config = extra_config['optimizer_config']
             if 'lr_config' in extra_config:
                 cfg.lr_config = extra_config['lr_config']
-            
+        
     # step3: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程

@@ -90,7 +90,7 @@ class ServerBase(object):
                 self.task_set.add(next_exp_stage)
                 self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))     
 
-            return True      
+            return True
         elif event == 'train/unlabel':
             next_exp_stage = 'activelearning'
 
@@ -103,15 +103,14 @@ class ServerBase(object):
                 self.task_set.add(next_exp_stage)
                 self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))  
 
-            return True     
+            return True
         elif event == 'product':
             next_exp_stage = 'supervised'
             if next_exp_stage not in self.task_set:
                 self.task_set.add(next_exp_stage)
                 self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))   
 
-            return True                
-
+            return True
         return False
 
     def schedule(self, project_name, project_info, exp_info):
@@ -184,15 +183,14 @@ class LocalServer(ServerBase):
         # 目录结构如下
         # root 
         #   - project
-        #        - exp
-        #           - id
+        #        - exp.id
         #               RUNNING/FINISH/STOP
         #               - output
         #                   - metric
         #                       best.json
         #                   - checkpoint
         #                       ***.pth
-        #           - id 
+        #        - exp.id
         #               RUNNING/FINISH/STOP
         #               - output
         #                   - metric
@@ -219,12 +217,12 @@ class LocalServer(ServerBase):
                 for exp_info in exp_list_info:
                     exp_id = exp_info['id']
                     if exp_info['state'] == 'training':
-                        project_state_folder = os.path.join(self.root, project_name, exp_name, exp_id)
-                        checkpoint_folder = os.path.join(self.root, project_name, exp_name, exp_id,'output', 'checkpoint')
+                        project_state_folder = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}')
+                        checkpoint_folder = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}','output', 'checkpoint')
                         is_exist = environment.hdfs_client.exists(os.path.join(project_state_folder, 'FINISH'))
                         if is_exist:
                             exp_info['state'] = 'finish'
-                            exp_info['finish_time'] = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))
+                            exp_info['finish_time'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
 
                             if environment.hdfs_client.exists(os.path.join(checkpoint_folder, 'best.pth')):
                                 # 记录最佳指标模型（开启评估过程）
@@ -233,7 +231,7 @@ class LocalServer(ServerBase):
                                 # 记录最后的一个模型（未开启评估过程）
                                 exp_info['checkpoint'] = os.path.join(checkpoint_folder, 'latest.pth')
 
-                            best_metric_record = os.path.join(self.root, project_name, exp_name, exp_id,'output', 'best.json')
+                            best_metric_record = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}','output', 'best.json')
                             if environment.hdfs_client.exists(best_metric_record):
                                 if not os.path.exists('/tmp/'):
                                     os.makedirs('/tmp/')

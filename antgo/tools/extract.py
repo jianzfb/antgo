@@ -327,6 +327,10 @@ def extract_from_crop(source_file, target_folder, **kwargs):
             
             box_w = x1 - x0
             box_h = y1 - y0
+            
+            if kwargs.get('ext_ratio') > 0:
+                box_w = box_w * (1+kwargs['ext_ratio'])
+                box_h = box_h * (1+kwargs['ext_ratio'])
             box_size = max(box_w, box_h)
             
             cx = (x0+x1)/2.0

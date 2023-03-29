@@ -14,6 +14,7 @@ from antgo.ant.client import *
 import json
 from pprint import pprint
 import time
+from antgo.framework.helper.utils import Config
 
 
 
@@ -303,53 +304,75 @@ def update_project_config(sub_action_name, args):
     project_info = {}
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp) 
-        
+
     if sub_action_name == 'project/semi':
         # 更新半监督方案配置
-        with open(args.config, 'r') as fp:
-            config_content = json.load(fp)
+        # args.name 来检查是否是内置算法
+        if not os.path.exists(args.config):
+            if args.name not in ['dense', 'detmpl', 'mpl']:
+                logging.error(f'Missing config file, {sub_action_name} couldnt config')
+                return
+            else:
+                args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
+
+        # 读取配置
+        assert(args.config.endswith('.py'))
+        cfg = Config.fromfile(args.config)
         
         # 设置半监督算法的名字        
         project_info['tool']['semi']['method'] = args.name
         # 设置半监督的配置
         project_info['tool']['semi']['config'].update(
-            config_content
+            cfg._cfg_dict.to_dict()
         )
     elif sub_action_name == 'project/distillation':
-        # 更新蒸馏方案配置
-        with open(args.config, 'r') as fp:
-            config_content = json.load(fp)
-            
+        # args.name 来检查是否是内置算法
+        if not os.path.exists(args.config):
+            if args.name not in ['dense', 'detmpl', 'mpl']:
+                logging.error(f'Missing config file, {sub_action_name} couldnt config')
+                return
+            else:
+                args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
+
+        # 读取配置
+        assert(args.config.endswith('.py'))
+        cfg = Config.fromfile(args.config)
+        
         # 设置蒸馏算法的名字        
         project_info['tool']['distillation']['method'] = args.name
         # 设置蒸馏的配置
         project_info['tool']['distillation']['config'].update(
-            config_content
+            cfg._cfg_dict.to_dict()
         )        
     elif sub_action_name == 'project/activelearning':
         # 更新主动学习方案配置
-        with open(args.config, 'r') as fp:
-            config_content = json.load(fp)
-                   
+        # 读取配置
+        assert(args.config.endswith('.py'))
+        cfg = Config.fromfile(args.config)
+         
         # 设置主动学习算法的名字        
         project_info['tool']['activelearning']['method'] = args.name
         # 设置主动学习的配置
         project_info['tool']['activelearning']['config'].update(
-            config_content
-        )                
+            cfg._cfg_dict.to_dict()
+        )      
     elif sub_action_name == 'project/ensemble':
         # 更新聚合方案配置
-        with open(args.config, 'r') as fp:
-            config_content = json.load(fp)
-            
+        # 读取配置
+        assert(args.config.endswith('.py'))
+        cfg = Config.fromfile(args.config)
+
         # 设置聚合算法的名字        
         project_info['tool']['ensemble']['method'] = args.name
         # 设置聚合的配置
         project_info['tool']['ensemble']['config'].update(
-            config_content
-        )                          
+            cfg._cfg_dict.to_dict()
+        )
     else:
         logging.error(f"Dont support {sub_action_name}")
         return
     
+    with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+        json.dump(project_info, fp)
+
     logging.info(f'Success update {sub_action_name} config')    
