@@ -66,13 +66,14 @@ class keep_ratio_op(object):
 
 @register
 class preprocess_op(object):
-    def __init__(self, mean, std, permute=None) -> None:
+    def __init__(self, mean, std, permute=None, expand_dim=False) -> None:
         mean = np.array(mean, dtype=np.float32)
         std = np.array(std, dtype=np.float32)
         
         self.mean = np.float64(mean.reshape(1, -1))
         self.stdinv = 1 / np.float64(std.reshape(1, -1))
         self.permute = permute
+        self.expand_dim = expand_dim
     
     def __call__(self, image):
         image = image.astype(np.float32)
@@ -81,6 +82,9 @@ class preprocess_op(object):
         
         if self.permute is not None:
             image = np.transpose(image, self.permute)
+            
+        if self.expand_dim:
+            image = np.expand_dims(image, 0)
         return image
 
 @register
