@@ -68,9 +68,9 @@ class ServerBase(object):
         }
 
         # 启动定时任务
-        # periodical_func = threading.Timer(30*60, self.watch)
-        # periodical_func.daemon = True
-        # periodical_func.start()
+        periodical_func = threading.Timer(10, self.watch)
+        periodical_func.daemon = True
+        periodical_func.start()
 
     def submit(self):
         raise NotImplementedError
@@ -216,7 +216,7 @@ class LocalServer(ServerBase):
             for exp_name, exp_list_info in project_info['exp'].items():
                 for exp_info in exp_list_info:
                     exp_id = exp_info['id']
-                    if exp_info['state'] == 'training':
+                    if exp_info['state'] == 'running':
                         project_state_folder = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}')
                         checkpoint_folder = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}','output', 'checkpoint')
                         is_exist = environment.hdfs_client.exists(os.path.join(project_state_folder, 'FINISH'))

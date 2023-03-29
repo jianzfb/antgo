@@ -114,7 +114,7 @@ def exp_basic_info():
         "checkpoint": "", 
         "create_time": time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())), 
         "finish_time": "",
-        "state": "",    # training, finish, stop, default
+        "state": "",    # running, finish, stop, default
         "stage": "",    # which stage of progress
     }
 

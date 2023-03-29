@@ -19,7 +19,7 @@ prettytable
 opencv-contrib-python
 antvis
 qiniu
-pycocotools
+pycocotools==2.0.2
 addict
 yapf
 timer

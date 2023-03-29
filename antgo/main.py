@@ -21,8 +21,6 @@ from jinja2 import Environment, FileSystemLoader
 import json
 from antgo import tools
 from antgo.script import *
-import traceback
-import yaml
 
 # 需要使用python3
 assert(int(sys.version[0]) >= 3)
@@ -235,6 +233,7 @@ def main():
       exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
       exp_info['branch'] = rep.active_branch.name
       exp_info['commit'] = rep.active_branch.commit.name_rev
+      exp_info['state'] = 'running'
       project_info['exp'][args.exp].append(
         exp_info
       )
@@ -297,6 +296,7 @@ def main():
       exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
       exp_info['branch'] = rep.active_branch.name
       exp_info['commit'] = rep.active_branch.commit.name_rev
+      exp_info['state'] = 'running'
       project_info['exp'][args.exp].append(
         exp_info
       )
