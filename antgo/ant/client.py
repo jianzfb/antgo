@@ -50,6 +50,7 @@ class BackgroundTCP(Tcp):
 class ServerBase(object):
     def __init__(self, *args, **kwargs) -> None:
         super(ServerBase, self).__init__(*args, **kwargs)
+        self.root = ''
         self.timer = 60*10 # 10分钟一次监控
         self.task_queue = PriorityQueue()
         self.task_set = set()       # 用于校验是否存在同类型任务
@@ -61,10 +62,10 @@ class ServerBase(object):
         self.task_order = [('activelearning', 'supervised'),('supervised', 'activelearning'), ('supervised','semi-supervised'),('supervised','distillation')]
         self.task_priority = {'activelearning': 1, 'supervised':2,'semi-supervised':3, 'distillation':3}
         self.task_cmd = {
-            "activelearning": "",
-            "supervised": "",
-            "semi-supervised": "",
-            "distillation": ""
+            "activelearning": "antgo tool label/start",
+            "supervised": "antgo train",
+            "semi-supervised": "antgo train",
+            "distillation": "antgo train"
         }
 
         # 启动定时任务
@@ -114,6 +115,8 @@ class ServerBase(object):
         return False
 
     def schedule(self, project_name, project_info, exp_info):
+        # exp_info 是当前已经运行完成的实验
+        # 可以从project_info中获得，当前完成的实验处在哪个阶段
         exp_name = exp_info['name']
         exp_id = exp_info['id']
 
@@ -136,7 +139,6 @@ class ServerBase(object):
 
         # 根据计算资源进行任务提交
         submitter_info = project_info['submitter']
-        submitter_is_local = submitter_info['local']
         submitter_method = submitter_info['method']
         submitter_gpu_num = submitter_info['gpu_num']
         submitter_cpu_num = submitter_info['cpu_num']
@@ -151,15 +153,28 @@ class ServerBase(object):
             logging.warn(f'Submitter {submitter_method} resource (gpu: {submitter_gpu_num}, cpu: {submitter_cpu_num}, memory: {submitter_memory}) not enough.')
             return
 
+        # submitter_func 已经决定了如何提交任务
         submitter_func = getattr(script, f'{submitter_method}_submit_process_func', None)
-        next_task = self.task_queue.get()
 
         next_task_cmd = self.task_cmd[next_task[1]]
-        if not submitter_is_local:
-            next_task_cmd += " --cloud"
+        next_task = self.task_queue.get()
+        if next_task[1] == 'activelearning':
+            # TODO，这里需要修改，先要完成无标签数据预测，再启动标注
+            if len(project_info['tool']['activelearning']['config']) == 0:
+                logging.warn('Ignore active leanring process. no config')
+                return
 
-        if submitter_method != '':
-            next_task_cmd += f" --{submitter_method}"
+            target_folder = os.path.join(self.root, project_name, 'activelearning', f'{exp_name}.{exp_id}')
+            # 需要label/start 命令支持自动获取unlabel数据，并打包后存储到目标位置
+            next_task_cmd += f" --src=unlabel --tgt={target_folder}"
+
+            label_tags = project_info['tool']['activelearning']['config']['tags']
+            label_type = project_info['tool']['activelearning']['config']['type']
+            next_task_cmd += f" --tags={label_tags} --type={label_type}"
+        else:
+            next_task_cmd += f" --exp={exp_name}"
+            next_task_cmd += f" --stage={next_task}"
+            next_task_cmd += f" --root={self.root}/{project_name}"
 
         if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task):
             # 提交任务成功
@@ -178,11 +193,11 @@ class LocalServer(ServerBase):
     def __init__(self, *args, **kwargs) -> None:
         super(LocalServer, self).__init__(*args, **kwargs)
         # antgo 监控root地址，定时从此目录下获得项目更新信息
-        # self.root = kwargs['root']
-        self.root = ''
+        self.root = kwargs['root']
         # 目录结构如下
         # root 
         #   - project
+        #        - activelearning
         #        - exp.id
         #               RUNNING/FINISH/STOP
         #               - output
@@ -284,30 +299,32 @@ class ClientHandler(object):
             return False
 
     def trigger(self, event):
-        client = socket(AF_INET, SOCK_STREAM)
-        client.connect((self.host, self.port))
+        try:
+            client = socket(AF_INET, SOCK_STREAM)
+            client.connect((self.host, self.port))
 
-        client.send(event.encode('utf-8'))
-        response = client.recv(1024)
-        if not response:
-            logging.error(f'Trigger event {event} fail.')
-            return
+            client.send(event.encode('utf-8'))
+            response = client.recv(1024)
+            if not response:
+                logging.error(f'Trigger event {event} fail.')
+                return
 
-        response = json.loads(response.decode('utf-8'))
-        if response['status']:
-            logging.info(f'Success to trigger {event}')
-        else:
-            logging.error(f'Abnormal to trigger {event}')
+            response = json.loads(response.decode('utf-8'))
+            if response['status']:
+                logging.info(f'Success to trigger {event}')
+            else:
+                logging.error(f'Abnormal to trigger {event}')
 
-        client.close()
-
+            client.close()
+        except:
+            logging.error(f'Trigger {event} fail (couldnt connect server).')
 
 def get_client():
     client_handler = ClientHandler()
     return client_handler
 
 
-def launch_server(port):
+def launch_server(port, root):
     # step1: 尝试使用httpserver，使用MLTALKER服务管理
     # step2: 使用localserver，常用于公网连接受限情况，基于文件服务实现同步
     host = ''
@@ -320,7 +337,7 @@ def launch_server(port):
 
     try:
         global server_manager
-        server_manager = LocalServer()
+        server_manager = LocalServer(root=root)
         server = socketserver.TCPServer((host, port), BackgroundTCP)
 
         config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')

@@ -1,11 +1,12 @@
 import logging
 import os
+import shutil
 import yaml 
 from antgo import config
 import json
 
 # 提交任务运行
-def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size, task_name=None):
+def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size, task_name=None):    
     # step1: 加载ssh配置文件
     ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
     assert(os.path.exists(ssh_submit_config_file))
@@ -27,12 +28,24 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     if image_name == '':
         image_name = 'antgo-env:latest'
 
+    # 检查是否存在项目代码
+    cur_work_dir = os.curdir
+    git_folder = None
+    if not os.path.exists(f'./{project_name}'):
+        git_folder = project_info["git"].split('/')[-1].split('.')[0]
+        os.system(f'git clone {project_info["git"]}')    
+        os.chdir(git_folder)
+    
     # 添加临时配置：将当前工程信息保存到当前目录下并一同提交
     if task_name is not None:
         # 复合任务标记
         extra_config = {}
         if task_name == "activelearning":
-            pass
+            # 扩展数据源
+            # unlabel
+            extra_config['source'] = {
+                "unlabel": project_info["dataset"]["train"]["unlabel"]
+            }            
         elif task_name == "supervised":
             # 扩展数据源
             # label, pseudo-label, unlabel
@@ -85,7 +98,10 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     # 删除临时配置：
     if os.path.exists('./extra-config.py'):
         os.remove('./extra-config.py')
-
+    # 删除临时项目代码
+    if git_folder is not None:
+        os.chdir(cur_work_dir)
+        shutil.rmtree(git_folder)
     return True
 
 # 检查任务资源是否满足

@@ -44,6 +44,7 @@ DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')  # 是否项目自动优化
 DEFINE_string('id', None, '')
 DEFINE_int('port', 0, 'set port')
+DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning'], '')
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -157,7 +158,7 @@ def main():
 
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
-    proc = multiprocessing.Process(target=launch_server, args=(args.port,))
+    proc = multiprocessing.Process(target=launch_server, args=(args.port,args.root))
     proc.daemon = False
     proc.start()
     return
@@ -234,6 +235,7 @@ def main():
       exp_info['branch'] = rep.active_branch.name
       exp_info['commit'] = rep.active_branch.commit.name_rev
       exp_info['state'] = 'running'
+      exp_info['stage'] = args.stage
       project_info['exp'][args.exp].append(
         exp_info
       )
@@ -243,6 +245,7 @@ def main():
       
       # 云端提交        
       sys_argv_cp.append(f'--id={exp_info["id"]}')
+      sys_argv_cp.append(f'--root={args.root}/{args.project}')
       filter_sys_argv_cp = []
       for t in sys_argv_cp:
         if t.startswith('--project'):
@@ -297,6 +300,7 @@ def main():
       exp_info['branch'] = rep.active_branch.name
       exp_info['commit'] = rep.active_branch.commit.name_rev
       exp_info['state'] = 'running'
+      exp_info['stage'] = args.stage
       project_info['exp'][args.exp].append(
         exp_info
       )
@@ -306,13 +310,13 @@ def main():
 
       # exp, exp:id
       args.id = exp_info['id']
-      
+
     # 执行任务
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
     if action_name == 'train':
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
         # cpu run
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --root={args.root}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -328,7 +332,7 @@ def main():
       elif len(args.gpu_ids.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_ids.split(',')[0]
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --root={args.root}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -344,7 +348,7 @@ def main():
       else:
         # multi gpu run
         gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=train'
+        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=train --root={args.root}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -361,27 +365,27 @@ def main():
       assert(args.checkpoint is not None)
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
         # cpu run
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --root={args.root}'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       elif len(args.gpu_ids.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_ids.split(',')[0]
-        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test'
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --root={args.root}'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       else:
         # multi gpu run
         gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test'
+        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test --root={args.root}'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
     elif action_name == 'export':
       assert(args.checkpoint is not None)
-      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export')
+      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root}')
   else:
     if action_name == 'create':
       if sub_action_name == 'project':

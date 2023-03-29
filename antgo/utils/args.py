@@ -43,6 +43,15 @@ def DEFINE_string(name, default, var_help):
         help=var_help
     )   
 
+def DEFINE_choices(name, default, choices, var_help):
+    global parser
+    parser.add_argument(
+        f'--{name}',
+        choices=choices,
+        default=default,
+        help=var_help
+    )    
+
 
 def DEFINE_nn_args():
     global parser

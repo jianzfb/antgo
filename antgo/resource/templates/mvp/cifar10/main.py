@@ -191,7 +191,12 @@ def main():
                 cfg.optimizer_config = extra_config['optimizer_config']
             if 'lr_config' in extra_config:
                 cfg.lr_config = extra_config['lr_config']
-        
+    
+    # step2.2 添加root地址（影响checkpoint_config, evaluation）
+    if nn_args.root != '':
+        cfg.checkpoint_config.out_dir = os.path.join(nn_args.root, nn_args.exp)
+        cfg.evaluation.out_dir = os.path.join(nn_args.root, nn_args.exp)
+
     # step3: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程
