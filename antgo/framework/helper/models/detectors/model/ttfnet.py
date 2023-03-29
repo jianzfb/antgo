@@ -2,6 +2,7 @@ from antgo.framework.helper.models.builder import DETECTORS
 from ..single_stage import SingleStageDetector
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 @DETECTORS.register_module()
@@ -45,5 +46,6 @@ class TTFNet(SingleStageDetector):
     def onnx_export(self, img):
         feat = self.extract_feat(img)
         local_cls, local_reg = self.bbox_head(feat)
+        local_cls = torch.sigmoid(local_cls)
+        local_cls = F.max_pool2d(local_cls, 3, stride=1, padding=(3 - 1) // 2)
         return local_cls, local_reg
-
