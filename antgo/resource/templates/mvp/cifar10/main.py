@@ -20,12 +20,12 @@
 # python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --process=export
 
 # 1.step 通用模块
-from asyncio.format_helpers import extract_stack
 import shutil
 import sys
 import os
+import json
+import logging
 
-from antgo.antgo.framework.helper.runner.hooks import hook
 system_path = os.path.join(os.path.abspath(os.curdir),'system.py')
 os.system(f'ln -sf {system_path}  {os.path.dirname(os.path.realpath(__file__))}/system.py')
 import torch
@@ -38,6 +38,7 @@ from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
 from antgo.ant import environment
+import json
 
 # 2.step 导入自定义系统后台(包括hdfs后端,KV后端)
 from system import *
@@ -90,7 +91,7 @@ def main():
     if nn_args.extra_config is not None and nn_args.extra_config != '':
         if os.path.exists(nn_args.extra_config):
             with open(nn_args.extra_config, 'r') as fp:
-                extra_config = json.load(fp)
+                extra_config = Config.fromstring(fp.read(),'.json')
             
             # extra_config 格式为项目信息格式
             # step2.1.1: 数据相关 (默认TFRECORD是antgo默认标准打包格式)
@@ -114,7 +115,6 @@ def main():
                         
                         label_local_path_list.append(local_path)
 
-                ## 
             pseudo_local_path_list = []
             if len(extra_dataset_train_pseudo_label) > 0:
                 # 下载相关数据，到训练集群
@@ -127,7 +127,6 @@ def main():
                             continue       
                         pseudo_local_path_list.append(local_path)
 
-                ##
             unlabel_local_path_list = []
             if len(extra_dataset_train_unlabel)> 0:
                 # 下载相关数据，到训练集群
@@ -139,12 +138,13 @@ def main():
                             logging.error(f'Download {data_info["address"]} error.')
                             continue       
                         unlabel_local_path_list.append(local_path)
-
-                ##
-                        
+    
             # step2.1.2: 训练方法相关 (包括数据的使用方式)
             if 'data' in extra_config:
-                cfg.data = extra_config['data']
+                # 扩展数据的使用方式
+                cfg.data.train = extra_config['data']['train']
+                if 'train_dataloader' in extra_config['data']:
+                    cfg.data.train_dataloader = extra_config['data']['train_dataloader']
             
             if not isinstance(cfg.data.train, list):
                 # 默认仅支持TFDataset
@@ -160,23 +160,18 @@ def main():
                 cfg.data.train[1].data_path_list.extend(unlabel_local_path_list)
             
             if 'model' in extra_config:
-                model_type = extra_config['model']['type']
-                model_train_cfg = extra_config['model']['train_cfg']
-                model_test_cfg = extra_config['model']['test_cfg']
-                model_init_cfg = extra_config['model']['init_cfg']
-                
                 # 更新默认配置
                 default_model_cfg = cfg.model
                 cfg.model = dict(
-                    type=model_type,
+                    type=extra_config['model']['type'],
                     model=default_model_cfg,
-                    train_cfg=model_train_cfg,
-                    test_cfg=model_test_cfg,
-                    init_cfg=model_init_cfg
+                    train_cfg=extra_config['model']['train_cfg'] if 'train_cfg' in extra_config['model'] else None,
+                    test_cfg=extra_config['model']['test_cfg'] if 'test_cfg' in extra_config['model'] else None,
+                    init_cfg=extra_config['model']['init_cfg'] if 'init_cfg' in extra_config['model'] else None
                 )
 
-            if 'hooks' in extra_config:
-                hooks = extra_config['hooks']
+            if 'custom_hooks' in extra_config:
+                hooks = extra_config['custom_hooks']
                 if not isinstance(hooks, list):
                     hooks = [hooks]
                 

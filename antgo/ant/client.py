@@ -162,7 +162,7 @@ class ServerBase(object):
         if submitter_method != '':
             next_task_cmd += f" --{submitter_method}"
 
-        if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory):
+        if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task):
             # 提交任务成功
             logging.info(f"Success submit task {self.task_cmd[next_task[1]]}")
             self.task_set.pop(next_task[1])
