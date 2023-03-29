@@ -198,7 +198,7 @@ class LocalServer(ServerBase):
         #                   - checkpoint
         #                       ***.pth        
         #   - project
-        #        - exp
+        #        - exp.id
 
     def watch(self):
         # 获得所有项目配置信息

@@ -28,7 +28,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
         image_name = 'antgo-env:latest'
 
     # 添加临时配置：将当前工程信息保存到当前目录下并一同提交
-    if task_name is None:
+    if task_name is not None:
         # 复合任务标记
         extra_config = {}
         if task_name == "activelearning":

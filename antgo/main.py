@@ -244,9 +244,16 @@ def main():
       
       # 云端提交        
       sys_argv_cp.append(f'--id={exp_info["id"]}')
+      filter_sys_argv_cp = []
+      for t in sys_argv_cp:
+        if t.startswith('--project'):
+          continue
+        filter_sys_argv_cp.append(t)
+      
+      sys_argv_cp = filter_sys_argv_cp
       sys_argv_cmd = ' '.join(sys_argv_cp[1:])
       sys_argv_cmd = sys_argv_cmd.replace('--cloud', '')
-            
+      
       # step 1.1: 检查提交脚本配置
       if args.ssh:
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
