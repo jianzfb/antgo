@@ -18,6 +18,7 @@ from socketserver import StreamRequestHandler as Tcp
 import socketserver
 from socket import *
 import threading
+import shutil
 
 
 '''
@@ -176,6 +177,12 @@ class ServerBase(object):
             next_task_cmd += f" --stage={next_task}"
             next_task_cmd += f" --root={self.root}/{project_name}"
 
+        # 准备代码环境
+        old_folder = os.path.abspath(os.curdir)
+        git_folder = project_info["git"].split('/')[-1].split('.')[0]
+        os.system(f'git clone {project_info["git"]}')    
+        os.chdir(git_folder)
+        
         if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task):
             # 提交任务成功
             logging.info(f"Success submit task {self.task_cmd[next_task[1]]}")
@@ -184,6 +191,10 @@ class ServerBase(object):
             # 提交任务失败 (重新加入任务队列)
             logging.error(f'Fail submit task {self.task_cmd[next_task[1]]}')
             self.task_queue.put(next_task)
+        
+        # 恢复原状
+        os.chdir(old_folder)
+        shutil.rmtree(git_folder)
 
 '''
 默认项目全部信息存储在hdfs上

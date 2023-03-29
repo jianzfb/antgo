@@ -7,6 +7,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 import multiprocessing
 import sys
+sys.path.append('/Users/bytedance/Downloads/workspace/my/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
@@ -231,7 +232,7 @@ def main():
       
       exp_info = exp_basic_info()
       exp_info['exp'] = args.exp
-      exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
+      exp_info['id'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
       exp_info['branch'] = rep.active_branch.name
       exp_info['commit'] = rep.active_branch.commit.name_rev
       exp_info['state'] = 'running'
@@ -296,7 +297,7 @@ def main():
       
       exp_info = exp_basic_info()
       exp_info['exp'] = args.exp
-      exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
+      exp_info['id'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
       exp_info['branch'] = rep.active_branch.name
       exp_info['commit'] = rep.active_branch.commit.name_rev
       exp_info['state'] = 'running'
