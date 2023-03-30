@@ -4,6 +4,8 @@ import json
 import numpy as np
 from antgo.utils.sample_gt import *
 from antgo.interactcontext import InteractContext
+from antgo.ant import environment
+from antgo.tools.package import *
 import logging
 
 
@@ -16,20 +18,33 @@ def label_to_studio(src_json_file, tgt_folder, prefix='',  **kwargs):
     pass
 
 
-def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=None, ignore_incomplete=False):
+def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=None, ignore_incomplete=False, root=None, exp=None):
     # 检查参数
     assert(tags is not None)
-    
-    if tgt_folder is None:
-        tgt_folder = './'
 
+    if tgt_folder is None:
+        tgt_folder = './output'
+
+    # 如果设置root and exp, 则按照规定规则读取等待标注数据。忽略src_json_file。
+    if root is not None and exp is not None:
+        if environment.hdfs_client.exists(os.path.join(root, 'label', exp, 'data.tar')):
+            if not os.path.exists('./data'):
+                os.mkdir('./data')
+            
+            environment.hdfs_client.get(os.path.join(root, 'label', exp, 'data.tar'), './data/')
+            os.system('cd data && tar -xf data.tar')
+            # 直接覆盖src_json_file
+            src_json_file = './data/annotation.json'
+            # 直接覆盖tgt_folder
+            tgt_folder = './data/'
+            
     if not os.path.exists(tgt_folder):
         os.makedirs(tgt_folder)
         
     if not os.path.isdir(tgt_folder):
         logging.error(f'--tgt {tgt_folder} must be a folder.')
         return 
-            
+    
     white_users = {}
     if white_users_str is not None:
         for t in white_users_str.split(','):
@@ -62,9 +77,10 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
             'class_name': label_name,
             'class_index': label_id
         })
-    
+
+    # 自动定义服务名字
     src_json_file_name = src_json_file.split('/')[-1].split('.')[0]
-    
+
     # 启动标注服务，直接保存标准格式
     ctx = InteractContext()
     # 需要在这里设置标注配置信息，如
@@ -86,9 +102,6 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
 
     # 下载当前标注结果（后台等待标注完成后，再下载）
     result = ctx.activelearning.download()
-    
-    # with open('/Users/bytedance/Downloads/annotation-2023-03-11_14_50_45-dc31d8c2-abba-4823-b051-8abba7308bee.json', 'r') as fp:
-    #     result = json.load(fp)
     
     # 转换到标准GT格式
     total_gt_list = []
@@ -174,6 +187,33 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     meta_info['extent']['total'] = len(total_gt_list)
     with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
         json.dump(meta_info, fp)
+    
+    if root is not None and exp is not None:
+        # 仅在设置root and exp后，起作用
+        # 1. 打包到tfrecord格式
+        package_to_tfrecord(
+            os.path.join(tgt_folder, anno_json_file_name), 
+            os.path.join(tgt_folder, 'package'),
+            prefix=exp,
+            size_in_shard=40000
+        )
+        
+        # 2. 上传到远程
+        if not environment.hdfs_client.exists(os.path.join(root, 'dataset', 'label')):
+            environment.hdfs_client.mkdir(os.path.join(root, 'dataset', 'label'), True)
+
+        # 打包后的数据
+        for file_name in os.listdir(os.path.join(tgt_folder, 'package')):
+            environment.hdfs_client.put(
+                os.path.join(root, 'dataset', 'label'), 
+                os.path.join(tgt_folder, 'package', file_name)
+            )
+        
+        # 标注文件
+        environment.hdfs_client.put(
+            os.path.join(root, 'label', exp),
+            os.path.join(tgt_folder,anno_json_file_name)
+        )
         
     # 全局结束
     ctx.activelearning.exit()    

@@ -22,8 +22,7 @@ class IterableDatasetFilter(torch.utils.data.IterableDataset):
             with open(ann_file, 'r') as fp:
                 content = json.load(fp)
             for sample_info in content:
-                tag = sample_info['tag'].split('/')[0]
-                sample_id = f'{tag}/{sample_info["image_file"]}'
+                sample_id = f'{sample_info["image_file"].split("/")[1:]}'
                 self.not_in_map[sample_id] = True
             
     def __iter__(self):
@@ -32,7 +31,8 @@ class IterableDatasetFilter(torch.utils.data.IterableDataset):
             try:
                 sample = next(dataset_iter)
                 if len(self.not_in_map) > 0:
-                    sample_id = f'{sample["image_meta"]["tag"]}/{sample["image_meta"]["image_file"].replace("/","-")}'
+                    sample_tag = sample["image_meta"]["tag"]                   
+                    sample_id = f"{sample_tag}_{sample['image_meta']['image_file'].replace('/','-')}"
                     if sample_id in self.not_in_map:
                         continue
                     

@@ -34,6 +34,10 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
         # 复合任务标记
         extra_config = {}
         if task_name == "activelearning":
+            if len(project_info['tool']['activelearning']['config']) == 0:
+                logging.error(f"Missing {task_name} config, couldnt launch task")
+                return False
+            
             # 扩展数据源
             # unlabel
             extra_config['source'] = {
@@ -42,7 +46,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
             
             # 扩展模型配置/优化器/学习率等
             extra_config.update( project_info['tool']['activelearning']['config'])  
-        elif task_name == "supervised":
+        elif task_name == "supervised":  
             # 扩展数据源
             # label, pseudo-label, unlabel
             extra_config['source'] = {
@@ -51,7 +55,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
                 "unlabel": project_info["dataset"]["train"]["unlabel"]
             }
         elif task_name == "semi-supervised":
-            if project_info['tool']['semi']['method'] == '' or len(project_info['tool']['semi']['config']) == 0:
+            if len(project_info['tool']['semi']['config']) == 0:
                 logging.error(f"Missing {task_name} config, couldnt launch task")
                 return False
             
@@ -66,7 +70,7 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
             # 扩展模型配置/优化器/学习率等
             extra_config.update( project_info['tool']['semi']['config'])
         elif task_name == "distillation":
-            if project_info['tool']['distillation']['method'] == '' or len(project_info['tool']['distillation']['config']) == 0:
+            if len(project_info['tool']['distillation']['config']) == 0:
                 logging.error(f"Missing {task_name} config, couldnt launch task")
                 return False
                     

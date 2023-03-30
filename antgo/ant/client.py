@@ -88,6 +88,7 @@ class ServerBase(object):
         self.task_queue.clear()
 
     def trigger(self, event):
+        # TODO，需要进一步确认数据发现方式
         # 当开发者主动更新 1. 标签数据; 2. 无标签数据; 3. 更换product模型; 触发
         if event == 'train/label':
             next_exp_stage = 'supervised'
@@ -169,17 +170,11 @@ class ServerBase(object):
 
             next_task = self.task_queue.get()
             next_task_cmd = self.task_cmd[next_task[1]]
-            if next_task[1] == 'activelearning':
-                if len(project_info['tool']['activelearning']['config']) == 0:
-                    logging.warn('Ignore active leanring process. no config')
-                    return
-
+            if next_task[1] == 'label':
                 next_task_cmd += f" --exp={exp_name}"
                 next_task_cmd += f" --stage={next_task[1]}"
                 next_task_cmd += f" --root={self.root}/{project_name}"
-                # 基于提交脚本设置gpu_ids
-                gpu_ids = ','.join([str(i) for i in range(submitter_gpu_num)])
-                next_task_cmd += f" --gpu-id={gpu_ids}"
+                next_task_cmd += f" --gpu-id=-1"
             else:
                 next_task_cmd += f" --exp={exp_name}"
                 next_task_cmd += f" --stage={next_task[1]}"
@@ -197,10 +192,6 @@ class ServerBase(object):
             auto_exp_info['state'] = 'running'
             auto_exp_info['stage'] = next_task[1]
             auto_exp_info['checkpoint'] = exp_info['checkpoint']
-            project_info['exp'][exp_info['exp']].append(
-                auto_exp_info
-            )
-
             next_task_cmd += f" --id={auto_exp_info['id']}"
             
             # 准备代码环境
@@ -214,11 +205,17 @@ class ServerBase(object):
             if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task[1]):
                 # 提交任务成功
                 logging.info(f"Success submit task {self.task_cmd[next_task[1]]}")
+                
+                # 将新增实验加入历史
+                project_info['exp'][exp_info['exp']].append(
+                    auto_exp_info
+                )
+                # 将next_task 从任务集合中删除 （任务队列已经没有此任务）
                 self.task_set.pop(next_task[1])
             else:
                 # 提交任务失败 (重新加入任务队列)
-                auto_exp_info['state'] = 'stop'
                 logging.error(f'Fail submit task {self.task_cmd[next_task[1]]}')
+                # 将next_task重新加入队列 （任务集合保持不变）
                 self.task_queue.put(next_task)
 
             # 恢复原状

@@ -333,11 +333,11 @@ class Activelearning(Tester):
         # 远程下载历史数据
         if getattr(cfg, 'root', '') != '':
             if environment.hdfs_client.exists(os.path.join(cfg.root, 'activelearning')):
-                environment.hdfs_client.get(os.path.jion(cfg.root, 'activelearning'), './activelearning')
+                environment.hdfs_client.get(os.path.join(cfg.root, 'activelearning'), './')
 
         if not os.path.exists('./activelearning'):
             os.mkdir('./activelearning')
-            
+
         # has finish round info
         has_finish_anns = []
         for sub_folder in os.listdir('./activelearning'):
@@ -418,9 +418,7 @@ class Activelearning(Tester):
                 if sample_id == selected_sample_ids[compare_pos]:
                     compare_pos += 1
                     # 防止在原目录下image_file是多层级的，在此将/替换为-
-                    file_name = sample['image_meta']['image_file'].replace('/','-')
-                    # 防止不同批次的无标签样本重名，在名字前加上 tag
-                    file_name = f'{sample_tag}-{file_name}'
+                    file_name = f"{sample_tag}_{sample['image_meta']['image_file'].replace('/','-')}"
                     image_file_name_list.append((file_name, sample_tag))
                     with open(os.path.join(image_folder, file_name), 'wb') as fp:
                         fp.write(sample['image'])
@@ -440,7 +438,7 @@ class Activelearning(Tester):
                 sample_gt_cp.update({
                     'image_file': f'images/{sample_file_name}'
                 })
-                sample_gt_cp['tag'] = f'{sample_file_tag}/{exp_name}'
+                sample_gt_cp['tag'] = f'{sample_file_tag}'
                 sample_gt_cp['height'] = height
                 sample_gt_cp['width'] = width
                 annotation_list.append(sample_gt_cp)
@@ -458,15 +456,15 @@ class Activelearning(Tester):
                 # 记录本次挑选出的数据记录
                 target_path = os.path.join(self.cfg.root, 'activelearning', exp_name)
                 if not environment.hdfs_client.exists(target_path):
-                    environment.hdfs_client.mkdir(target_folder, True)
+                    environment.hdfs_client.mkdir(target_path, True)
                 environment.hdfs_client.put(target_path, os.path.join(target_folder, annotation_file_name), False)
                 
                 # 打包本次挑选出的数据，并保存到标注目录下
                 # root/label/exp_name/data.tar
                 target_path = os.path.join(self.cfg.root, 'label', exp_name)
                 if not environment.hdfs_client.exists(target_path):
-                    environment.hdfs_client.mkdir(target_folder, True)
+                    environment.hdfs_client.mkdir(target_path, True)
                                 
-                os.system(f'tar -cf data.tar {target_folder}/*')
-                environment.hdfs_client.put(target_path, 'data.tar', False)
-                os.system('rm data.tar')
+                os.system(f'cd {target_folder} && tar -cf data.tar .')
+                environment.hdfs_client.put(target_path, f'{target_folder}/data.tar', False)
+                os.system('cd {target_folder} && rm data.tar')
