@@ -147,73 +147,82 @@ class ServerBase(object):
         submitter_cpu_num = submitter_info['cpu_num']
         submitter_memory = submitter_info['memory']
 
+        # submitter_resource_check 检查资源
         submitter_resource_check = getattr(script, f'{submitter_method}_submit_resource_check_func', None)
         if submitter_resource_check is None:
             logging.warn(f'Submitter {submitter_method} not support.')
             return
 
-        if not submitter_resource_check(submitter_gpu_num, submitter_cpu_num, submitter_memory):
-            logging.warn(f'Submitter {submitter_method} resource (gpu: {submitter_gpu_num}, cpu: {submitter_cpu_num}, memory: {submitter_memory}) not enough.')
-            return
-
         # submitter_func 已经决定了如何提交任务
         submitter_func = getattr(script, f'{submitter_method}_submit_process_func', None)
-
-        next_task = self.task_queue.get()
-        next_task_cmd = self.task_cmd[next_task[1]]
-        if next_task[1] == 'activelearning':
-            # TODO，这里需要修改，先要完成无标签数据预测，再启动标注
-            if len(project_info['tool']['activelearning']['config']) == 0:
-                logging.warn('Ignore active leanring process. no config')
+        if submitter_func is None:
+            logging.warn(f'Submitter {submitter_method} not support.')
+            return            
+        
+        # 从任务队列中尝试取出所有等待任务进行提交
+        while self.task_queue.qsize() > 0:
+            if not submitter_resource_check(submitter_gpu_num, submitter_cpu_num, submitter_memory):
+                logging.warn(f'Submitter {submitter_method} resource (gpu: {submitter_gpu_num}, cpu: {submitter_cpu_num}, memory: {submitter_memory}) not enough.')
                 return
 
-            target_folder = os.path.join(self.root, project_name, 'activelearning', f'{exp_name}.{exp_id}')
-            # 需要label/start 命令支持自动获取unlabel数据，并打包后存储到目标位置
-            next_task_cmd += f" --src=unlabel --tgt={target_folder}"
+            next_task = self.task_queue.get()
+            next_task_cmd = self.task_cmd[next_task[1]]
+            if next_task[1] == 'activelearning':
+                # TODO，这里需要修改，先要完成无标签数据预测，再启动标注
+                if len(project_info['tool']['activelearning']['config']) == 0:
+                    logging.warn('Ignore active leanring process. no config')
+                    return
 
-            label_tags = project_info['tool']['activelearning']['config']['tags']
-            label_type = project_info['tool']['activelearning']['config']['type']
-            next_task_cmd += f" --tags={label_tags} --type={label_type}"
-        else:
-            next_task_cmd += f" --exp={exp_name}"
-            next_task_cmd += f" --stage={next_task[1]}"
-            next_task_cmd += f" --root={self.root}/{project_name}"
-            # 基于提交脚本设置gpu_ids
-            gpu_ids = ','.join([str(i) for i in range(submitter_gpu_num)])
-            next_task_cmd += f" --gpu-id={gpu_ids}"
+                target_folder = os.path.join(self.root, project_name, 'activelearning', f'{exp_name}.{exp_id}')
+                # 需要label/start 命令支持自动获取unlabel数据，并打包后存储到目标位置
+                next_task_cmd += f" --src=unlabel --tgt={target_folder}"
 
-        # 创建新实验记录
-        auto_exp_info = exp_basic_info()
-        auto_exp_info['exp'] = exp_info['exp']
-        auto_exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
-        auto_exp_info['branch'] = exp_info['branch']
-        auto_exp_info['commit'] = exp_info['commit']
-        auto_exp_info['state'] = 'running'
-        auto_exp_info['stage'] = next_task[1]
-        project_info['exp'][exp_info['exp']].append(
-            auto_exp_info
-        )
- 
-         # 准备代码环境
-        old_folder = os.path.abspath(os.curdir)
-        git_folder = project_info["git"].split('/')[-1].split('.')[0]
-        os.system(f'git clone {project_info["git"]}')    
-        os.chdir(git_folder)
- 
-        if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task[1]):
-            # 提交任务成功
-            logging.info(f"Success submit task {self.task_cmd[next_task[1]]}")
-            self.task_set.pop(next_task[1])
-        else:
-            # 提交任务失败 (重新加入任务队列)
-            auto_exp_info['state'] = 'stop'
-            logging.error(f'Fail submit task {self.task_cmd[next_task[1]]}')
-            self.task_queue.put(next_task)
+                label_tags = project_info['tool']['activelearning']['config']['tags']
+                label_type = project_info['tool']['activelearning']['config']['type']
+                next_task_cmd += f" --tags={label_tags} --type={label_type}"
+            else:
+                next_task_cmd += f" --exp={exp_name}"
+                next_task_cmd += f" --stage={next_task[1]}"
+                next_task_cmd += f" --root={self.root}/{project_name}"
+                # 基于提交脚本设置gpu_ids
+                gpu_ids = ','.join([str(i) for i in range(submitter_gpu_num)])
+                next_task_cmd += f" --gpu-id={gpu_ids}"
 
-        # 恢复原状
-        os.chdir(old_folder)
-        shutil.rmtree(git_folder)
-        
+            # 创建新实验记录
+            auto_exp_info = exp_basic_info()
+            auto_exp_info['exp'] = exp_info['exp']
+            auto_exp_info['id'] = time.strftime('%Y-%m-%dx%H:%M:%S',time.localtime(time.time()))
+            auto_exp_info['branch'] = exp_info['branch']
+            auto_exp_info['commit'] = exp_info['commit']
+            auto_exp_info['state'] = 'running'
+            auto_exp_info['stage'] = next_task[1]
+            project_info['exp'][exp_info['exp']].append(
+                auto_exp_info
+            )
+
+            # 准备代码环境
+            old_folder = os.path.abspath(os.curdir)
+            git_folder = None
+            if not os.path.exists(f'./{project_name}'):
+                git_folder = project_info["git"].split('/')[-1].split('.')[0]
+                os.system(f'git clone {project_info["git"]}')    
+                os.chdir(git_folder)
+
+            if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task[1]):
+                # 提交任务成功
+                logging.info(f"Success submit task {self.task_cmd[next_task[1]]}")
+                self.task_set.pop(next_task[1])
+            else:
+                # 提交任务失败 (重新加入任务队列)
+                auto_exp_info['state'] = 'stop'
+                logging.error(f'Fail submit task {self.task_cmd[next_task[1]]}')
+                self.task_queue.put(next_task)
+
+            # 恢复原状
+            if git_folder is not None:
+                os.chdir(old_folder)
+                shutil.rmtree(git_folder)
+
 '''
 默认项目全部信息存储在hdfs上
 自动化触发, 依靠定时读取hdfs地址实现
