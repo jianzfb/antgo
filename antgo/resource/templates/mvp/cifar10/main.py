@@ -81,20 +81,20 @@ def main():
         print('Couldnt find correct config file.')
         return
 
-    cfg = Config.fromfile(os.path.join(nn_args.exp, nn_args.config))
+    cfg = Config.fromfile(os.path.join(os.path.dirname(__file__), nn_args.config))
     if 'checkpoint_config' in cfg:
         cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
     if 'evaluation' in cfg:
         cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
 
-    # step2.1 检查补充配置
+    # step3 检查补充配置
     if nn_args.extra_config is not None and nn_args.extra_config != '':
         if os.path.exists(nn_args.extra_config):
             with open(nn_args.extra_config, 'r') as fp:
                 extra_config = Config.fromstring(fp.read(),'.json')
             
             # extra_config 格式为项目信息格式
-            # step2.1.1: 数据相关 (默认TFRECORD是antgo默认标准打包格式)
+            # step3.1.1: 数据相关 (默认TFRECORD是antgo默认标准打包格式)
             extra_dataset_train_label = extra_config['source']['label']
             extra_dataset_train_pseudo_label = extra_config['source']['pseudo-label']
             extra_dataset_train_unlabel = extra_config['source']['unlabel']
@@ -139,7 +139,7 @@ def main():
                             continue       
                         unlabel_local_path_list.append(local_path)
     
-            # step2.1.2: 训练方法相关 (包括数据的使用方式)
+            # step3.1.2: 训练方法相关 (包括数据的使用方式)
             if 'data' in extra_config:
                 # 扩展数据的使用方式
                 cfg.data.train = extra_config['data']['train']
@@ -192,12 +192,14 @@ def main():
             if 'lr_config' in extra_config:
                 cfg.lr_config = extra_config['lr_config']
     
-    # step2.2 添加root地址（影响checkpoint_config, evaluation）
+    # step4 添加root (运行时，输出结果保存的根目录地址)
+    cfg.root = nn_args.root  
+    # step4.1 添加root地址（影响checkpoint_config, evaluation）
     if nn_args.root != '':
         cfg.checkpoint_config.out_dir = os.path.join(nn_args.root, nn_args.exp)
         cfg.evaluation.out_dir = os.path.join(nn_args.root, nn_args.exp)
 
-    # step3: 执行指令(训练、测试、模型导出)
+    # step5: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程
         trainer = Trainer(
@@ -236,7 +238,7 @@ def main():
         print(f'nn_args.checkpoint {nn_args.checkpoint}')        
         ac = Activelearning(cfg, './', nn_args.gpu_id, distributed=nn_args.distributed)
         ac.config_model(checkpoint=nn_args.checkpoint, revise_keys=[('^','model.')])
-        ac.select()        
+        ac.select(nn_args.exp)
     elif nn_args.process == 'export':
         # 创建导出模型过程
         tester = Exporter(cfg, './')
@@ -247,6 +249,7 @@ def main():
             output_name_list=cfg.export.output_name_list, 
             checkpoint=nn_args.checkpoint, 
             prefix=f'{nn_args.exp}-{checkpoint_file_name}-model')
+
 
 if __name__ == "__main__":
     main()

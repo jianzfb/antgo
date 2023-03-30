@@ -37,6 +37,7 @@ from antgo.utils.sample_gt import *
 from antgo.framework.helper.dataset.builder import DATASETS
 import json
 import imagesize
+from antgo.ant import environment
 
 
 UNCERTAINTY_SAMPLING = Registry('UNCERTAINTY_SAMPLING')
@@ -326,14 +327,23 @@ class SamplingByComposer(object):
 class Activelearning(Tester):
     def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False):
         self.cfg = cfg
-        self.activelearning_round = self.cfg.activelearning.get("round", 0)
+        # 默认使用单卡进行主动学习即可
+        assert(not distributed)
         
+        # 远程下载历史数据
+        if getattr(cfg, 'root', '') != '':
+            if environment.hdfs_client.exists(os.path.join(cfg.root, 'activelearning')):
+                environment.hdfs_client.get(os.path.jion(cfg.root, 'activelearning'), './activelearning')
+
+        if not os.path.exists('./activelearning'):
+            os.mkdir('./activelearning')
+            
         # has finish round info
         has_finish_anns = []
-        for round in range(self.activelearning_round):
-            target_folder = f'./activelearning/{round}'
-            has_finish_anns.append(os.path.join(target_folder, 'annotation.json'))
-        
+        for sub_folder in os.listdir('./activelearning'):
+            if os.path.exists(f'./activelearning/{sub_folder}/annotation.json'):
+                has_finish_anns.append(f'./activelearning/{sub_folder}/annotation.json')
+
         unlabel_filter_warp = dict(
             type='IterableDatasetFilter',
             dataset=build_from_cfg(cfg.data.unlabel, DATASETS, None),
@@ -343,12 +353,13 @@ class Activelearning(Tester):
         cfg.data.test = unlabel_filter_warp
         cfg.data.test_dataloader = cfg.data.unlabel_dataloader
         super().__init__(cfg, work_dir, gpu_id, distributed)
-        # 采样函数
-        self.sampling_fn = build_from_cfg(cfg.activelearning.sampling_fn, UNCERTAINTY_SAMPLING)
-        self.sampling_count = cfg.activelearning.sampling_count
-        self.sampling_num = cfg.activelearning.sampling_num
         
-    def select(self):
+        # 采样函数
+        self.sampling_fn = build_from_cfg(cfg.model.init_cfg.sampling_fn, UNCERTAINTY_SAMPLING)
+        self.sampling_count = cfg.model.init_cfg.sampling_count # 计算预测次数
+        self.sampling_num = cfg.model.init_cfg.sampling_num     # 最终采样数（最有价值的等待标注样本）
+
+    def select(self, exp_name):
         rank, _ = get_dist_info()        
         
         sample_results = None
@@ -387,25 +398,30 @@ class Activelearning(Tester):
             self.dataset.dataset._alias = ["image", "image_meta"] #
 
             # step2.2: 保存到目标目录
-            target_folder = f'./activelearning/{self.activelearning_round}'
+            target_folder = f'./activelearning/{exp_name}'
             if not os.path.exists(target_folder):
                 os.makedirs(target_folder)
 
             image_folder = os.path.join(target_folder, 'images')
             if not os.path.exists(image_folder):
                 os.makedirs(image_folder)
-            
+
             # TODO，每个样本如何进行唯一标识
             selected_sample_ids = [f"{sample['tag']}/{sample['image_file']}" for sample in sampling_list]
             
             image_file_name_list = []
             compare_pos = 0
             for sample in self.dataset:
-                sample_id = f"{sample['image_meta']['tag']}/{sample['image_meta']['image_file']}"
+                sample_tag = sample['image_meta']['tag']
+                sample_id = f"{sample_tag}/{sample['image_meta']['image_file']}"
+                
                 if sample_id == selected_sample_ids[compare_pos]:
                     compare_pos += 1
+                    # 防止在原目录下image_file是多层级的，在此将/替换为-
                     file_name = sample['image_meta']['image_file'].replace('/','-')
-                    image_file_name_list.append((file_name, sample['image_meta']['tag']))
+                    # 防止不同批次的无标签样本重名，在名字前加上 tag
+                    file_name = f'{sample_tag}-{file_name}'
+                    image_file_name_list.append((file_name, sample_tag))
                     with open(os.path.join(image_folder, file_name), 'wb') as fp:
                         fp.write(sample['image'])
 
@@ -422,9 +438,9 @@ class Activelearning(Tester):
                 sample_gt = sgt.get()
                 sample_gt_cp = copy.deepcopy(sample_gt)
                 sample_gt_cp.update({
-                    'image_file': sample_file_name
+                    'image_file': f'images/{sample_file_name}'
                 })
-                sample_gt_cp['tag'] = f'{sample_file_tag}/AC/{self.activelearning_round}'
+                sample_gt_cp['tag'] = f'{sample_file_tag}/{exp_name}'
                 sample_gt_cp['height'] = height
                 sample_gt_cp['width'] = width
                 annotation_list.append(sample_gt_cp)
@@ -433,5 +449,24 @@ class Activelearning(Tester):
                 json.dump(annotation_list, fp)
 
             with open(os.path.join(target_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
-                json.dump(sgt.meta(), fp)
+                meta_info= sgt.meta()
+                meta_info['extent']['total'] = len(annotation_list)
+                json.dump(meta_info, fp)
 
+            # step2.4: 保存到远程
+            if getattr(self.cfg, 'root', '') != '':
+                # 记录本次挑选出的数据记录
+                target_path = os.path.join(self.cfg.root, 'activelearning', exp_name)
+                if not environment.hdfs_client.exists(target_path):
+                    environment.hdfs_client.mkdir(target_folder, True)
+                environment.hdfs_client.put(target_path, os.path.join(target_folder, annotation_file_name), False)
+                
+                # 打包本次挑选出的数据，并保存到标注目录下
+                # root/label/exp_name/data.tar
+                target_path = os.path.join(self.cfg.root, 'label', exp_name)
+                if not environment.hdfs_client.exists(target_path):
+                    environment.hdfs_client.mkdir(target_folder, True)
+                                
+                os.system(f'tar -cf data.tar {target_folder}/*')
+                environment.hdfs_client.put(target_path, 'data.tar', False)
+                os.system('rm data.tar')

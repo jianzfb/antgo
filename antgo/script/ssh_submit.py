@@ -39,6 +39,9 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
             extra_config['source'] = {
                 "unlabel": project_info["dataset"]["train"]["unlabel"]
             }            
+            
+            # 扩展模型配置/优化器/学习率等
+            extra_config.update( project_info['tool']['activelearning']['config'])  
         elif task_name == "supervised":
             # 扩展数据源
             # label, pseudo-label, unlabel

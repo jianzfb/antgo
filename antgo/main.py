@@ -361,6 +361,54 @@ def main():
         # 补充配置
         command_str += f' --extra-config={args.extra_config}'        
         os.system(command_str)
+    elif action_name == 'activelearning':
+      if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
+        # cpu run
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --root={args.root}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
+
+        # 补充配置
+        command_str += f' --extra-config={args.extra_config}'
+        os.system(command_str)
+      elif len(args.gpu_ids.split(',')) == 1:
+        # single gpu run
+        gpu_id = args.gpu_ids.split(',')[0]
+        command_str = f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=activelearning --root={args.root}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
+
+        # 补充配置
+        command_str += f' --extra-config={args.extra_config}'
+        os.system(command_str)
+      else:
+        # multi gpu run
+        gpu_num = len(args.gpu_ids.split(','))
+        command_str = f'bash install.sh; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=activelearning --root={args.root}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
+        
+        # 补充配置
+        command_str += f' --extra-config={args.extra_config}'        
+        os.system(command_str)
     elif action_name == 'eval':
       assert(args.checkpoint is not None)
       if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:

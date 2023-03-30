@@ -62,14 +62,16 @@ class ServerBase(object):
         # distillation          优先级3
         # activelearning        优先级1
         # self.task_order = [('activelearning', 'supervised'),('supervised', 'activelearning'), ('supervised','semi-supervised'),('supervised','distillation')]
+        # self.task_order = [('activelearning', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
         
-        self.task_order = [('activelearning', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
+        self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
         self.task_priority = {'activelearning': 1, 'supervised':2,'semi-supervised':3, 'distillation':3}
         self.task_cmd = {
-            "activelearning": "antgo tool label/start",
-            "supervised": "antgo train --process=train",
-            "semi-supervised": "antgo train --process=train",
-            "distillation": "antgo train --process=train"
+            "activelearning": "antgo activelearning",
+            "label": "anrgo tool label/start",
+            "supervised": "antgo train",
+            "semi-supervised": "antgo train",
+            "distillation": "antgo train"
         }
 
         # 启动定时任务
@@ -168,18 +170,16 @@ class ServerBase(object):
             next_task = self.task_queue.get()
             next_task_cmd = self.task_cmd[next_task[1]]
             if next_task[1] == 'activelearning':
-                # TODO，这里需要修改，先要完成无标签数据预测，再启动标注
                 if len(project_info['tool']['activelearning']['config']) == 0:
                     logging.warn('Ignore active leanring process. no config')
                     return
 
-                target_folder = os.path.join(self.root, project_name, 'activelearning', f'{exp_name}.{exp_id}')
-                # 需要label/start 命令支持自动获取unlabel数据，并打包后存储到目标位置
-                next_task_cmd += f" --src=unlabel --tgt={target_folder}"
-
-                label_tags = project_info['tool']['activelearning']['config']['tags']
-                label_type = project_info['tool']['activelearning']['config']['type']
-                next_task_cmd += f" --tags={label_tags} --type={label_type}"
+                next_task_cmd += f" --exp={exp_name}"
+                next_task_cmd += f" --stage={next_task[1]}"
+                next_task_cmd += f" --root={self.root}/{project_name}"
+                # 基于提交脚本设置gpu_ids
+                gpu_ids = ','.join([str(i) for i in range(submitter_gpu_num)])
+                next_task_cmd += f" --gpu-id={gpu_ids}"
             else:
                 next_task_cmd += f" --exp={exp_name}"
                 next_task_cmd += f" --stage={next_task[1]}"
@@ -196,10 +196,13 @@ class ServerBase(object):
             auto_exp_info['commit'] = exp_info['commit']
             auto_exp_info['state'] = 'running'
             auto_exp_info['stage'] = next_task[1]
+            auto_exp_info['checkpoint'] = exp_info['checkpoint']
             project_info['exp'][exp_info['exp']].append(
                 auto_exp_info
             )
 
+            next_task_cmd += f" --id={auto_exp_info['id']}"
+            
             # 准备代码环境
             old_folder = os.path.abspath(os.curdir)
             git_folder = None
@@ -235,11 +238,23 @@ class LocalServer(ServerBase):
         # 目录结构如下
         # root 
         #   - project
+        #        - activelearning
+        #           - exp.id        # 在此实验之后，触发的主动学习进行标注样本挑选
+        #               annotation.json
+        #           - exp.id
+        #               annotation.json
         #        - label
-        #           - exp.id    # 在此实验后，进行的标注结果
-        #               annotation.json
-        #           - exp.id    # 在此实验后，进行的标注结果
-        #               annotation.json
+        #           - exp.id        # 针对主动学习挑选出来的样本，进行标注结果
+        #               data.tar    # 压缩包数据格式 images/, annotation.json, meta.json
+        #           - exp.id        # 在此实验后，进行的标注结果
+        #               data.tar    # 压缩包数据格式 images/, annotation.json, meta.json
+        #        - dataset
+        #           - label
+        #               exp-id-{}.tfrecord    # 针对标注后样本进行的重新打包
+        #           - pseudo-label
+        #               xxx.tfrecord          # 针对算法生成的伪标签数据进行的打包
+        #           - unlabel
+        #               xxx.tfrecord          # 针对上传的无标签数据
         #        - exp.id
         #               RUNNING/FINISH/STOP
         #               - output
@@ -300,6 +315,22 @@ class LocalServer(ServerBase):
                                 if os.path.exists(os.path.join('/tmp/best.json')):
                                     with open('/tmp/best.json', 'r') as fp:
                                         exp_info['metric'].update(json.load(fp))
+                                
+                                # 自动更新最佳模型（仅针对产品模型记录）
+                                try:
+                                    if project_info['product'].startswith(exp_name):
+                                        if len(project_info['best']) == 0 or len(project_info['best']['metric']) == 0:
+                                            project_info['best'] = exp_info
+                                        else:
+                                            is_best = False
+                                            for k in exp_info['metric'].keys():
+                                                if exp_info['metric'][k] < project_info['best']['metric'][k]:
+                                                    is_best = False
+                                            
+                                            if is_best:
+                                                project_info['best'] = exp_info
+                                except:
+                                    pass
 
                             # 项目自动化优化流水线
                             if project_info['auto']:
