@@ -42,11 +42,13 @@ class TFDataWriter(object):
         shard_i = -1
         count = 0
 
+        iijj = []
         # step 1: write tfrecord
         for index, data in enumerate(data_iterator):
             if data is None:
                 continue
-                        
+            
+            iijj.append(data['image_file'])
             data_and_description = {}
             for k,v in data.items():
                 if isinstance(v, str):
@@ -111,6 +113,8 @@ class TFDataWriter(object):
         
         print(f'Finish tfrecord index.')
 
+        with open('/root/workspace/extract/ss.json', 'w') as fp:
+            json.dump(iijj, fp)
 
 class KVDataWriter(object):
     def __init__(self, prefix, output_path, size_in_shard=-1, num_shards=1, keys=[]) -> None:
