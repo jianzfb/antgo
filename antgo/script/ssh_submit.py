@@ -1,9 +1,12 @@
 import logging
 import os
+from queue import PriorityQueue
 import shutil
 import yaml 
-from antgo import config
 import json
+from antgo import config
+from antgo.script.base import *
+
 
 # 提交任务运行
 def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size, task_name=None):   
@@ -29,65 +32,13 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     if image_name == '':
         image_name = 'antgo-env:latest'
     
-    # 添加临时配置：将当前工程信息保存到当前目录下并一同提交
+    # 添加扩展配置：保存到当前目录下并一同提交
     if task_name is not None:
-        # 复合任务标记
-        extra_config = {}
-        if task_name == "activelearning":
-            if len(project_info['tool']['activelearning']['config']) == 0:
-                logging.error(f"Missing {task_name} config, couldnt launch task")
-                return False
-            
-            # 扩展数据源
-            # unlabel
-            extra_config['source'] = {
-                "unlabel": project_info["dataset"]["train"]["unlabel"]
-            }            
-            
-            # 扩展模型配置/优化器/学习率等
-            extra_config.update( project_info['tool']['activelearning']['config'])  
-        elif task_name == "supervised":  
-            # 扩展数据源
-            # label, pseudo-label, unlabel
-            extra_config['source'] = {
-                "label": project_info["dataset"]["train"]["label"],
-                "pseudo-label": project_info["dataset"]["train"]["pseudo-label"],
-                "unlabel": project_info["dataset"]["train"]["unlabel"]
-            }
-        elif task_name == "semi-supervised":
-            if len(project_info['tool']['semi']['config']) == 0:
-                logging.error(f"Missing {task_name} config, couldnt launch task")
-                return False
-            
-            # 扩展数据源
-            # label, pseudo-label, unlabel
-            extra_config['source'] = {
-                "label": project_info["dataset"]["train"]["label"],
-                "pseudo-label": project_info["dataset"]["train"]["pseudo-label"] if "pseudo-label" in project_info["dataset"]["train"] else [],
-                "unlabel": project_info["dataset"]["train"]["unlabel"] if "unlabel" in project_info["dataset"]["train"] else []
-            }
-            
-            # 扩展模型配置/优化器/学习率等
-            extra_config.update( project_info['tool']['semi']['config'])
-        elif task_name == "distillation":
-            if len(project_info['tool']['distillation']['config']) == 0:
-                logging.error(f"Missing {task_name} config, couldnt launch task")
-                return False
-                    
-            # 扩展数据源
-            # label, pseudo-label, unlabel
-            extra_config['source'] = {
-                "label": project_info["dataset"]["train"]["label"],
-                "pseudo-label": project_info["dataset"]["train"]["pseudo-label"],
-                "unlabel": project_info["dataset"]["train"]["unlabel"]
-            }
-                    
-            # 扩展模型配置/优化器/学习率等
-            extra_config.update( project_info['tool']['distillation']['config'])
-
-        with open('./extra-config.py', 'w') as fp:
-            json.dump(extra_config, fp)    
-        sys_argv += " --extra-config=./extra-config.py"
+        extra_config = prepare_extra_config(task_name, project_info)
+        if extra_config is not None:
+            with open('./extra-config.py', 'w') as fp:
+                json.dump(extra_config, fp)    
+            sys_argv += " --extra-config=./extra-config.py"
 
     # 执行提交命令
     if password == '':

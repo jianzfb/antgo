@@ -31,7 +31,8 @@ from antgo.framework.helper.models.proxy_module import *
 from antgo.framework.helper.models.distillation import *
 from antgo.framework.helper.runner.hooks.hook import *
 from antgo.framework.helper.utils import Config, build_from_cfg
-
+from antgo.antgo.framework.helper.task_flag import *
+import traceback
 from thop import profile
 import copy
 
@@ -209,7 +210,19 @@ class BaseTrainer(object):
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
 
     def start_train(self, max_epochs, **kwargs):
-        self.runner.run([self.train_generator], [('train', max_epochs)], max_epochs)
-
+        try:
+            running_flag(self.cfg.root)
+            self.runner.run([self.train_generator], [('train', max_epochs)], max_epochs)
+            finish_flag(self.cfg.root)
+        except Exception:
+            stop_flag(self.cfg.root)
+            traceback.print_exc()
+        
     def start_eval(self, **kwargs):
-        self.runner.run([self.train_generator], [('val', 1)], 1)
+        try:
+            running_flag(self.cfg.root)
+            self.runner.run([self.train_generator], [('val', 1)], 1)
+            finish_flag(self.cfg.root)
+        except:
+            stop_flag(self.cfg.root)
+            traceback.print_exc()

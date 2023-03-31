@@ -31,7 +31,7 @@ model = dict(
 
 # 数据配置
 data=dict(
-    unlabel=dict(
+    test=dict(
         type="TFDataset",
         data_path_list=[],
         pipeline=[
@@ -47,7 +47,7 @@ data=dict(
         shuffle_queue_size=0,           # 取消shuffle
         sample_num_equalizer=False      # 取消样本数多卡均衡
     ),
-    unlabel_dataloader=dict(
+    test_dataloader=dict(
         samples_per_gpu=2, 
         workers_per_gpu=1,
         drop_last=False,

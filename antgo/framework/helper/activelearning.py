@@ -35,6 +35,7 @@ from antgo.framework.helper.runner import BaseModule
 from thop import profile
 from antgo.utils.sample_gt import *
 from antgo.framework.helper.dataset.builder import DATASETS
+from antgo.antgo.framework.helper.task_flag import *
 import json
 import imagesize
 from antgo.ant import environment
@@ -329,7 +330,7 @@ class Activelearning(Tester):
         self.cfg = cfg
         # 默认使用单卡进行主动学习即可
         assert(not distributed)
-        
+
         # 远程下载历史数据
         if getattr(cfg, 'root', '') != '':
             if environment.hdfs_client.exists(os.path.join(cfg.root, 'activelearning')):
@@ -346,12 +347,12 @@ class Activelearning(Tester):
 
         unlabel_filter_warp = dict(
             type='IterableDatasetFilter',
-            dataset=build_from_cfg(cfg.data.unlabel, DATASETS, None),
+            dataset=build_from_cfg(cfg.data.test, DATASETS, None),
             not_in_anns=has_finish_anns
         )
         
         cfg.data.test = unlabel_filter_warp
-        cfg.data.test_dataloader = cfg.data.unlabel_dataloader
+        cfg.data.test_dataloader = cfg.data.test_dataloader
         super().__init__(cfg, work_dir, gpu_id, distributed)
         
         # 采样函数
@@ -360,8 +361,10 @@ class Activelearning(Tester):
         self.sampling_num = cfg.model.init_cfg.sampling_num     # 最终采样数（最有价值的等待标注样本）
 
     def select(self, exp_name):
-        rank, _ = get_dist_info()        
+        # 添加运行标记
+        running_flag(self.cfg)
         
+        rank, _ = get_dist_info()        
         sample_results = None
         for _ in range(self.sampling_count):
             if not self.distributed:
@@ -468,3 +471,6 @@ class Activelearning(Tester):
                 os.system(f'cd {target_folder} && tar -cf data.tar .')
                 environment.hdfs_client.put(target_path, f'{target_folder}/data.tar', False)
                 os.system('cd {target_folder} && rm data.tar')
+                
+        # 添加完成标记
+        finish_flag(self.cfg)

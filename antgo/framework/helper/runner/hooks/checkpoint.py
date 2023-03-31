@@ -1,7 +1,5 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import os.path as osp
 import warnings
-
 from antgo.framework.helper.fileio import FileClient
 from ..dist_utils import allreduce_params, master_only
 from .hook import HOOKS, Hook
@@ -70,20 +68,15 @@ class CheckpointHook(Hook):
 
     def before_run(self, runner):
         if not self.out_dir:
+            # 在out_dir没有被设置时，继承runner.work_dir的工作目录
             self.out_dir = runner.work_dir
 
         self.file_client = \
             FileClient.infer_client(
                 self.file_client_args, self.out_dir)
 
-        # if `self.out_dir` is not equal to `runner.work_dir`, it means that
-        # `self.out_dir` is set so the final `self.out_dir` is the
-        # concatenation of `self.out_dir` and the last level directory of
-        # `runner.work_dir`
-        if self.out_dir != runner.work_dir:
-            basename = osp.basename(runner.work_dir.rstrip(osp.sep))
-            self.out_dir = self.file_client.join_path(self.out_dir, basename)
-
+        # 添加固定路径格式
+        self.out_dir = osp.join(self.out_dir, 'output', 'checkpoint')
         runner.logger.info(
             (f'Checkpoints will be saved to {self.out_dir} by '
                             f'{self.file_client.name}.'))

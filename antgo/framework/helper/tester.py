@@ -26,6 +26,7 @@ from antgo.framework.helper.utils.setup_env import *
 from antgo.framework.helper.runner.checkpoint import load_checkpoint
 from antgo.framework.helper.runner.test import multi_gpu_test, single_gpu_test
 from antgo.framework.helper.cnn.utils import fuse_conv_bn
+from antgo.antgo.framework.helper.task_flag import *
 from thop import profile
 import json
 
@@ -100,8 +101,10 @@ class Tester(object):
                 broadcast_buffers=False)
 
     def evaluate(self):
+        # 添加运行标记
+        running_flag(self.cfg)
+
         rank, _ = get_dist_info()        
-        # allows not to create
         json_file = './result.json'
         if self.work_dir is not None and rank == 0:
             if not os.path.exists(osp.abspath(self.work_dir)):
@@ -144,3 +147,6 @@ class Tester(object):
             if self.work_dir is not None and rank == 0:
                 with open(json_file, 'w') as fp:
                     json.dump(metric_dict, fp)
+
+        # 添加完成标记
+        finish_flag(self.cfg)

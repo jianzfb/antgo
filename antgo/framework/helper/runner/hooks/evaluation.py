@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import os.path as osp
 import warnings
 from math import inf
@@ -203,29 +202,19 @@ class EvalHook(Hook):
 
     def before_run(self, runner):
         if not self.out_dir:
+            # 在out_dir没有被设置时，继承runner.work_dir的工作目录
             self.out_dir = runner.work_dir
 
         self.file_client = FileClient.infer_client(self.file_client_args,
                                                    self.out_dir)
-
-        # if `self.out_dir` is not equal to `runner.work_dir`, it means that
-        # `self.out_dir` is set so the final `self.out_dir` is the
-        # concatenation of `self.out_dir` and the last level directory of
-        # `runner.work_dir`
-        if self.out_dir != runner.work_dir:
-            basename = osp.basename(runner.work_dir.rstrip(osp.sep))
-            self.out_dir = self.file_client.join_path(self.out_dir, basename)
-            runner.logger.info(
-                (f'The best checkpoint will be saved to {self.out_dir} by '
-                 f'{self.file_client.name}'))
-
+        # 添加固定路径格式
+        self.out_dir = osp.join(self.out_dir, 'output', 'metric')
+        
         if self.save_best is not None:
             if runner.meta is None:
                 warnings.warn('runner.meta is None. Creating an empty one.')
                 runner.meta = dict()
-            runner.meta.setdefault('hook_msgs', dict())
-            self.best_ckpt_path = runner.meta['hook_msgs'].get(
-                'best_ckpt', None)
+            runner.meta.setdefault('hook_msgs', dict())            
 
     def before_train_iter(self, runner):
         """Evaluate the model only at the start of training by iteration."""
@@ -334,22 +323,19 @@ class EvalHook(Hook):
             best_score = key_score
             runner.meta['hook_msgs']['best_score'] = best_score
 
-            if self.best_ckpt_path and self.file_client.isfile(
-                    self.best_ckpt_path):
+            if self.best_ckpt_path and self.file_client.isfile(self.best_ckpt_path):
                 self.file_client.remove(self.best_ckpt_path)
                 runner.logger.info(
                     (f'The previous best checkpoint {self.best_ckpt_path} was '
                      'removed'))
-
-            best_ckpt_name = f'best_{self.key_indicator}_{current}.pth'
-            self.best_ckpt_path = self.file_client.join_path(
-                self.out_dir, best_ckpt_name)
-            runner.meta['hook_msgs']['best_ckpt'] = self.best_ckpt_path
-
+                
+            best_ckpt_name = f'best_{self.key_indicator}_{best_score}_{current}.pth'
+            self.best_ckpt_path = self.file_client.join_path(self.out_dir, best_ckpt_name)            
             runner.save_checkpoint(
                 self.out_dir,
                 filename_tmpl=best_ckpt_name,
                 create_symlink=False)
+            
             runner.logger.info(
                 f'Now best checkpoint is saved as {best_ckpt_name}.')
             runner.logger.info(

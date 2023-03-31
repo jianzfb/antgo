@@ -64,7 +64,8 @@ class ServerBase(object):
         # self.task_order = [('activelearning', 'supervised'),('supervised', 'activelearning'), ('supervised','semi-supervised'),('supervised','distillation')]
         # self.task_order = [('activelearning', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
         
-        self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
+        # self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
+        self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised')]
         self.task_priority = {'activelearning': 1, 'supervised':2,'semi-supervised':3, 'distillation':3}
         self.task_cmd = {
             "activelearning": "antgo activelearning",
@@ -256,14 +257,14 @@ class LocalServer(ServerBase):
         #               RUNNING/FINISH/STOP
         #               - output
         #                   - metric
-        #                       best.json
+        #                       best_{key}_{score}_{xxx}.pth
         #                   - checkpoint
         #                       ***.pth
         #        - exp.id
         #               RUNNING/FINISH/STOP
         #               - output
         #                   - metric
-        #                       best.json
+        #                       best_{key}_{score}_{xxx}.pth
         #                   - checkpoint
         #                       ***.pth        
         #   - project
@@ -288,6 +289,9 @@ class LocalServer(ServerBase):
                     if exp_info['state'] == 'running':
                         project_state_folder = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}')
                         checkpoint_folder = os.path.join(self.root, project_name, f'{exp_name}.{exp_id}','output', 'checkpoint')
+
+                        # FINISH 仅仅表示任务运行完毕
+                        # 对于具体完成的任务是什么需要从project_info中查找
                         is_exist = environment.hdfs_client.exists(os.path.join(project_state_folder, 'FINISH'))
                         if is_exist:
                             # 任务完成状态
@@ -319,16 +323,58 @@ class LocalServer(ServerBase):
                                         if len(project_info['best']) == 0 or len(project_info['best']['metric']) == 0:
                                             project_info['best'] = exp_info
                                         else:
-                                            is_best = False
-                                            for k in exp_info['metric'].keys():
-                                                if exp_info['metric'][k] < project_info['best']['metric'][k]:
-                                                    is_best = False
-                                            
-                                            if is_best:
-                                                project_info['best'] = exp_info
+                                            best_metric_keys = project_info['best']['metric'].keys()
+                                            exp_metric_keys = exp_info['metric'].keys()
+                                            if set(best_metric_keys) == set(exp_metric_keys):
+                                                is_best = False
+                                                for k in exp_info['metric'].keys():
+                                                    if exp_info['metric'][k] < project_info['best']['metric'][k]:
+                                                        is_best = False
+                                                
+                                                if is_best:
+                                                    project_info['best'] = exp_info
+                                            else:
+                                                logging.error('Abnormal exp metric keys not consistent with best record.')
                                 except:
-                                    pass
-
+                                    logging.error("Abnormal analyze project best record.")
+                            
+                            # 获得任务生成的数据（标注数据，伪标签数据）
+                            dataset_record_folder = os.path.join(self.root, project_name, 'dataset', 'label')
+                            if environment.hdfs_client.exists(dataset_record_folder):
+                                record_list = environment.hdfs_client.ls(dataset_record_folder)
+                                existed_record_list = [b['address'] for b in project_info['dataset']['train']['pseudo-label']]
+                                diff_record_list = []
+                                for record_path in record_list:
+                                    if record_path in existed_record_list:
+                                        continue
+                                    diff_record_list.append(record_path)
+                               
+                                for record_path in record_list:
+                                    basic_info = dataset_basic_info()
+                                    basic_info.update({
+                                        'status': True,
+                                        'address': record_path
+                                    })
+                                    project_info['dataset']['train']['label'].append(basic_info)
+                            
+                            dataset_record_folder = os.path.join(self.root, project_name, 'dataset', 'pseudo-label')
+                            if environment.hdfs_client.exists(dataset_record_folder):
+                                record_list = environment.hdfs_client.ls(dataset_record_folder)
+                                existed_record_list = [b['address'] for b in project_info['dataset']['train']['pseudo-label']]
+                                diff_record_list = []
+                                for record_path in record_list:
+                                    if record_path in existed_record_list:
+                                        continue
+                                    diff_record_list.append(record_path)
+                                                                    
+                                for record_path in diff_record_list:
+                                    basic_info = dataset_basic_info()
+                                    basic_info.update({
+                                        'status': True,
+                                        'address': record_path
+                                    })
+                                    project_info['dataset']['train']['pseudo-label'].append(basic_info)
+                                                        
                             # 项目自动化优化流水线
                             if project_info['auto']:
                                 self.schedule(project_name, project_info, exp_info)
