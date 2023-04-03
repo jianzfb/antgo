@@ -11,7 +11,7 @@ import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
 from antgo.ant.utils import *
-from antgo.ant.client import get_client, launch_server
+from antgo.ant.client import get_client
 from antgo.command import *
 from antgo.framework.helper.tools.util import *
 from antgo.help import *
@@ -34,7 +34,6 @@ DEFINE_string('git', None, '')
 DEFINE_string('branch', None, '')
 DEFINE_string('commit', None, '')
 DEFINE_string('image', '', '')      # 镜像
-DEFINE_string('gpu-ids', '0', 'use gpu ids')
 DEFINE_int('cpu', 0, 'set cpu number')
 DEFINE_int('memory', 0, 'set memory size (M)')
 DEFINE_string('name', None, '')     # 名字
@@ -168,9 +167,7 @@ def main():
 
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
-    proc = multiprocessing.Process(target=launch_server, args=(args.port,args.root))
-    proc.daemon = False
-    proc.start()
+    os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
     return
 
   # 检查是否后台服务活跃
@@ -224,7 +221,7 @@ def main():
       if not os.path.exists(args.exp):
         logging.error(f'Exp code not found in current folder.')
         return
-      
+  
       # 记录commit
       rep = git.Repo('./')     
       if not isinstance(project_info['exp'][args.exp], list):
@@ -246,14 +243,19 @@ def main():
       
       # 云端提交        
       sys_argv_cp.append(f'--id={exp_info["id"]}')
-      sys_argv_cp.append(f'--root={args.root}/{args.project}')
       filter_sys_argv_cp = []
       for t in sys_argv_cp:
         if t.startswith('--project'):
           continue
+        if t.startswith('--root'):
+          continue
+        
         filter_sys_argv_cp.append(t)
       
+      assert(args.root)
       sys_argv_cp = filter_sys_argv_cp
+      sys_argv_cp.append(f'--root={args.root}/{args.project}')
+      
       sys_argv_cmd = ' '.join(sys_argv_cp[1:])
       sys_argv_cmd = sys_argv_cmd.replace('--cloud', '')
       
@@ -261,13 +263,13 @@ def main():
       if args.local:
         sys_argv_cmd = sys_argv_cmd.replace('--local', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-        sys_argv_cmd = f'antgo {sys_argv_cmd}'        
-        local_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_ids == '' else len(args.gpu_ids.split(',')), args.cpu, args.memory)  
+        sys_argv_cmd = f'antgo {sys_argv_cmd}'
+        local_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
       elif args.ssh:
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'        
-        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_ids == '' else len(args.gpu_ids.split(',')), args.cpu, args.memory)  
+        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
       else:
         logging.error("Dont set remote mode (--ssh,--local,--custom).")
       return
@@ -321,10 +323,10 @@ def main():
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
     script_folder = os.path.join(os.path.dirname(__file__), 'script')
     if action_name == 'train':
-      if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
+      if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; /usr/bin/python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; /usr/bin/python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -335,11 +337,11 @@ def main():
           command_str += f' --max-epochs={args.max_epochs}'
 
         os.system(command_str)
-      elif len(args.gpu_ids.split(',')) == 1:
+      elif len(args.gpu_id.split(',')) == 1:
         # single gpu run
         # (1)安装;(2)数据准备;(3)运行
-        gpu_id = args.gpu_ids.split(',')[0]
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        gpu_id = args.gpu_id.split(',')[0]
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -353,8 +355,8 @@ def main():
       else:
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
-        gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        gpu_num = len(args.gpu_id.split(','))
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -366,10 +368,10 @@ def main():
              
         os.system(command_str)
     elif action_name == 'activelearning':
-      if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
+      if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -380,11 +382,11 @@ def main():
           command_str += f' --max-epochs={args.max_epochs}'
 
         os.system(command_str)
-      elif len(args.gpu_ids.split(',')) == 1:
+      elif len(args.gpu_id.split(',')) == 1:
         # single gpu run
         # (1)安装;(2)数据准备;(3)运行
-        gpu_id = args.gpu_ids.split(',')[0]
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        gpu_id = args.gpu_id.split(',')[0]
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -398,8 +400,8 @@ def main():
       else:
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
-        gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        gpu_num = len(args.gpu_id.split(','))
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -413,23 +415,23 @@ def main():
     elif action_name == 'eval':
       assert(args.checkpoint is not None)
       # (1)安装;(2)数据准备;(3)运行
-      if args.gpu_ids == '' or int(args.gpu_ids.split(',')[0]) == -1:
+      if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
-      elif len(args.gpu_ids.split(',')) == 1:
+      elif len(args.gpu_id.split(',')) == 1:
         # single gpu run
-        gpu_id = args.gpu_ids.split(',')[0]
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        gpu_id = args.gpu_id.split(',')[0]
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       else:
         # multi gpu run
-        gpu_num = len(args.gpu_ids.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --extra-config={args.extra_config} --config={args.config}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        gpu_num = len(args.gpu_id.split(','))
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -488,7 +490,7 @@ def main():
         if args.name in project_info['exp']:
           logging.error(f'Experiment {args.name} existed')
           return        
-        
+  
         if not os.path.exists(args.name):
           # 如果不存在实验目录，创建
           os.makedirs(args.name)
@@ -583,7 +585,7 @@ def main():
     elif action_name == 'show':
       show_action(sub_action_name, args)
     elif action_name == 'get':
-      show_action(sub_action_name, args)
+      get_action(sub_action_name, args)
     elif action_name == 'update':
       update_project_config(sub_action_name, args)
 

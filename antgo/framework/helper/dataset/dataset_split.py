@@ -19,7 +19,7 @@ class DatasetSamplingByClass(object):
         sample_labels = [self.dataset.get_cat_ids(i) for i in range(len(self.dataset))]
         label_per_class = sampling_num // class_num
         sample_labels = np.array(sample_labels)
-        
+
         labeled_idx = []
         for i in range(class_num):
             idx = np.where(sample_labels == i)[0]
@@ -28,7 +28,7 @@ class DatasetSamplingByClass(object):
         labeled_idx = np.array(labeled_idx)
         assert len(labeled_idx) == sampling_num
         self.sampling_idx = labeled_idx
-        
+
     def __getitem__(self, idx):
         return self.dataset[self.sampling_idx[idx]]
 

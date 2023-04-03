@@ -6,7 +6,7 @@ from antgo.framework.helper.models.ema_module import *
 
 @MODELS.register_module()
 class MPL(MultiSteamModule):
-    def __init__(self, model: dict, ema=0.0, train_cfg=None, test_cfg=None) -> None:
+    def __init__(self, model: dict, ema=0.0, train_cfg=None, test_cfg=None, init_cfg=None) -> None:
         if test_cfg is None:
             test_cfg = dict()
         test_cfg.update(

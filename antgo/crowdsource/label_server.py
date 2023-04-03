@@ -632,7 +632,7 @@ class LabelExportHandler(BaseHandler):
 
     # 导出数据下载
     project_name = self.db['task_metas']['task_name']
-    now_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+    now_time = time.strftime("%Y-%m-%dx%H:%M:%S", time.localtime(time.time()))
     random_id = str(uuid.uuid4())
     export_file_name = f'{project_name}-{now_time}-{random_id}.json'
     with open(os.path.join(self.settings.get('static_path'), export_file_name), 'w') as fp:

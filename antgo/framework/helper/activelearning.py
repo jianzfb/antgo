@@ -35,7 +35,7 @@ from antgo.framework.helper.runner import BaseModule
 from thop import profile
 from antgo.utils.sample_gt import *
 from antgo.framework.helper.dataset.builder import DATASETS
-from antgo.antgo.framework.helper.task_flag import *
+from antgo.framework.helper.task_flag import *
 import json
 import imagesize
 from antgo.ant import environment
@@ -352,7 +352,6 @@ class Activelearning(Tester):
         )
         
         cfg.data.test = unlabel_filter_warp
-        cfg.data.test_dataloader = cfg.data.test_dataloader
         super().__init__(cfg, work_dir, gpu_id, distributed)
         
         # 采样函数

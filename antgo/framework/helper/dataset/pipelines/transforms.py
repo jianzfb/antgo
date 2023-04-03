@@ -704,8 +704,8 @@ class INormalize(object):
             results[key] = imnormalize(results[key], self.mean, self.std,
                                             self.to_rgb)
 
-        if 'image_metas' in results:
-            results['image_metas']['img_norm_cfg'] = \
+        if 'image_meta' in results:
+            results['image_meta']['img_norm_cfg'] = \
                 dict(mean=self.mean, std=self.std, to_rgb=self.to_rgb)
         return results
 

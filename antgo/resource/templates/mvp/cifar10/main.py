@@ -20,6 +20,7 @@
 # python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --process=export
 
 # 1.step 通用模块
+from genericpath import isdir
 import shutil
 import sys
 import os
@@ -37,6 +38,7 @@ from antgo.framework.helper.exporter import *
 from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
+from antgo.framework.helper.dataset import *
 from antgo.ant import environment
 import json
 
@@ -87,89 +89,133 @@ def main():
     if 'evaluation' in cfg:
         cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
 
+    for data_stage in ['train', 'val', 'test']:
+        # 如果配置的是远程数据路径，则在本地寻找对应路径数据
+        for i in range(len(getattr(cfg.data, data_stage).data_path_list)):
+            data_record_path = getattr(cfg.data, data_stage).data_path_list[i]
+            if data_record_path.startswith('hdfs') or data_record_path.startswith('http') or data_record_path.startswith('/'):
+                try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
+                if os.path.exists(try_local_path):
+                    getattr(cfg.data, data_stage).data_path_list[i] = try_local_path   
+    
     # step3 检查补充配置
     if nn_args.extra_config is not None and nn_args.extra_config != '':
         if os.path.exists(nn_args.extra_config):
             with open(nn_args.extra_config, 'r') as fp:
                 extra_config = Config.fromstring(fp.read(),'.json')
-            
+
             # extra_config 格式为项目信息格式
-            # step3.1.1: 数据相关 (默认TFRECORD是antgo默认标准打包格式)
-            extra_dataset_train_label = extra_config['source']['label']
-            extra_dataset_train_pseudo_label = extra_config['source']['pseudo-label']
-            extra_dataset_train_unlabel = extra_config['source']['unlabel']
-
-            if not os.path.exists('-dataset-'):
-                os.mkdir('-dataset-')
-
+            # step3.1: 数据加载 (默认TFRECORD是antgo默认标准打包格式)
+            # 有标签数据,伪标签数据,无标签数据,跨域数据 文件列表
             label_local_path_list = []
-            if len(extra_dataset_train_label) > 0:
-                # 下载相关数据，到训练集群
-                for data_info in extra_dataset_train_label:
-                    if data_info['status'] and data_info['address'] != '':
-                        local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
-                        status = environment.hdfs_client.get(data_info['address'], local_path)                        
-                        if not status:
-                            logging.error(f'Download {data_info["address"]} error.')
-                            continue
-                        
-                        label_local_path_list.append(local_path)
-
             pseudo_local_path_list = []
-            if len(extra_dataset_train_pseudo_label) > 0:
-                # 下载相关数据，到训练集群
-                for data_info in extra_dataset_train_pseudo_label:
-                    if data_info['status'] and data_info['address'] != '':
-                        local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
-                        status = environment.hdfs_client.get(data_info['address'], local_path)
-                        if not status:
-                            logging.error(f'Download {data_info["address"]} error.')
-                            continue       
-                        pseudo_local_path_list.append(local_path)
-
             unlabel_local_path_list = []
-            if len(extra_dataset_train_unlabel)> 0:
-                # 下载相关数据，到训练集群
-                for data_info in extra_dataset_train_unlabel:
-                    if data_info['status'] and data_info['address'] != '':
-                        local_path = f"-dataset-/{data_info['address'].split('/')[-1]}"
-                        status = environment.hdfs_client.get(data_info['address'], local_path)
-                        if not status:
-                            logging.error(f'Download {data_info["address"]} error.')
-                            continue       
-                        unlabel_local_path_list.append(local_path)
-    
-            # step3.1.2: 训练方法相关 (包括数据的使用方式)
+            cross_domain_local_path_list = []
+            if os.path.exists('dataset-storage'):
+                for sub_folder_name in os.listdir('dataset-storage'):
+                    if not os.path.isdir(os.path.join('dataset-storage', sub_folder_name)):
+                        continue
+
+                    if sub_folder_name == 'label':
+                        for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                            label_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
+                    elif sub_folder_name == 'pseudo-label':
+                        for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                            pseudo_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
+                    elif sub_folder_name == 'unlabel':
+                        for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                            unlabel_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
+
+            # step3.2: 数据使用方式扩展
+            existed_train_datalist = []
             if 'data' in extra_config:
-                # 扩展数据的使用方式
-                cfg.data.train = extra_config['data']['train']
+                # 扩展数据的使用方式 (训练集)
+                # 训练数据的使用方式扩展
+                if 'train' in extra_config['data']:
+                    existed_train_datalist = cfg.data.train.data_path_list
+                    cfg.data.train = extra_config['data']['train']
                 if 'train_dataloader' in extra_config['data']:
                     cfg.data.train_dataloader = extra_config['data']['train_dataloader']
-            
+
+                # 测试数据的使用方式扩展（允许没有标签存在，在主动学习模块中使用）
+                if 'test' in extra_config['data']:
+                    cfg.data.test = extra_config['data']['test']
+                    cfg.data.test.data_path_list = unlabel_local_path_list
+                if 'test_dataloader' in extra_config['data']:
+                    cfg.data.test_dataloader = extra_config['data']['test_dataloader']
+
+            # step3.3: 数据文件数扩展
+            # 训练集相关
+            # 功能性数据类 RepeatDataset, DatasetSamplingByClass
+            control_dataset_type_names = ['RepeatDataset', 'DatasetSamplingByClass']
             if not isinstance(cfg.data.train, list):
                 # 默认仅支持TFDataset
                 # 默认常规训练方式
-                cfg.data.train.data_path_list.extend(label_local_path_list)
-                cfg.data.train.data_path_list.extend(pseudo_local_path_list)
+                concrete_dataset = cfg.data.train
+                while True:
+                    if concrete_dataset.type in control_dataset_type_names:
+                        concrete_dataset = concrete_dataset.dataset
+                        continue
+                    concrete_dataset.data_path_list = existed_train_datalist
+                    concrete_dataset.data_path_list.extend(label_local_path_list)
+                    concrete_dataset.data_path_list.extend(pseudo_local_path_list)
+                    break
             else:
-                # 默认复杂训练方式（如，半监督训练，蒸馏训练，跨域训练模式）
+                # 默认复杂训练方式（如，半监督训练，跨域训练模式）
                 # 仅支持list size=2 （默认，0: 标签数据+伪标签数据；1: 无标签数据）
-                cfg.data.train[0].data_path_list.extend(label_local_path_list)
-                cfg.data.train[0].data_path_list.extend(pseudo_local_path_list)
-                
-                cfg.data.train[1].data_path_list.extend(unlabel_local_path_list)
-            
+                concrete_dataset = cfg.data.train[0]
+                while True:
+                    if concrete_dataset.type in control_dataset_type_names:
+                        concrete_dataset = concrete_dataset.dataset
+                        continue
+                    concrete_dataset.data_path_list = existed_train_datalist
+                    concrete_dataset.data_path_list.extend(label_local_path_list)
+                    concrete_dataset.data_path_list.extend(pseudo_local_path_list)
+                    break
+
+                concrete_dataset = cfg.data.train[1]
+                while True:
+                    if concrete_dataset.type in control_dataset_type_names:
+                        concrete_dataset = concrete_dataset.dataset
+                        continue
+                    # 无标签数据
+                    concrete_dataset.data_path_list.extend(unlabel_local_path_list)
+                    # 跨域数据
+                    concrete_dataset.data_path_list.extend(cross_domain_local_path_list)
+                    break
+
+            # step3.4: 模型配置扩展
             if 'model' in extra_config:
                 # 更新默认配置
                 default_model_cfg = cfg.model
-                cfg.model = dict(
-                    type=extra_config['model']['type'],
-                    model=default_model_cfg,
-                    train_cfg=extra_config['model']['train_cfg'] if 'train_cfg' in extra_config['model'] else None,
-                    test_cfg=extra_config['model']['test_cfg'] if 'test_cfg' in extra_config['model'] else None,
-                    init_cfg=extra_config['model']['init_cfg'] if 'init_cfg' in extra_config['model'] else None
-                )
+                if 'model' in extra_config['model'] and \
+                    'student' in extra_config['model']['model'] and \
+                    'teacher' in extra_config['model']['model']:
+                    cfg.model = dict(
+                        type=extra_config['model']['type'],
+                        model=dict(
+                            teacher=extra_config['model']['model']['teacher'],
+                            student=extra_config['model']['model']['student']
+                        ),
+                        train_cfg=extra_config['model']['train_cfg'] if 'train_cfg' in extra_config['model'] else None,
+                        test_cfg=extra_config['model']['test_cfg'] if 'test_cfg' in extra_config['model'] else None,
+                        init_cfg=extra_config['model']['init_cfg'] if 'init_cfg' in extra_config['model'] else None
+                    )
+                    
+                    if cfg.model.model.teacher is None:
+                        cfg.model.model.teacher = default_model_cfg
+                    if cfg.model.model.student is None:
+                        cfg.model.model.student = default_model_cfg
+                else:
+                    cfg.model = dict(
+                        type=extra_config['model']['type'],
+                        model=default_model_cfg,
+                        train_cfg=extra_config['model']['train_cfg'] if 'train_cfg' in extra_config['model'] else None,
+                        test_cfg=extra_config['model']['test_cfg'] if 'test_cfg' in extra_config['model'] else None,
+                        init_cfg=extra_config['model']['init_cfg'] if 'init_cfg' in extra_config['model'] else None
+                    )
 
+            # step3.5: 模型运行时hooks扩展
             if 'custom_hooks' in extra_config:
                 hooks = extra_config['custom_hooks']
                 if not isinstance(hooks, list):
@@ -185,19 +231,23 @@ def main():
                     else:
                         custom_hooks = hooks
             
+            # step3.6: 模型其他方面扩展
             if 'optimizer' in extra_config:
                 cfg.optimizer = extra_config['optimizer']
             if 'optimizer_config' in extra_config:
                 cfg.optimizer_config = extra_config['optimizer_config']
             if 'lr_config' in extra_config:
                 cfg.lr_config = extra_config['lr_config']
-    
+            if 'max_epochs' in extra_config:
+                cfg.max_epochs = extra_config['max_epochs']
+
     # step4 添加root (运行时，输出结果保存的根目录地址)
-    cfg.root = nn_args.root  
+    cfg.root = nn_args.root if nn_args.root != '' else './'
+    cfg.root = os.path.join(cfg.root, nn_args.exp)
     # step4.1 添加root地址（影响checkpoint_config, evaluation）
-    if nn_args.root != '':
-        cfg.checkpoint_config.out_dir = os.path.join(nn_args.root, nn_args.exp)
-        cfg.evaluation.out_dir = os.path.join(nn_args.root, nn_args.exp)
+    if cfg.root != '':
+        cfg.checkpoint_config.out_dir = cfg.root
+        cfg.evaluation.out_dir = cfg.root
 
     # step5: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
@@ -205,7 +255,7 @@ def main():
         trainer = Trainer(
             cfg, 
             './', 
-            nn_args.gpu_id, # 对于多卡运行环境,会自动忽略此参数数值
+            int(nn_args.gpu_id), # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed, 
             diff_seed=nn_args.diff_seed, 
             deterministic=nn_args.deterministic, 
@@ -227,7 +277,7 @@ def main():
         tester = Tester(
             cfg, 
             './',
-            nn_args.gpu_id, # 对于多卡运行环境,会自动忽略此参数数值
+            int(nn_args.gpu_id), # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed)
         tester.config_model(checkpoint=nn_args.checkpoint)
         tester.evaluate()
@@ -236,7 +286,7 @@ def main():
         print(f'nn_args.distributed {nn_args.distributed}')
         print(f'nn_args.gpu-id {nn_args.gpu_id}')
         print(f'nn_args.checkpoint {nn_args.checkpoint}')        
-        ac = Activelearning(cfg, './', nn_args.gpu_id, distributed=nn_args.distributed)
+        ac = Activelearning(cfg, './', int(nn_args.gpu_id), distributed=nn_args.distributed)
         ac.config_model(checkpoint=nn_args.checkpoint, revise_keys=[('^','model.')])
         ac.select(nn_args.exp)
     elif nn_args.process == 'export':

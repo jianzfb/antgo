@@ -27,7 +27,7 @@ def get_host_info():
 
 
 def get_time_str():
-    return time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    return time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
 
 
 def obj_from_dict(info, parent=None, default_args=None):

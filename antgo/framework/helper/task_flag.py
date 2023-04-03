@@ -9,9 +9,7 @@ def running_flag(root):
     if rank == 0:
         file_client = \
                 FileClient.infer_client(None, root)
-        os.system('touch RUNNING')
-        file_client.put_text('', root)
-        os.system('rm RUNNING')
+        file_client.put(b'', f'{root}/RUNNING')
 
 
 def finish_flag(root):
@@ -20,9 +18,7 @@ def finish_flag(root):
     if rank == 0:        
         file_client = \
                 FileClient.infer_client(None, root)        
-        os.system('touch FINISH')
-        file_client.put_text('', root)
-        os.system('rm FINISH')
+        file_client.put(b'', f'{root}/FINISH')
 
 
 def stop_flag(root):
@@ -31,6 +27,4 @@ def stop_flag(root):
     if rank == 0:     
         file_client = \
                 FileClient.infer_client(None, root)        
-        os.system('touch STOP')
-        file_client.put_text('', root)
-        os.system('rm STOP')
+        file_client.put(b'', f'{root}/STOP')

@@ -10,12 +10,11 @@ import git
 import logging
 import shutil
 from antgo import config
-from antgo.ant.client import *
 import json
 from pprint import pprint
 import time
 from antgo.framework.helper.utils import Config
-
+from antgo.ant.client import *
 
 
 def prepare_project_environment(project_git, project_branch, project_commit):
@@ -103,32 +102,8 @@ def generate_project_exp_example(template_project_folder, target_folder):
         shutil.copy(os.path.join(template_project_folder, 'README.md'), target_folder)
 
 
-def exp_basic_info():
-    return {
-        "exp": "", 
-        "id": "",
-        "branch": "", 
-        "commit": "", 
-        "metric": {}, 
-        "dataset": {"test": "", "train": []},
-        "checkpoint": "", 
-        "create_time": time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time())), 
-        "finish_time": "",
-        "state": "",    # running, finish, stop, default
-        "stage": "",    # which stage of progress
-    }
-
-
-def dataset_basic_info():
-    return {
-        "tag": "",
-        "num": 0,
-        "status": True,
-        'address': ""
-    }
-
-
 def project_add_action(action_name, args):
+    assert(args.project)
     if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} not existed.')
         return        
@@ -136,7 +111,7 @@ def project_add_action(action_name, args):
     project_info = {}
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp) 
-        
+
     if action_name == 'expert':
         assert(args.exp in project_info['exp'])
         assert(args.id is not None)
@@ -146,13 +121,25 @@ def project_add_action(action_name, args):
             logging.error(f'{exp_with_id} has existed in project {args.project}')
             return
 
-        project_info['expert'].append(exp_with_id)
+        project_info['expert'].append(exp_with_id)        
     elif action_name == 'product':
+        assert(args.project)
+        assert(args.exp)
+        if args.exp not in project_info['exp']:
+            logging.error(f'Exp {args.exp} not in project exp list.')
+            return
         assert(args.exp in project_info['exp'])    
         project_info['product'] = args.exp
+
+        # 因为要触发后台，任务调度服务，提前保存项目信息
+        with open(os.path.join(config.AntConfig.task_factory, f'{args.project}.json'), 'w') as fp:
+            json.dump(project_info, fp)  
+
         ######### trigger:start #########
-        get_client().trigger('product')
+        # 重新训练产品模型（监督训练->半监督训练->蒸馏训练）
+        get_client().trigger(f'{args.project}.product')
         ######### trigger:end   #########        
+        return
     elif action_name == 'baseline':
         assert(args.exp in project_info['exp'])   
         assert(args.id is not None)
@@ -169,10 +156,16 @@ def project_add_action(action_name, args):
                 'address': args.address
             }
         )
+
+        # 因为要触发后台，任务调度服务，提前保存项目信息
+        with open(os.path.join(config.AntConfig.task_factory, f'{args.project}.json'), 'w') as fp:
+            json.dump(project_info, fp)  
+
         ######### trigger:start #########
-        get_client().trigger('train/label')
+        # 基于更新后的有标签数据，基于当前最佳产品模型，重新监督训练/蒸馏训练
+        get_client().trigger(f'{args.project}.train/label')
         ######### trigger:end   #########
-        
+        return
     elif action_name == 'train/unlabel':
         assert(args.address is not None)
         project_info['dataset']['train']['unlabel'].append(
@@ -183,10 +176,16 @@ def project_add_action(action_name, args):
                 'address': args.address
             }
         )
+
+        # 因为要触发后台，任务调度服务，提前保存项目信息
+        with open(os.path.join(config.AntConfig.task_factory, f'{args.project}.json'), 'w') as fp:
+            json.dump(project_info, fp)  
+
         ######### trigger:start #########
-        get_client().trigger('train/unlabel')
+        # 基于更新后的无标签数据，基于当前最佳产品模型，重新半监督模型训练
+        get_client().trigger(f'{args.project}.train/unlabel')
         ######### trigger:end   #########
-                
+        return
     elif action_name == 'test':
         assert(args.address is not None)
         project_info['dataset']['test'] = {
@@ -212,9 +211,10 @@ def project_add_action(action_name, args):
 
 
 def project_del_action(action_name, args):
+    assert(args.project)
     if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} not existed.')
-        return        
+        return
 
     project_info = {}
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
@@ -224,12 +224,13 @@ def project_del_action(action_name, args):
         assert(args.exp in project_info['exp'])
         assert(args.id is not None)
         exp_with_id = f'{args.exp}/{args.id}'
-                
+
         if exp_with_id not in project_info['expert']:
             logging.error(f'{exp_with_id} not exist in project {args.project}')
             return
-        
+
         project_info['expert'].remove(exp_with_id)
+        logging.info(f'Del expert {exp_with_id} of project {args.project}')
     elif action_name == 'train/label':
         after_list = []
         for info in project_info['dataset']['train']['label']:
@@ -238,6 +239,7 @@ def project_del_action(action_name, args):
             after_list.append(info)
         
         project_info['dataset']['train']['label'] = after_list
+        logging.info(f'Del train/label with tags {args.tags} of project {args.project}')
     elif action_name == 'train/unlabel':
         after_list = []
         for info in project_info['dataset']['train']['unlabel']:
@@ -246,10 +248,13 @@ def project_del_action(action_name, args):
             after_list.append(info)
         
         project_info['dataset']['train']['unlabel'] = after_list
+        logging.info(f'Del train/unlabel with tags {args.tags} of project {args.project}')
     elif action_name == 'test':
         project_info['dataset']['test'] = {}
+        logging.info(f'Del test dataset of project {args.project}')
     elif action_name == 'val':
         project_info['dataset']['val'] = {}
+        logging.info(f'Del val dataset of project {args.project}')
     else:
         logging.error(f'Command {action_name} dont support.')
 

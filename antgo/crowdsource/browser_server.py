@@ -780,7 +780,7 @@ class DownloadApiHandler(BaseHandler):
       with open(os.path.join(self.dump_folder, self.db['state'], file_name), 'r') as fp:
         package_data[data_id] = json.load(fp)
               
-    now_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+    now_time = time.strftime("%Y-%m-%dx%H:%M:%S", time.localtime(time.time()))
     download_file = f'{now_time}.json'
     download_path = os.path.join(self.dump_folder, download_file)
     with open(download_path, 'w') as fp:

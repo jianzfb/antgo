@@ -31,7 +31,7 @@ from antgo.framework.helper.models.proxy_module import *
 from antgo.framework.helper.models.distillation import *
 from antgo.framework.helper.runner.hooks.hook import *
 from antgo.framework.helper.utils import Config, build_from_cfg
-from antgo.antgo.framework.helper.task_flag import *
+from antgo.framework.helper.task_flag import *
 import traceback
 from thop import profile
 import copy
@@ -198,7 +198,7 @@ class BaseTrainer(object):
         self._config_training_hooks()
 
         # an ugly workaround to make .log and .log.json filenames the same
-        self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+        self.runner.timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
 
         if self.distributed:
             if isinstance(self.runner, EpochBasedRunner):

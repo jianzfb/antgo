@@ -159,7 +159,7 @@ class Trainer(BaseTrainer):
         # set multi-process settings
         setup_multi_processes(self.cfg)
 
-        device = 'cpu' if gpu_id < 0 else 'cuda'
+        device = 'cpu' if int(gpu_id) < 0 else 'cuda'
         self.cfg.gpu_ids = [gpu_id] if gpu_id >= 0 else []
         if self.distributed:
             init_dist(**self.cfg.get('dist_params', {}))
@@ -301,7 +301,7 @@ class Trainer(BaseTrainer):
                 lr_scheduler=lr_scheduler))
 
         # an ugly workaround to make .log and .log.json filenames the same
-        self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+        self.runner.timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
 
         optimizer_config = None
         if not isinstance(optimizer, dict):
@@ -344,9 +344,9 @@ class Trainer(BaseTrainer):
                     build_from_cfg(eval_cfg, HOOKS), priority='LOW'
                 )
 
-        if resume_from is not None:
+        if resume_from:
             self.runner.resume(resume_from)
-        elif load_from is not None:
+        elif load_from:
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
 
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
@@ -545,7 +545,7 @@ class Trainer(BaseTrainer):
                 meta=self.meta))
 
         # an ugly workaround to make .log and .log.json filenames the same
-        self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+        self.runner.timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
 
         optimizer_config = self.cfg.optimizer_config
         if self.distributed and 'type' not in self.cfg.optimizer_config:

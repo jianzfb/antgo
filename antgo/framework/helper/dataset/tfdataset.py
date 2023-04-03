@@ -150,9 +150,16 @@ class TFDataset(torch.utils.data.IterableDataset):
         super().__init__()
         self.data_path_list = data_path_list
         self.index_path_list = []
-        for tfrecord_file in self.data_path_list:
+        for i in range(len(self.data_path_list)):
+            tfrecord_file = self.data_path_list[i]
             folder = os.path.dirname(tfrecord_file)
-            index_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['index'])
+            if tfrecord_file.endswith('tfrecord') or tfrecord_file.endswith('index'):
+                index_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['index'])
+                self.data_path_list[i] = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['tfrecord'])
+            else:
+                index_file = tfrecord_file+'-index'
+                self.data_path_list[i] = tfrecord_file+'-tfrecord'
+            
             index_file = os.path.join(folder, index_file)
             self.index_path_list.append(index_file)
 

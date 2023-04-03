@@ -71,8 +71,8 @@ def DEFINE_nn_args():
         help='whether not to evaluate the checkpoint during training')
     group_gpus.add_argument(
         '--gpu-id',
-        type=int,
-        default=0,
+        type=str,
+        default='0',
         help='id of gpu to use '
         '(only applicable to non-distributed training)')
     parser.add_argument('--seed', type=int, default=None, help='random seed')

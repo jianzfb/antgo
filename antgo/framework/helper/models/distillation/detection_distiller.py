@@ -63,7 +63,7 @@
 
     def forward_train(self, 
                       image, 
-                      image_metas, 
+                      image_meta, 
                       **kwargs):
         """
         Args:
@@ -77,8 +77,8 @@
         Returns:
             dict[str, Tensor]: A dictionary of loss components(student's losses and distiller's losses).
         """
-        super().forward_train(image, image_metas, **kwargs)
-        student_loss = self.student.forward_train(image, image_metas, **kwargs)
+        super().forward_train(image, image_meta, **kwargs)
+        student_loss = self.student.forward_train(image, image_meta, **kwargs)
 
         with torch.no_grad():
             # 此处提出的是不包含head的feature

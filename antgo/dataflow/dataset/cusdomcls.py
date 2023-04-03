@@ -263,7 +263,7 @@ class CustomClsDataset(ClsDataset):
         data_infos = []
         for filename, gt_label in samples:
             info = {}
-            info['image_metas'] = {'filename': filename, 'img_prefix': self.data_prefix}
+            info['image_meta'] = {'filename': filename, 'img_prefix': self.data_prefix}
             info['image_file'] = os.path.join(self.data_prefix,filename)
             if not os.path.exists(info['image_file']):
                 info['image_file'] = os.path.join(self.data_prefix, self.train_or_test, filename)            

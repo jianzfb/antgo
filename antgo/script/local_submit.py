@@ -17,13 +17,13 @@ def local_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_s
     if task_name is not None:
         extra_config = prepare_extra_config(task_name, project_info)
         if extra_config is not None:
-            with open('./extra-config.py', 'w') as fp:
+            with open('./extra-config.json', 'w') as fp:
                 json.dump(extra_config, fp)    
-            sys_argv += " --extra-config=./extra-config.py"
+            
+            sys_argv += " --extra-config=./extra-config.json"
 
     # 后台运行
-    sys_argv = f'nohup {sys_argv} > {project_name}.log 2>&1 &'
-    process = subprocess.Popen(sys_argv, shell=False)
+    process = subprocess.Popen(sys_argv, shell=True)
     with open(os.path.join(config.AntConfig.factory, '.local_submit_process.pid'), 'w') as fp:
         fp.write(f'{process.pid}')
 

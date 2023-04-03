@@ -137,7 +137,7 @@ class ImageClassifier(BaseClassifier):
         losses.update(loss)
         return losses
     
-    def simple_test(self, image, image_metas=None, **kwargs):
+    def simple_test(self, image, image_meta=None, **kwargs):
         """Test without augmentation."""
         x = self.extract_feat(image)
         res = self.head.simple_test(x, **kwargs)

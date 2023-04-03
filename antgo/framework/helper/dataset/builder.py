@@ -61,7 +61,8 @@ def _concat_dataset(cfg, default_args=None):
 def build_dataset(cfg, default_args=None):
     from .dataset_wrappers import (ConcatDataset, RepeatDataset, IterConcatDataset)
     if isinstance(cfg, (list, tuple)):
-        if cfg[0].type == 'TFDataset':
+        type_list = [cfg[i].type for i in range(len(cfg))]
+        if 'TFDataset' in type_list:
             dataset = IterConcatDataset([build_dataset(c, default_args) for c in cfg])
         else:
             dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])

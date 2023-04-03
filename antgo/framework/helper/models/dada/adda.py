@@ -32,8 +32,8 @@ class Adda(BaseModule):
         # 构建discriminator
         pass
 
-    def forward_train(self, image, image_metas, **kwargs):
-        super().forward_train(image, image_metas, **kwargs)
+    def forward_train(self, image, image_meta, **kwargs):
+        super().forward_train(image, image_meta, **kwargs)
 
         source_feature = self.source_model.extract_feature
         target_feature = self.target_model.extract_feature

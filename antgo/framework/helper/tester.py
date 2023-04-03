@@ -26,7 +26,7 @@ from antgo.framework.helper.utils.setup_env import *
 from antgo.framework.helper.runner.checkpoint import load_checkpoint
 from antgo.framework.helper.runner.test import multi_gpu_test, single_gpu_test
 from antgo.framework.helper.cnn.utils import fuse_conv_bn
-from antgo.antgo.framework.helper.task_flag import *
+from antgo.framework.helper.task_flag import *
 from thop import profile
 import json
 
@@ -109,7 +109,7 @@ class Tester(object):
         if self.work_dir is not None and rank == 0:
             if not os.path.exists(osp.abspath(self.work_dir)):
                 os.makedirs(osp.abspath(self.work_dir))
-            timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+            timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
             json_file = osp.join(self.work_dir, f'eval_{timestamp}.json')
 
         eval_cfg = self.cfg.get('evaluation', {}).copy()

@@ -169,8 +169,9 @@ class DecodeImage(BaseOperator):
 
 
 class Meta(BaseOperator):
-    def __init__(self, keys):
+    def __init__(self, keys, with_shape=False):
         self.keys = keys
+        self.with_shape = with_shape
     
     def __call__(self, sample, context=None):
         if 'image_meta' not in sample:
@@ -178,7 +179,10 @@ class Meta(BaseOperator):
             
         for key in self.keys:
             sample['image_meta'][key] = sample[key]
-        
+
+        if self.with_shape:
+            sample['image_meta']['image_shape'] = (sample['image'].shape[0], sample['image'].shape[1])
+
         return sample
 
 
@@ -657,8 +661,8 @@ class RandomFlipImage(BaseOperator):
             if 'semantic' in sample.keys() and sample['semantic'] is not None:
                 sample['semantic'] = sample['semantic'][:, ::-1]
 
-            if 'image_metas' in sample:
-                sample['image_metas']['flipped'] = True
+            if 'image_meta' in sample:
+                sample['image_meta']['flipped'] = True
             sample['image'] = im
 
         # vis_2d_boxes_in_image(sample['image'].copy(), sample['bboxes'], sample['labels'], './d.png') 

@@ -128,7 +128,6 @@ class ConcatDataset(_ConcatDataset):
 @DATASETS.register_module()
 class IterConcatDataset(torch.utils.data.ChainDataset):
     def __init__(self, datasets, samples_per_gpu=None) -> None:
-        datasets = [build_from_cfg(c, DATASETS, None) for c in datasets]
         super().__init__(datasets)
         self.samples_per_gpu = samples_per_gpu
 

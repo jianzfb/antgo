@@ -77,7 +77,7 @@ def main():
     if cfg.work_dir is not None and rank == 0:
         if not os.path.exists(osp.abspath(cfg.work_dir)):
             os.makedirs(osp.abspath(cfg.work_dir))
-        timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+        timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
         json_file = osp.join(cfg.work_dir, f'eval_{timestamp}.json')
 
     # build the dataloader

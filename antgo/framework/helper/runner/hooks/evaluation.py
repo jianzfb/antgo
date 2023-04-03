@@ -8,6 +8,8 @@ from torch.utils.data import DataLoader
 
 from antgo.framework.helper.fileio import FileClient
 from antgo.framework.helper.utils import is_seq_of
+import json
+import os
 from .hook import Hook
 from .logger import LoggerHook
 
@@ -205,6 +207,7 @@ class EvalHook(Hook):
             # 在out_dir没有被设置时，继承runner.work_dir的工作目录
             self.out_dir = runner.work_dir
 
+        # 存储控制对象
         self.file_client = FileClient.infer_client(self.file_client_args,
                                                    self.out_dir)
         # 添加固定路径格式
@@ -262,12 +265,14 @@ class EvalHook(Hook):
         needed_info = self.metric_func.keys()['gt']
         results = self.test_fn(runner.model, self.dataloader, needed_info)
         runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
-        key_score = self.evaluate(runner, results)
+        key_score, metric_info = self.evaluate(runner, results)
         # the key_score may be `None` so it needs to skip the action to save
         # the best checkpoint
+        
         if self.save_best and key_score:
             self._save_ckpt(runner, key_score)
-
+            self._save_metric(runner, metric_info)
+        
     def _should_evaluate(self, runner):
         """Judge whether to perform evaluation.
 
@@ -303,6 +308,20 @@ class EvalHook(Hook):
                 return False
         return True
 
+    def _save_metric(self, runner, info):
+        current = ''
+        if self.by_epoch:
+            current = f'epoch_{runner.epoch + 1}'
+            cur_type, cur_time = 'epoch', runner.epoch + 1
+        else:
+            current = f'iter_{runner.iter + 1}'
+            cur_type, cur_time = 'iter', runner.iter + 1
+
+        info.update({
+            'current': current    
+        })
+        self.file_client.put_text(json.dumps(info), os.path.join(self.out_dir, 'best.json'))
+    
     def _save_ckpt(self, runner, key_score):
         """Save the best checkpoint.
 
@@ -328,8 +347,9 @@ class EvalHook(Hook):
                 runner.logger.info(
                     (f'The previous best checkpoint {self.best_ckpt_path} was '
                      'removed'))
-                
-            best_ckpt_name = f'best_{self.key_indicator}_{best_score}_{current}.pth'
+
+            # best_ckpt_name = f'best_{self.key_indicator}_metric_{best_score}_cur_{current}.pth'
+            best_ckpt_name = 'best.pth'
             self.best_ckpt_path = self.file_client.join_path(self.out_dir, best_ckpt_name)            
             runner.save_checkpoint(
                 self.out_dir,
@@ -371,10 +391,6 @@ class EvalHook(Hook):
         runner.log_buffer.ready = True
 
         if self.save_best is not None:
-            # If the performance of model is pool, the `eval_res` may be an
-            # empty dict and it will raise exception when `self.save_best` is
-            # not None. More details at
-            # https://github.com/open-mmlab/mmdetection/issues/6265.
             if not eval_res:
                 warnings.warn(
                     'Since `eval_res` is an empty dict, the behavior to save '
@@ -384,9 +400,14 @@ class EvalHook(Hook):
             if self.key_indicator == 'auto':
                 # infer from eval_results
                 self._init_rule(self.rule, list(eval_res.keys())[0])
-            return eval_res[self.key_indicator]
 
-        return None
+            eval_metric_info = {
+                'score': eval_res,
+                'indicator': self.key_indicator
+            }
+            return eval_res[self.key_indicator], eval_metric_info
+
+        return None, None
 
 
 class DistEvalHook(EvalHook):
@@ -516,8 +537,9 @@ class DistEvalHook(EvalHook):
             # 仅在master节点进行统计模型分数
             print('\n')
             runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
-            key_score = self.evaluate(runner, results)
+            key_score, metric_info = self.evaluate(runner, results)
             # the key_score may be `None` so it needs to skip the action to
             # save the best checkpoint
             if self.save_best and key_score:
                 self._save_ckpt(runner, key_score)
+                self._save_metric(runner, metric_info)

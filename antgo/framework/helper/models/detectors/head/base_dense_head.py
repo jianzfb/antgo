@@ -20,7 +20,7 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
 
     def forward_train(self,
                       x,
-                      image_metas,
+                      image_meta,
                       gt_bbox,
                       gt_class=None,
                       gt_bboxes_ignore=None,
@@ -28,7 +28,7 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
         """
         Args:
             x (list[Tensor]): Features from FPN.
-            image_metas (list[dict]): Meta information of each image, e.g.,
+            image_meta (list[dict]): Meta information of each image, e.g.,
                 image size, scaling factor, etc.
             gt_bboxes (Tensor): Ground truth bboxes of the image,
                 shape (num_gts, 4).
@@ -47,9 +47,9 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
         outs = self(x)
 
         if gt_class is None:
-            loss_inputs = outs + (gt_bbox, image_metas)
+            loss_inputs = outs + (gt_bbox, image_meta)
         else:
-            loss_inputs = outs + (gt_bbox, gt_class, image_metas)
+            loss_inputs = outs + (gt_bbox, gt_class, image_meta)
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
         return losses
 

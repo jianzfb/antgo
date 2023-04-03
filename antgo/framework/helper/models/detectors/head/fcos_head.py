@@ -227,7 +227,7 @@ class FcosHead(BaseDenseHead):
         coords = torch.stack([shift_x, shift_y], -1) + stride // 2
         return coords
 
-    def get_targets(self, gt_bboxes, gt_labels, feat_shape, image_metas):
+    def get_targets(self, gt_bboxes, gt_labels, feat_shape, image_meta):
         """Compute regression and classification targets in multiple images.
 
         Args:
@@ -248,8 +248,8 @@ class FcosHead(BaseDenseHead):
                - wh_offset_target_weight (Tensor): weights of wh and offset \
                    predict, shape (B, 2, H, W).
         """
-        img_h = image_metas[0]['image_shape'][0]
-        img_w = image_metas[0]['image_shape'][1]
+        img_h = image_meta[0]['image_shape'][0]
+        img_w = image_meta[0]['image_shape'][1]
         bs, _, feat_h, feat_w = feat_shape
 
         width_ratio = float(feat_w / img_w)
