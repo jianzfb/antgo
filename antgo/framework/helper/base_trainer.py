@@ -217,7 +217,7 @@ class BaseTrainer(object):
         except Exception:
             stop_flag(self.cfg.root)
             traceback.print_exc()
-        
+
     def start_eval(self, **kwargs):
         try:
             running_flag(self.cfg.root)

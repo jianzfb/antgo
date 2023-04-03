@@ -10,13 +10,13 @@ class ACModule(BaseModule):
     def __init__(self, model, test_cfg, train_cfg=None, init_cfg=None):
         super().__init__(init_cfg)
         self.model = build_from_cfg(model, MODELS)
-        
+
         # feature_from, uncertainty_from, bayesian_from
         self.test_cfg = test_cfg
  
     def forward(self, *args, **kwargs):
         out = {}
-        
+
         if self.test_cfg.get('feature_config', None) is not None:
             feature_extract_proxy = getattr(getattr(self.model, self.test_cfg.feature_config.from_name), 'forward', None)
             from_index = self.test_cfg.feature_config.from_index
@@ -32,7 +32,7 @@ class ACModule(BaseModule):
                 return x
 
             setattr(getattr(self.model, self.test_cfg.feature_config.from_name), 'forward', feature_extract_func)
-            
+
         if self.test_cfg.get('uncertainty_config', None) is not None:
             uncertainty_extract_proxy = getattr(self.model, self.test_cfg.uncertainty_config.from_name, None)
             with_sigmoid = self.test_cfg.uncertainty_config.with_sigmoid
@@ -51,7 +51,7 @@ class ACModule(BaseModule):
                 })
                 return x
             setattr(self.model, self.test_cfg.uncertainty_config.from_name, uncertainty_extract_func)
-            
+
         if self.test_cfg.get('bayesian_config', None) is not None:
             bayesian_proxy = getattr(self.model, self.test_cfg.bayesian_config.from_name, None)
             p = self.test_cfg.bayesian_config.p
@@ -60,7 +60,7 @@ class ACModule(BaseModule):
                 x = F.dropout(x, p,training=True)
                 return x
             setattr(self.model, self.test_cfg.bayesian_config.from_name, bayesian_func)
-            
+
         result = self.model(*args, **kwargs)
         out.update(result)
         return out

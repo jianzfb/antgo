@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import os
+import re
 import git
 import logging
 import shutil
@@ -313,12 +314,26 @@ def update_project_config(sub_action_name, args):
     if sub_action_name == 'project/semi':
         # 更新半监督方案配置
         # args.name 来检查是否是内置算法
+        if args.name == '' and args.config == '':
+            # 清空配置
+            project_info['tool']['semi']['method'] = ''
+            project_info['tool']['semi']['config'] = dict()
+
+            with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+                json.dump(project_info, fp)
+            logging.info(f'Success remove {sub_action_name} config')  
+            return    
+
         if not os.path.exists(args.config):
             if args.name not in ['dense', 'detmpl', 'mpl']:
                 logging.error(f'Missing config file, {sub_action_name} couldnt config')
                 return
             else:
                 args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
+
+        if not os.path.exists(args.config):
+            logging.error(f'Config file {args.config} not exist')
+            return
 
         # 读取配置
         assert(args.config.endswith('.py'))
@@ -332,12 +347,26 @@ def update_project_config(sub_action_name, args):
         )
     elif sub_action_name == 'project/distillation':
         # args.name 来检查是否是内置算法
+        if args.name == '' and args.config == '':
+            # 清空配置
+            project_info['tool']['distillation']['method'] = ''
+            project_info['tool']['distillation']['config'] = dict()
+
+            with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+                json.dump(project_info, fp)
+            logging.info(f'Success remove {sub_action_name} config')              
+            return    
+
         if not os.path.exists(args.config):
             if args.name not in ['dense', 'detmpl', 'mpl']:
                 logging.error(f'Missing config file, {sub_action_name} couldnt config')
                 return
             else:
                 args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
+
+        if not os.path.exists(args.config):
+            logging.error(f'Config file {args.config} not exist')
+            return
 
         # 读取配置
         assert(args.config.endswith('.py'))
@@ -351,10 +380,31 @@ def update_project_config(sub_action_name, args):
         )        
     elif sub_action_name == 'project/activelearning':
         # 更新主动学习方案配置
+        if args.name == '' and args.config == '':
+            # 清空配置
+            project_info['tool']['activelearning']['method'] = ''
+            project_info['tool']['activelearning']['config'] = dict()
+
+            with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+                json.dump(project_info, fp)
+            logging.info(f'Success remove {sub_action_name} config')              
+            return    
+
+        if not os.path.exists(args.config):
+            if args.name not in ['dense', 'detmpl', 'mpl', 'ac']:
+                logging.error(f'Missing config file, {sub_action_name} couldnt config')
+                return
+            else:
+                args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
+
+        if not os.path.exists(args.config):
+            logging.error(f'Config file {args.config} not exist')
+            return
+        
         # 读取配置
         assert(args.config.endswith('.py'))
         cfg = Config.fromfile(args.config)
-         
+
         # 设置主动学习算法的名字        
         project_info['tool']['activelearning']['method'] = args.name
         # 设置主动学习的配置

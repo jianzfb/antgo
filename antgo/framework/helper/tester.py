@@ -1,6 +1,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+from asyncio.log import logger
 
 import os
 import os.path as osp
@@ -84,7 +85,11 @@ class Tester(object):
 
         if checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
-        checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu', revise_keys=revise_keys)
+        
+        if checkpoint is None or checkpoint == '':
+            logger.error('Missing checkpoint file')
+        else:
+            checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu', revise_keys=revise_keys)
         
         if is_fuse_conv_bn:
             print('use fuse conv_bn')

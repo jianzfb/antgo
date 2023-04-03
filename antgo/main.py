@@ -11,7 +11,7 @@ import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
 from antgo.ant.utils import *
-from antgo.ant.client import get_client
+from antgo.ant.client import get_client, launch_server
 from antgo.command import *
 from antgo.framework.helper.tools.util import *
 from antgo.help import *
@@ -120,7 +120,7 @@ def main():
     with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
       fp.write(config_content)
     logging.warn('Using default config file.')
-  
+
   # 配置操作
   if action_name == 'config':
     config_data = {'FACTORY': '', 'USER_TOKEN': ''}
@@ -129,7 +129,7 @@ def main():
     config.AntConfig.parse_xml(config_xml)
     config_data['FACTORY'] = getattr(config.AntConfig, 'factory', '')
     config_data['USER_TOKEN'] = getattr(config.AntConfig, 'token', '')
-    
+
     if args.root is not None:
       config_data['FACTORY'] = args.root
     if args.token is not None:
@@ -167,7 +167,9 @@ def main():
 
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
-    os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
+    # os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
+    # return
+    launch_server(args.port, args.root)
     return
 
   # 检查是否后台服务活跃

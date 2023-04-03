@@ -48,10 +48,10 @@ def main():
                             if file_name.startswith(check_prefix):
                                 is_existed = True
                                 break
-                        
+
                         if is_existed:
                             continue
-                                            
+
                         if not data_info['address'].endswith('*'):
                             data_info['address'] += '*'
                         status = environment.hdfs_client.get(data_info['address'], f"dataset-storage/{data_stage}")
@@ -73,7 +73,7 @@ def main():
                             if os.path.exists(f'{target_data_folder}/{file_name}'):
                                 # 目标文件已经存在，直接跳过
                                 continue
-                                                        
+                      
                             if file_name.startswith(check_prefix):
                                 os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
 
@@ -98,7 +98,7 @@ def main():
         for data_stage in ['train', 'val', 'test']:
             if not os.path.exists(f"dataset-storage/{data_stage}/"):
                 os.makedirs(f"dataset-storage/{data_stage}/")
-            
+
             for data_record_path in getattr(cfg.data, data_stage).data_path_list:
                 if data_record_path.startswith('hdfs'):
                     # hdfs
@@ -108,10 +108,10 @@ def main():
                         if file_name.startswith(check_prefix):
                             is_existed = True
                             break
-                    
+
                     if is_existed:
                         continue
-                    
+
                     if not data_record_path.endswith('*'):
                         data_record_path += '*'
                     status = environment.hdfs_client.get(data_record_path, f"dataset-storage/{data_stage}")
@@ -127,13 +127,13 @@ def main():
                     # 本地路径
                     data_folder = os.path.dirname(data_record_path)
                     target_data_folder = f"dataset-storage/{data_stage}"
-                    
+
                     check_prefix = data_record_path.split('/')[-1]
                     for file_name in os.listdir(data_folder):
                         if os.path.exists(f'{target_data_folder}/{file_name}'):
                             # 目标文件已经存在，直接跳过
                             continue
-                        
+
                         if file_name.startswith(check_prefix):
                             os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
 

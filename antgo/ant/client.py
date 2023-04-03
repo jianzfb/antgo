@@ -80,7 +80,7 @@ def dataset_basic_info():
 class ServerBase(object):
     def __init__(self, *args, **kwargs) -> None:
         super(ServerBase, self).__init__()
-        self.root = kwargs.get('root', '')
+        self.root = kwargs.get('root', './')
         self.timer = 10         # 10分钟一次监控, debug 10*60
         self.task_queue = PriorityQueue()
         self.task_set = set()       # 用于校验是否存在同类型任务
@@ -89,7 +89,9 @@ class ServerBase(object):
         # semi-supervised       优先级3
         # distillation          优先级3
         # activelearning        优先级1
-        self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
+        # self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised'),('supervised','semi-supervised'),('supervised','distillation')]
+        self.task_order = [('activelearning', 'label'),('supervised', 'activelearning')]
+
         # self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised')]
         # self.task_order = [('supervised','semi-supervised')]
         self.task_priority = {'activelearning': 1, 'supervised':2,'semi-supervised':3, 'distillation':3}
@@ -152,15 +154,19 @@ class ServerBase(object):
         elif project_event == 'train/unlabel':
             # 启动主动学习，挑选等待标注样本
             next_exp_stage = 'activelearning'
-            if next_exp_stage not in self.task_set:
-                self.task_set.add(next_exp_stage)
-                self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))       
+            if len(project_info['tool']['activelearning']['config']) > 0:
+                # 存在主动学习的配置方案
+                if next_exp_stage not in self.task_set:
+                    self.task_set.add(next_exp_stage)
+                    self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))       
 
             # 启动半监督学习，直接利用无标签样本训练产品模型
             next_exp_stage = 'semi-supervised'
-            if next_exp_stage not in self.task_set:
-                self.task_set.add(next_exp_stage)
-                self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))  
+            if len(project_info['tool']['semi']['config']) > 0:
+                # 存在半监督学习的配置方案
+                if next_exp_stage not in self.task_set:
+                    self.task_set.add(next_exp_stage)
+                    self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))  
 
             self.schedule(project_name, project_info, exp_info, auto_find_next_task=False)
             return True

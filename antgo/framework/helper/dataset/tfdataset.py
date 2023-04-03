@@ -145,8 +145,8 @@ class TFDataset(torch.utils.data.IterableDataset):
                  compression_type: typing.Optional[str] = None,
                  infinite: typing.Optional[bool] = False,
                  inputs_def=None,
-                 sample_num_equalizer=True
-                 ) -> None:
+                 sample_num_equalizer=True,
+                 auto_ext_info=[]) -> None:
         super().__init__()
         self.data_path_list = data_path_list
         self.index_path_list = []
@@ -159,8 +159,6 @@ class TFDataset(torch.utils.data.IterableDataset):
             else:
                 index_file = tfrecord_file+'-index'
                 self.data_path_list[i] = tfrecord_file+'-tfrecord'
-            
-            index_file = os.path.join(folder, index_file)
             self.index_path_list.append(index_file)
 
         if description is None:
@@ -264,6 +262,11 @@ class TFDataset(torch.utils.data.IterableDataset):
                         raise TypeError('strong_pipeline must be a dict')
         self.infinite = infinite
 
+        # 自动扩展样本信息
+        self.auto_ext_info = auto_ext_info
+        # 样本计数
+        self.sample_id = 0
+        
         num_samples_list = []
         self.num_samples = 0
         for i, index_path in enumerate(self.index_path_list):
@@ -362,6 +365,10 @@ class TFDataset(torch.utils.data.IterableDataset):
         return warp_ins
             
     def __transform(self, sample):
+        # 样本计数 +1
+        self.sample_id += 1
+
+        # 转换样本
         new_sample = {}
         for k in sample.keys():
             if not k.startswith('__'):
@@ -379,6 +386,11 @@ class TFDataset(torch.utils.data.IterableDataset):
         weak_sample = None
         strong_sample = None
         if len(self.weak_pipeline) > 0 or len(self.strong_pipeline) > 0:
+            # 扩展样本信息
+            for ext_key in self.auto_ext_info:
+                if ext_key not in sample:
+                    sample[ext_key] = f'{self.sample_id}'
+
             weak_sample = copy.deepcopy(sample)
             for transform in self.weak_pipeline:
                 weak_sample = transform(weak_sample)
@@ -398,14 +410,22 @@ class TFDataset(torch.utils.data.IterableDataset):
             strong_sample = self._arrange(strong_sample, self._fields, self._alias)
             return [weak_sample, strong_sample]
         else:
+            # 扩展样本信息
+            for ext_key in self.auto_ext_info:
+                if ext_key not in sample:
+                    sample[ext_key] = f'{self.sample_id}'
+
             for transform in self.pipeline:
                 sample = transform(sample)
-                
-            # arange warp
+
+            # arange warp       
             sample = self._arrange(sample, self._fields, self._alias)        
             return sample
 
     def __iter__(self):
+        # 计数
+        self.sample_id = 0
+        
         worker_info = torch.utils.data.get_worker_info()
         remain_sample_num = 0
         if worker_info is not None:
@@ -422,7 +442,7 @@ class TFDataset(torch.utils.data.IterableDataset):
 
         if not self.sample_num_equalizer:
             remain_sample_num = 0
-        
+
         loaders = [functools.partial(tfrecord_loader, data_path=data_path,
                                     index_path=index_path,
                                     shard=shard,

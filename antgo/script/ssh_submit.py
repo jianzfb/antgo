@@ -35,10 +35,12 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     # 添加扩展配置：保存到当前目录下并一同提交
     if task_name is not None:
         extra_config = prepare_extra_config(task_name, project_info)
-        if extra_config is not None:
-            with open('./extra-config.py', 'w') as fp:
-                json.dump(extra_config, fp)    
-            sys_argv += " --extra-config=./extra-config.py"
+        if extra_config is None:
+            return False
+
+        with open('./extra-config.py', 'w') as fp:
+            json.dump(extra_config, fp)    
+        sys_argv += " --extra-config=./extra-config.py"
 
     # 执行提交命令
     if password == '':

@@ -22,9 +22,9 @@ class IterableDatasetFilter(torch.utils.data.IterableDataset):
             with open(ann_file, 'r') as fp:
                 content = json.load(fp)
             for sample_info in content:
-                sample_id = f'{sample_info["image_file"].split("/")[1:]}'
+                sample_id = f'{sample_info["image_file"].split("/")[1]}'
                 self.not_in_map[sample_id] = True
-            
+
     def __iter__(self):
         dataset_iter = iter(self.dataset)
         while True:

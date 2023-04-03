@@ -16,11 +16,12 @@ def local_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_s
 
     if task_name is not None:
         extra_config = prepare_extra_config(task_name, project_info)
-        if extra_config is not None:
-            with open('./extra-config.json', 'w') as fp:
-                json.dump(extra_config, fp)    
-            
-            sys_argv += " --extra-config=./extra-config.json"
+        if extra_config is None:
+            return False
+        
+        with open('./extra-config.json', 'w') as fp:
+            json.dump(extra_config, fp)      
+        sys_argv += " --extra-config=./extra-config.json"
 
     # 后台运行
     process = subprocess.Popen(sys_argv, shell=True)

@@ -169,20 +169,36 @@ class DecodeImage(BaseOperator):
 
 
 class Meta(BaseOperator):
-    def __init__(self, keys, with_shape=False):
+    def __init__(self, 
+                 keys=[],
+                 with_sample_shape=False, 
+                 with_sample_file=False, 
+                 with_sample_id=False, 
+                 with_sample_tag=False):
         self.keys = keys
-        self.with_shape = with_shape
-    
+        self.with_sample_shape = with_sample_shape
+        self.with_sample_file = with_sample_file
+        self.with_sample_id = with_sample_id
+        self.with_sample_tag = with_sample_tag
+
     def __call__(self, sample, context=None):
         if 'image_meta' not in sample:
             sample['image_meta'] = {}
-            
+
         for key in self.keys:
             sample['image_meta'][key] = sample[key]
 
-        if self.with_shape:
+        if self.with_sample_shape:
             sample['image_meta']['image_shape'] = (sample['image'].shape[0], sample['image'].shape[1])
 
+        if self.with_sample_file:
+            sample['image_meta']['image_file'] = ''
+
+        if self.with_sample_id:
+            sample['image_meta']['id'] = ''
+
+        if self.with_sample_tag:
+            sample['image_meta']['tag'] = ''
         return sample
 
 

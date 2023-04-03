@@ -331,10 +331,12 @@ class Activelearning(Tester):
         # 默认使用单卡进行主动学习即可
         assert(not distributed)
 
-        # 远程下载历史数据
+        # 远程下载历史数据        
         if getattr(cfg, 'root', '') != '':
-            if environment.hdfs_client.exists(os.path.join(cfg.root, 'activelearning')):
-                environment.hdfs_client.get(os.path.join(cfg.root, 'activelearning'), './')
+            environment.hdfs_client.mkdir(self.cfg.root, True)
+            dir_name = os.path.dirname(cfg.root)
+            if environment.hdfs_client.exists(os.path.join(dir_name, 'activelearning')):
+                environment.hdfs_client.get(os.path.join(dir_name, 'activelearning'), './')
 
         if not os.path.exists('./activelearning'):
             os.mkdir('./activelearning')
@@ -350,10 +352,10 @@ class Activelearning(Tester):
             dataset=build_from_cfg(cfg.data.test, DATASETS, None),
             not_in_anns=has_finish_anns
         )
-        
+
         cfg.data.test = unlabel_filter_warp
         super().__init__(cfg, work_dir, gpu_id, distributed)
-        
+
         # 采样函数
         self.sampling_fn = build_from_cfg(cfg.model.init_cfg.sampling_fn, UNCERTAINTY_SAMPLING)
         self.sampling_count = cfg.model.init_cfg.sampling_count # 计算预测次数
@@ -361,8 +363,8 @@ class Activelearning(Tester):
 
     def select(self, exp_name):
         # 添加运行标记
-        running_flag(self.cfg)
-        
+        running_flag(self.cfg.root)
+
         rank, _ = get_dist_info()        
         sample_results = None
         for _ in range(self.sampling_count):
@@ -410,7 +412,7 @@ class Activelearning(Tester):
 
             # TODO，每个样本如何进行唯一标识
             selected_sample_ids = [f"{sample['tag']}/{sample['image_file']}" for sample in sampling_list]
-            
+
             image_file_name_list = []
             compare_pos = 0
             for sample in self.dataset:
@@ -456,20 +458,21 @@ class Activelearning(Tester):
             # step2.4: 保存到远程
             if getattr(self.cfg, 'root', '') != '':
                 # 记录本次挑选出的数据记录
-                target_path = os.path.join(self.cfg.root, 'activelearning', exp_name)
+                dir_name = os.path.dirname(self.cfg.root)
+                target_path = os.path.join(dir_name, 'activelearning', exp_name)
                 if not environment.hdfs_client.exists(target_path):
                     environment.hdfs_client.mkdir(target_path, True)
                 environment.hdfs_client.put(target_path, os.path.join(target_folder, annotation_file_name), False)
-                
+
                 # 打包本次挑选出的数据，并保存到标注目录下
                 # root/label/exp_name/data.tar
-                target_path = os.path.join(self.cfg.root, 'label', exp_name)
+                target_path = os.path.join(dir_name, 'label', exp_name)
                 if not environment.hdfs_client.exists(target_path):
                     environment.hdfs_client.mkdir(target_path, True)
-                                
+
                 os.system(f'cd {target_folder} && tar -cf data.tar .')
                 environment.hdfs_client.put(target_path, f'{target_folder}/data.tar', False)
                 os.system('cd {target_folder} && rm data.tar')
                 
         # 添加完成标记
-        finish_flag(self.cfg)
+        finish_flag(self.cfg.root)
