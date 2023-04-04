@@ -16,15 +16,16 @@ args.DEFINE_nn_args()
 
 def main():
     nn_args = args.parse_args()
+    # 下载扩展配置中的数据到本地
     if os.path.exists(nn_args.extra_config):
         with open(nn_args.extra_config, 'r') as fp:
             extra_config = Config.fromstring(fp.read(),'.json')
 
         # extra_config 格式为项目信息格式
         # step3.1: 数据相关下载 (默认TFRECORD是antgo默认标准打包格式)
-        extra_dataset_train_label = extra_config['source']['label']
-        extra_dataset_train_pseudo_label = extra_config['source']['pseudo-label']
-        extra_dataset_train_unlabel = extra_config['source']['unlabel']
+        extra_dataset_train_label = extra_config['source'].get('label', [])
+        extra_dataset_train_pseudo_label = extra_config['source'].get('pseudo-label', [])
+        extra_dataset_train_unlabel = extra_config['source'].get('unlabel', [])
 
         if not os.path.exists('dataset-storage'):
             os.mkdir('dataset-storage')
@@ -67,7 +68,7 @@ def main():
                         # 本地路径
                         data_folder = os.path.dirname(data_info['address'])
                         target_data_folder = f"dataset-storage/{data_stage}"
-                        
+
                         check_prefix = data_info['address'].split('/')[-1]
                         for file_name in os.listdir(data_folder):
                             if os.path.exists(f'{target_data_folder}/{file_name}'):
@@ -77,6 +78,7 @@ def main():
                             if file_name.startswith(check_prefix):
                                 os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
 
+    # 下载配置中的数据到本地
     if not os.path.exists(nn_args.config):
         # 查找位置1
         config_file_path = os.path.join(nn_args.exp.split('.')[0], 'config.py')
@@ -137,6 +139,25 @@ def main():
                         if file_name.startswith(check_prefix):
                             os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
 
+    # 下载checkpoint到本地
+    if nn_args.checkpoint is not None and nn_args.checkpoint != '':
+        if not os.path.exists('checkpoint-storage'):
+            os.mkdir('checkpoint-storage')
 
+        if nn_args.checkpoint.startswith('hdfs'):
+            status = environment.hdfs_client.get(nn_args.checkpoint, f"checkpoint-storage")
+            if not status:
+                logging.error(f'Download checkpoint fail.')
+    
+    if nn_args.resume_from is not None and nn_args.resume_from != '':
+        if not os.path.exists('checkpoint-storage'):
+            os.mkdir('checkpoint-storage')
+
+        if nn_args.checkpoint.startswith('hdfs'):
+            status = environment.hdfs_client.get(nn_args.resume_from, f"checkpoint-storage")
+            if not status:
+                logging.error(f'Download checkpoint fail.')
+    
+    
 if __name__ == "__main__":
     main()

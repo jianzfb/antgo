@@ -30,6 +30,13 @@
             "method": "",
             "config": {},
             "best": {}
+        },
+        "label":{
+            "category": [],
+            "type": "",
+            "meta": {
+                "skeleton": []
+            }
         }
     },
     "dataset": {

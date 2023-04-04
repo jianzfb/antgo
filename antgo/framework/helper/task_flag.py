@@ -4,8 +4,9 @@ import os
 
 
 def running_flag(root):
+    if root is None:
+        return
     rank, _ = get_dist_info()        
-
     if rank == 0:
         file_client = \
                 FileClient.infer_client(None, root)
@@ -13,6 +14,8 @@ def running_flag(root):
 
 
 def finish_flag(root):
+    if root is None:
+        return        
     rank, _ = get_dist_info()
     
     if rank == 0:        
@@ -22,6 +25,8 @@ def finish_flag(root):
 
 
 def stop_flag(root):
+    if root is None:
+        return        
     rank, _ = get_dist_info()
     
     if rank == 0:     

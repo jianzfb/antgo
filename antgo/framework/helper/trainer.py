@@ -159,7 +159,8 @@ class Trainer(BaseTrainer):
         # set multi-process settings
         setup_multi_processes(self.cfg)
 
-        device = 'cpu' if int(gpu_id) < 0 else 'cuda'
+        gpu_id = int(gpu_id)
+        device = 'cpu' if gpu_id < 0 else 'cuda'
         self.cfg.gpu_ids = [gpu_id] if gpu_id >= 0 else []
         if self.distributed:
             init_dist(**self.cfg.get('dist_params', {}))

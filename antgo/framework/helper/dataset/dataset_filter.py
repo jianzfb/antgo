@@ -23,6 +23,10 @@ class IterableDatasetFilter(torch.utils.data.IterableDataset):
                 content = json.load(fp)
             for sample_info in content:
                 sample_id = f'{sample_info["image_file"].split("/")[1]}'
+                if sample_id.endswith('.png') or sample_id.endswith('.jpg'):
+                    sample_id = sample_id[:-4]
+                elif sample_id.endswith('.jpeg'):
+                    sample_id = sample_id[:-5]
                 self.not_in_map[sample_id] = True
 
     def __iter__(self):

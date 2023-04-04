@@ -18,7 +18,7 @@ def local_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_s
         extra_config = prepare_extra_config(task_name, project_info)
         if extra_config is None:
             return False
-        
+
         with open('./extra-config.json', 'w') as fp:
             json.dump(extra_config, fp)      
         sys_argv += " --extra-config=./extra-config.json"

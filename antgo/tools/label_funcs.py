@@ -7,6 +7,7 @@ from antgo.interactcontext import InteractContext
 from antgo.ant import environment
 from antgo.tools.package import *
 import logging
+from antgo.framework.helper.task_flag import *
 
 
 def label_to_studio(src_json_file, tgt_folder, prefix='',  **kwargs):
@@ -27,24 +28,26 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
 
     # 如果设置root and exp, 则按照规定规则读取等待标注数据。忽略src_json_file。
     if root is not None and exp is not None:
+        # 开始标记
+        running_flag(os.path.join(root, 'label', exp))
         if environment.hdfs_client.exists(os.path.join(root, 'label', exp, 'data.tar')):
-            if not os.path.exists('./data'):
-                os.mkdir('./data')
+            if not os.path.exists('./label'):
+                os.mkdir('./label')
             
-            environment.hdfs_client.get(os.path.join(root, 'label', exp, 'data.tar'), './data/')
-            os.system('cd data && tar -xf data.tar')
+            environment.hdfs_client.get(os.path.join(root, 'label', exp, 'data.tar'), './label/')
+            os.system('cd label && tar -xf data.tar')
             # 直接覆盖src_json_file
-            src_json_file = './data/annotation.json'
+            src_json_file = './label/annotation.json'
             # 直接覆盖tgt_folder
-            tgt_folder = './data/'
-            
+            tgt_folder = './label/'
+
     if not os.path.exists(tgt_folder):
         os.makedirs(tgt_folder)
-        
+
     if not os.path.isdir(tgt_folder):
         logging.error(f'--tgt {tgt_folder} must be a folder.')
         return 
-    
+
     white_users = {}
     if white_users_str is not None:
         for t in white_users_str.split(','):
@@ -54,15 +57,15 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
             })
     if len(white_users) == 0:
         white_users = None
-    
+
     if label_type == 'POINT':
         logging.error(f'Now not support {label_type}')
         return 
     if label_type is None:
         label_type = ''
-    
+
     assert(label_type in ['', 'RECT','POINT','POLYGON'])
-    
+
     # label_name:0,label_name;1,...
     label_name_and_label_id_map = {}
     label_id_and_label_name_map = {}
@@ -102,7 +105,7 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
 
     # 下载当前标注结果（后台等待标注完成后，再下载）
     result = ctx.activelearning.download()
-    
+
     # 转换到标准GT格式
     total_gt_list = []
     sgtt = SampleGTTemplate()
@@ -110,10 +113,10 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         standard_gt = sgtt.get()
         standard_gt['image_file'] = '/'.join(anno_info['file_upload'].split('/')[3:])
         standard_gt['tag'] = src_json_file_name
-        
+
         if len(anno_info['annotations']) == 0:
             continue
-        
+
         sample_anno_info = anno_info['annotations'][0]
         for sample_anno_instance in sample_anno_info['result']:  
             if sample_anno_instance['type'] == 'RECT':
@@ -166,7 +169,16 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
                 continue
         
         total_gt_list.append(standard_gt)    
-    
+
+    # # debug
+    # for _ in range(1000):
+    #     standard_gt = sgtt.get()
+    #     image_files = os.listdir('./label/images')
+    #     print('images files number')
+    #     print(len(image_files))
+    #     standard_gt['image_file'] = f'images/{image_files[0]}'
+    #     total_gt_list.append(standard_gt)
+
     anno_json_file_name = f'{src_json_file_name}_label.json'
     if os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
         count = 0
@@ -175,10 +187,10 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
             if not os.path.exists(os.path.join(tgt_folder,anno_json_file_name)):
                 break
             count += 1
-            
+
     with open(os.path.join(tgt_folder, anno_json_file_name), 'w',  encoding="utf-8") as fp:
         json.dump(total_gt_list, fp)
-    
+
     meta_info = sgtt.meta()    
     if os.path.exists(os.path.join(tgt_folder, 'meta.json')):
          with open(os.path.join(tgt_folder, 'meta.json'), 'r', encoding="utf-8") as fp:
@@ -187,7 +199,7 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     meta_info['extent']['total'] = len(total_gt_list)
     with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
         json.dump(meta_info, fp)
-    
+
     if root is not None and exp is not None:
         # 仅在设置root and exp后，起作用
         # 1. 打包到tfrecord格式
@@ -195,9 +207,10 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
             os.path.join(tgt_folder, anno_json_file_name), 
             os.path.join(tgt_folder, 'package'),
             prefix=exp,
-            size_in_shard=40000
+            size_in_shard=40000,
+            thread_num=1
         )
-        
+
         # 2. 上传到远程
         if not environment.hdfs_client.exists(os.path.join(root, 'dataset', 'label')):
             environment.hdfs_client.mkdir(os.path.join(root, 'dataset', 'label'), True)
@@ -208,15 +221,18 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
                 os.path.join(root, 'dataset', 'label'), 
                 os.path.join(tgt_folder, 'package', file_name)
             )
-        
+
         # 标注文件
         environment.hdfs_client.put(
             os.path.join(root, 'label', exp),
-            os.path.join(tgt_folder,anno_json_file_name)
+            os.path.join(tgt_folder, anno_json_file_name)
         )
+
+        # 完成标记
+        finish_flag(os.path.join(root, 'label', exp))
         
     # 全局结束
-    ctx.activelearning.exit()    
+    ctx.activelearning.exit()
 
 
 def label_from_native(src_json_file, tgt_folder, tags, ignore_incomplete=False, **kwargs):

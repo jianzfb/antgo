@@ -423,9 +423,10 @@ class Activelearning(Tester):
                     compare_pos += 1
                     # 防止在原目录下image_file是多层级的，在此将/替换为-
                     file_name = f"{sample_tag}_{sample['image_meta']['image_file'].replace('/','-')}"
+                    if not (file_name.lower().endswith('.png') or file_name.lower().endswith('.jpg') or file_name.lower().endswith('.jpeg')):
+                        file_name = f'{file_name}.png'
                     image_file_name_list.append((file_name, sample_tag))
-                    with open(os.path.join(image_folder, file_name), 'wb') as fp:
-                        fp.write(sample['image'])
+                    cv2.imwrite(os.path.join(image_folder, file_name), sample['image'])
 
             # step2.3: 生成解析文件
             # 生成默认格式解析json
@@ -470,9 +471,9 @@ class Activelearning(Tester):
                 if not environment.hdfs_client.exists(target_path):
                     environment.hdfs_client.mkdir(target_path, True)
 
-                os.system(f'cd {target_folder} && tar -cf data.tar .')
-                environment.hdfs_client.put(target_path, f'{target_folder}/data.tar', False)
-                os.system('cd {target_folder} && rm data.tar')
-                
-        # 添加完成标记
-        finish_flag(self.cfg.root)
+                os.system(f'cd {target_folder} && tar -cf ../data.tar .')
+                environment.hdfs_client.put(target_path, './activelearning/data.tar', False)
+                os.system('rm ./activelearning/data.tar')
+
+            # 添加完成标记
+            finish_flag(self.cfg.root)

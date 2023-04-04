@@ -20,6 +20,7 @@
 # python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --process=export
 
 # 1.step 通用模块
+from audioop import findfit
 from genericpath import isdir
 import shutil
 import sys
@@ -39,7 +40,6 @@ from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
 from antgo.framework.helper.dataset import *
-from antgo.ant import environment
 import json
 
 # 2.step 导入自定义系统后台(包括hdfs后端,KV后端)
@@ -90,14 +90,17 @@ def main():
         cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
 
     for data_stage in ['train', 'val', 'test']:
+        # 实验默认的训练，验证，测试数据
         # 如果配置的是远程数据路径，则在本地寻找对应路径数据
+        if not getattr(cfg.data, data_stage, None):
+            continue
+        
         for i in range(len(getattr(cfg.data, data_stage).data_path_list)):
             data_record_path = getattr(cfg.data, data_stage).data_path_list[i]
-            if data_record_path.startswith('hdfs') or data_record_path.startswith('http') or data_record_path.startswith('/'):
+            if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
                 try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
-                if os.path.exists(try_local_path):
-                    getattr(cfg.data, data_stage).data_path_list[i] = try_local_path   
-    
+                getattr(cfg.data, data_stage).data_path_list[i] = try_local_path   
+
     # step3 检查补充配置
     if nn_args.extra_config is not None and nn_args.extra_config != '':
         if os.path.exists(nn_args.extra_config):
@@ -117,13 +120,34 @@ def main():
                         continue
 
                     if sub_folder_name == 'label':
+                        file_list = []
                         for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                            # 同一个数据文件，存在*-index和*-tfrecord
+                            finding_file = '-'.join(data_record_file.split('-')[:-1])
+                            if finding_file not in file_list:
+                                file_list.append(finding_file)
+                        
+                        for data_record_file in file_list:
                             label_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
                     elif sub_folder_name == 'pseudo-label':
+                        file_list = []
                         for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                            # 同一个数据文件，存在*-index和*-tfrecord
+                            finding_file = '-'.join(data_record_file.split('-')[:-1])
+                            if finding_file not in file_list:
+                                file_list.append(finding_file)
+
+                        for data_record_file in file_list:
                             pseudo_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
                     elif sub_folder_name == 'unlabel':
+                        file_list = []
                         for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                            # 同一个数据文件，存在*-index和*-tfrecord
+                            finding_file = '-'.join(data_record_file.split('-')[:-1])
+                            if finding_file not in file_list:
+                                file_list.append(finding_file)
+
+                        for data_record_file in file_list:
                             unlabel_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
 
             # step3.2: 数据使用方式扩展
@@ -137,7 +161,7 @@ def main():
                 if 'train_dataloader' in extra_config['data']:
                     cfg.data.train_dataloader = extra_config['data']['train_dataloader']
 
-                # 测试数据的使用方式扩展（允许没有标签存在，在主动学习模块中使用）
+                # 测试数据的使用方式扩展
                 if 'test' in extra_config['data']:
                     cfg.data.test = extra_config['data']['test']
                     cfg.data.test.data_path_list = unlabel_local_path_list
@@ -156,7 +180,7 @@ def main():
                     if concrete_dataset.type in control_dataset_type_names:
                         concrete_dataset = concrete_dataset.dataset
                         continue
-                    concrete_dataset.data_path_list = existed_train_datalist
+                    concrete_dataset.data_path_list.extend(existed_train_datalist)
                     concrete_dataset.data_path_list.extend(label_local_path_list)
                     concrete_dataset.data_path_list.extend(pseudo_local_path_list)
                     break
@@ -168,7 +192,7 @@ def main():
                     if concrete_dataset.type in control_dataset_type_names:
                         concrete_dataset = concrete_dataset.dataset
                         continue
-                    concrete_dataset.data_path_list = existed_train_datalist
+                    concrete_dataset.data_path_list.extend(existed_train_datalist)
                     concrete_dataset.data_path_list.extend(label_local_path_list)
                     concrete_dataset.data_path_list.extend(pseudo_local_path_list)
                     break
@@ -183,6 +207,11 @@ def main():
                     # 跨域数据
                     concrete_dataset.data_path_list.extend(cross_domain_local_path_list)
                     break
+
+            # 测试集相关 (仅存在无标签数据时，默认是主动学习过程)
+            if nn_args.process == 'activelearning':
+                assert(len(unlabel_local_path_list) > 0)
+                cfg.data.test.data_path_list = unlabel_local_path_list
 
             # step3.4: 模型配置扩展
             if 'model' in extra_config:
@@ -241,8 +270,22 @@ def main():
             if 'max_epochs' in extra_config:
                 cfg.max_epochs = extra_config['max_epochs']
 
-    # step4 添加root (运行时，输出结果保存的根目录地址)
-    cfg.root = nn_args.root if nn_args.root != '' else './'
+    # step4 检查checkpoint
+    if nn_args.checkpoint is not None and nn_args.checkpoint != '':
+        if not nn_args.checkpoint.startswith('/'):
+            checkpoint_file_name = nn_args.checkpoint.split('/')[-1]
+            nn_args.checkpoint = os.path.join('checkpoint-storage', checkpoint_file_name)
+            if not os.path.exists(nn_args.checkpoint):
+                logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
+    if nn_args.resume_from is not None and nn_args.resume_from != '':
+        if not nn_args.resume_from.startswith('/'):
+            checkpoint_file_name = nn_args.resume_from.split('/')[-1]
+            nn_args.resume_from = os.path.join('checkpoint-storage', checkpoint_file_name)
+            if not os.path.exists(nn_args.resume_from):
+                logging.error(f'Checkpoint {nn_args.resume_from} not in local.')
+
+    # step5 添加root (运行时，输出结果保存的根目录地址)
+    cfg.root = nn_args.root if nn_args.root != '' else './output/'
     cfg.root = os.path.join(cfg.root, nn_args.exp)
     # step4.1 添加root地址（影响checkpoint_config, evaluation）
     if cfg.root != '':

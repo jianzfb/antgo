@@ -211,18 +211,18 @@ class BaseTrainer(object):
 
     def start_train(self, max_epochs, **kwargs):
         try:
-            running_flag(self.cfg.root)
+            running_flag(self.cfg.get('root', None))
             self.runner.run([self.train_generator], [('train', max_epochs)], max_epochs)
-            finish_flag(self.cfg.root)
+            finish_flag(self.cfg.get('root', None))
         except Exception:
-            stop_flag(self.cfg.root)
+            stop_flag(self.cfg.get('root', None))
             traceback.print_exc()
 
     def start_eval(self, **kwargs):
         try:
-            running_flag(self.cfg.root)
+            running_flag(self.cfg.get('root', None))
             self.runner.run([self.train_generator], [('val', 1)], 1)
-            finish_flag(self.cfg.root)
+            finish_flag(self.cfg.get('root', None))
         except:
-            stop_flag(self.cfg.root)
+            stop_flag(self.cfg.get('root', None))
             traceback.print_exc()
