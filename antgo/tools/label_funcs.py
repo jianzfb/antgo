@@ -171,6 +171,8 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         total_gt_list.append(standard_gt)    
 
     # # debug
+    # total_gt_list = []
+    # sgtt = SampleGTTemplate()
     # for _ in range(1000):
     #     standard_gt = sgtt.get()
     #     image_files = os.listdir('./label/images')

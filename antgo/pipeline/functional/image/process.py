@@ -88,6 +88,33 @@ class preprocess_op(object):
         return image
 
 @register
+class center_crop_op(object):
+    def __init__(self, size) -> None:
+        self.crop_height = size[0]
+        self.crop_width = size[1]
+    
+    def __call__(self, image):
+        image_height, image_width = image.shape[:2]
+        if self.crop_width > image_width or self.crop_height > image_height:
+            padding_ltrb = [
+                (self.crop_width - image_width) // 2 if self.crop_width > image_width else 0,
+                (self.crop_height - image_height) // 2 if self.crop_height > image_height else 0,
+                (self.crop_width - image_width + 1) // 2 if self.crop_width > image_width else 0,
+                (self.crop_height - image_height + 1) // 2 if self.crop_height > image_height else 0,
+            ]
+            pad_left, pad_top, pad_right, pad_bottom = padding_ltrb
+            image = np.pad(image, ((pad_top, pad_bottom), (pad_left, pad_right)), 'constant', constant_values=(0, 0))
+
+            image_height, image_width = image.shape[:2]
+            if self.crop_width == image_width and self.crop_height == image_height:
+                return image
+        
+        crop_top = int(round((image_height - self.crop_height) / 2.))
+        crop_left = int(round((image_width - self.crop_width) / 2.))
+        crop_image = image[crop_top:crop_top+self.crop_height, crop_left:crop_left+self.crop_width].copy()
+        return crop_image
+
+@register
 def convert_rgb2bgr_op(x):
     x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)    
     return x

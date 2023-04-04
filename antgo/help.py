@@ -411,18 +411,33 @@ def update_project_config(sub_action_name, args):
         project_info['tool']['activelearning']['config'].update(
             cfg._cfg_dict.to_dict()
         )      
-    elif sub_action_name == 'project/ensemble':
-        # 更新聚合方案配置
-        # 读取配置
+    elif sub_action_name == 'project/label':
         assert(args.config.endswith('.py'))
         cfg = Config.fromfile(args.config)
 
-        # 设置聚合算法的名字        
-        project_info['tool']['ensemble']['method'] = args.name
-        # 设置聚合的配置
-        project_info['tool']['ensemble']['config'].update(
-            cfg._cfg_dict.to_dict()
-        )
+        cfg.type = cfg.type.upper()
+        if cfg.type not in ['', 'CLASS', 'RECT','POINT','POLYGON', 'SKELETON']:
+            logging.error(f"Dont support label type {cfg.type}")
+            return
+
+        if not isinstance(cfg.category, list):
+            logging.error(f"Label category must be list type")
+            return
+        
+        if cfg.type == 'SKELETON':
+            # 对于关键点标注，需要添加meta/skeleton信息
+            if cfg.get('meta', None):
+                logging.error('Must set meta/skeleton info for SKELETON label')
+                return
+
+            if len(cfg.meta.get('skeleton', [])) == 0:
+                logging.error('Must set meta/skeleton info for SKELETON label')
+                return
+
+        project_info['tool']['label']['category'] = cfg.category    # 标注类别 ['clsname', 'clsname', ...]
+        project_info['tool']['label']['type'] = cfg.type            # 标注类型
+        if cfg.get('meta', None):
+            project_info['tool']['label']['meta']['skeleton'] = cfg.meta.get('skeleton', [])
     else:
         logging.error(f"Dont support {sub_action_name}")
         return
