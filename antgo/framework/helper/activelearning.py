@@ -38,7 +38,7 @@ from antgo.framework.helper.dataset.builder import DATASETS
 from antgo.framework.helper.task_flag import *
 import json
 import imagesize
-from antgo.ant import environment
+from antgo.framework.helper.fileio import *
 
 
 UNCERTAINTY_SAMPLING = Registry('UNCERTAINTY_SAMPLING')
@@ -333,10 +333,10 @@ class Activelearning(Tester):
 
         # 远程下载历史数据        
         if getattr(cfg, 'root', '') != '':
-            environment.hdfs_client.mkdir(self.cfg.root, True)
+            file_client_mkdir(self.cfg.root, True)
             dir_name = os.path.dirname(cfg.root)
-            if environment.hdfs_client.exists(os.path.join(dir_name, 'activelearning')):
-                environment.hdfs_client.get(os.path.join(dir_name, 'activelearning'), './')
+            if file_client_exists(os.path.join(dir_name, 'activelearning')):
+                file_client_get(os.path.join(dir_name, 'activelearning'), './')
 
         if not os.path.exists('./activelearning'):
             os.mkdir('./activelearning')
@@ -461,18 +461,18 @@ class Activelearning(Tester):
                 # 记录本次挑选出的数据记录
                 dir_name = os.path.dirname(self.cfg.root)
                 target_path = os.path.join(dir_name, 'activelearning', exp_name)
-                if not environment.hdfs_client.exists(target_path):
-                    environment.hdfs_client.mkdir(target_path, True)
-                environment.hdfs_client.put(target_path, os.path.join(target_folder, annotation_file_name), False)
+                if not file_client_exists(target_path):
+                    file_client_mkdir(target_path, True)
+                file_client_put(target_path, os.path.join(target_folder, annotation_file_name), False)
 
                 # 打包本次挑选出的数据，并保存到标注目录下
                 # root/label/exp_name/data.tar
                 target_path = os.path.join(dir_name, 'label', exp_name)
-                if not environment.hdfs_client.exists(target_path):
-                    environment.hdfs_client.mkdir(target_path, True)
+                if not file_client_exists(target_path):
+                    file_client_mkdir(target_path, True)
 
                 os.system(f'cd {target_folder} && tar -cf ../data.tar .')
-                environment.hdfs_client.put(target_path, './activelearning/data.tar', False)
+                file_client_put(target_path, './activelearning/data.tar', False)
                 os.system('rm ./activelearning/data.tar')
 
             # 添加完成标记

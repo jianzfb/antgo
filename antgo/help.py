@@ -345,6 +345,9 @@ def update_project_config(sub_action_name, args):
         project_info['tool']['semi']['config'].update(
             cfg._cfg_dict.to_dict()
         )
+        
+        # print info
+        pprint(project_info['tool']['semi'])
     elif sub_action_name == 'project/distillation':
         # args.name 来检查是否是内置算法
         if args.name == '' and args.config == '':
@@ -377,7 +380,10 @@ def update_project_config(sub_action_name, args):
         # 设置蒸馏的配置
         project_info['tool']['distillation']['config'].update(
             cfg._cfg_dict.to_dict()
-        )        
+        )
+        
+        # print info
+        pprint(project_info['tool']['distillation'])
     elif sub_action_name == 'project/activelearning':
         # 更新主动学习方案配置
         if args.name == '' and args.config == '':
@@ -410,7 +416,10 @@ def update_project_config(sub_action_name, args):
         # 设置主动学习的配置
         project_info['tool']['activelearning']['config'].update(
             cfg._cfg_dict.to_dict()
-        )      
+        )
+        
+        # print info
+        pprint(project_info['tool']['activelearning'])
     elif sub_action_name == 'project/label':
         assert(args.config.endswith('.py'))
         cfg = Config.fromfile(args.config)
@@ -438,10 +447,27 @@ def update_project_config(sub_action_name, args):
         project_info['tool']['label']['type'] = cfg.type            # 标注类型
         if cfg.get('meta', None):
             project_info['tool']['label']['meta']['skeleton'] = cfg.meta.get('skeleton', [])
+
+        # print info
+        pprint(project_info['tool']['label'])
+    elif sub_action_name == 'project/submitter':
+        if args.ssh:
+            project_info['submitter']['method'] = 'ssh'
+        elif args.local:
+            project_info['submitter']['method'] = 'local'
+        else:
+            project_info['submitter']['method'] = 'custom'
+
+        project_info['submitter']['gpu_num'] = args.gpu
+        project_info['submitter']['cpu_num'] = args.cpu
+        project_info['submitter']['memory'] = args.memory
+
+        # print info
+        pprint(project_info['submitter'])
     else:
         logging.error(f"Dont support {sub_action_name}")
         return
-    
+
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
         json.dump(project_info, fp)
 

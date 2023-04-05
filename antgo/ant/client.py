@@ -10,7 +10,7 @@ import sys
 import os
 from unicodedata import name
 from antvis.client.httprpc import *
-from antgo.ant import environment
+from antgo.framework.helper.fileio import *
 from antgo import config
 from antgo import script
 from antgo.utils.args import *
@@ -229,7 +229,21 @@ class ServerBase(object):
 
         # 根据计算资源进行任务提交
         submitter_info = project_info['submitter']
-        submitter_method = submitter_info['method']
+        if len(submitter_info) == 0:
+            # 没有提交配置，清空任务队列
+            self.task_set.clear()
+            while self.task_queue.qsize():
+                self.task_queue.get()
+            return
+
+        submitter_method = submitter_info.get('method', '')
+        if submitter_method == '':
+            # 没有提交配置，清空任务队列
+            self.task_set.clear()
+            while self.task_queue.qsize():
+                self.task_queue.get()
+            return        
+
         submitter_gpu_num = submitter_info['gpu_num']
         submitter_cpu_num = submitter_info['cpu_num']
         submitter_memory = submitter_info['memory']
@@ -422,7 +436,7 @@ class LocalServer(ServerBase):
                     if exp_info['stage'] == 'label' and exp_info['state'] == 'running':
                         # 对于在运行的标注任务
                         project_state_folder = os.path.join(self.root, project_name, 'label', f'{exp_name}.{exp_id}')
-                        is_exist = environment.hdfs_client.exists(os.path.join(project_state_folder, 'FINISH'))
+                        is_exist = file_client_exists(os.path.join(project_state_folder, 'FINISH'))
                         if is_exist:
                             # 标注任务完成，开始调度下一轮任务
                             logging.info(f'Finish label task {exp_name}.{exp_id} project {project_name}.')
@@ -430,7 +444,7 @@ class LocalServer(ServerBase):
                             
                             # 获得新打包的标注数据集
                             # root, dataset, label
-                            labeled_dataset_records = environment.hdfs_client.ls(os.path.join(self.root, project_name, 'dataset', 'label'))
+                            labeled_dataset_records = file_client_ls(os.path.join(self.root, project_name, 'dataset', 'label'))
                             if len(labeled_dataset_records) > 0:
                                 existed_dataset_records = [
                                     aabb['address'] for aabb in project_info['dataset']['train']['label']
@@ -468,7 +482,7 @@ class LocalServer(ServerBase):
 
                         # FINISH 仅仅表示任务运行完毕
                         # 对于具体完成的任务是什么需要从project_info中查找
-                        is_exist = environment.hdfs_client.exists(os.path.join(project_state_folder, 'FINISH'))
+                        is_exist = file_client_exists(os.path.join(project_state_folder, 'FINISH'))
                         if is_exist:
                             # 任务完成状态
                             logging.info(f'Finish stage {exp_info["stage"]} task {exp_name}.{exp_id} project {project_name}.')
@@ -476,21 +490,21 @@ class LocalServer(ServerBase):
                             exp_info['finish_time'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
 
                             # 获得任务保存的checkpoint
-                            if environment.hdfs_client.exists(os.path.join(metric_folder, 'best.pth')):
+                            if file_client_exists(os.path.join(metric_folder, 'best.pth')):
                                 # 记录最佳指标模型（开启评估过程）
                                 exp_info['checkpoint'] = os.path.join(metric_folder, 'best.pth')
-                            elif environment.hdfs_client.exists(os.path.join(checkpoint_folder, 'latest.pth')):
+                            elif file_client_exists(os.path.join(checkpoint_folder, 'latest.pth')):
                                 # 记录最后的一个模型（未开启评估过程）
                                 exp_info['checkpoint'] = os.path.join(checkpoint_folder, 'latest.pth')
 
                             # 获得任务保存的最佳指标结果
                             best_metric_record = os.path.join(metric_folder, 'best.json')
-                            if environment.hdfs_client.exists(best_metric_record):
+                            if file_client_exists(best_metric_record):
                                 logging.info(f'Finding metric best.json of task {exp_name}.{exp_id}.')
                                 if not os.path.exists('./temp'):
                                     os.makedirs('./temp')
 
-                                environment.hdfs_client.get(best_metric_record, './temp')
+                                file_client_get(best_metric_record, './temp')
                                 if os.path.exists(os.path.join('./temp/best.json')):
                                     # 读取并更新实验指标信息
                                     with open('./temp/best.json', 'r') as fp:
@@ -524,8 +538,8 @@ class LocalServer(ServerBase):
 
                             # 获得任务生成的数据（标注数据，伪标签数据）
                             dataset_record_folder = os.path.join(self.root, project_name, 'dataset', 'label')
-                            if environment.hdfs_client.exists(dataset_record_folder):
-                                record_list = environment.hdfs_client.ls(dataset_record_folder)
+                            if file_client_exists(dataset_record_folder):
+                                record_list = file_client_ls(dataset_record_folder)
                                 existed_record_list = [b['address'] for b in project_info['dataset']['train']['pseudo-label']]
                                 diff_record_list = []
                                 for record_path in record_list:
@@ -542,8 +556,8 @@ class LocalServer(ServerBase):
                                     project_info['dataset']['train']['label'].append(basic_info)
 
                             dataset_record_folder = os.path.join(self.root, project_name, 'dataset', 'pseudo-label')
-                            if environment.hdfs_client.exists(dataset_record_folder):
-                                record_list = environment.hdfs_client.ls(dataset_record_folder)
+                            if file_client_exists(dataset_record_folder):
+                                record_list = file_client_ls(dataset_record_folder)
                                 existed_record_list = [b['address'] for b in project_info['dataset']['train']['pseudo-label']]
                                 diff_record_list = []
                                 for record_path in record_list:
@@ -563,7 +577,7 @@ class LocalServer(ServerBase):
                             # 保存项目新信息(在任务调度时可能需要重新读取项目信息，提前把更新内容保存)
                             with open(os.path.join(config.AntConfig.task_factory, project_file), 'w') as fp:
                                 json.dump(project_info, fp)
-                                    
+     
                             # 项目自动化优化流水线(仅对产品模型进行自动化优化)
                             if project_info['auto'] and project_info['product'].startswith(exp_name):
                                 logging.info(f'Schedule next task of {exp_name}.{exp_id} project {project_name}.')

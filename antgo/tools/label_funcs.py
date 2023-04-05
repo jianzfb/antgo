@@ -4,7 +4,7 @@ import json
 import numpy as np
 from antgo.utils.sample_gt import *
 from antgo.interactcontext import InteractContext
-from antgo.ant import environment
+from antgo.framework.helper.fileio import *
 from antgo.tools.package import *
 import logging
 from antgo.framework.helper.task_flag import *
@@ -30,11 +30,11 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     if root is not None and exp is not None:
         # 开始标记
         running_flag(os.path.join(root, 'label', exp))
-        if environment.hdfs_client.exists(os.path.join(root, 'label', exp, 'data.tar')):
+        if file_client_exists(os.path.join(root, 'label', exp, 'data.tar')):
             if not os.path.exists('./label'):
                 os.mkdir('./label')
             
-            environment.hdfs_client.get(os.path.join(root, 'label', exp, 'data.tar'), './label/')
+            file_client_get(os.path.join(root, 'label', exp, 'data.tar'), './label/')
             os.system('cd label && tar -xf data.tar')
             # 直接覆盖src_json_file
             src_json_file = './label/annotation.json'
@@ -214,18 +214,18 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         )
 
         # 2. 上传到远程
-        if not environment.hdfs_client.exists(os.path.join(root, 'dataset', 'label')):
-            environment.hdfs_client.mkdir(os.path.join(root, 'dataset', 'label'), True)
+        if not file_client_exists(os.path.join(root, 'dataset', 'label')):
+            file_client_mkdir(os.path.join(root, 'dataset', 'label'), True)
 
         # 打包后的数据
         for file_name in os.listdir(os.path.join(tgt_folder, 'package')):
-            environment.hdfs_client.put(
+            file_client_put(
                 os.path.join(root, 'dataset', 'label'), 
                 os.path.join(tgt_folder, 'package', file_name)
             )
 
         # 标注文件
-        environment.hdfs_client.put(
+        file_client_put(
             os.path.join(root, 'label', exp),
             os.path.join(tgt_folder, anno_json_file_name)
         )

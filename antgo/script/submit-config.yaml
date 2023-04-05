@@ -1,0 +1,5 @@
+# config:
+#   key: 'value' 
+
+folder: 'replace with your submit code folder'
+script: 'replace with your launch script'

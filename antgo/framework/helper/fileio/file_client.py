@@ -1,9 +1,9 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import inspect
 import os
 import os.path as osp
 import re
 import tempfile
+from threading import local
 import warnings
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable, Iterator, Optional, Tuple, Union
 from antgo.framework.helper.utils.path import is_filepath
 from antgo.ant import environment
+import shutil
 
 
 class BaseStorageBackend(metaclass=ABCMeta):
@@ -33,11 +34,19 @@ class BaseStorageBackend(metaclass=ABCMeta):
         return self._allow_symlink
 
     @abstractmethod
-    def get(self, filepath):
+    def download(self, remote_path, local_path=None):
         pass
 
     @abstractmethod
-    def get_text(self, filepath):
+    def upload(self, remote_path, local_path, is_exist=False):
+        pass
+
+    @abstractmethod
+    def ls(self, remote_folder):
+        pass
+
+    @abstractmethod
+    def mkdir(self, remote_path, p=False):
         pass
 
 
@@ -87,7 +96,6 @@ class HardDiskBackend(BaseStorageBackend):
             obj (bytes): Data to be written.
             filepath (str or Path): Path to write data.
         """
-        # mmcv.mkdir_or_exist(osp.dirname(filepath))
         if not os.path.exists(osp.dirname(filepath)):
             os.makedirs(osp.dirname(filepath))
         with open(filepath, 'wb') as f:
@@ -109,7 +117,6 @@ class HardDiskBackend(BaseStorageBackend):
             encoding (str): The encoding format used to open the ``filepath``.
                 Default: 'utf-8'.
         """
-        # mmcv.mkdir_or_exist(osp.dirname(filepath))
         if not os.path.exists(osp.dirname(filepath)):
             os.makedirs(osp.dirname(filepath))        
         with open(filepath, 'w', encoding=encoding) as f:
@@ -225,6 +232,32 @@ class HardDiskBackend(BaseStorageBackend):
 
         return _list_dir_or_file(dir_path, list_dir, list_file, suffix,
                                  recursive)
+
+    def ls(self, remote_folder):
+        return os.listdir(remote_folder)
+
+    def mkdir(self, remote_path, p=False):
+        os.makedirs(remote_path)
+        return True
+
+    def download(self, remote_path, local_path):
+        # donwload from remote_path to local_path
+        if HardDiskBackend._allow_symlink:
+            os.system(f'ln -s {remote_path} {local_path}')
+        else:
+            shutil.copy(remote_path, local_path)
+
+        return True
+
+    def upload(self, remote_path, local_path, is_exist=False):
+        # upload from local_path to remote_path
+        if is_exist:
+            # 如果存在，则取消copy
+            if os.path.exists(remote_path):
+                return
+
+        shutil.copy(local_path, remote_path)
+        return True
 
 
 class HDFSBackend(BaseStorageBackend):
@@ -342,18 +375,11 @@ class HDFSBackend(BaseStorageBackend):
         Returns:
             bool: Return ``True`` if ``filepath`` exists, ``False`` otherwise.
         """
-        return environment.exists(filepath)
+        return environment.hdfs_client.exists(filepath)
 
     def isdir(self, filepath: str) -> bool:
-        """Check whether a file path is a directory.
-
-        Args:
-            filepath (str or Path): Path to be checked whether it is a
-                directory.
-
-        Returns:
-            bool: Return ``True`` if ``filepath`` points to a directory,
-            ``False`` otherwise.
+        """
+        仅依靠路径名称进行判断，存在不准确
         """
         if filepath.endswith('/'):
             return True
@@ -364,19 +390,12 @@ class HDFSBackend(BaseStorageBackend):
             return True
 
     def isfile(self, filepath: str) -> bool:
-        """Check whether a file path is a file.
-
-        Args:
-            filepath (str or Path): Path to be checked whether it is a file.
-
-        Returns:
-            bool: Return ``True`` if ``filepath`` points to a file, ``False``
-            otherwise.
+        """
+        仅依靠路径名称进行判断，存在不准确
         """
         return not self.isdir(filepath)
 
-    def join_path(self, filepath: str,
-                  *filepaths: str) -> str:
+    def join_path(self, filepath: str, *filepaths: str) -> str:
         """Concatenate all file paths.
 
         Join one or more filepath components intelligently. The return value
@@ -416,6 +435,22 @@ class HDFSBackend(BaseStorageBackend):
         """
         raise NotImplementedError
 
+    def ls(self, folder):
+        return environment.hdfs_client.ls(folder)
+
+    def mkdir(self, remote_path, p=False):
+        environment.hdfs_client.mkdir(remote_path, p)
+        return True
+
+    def download(self, remote_path, local_path):
+        # donwload from remote_path to local_path
+        status = environment.hdfs_client.get(remote_path, local_path)
+        return status
+
+    def upload(self, remote_path, local_path, is_exist=False):
+        # upload from local_path to remote_path
+        status = environment.hdfs_client.put(remote_path, local_path, is_exist)
+        return status
 
 
 class FileClient:
@@ -518,6 +553,7 @@ class FileClient:
             if uri.startswith('hdfs'):
                 file_client_args = {'backend': 'hdfs'}
         if file_client_args is None:
+            # 默认情况下，后台存储使用disk
             return cls()
 
         return cls(**file_client_args)
@@ -786,3 +822,46 @@ class FileClient:
         """
         yield from self.client.list_dir_or_file(dir_path, list_dir, list_file,
                                                 suffix, recursive)
+
+    def ls(self, remote_folder):
+        return self.client.ls(remote_folder)
+
+    def mkdir(self, remote_path, p=False):
+        return self.client.mkdir(remote_path, p)
+
+    def download(self, remote_path, local_path):
+        return self.client.download(remote_path, local_path)
+
+    def upload(self, remote_path, local_path, is_exist=False):
+        return self.client.upload(remote_path, local_path, is_exist)
+
+
+def file_client_get(remote_path, local_path):
+    status = FileClient.infer_client(uri=remote_path).download(remote_path, local_path)
+    return status
+
+
+def file_client_put(remote_path, local_path, is_exist=False):
+    status = FileClient.infer_client(uri=remote_path).upload(remote_path, local_path, is_exist)
+    return status
+
+
+def file_client_ls(remote_folder):
+    result = FileClient.infer_client(uri=remote_folder).ls(remote_folder)
+    return result
+
+
+def file_client_mkdir(remote_path, p=False):
+    status = FileClient.infer_client(uri=remote_path).mkdir(remote_path, p)
+    return status
+
+
+def file_client_rm(remote_path):
+    status = FileClient.infer_client(uri=remote_path).remove(remote_path)
+    return status
+
+
+def file_client_exists(remote_path):
+    status = FileClient.infer_client(uri=remote_path).exists(remote_path)
+    return status
+

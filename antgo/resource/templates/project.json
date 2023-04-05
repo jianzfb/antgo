@@ -7,11 +7,10 @@
     "baseline": "",
     "type": "",
     "submitter": {
-        "local": false,
-        "method": "ssh",
-        "gpu_num": 1,
-        "cpu_num": 10,
-        "memory": 5000
+        "method": "",
+        "gpu_num": 0,
+        "cpu_num": 4,
+        "memory": 8000
     },
     "tool":{
         "semi": {

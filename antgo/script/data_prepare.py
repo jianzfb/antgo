@@ -1,13 +1,12 @@
 from fileinput import filename
 import sys
-sys.path.append('/root/workspace/antgo')
 import os
 import json
 import logging
 from antgo.utils import args
 system_path = os.path.join(os.path.abspath(os.curdir),'system.py')
 os.system(f'ln -sf {system_path}  {os.path.dirname(os.path.realpath(__file__))}/system.py')
-from antgo.ant import environment
+from antgo.framework.helper.fileio import *
 from antgo.framework.helper.utils import Config
 from system import *
 
@@ -55,7 +54,7 @@ def main():
 
                         if not data_info['address'].endswith('*'):
                             data_info['address'] += '*'
-                        status = environment.hdfs_client.get(data_info['address'], f"dataset-storage/{data_stage}")
+                        status = file_client_get(data_info['address'], f"dataset-storage/{data_stage}")
                         if not status:
                             logging.error(f'Download {data_info["address"]} error.')
                     elif data_info['address'].startswith('http'):
@@ -74,7 +73,7 @@ def main():
                             if os.path.exists(f'{target_data_folder}/{file_name}'):
                                 # 目标文件已经存在，直接跳过
                                 continue
-                      
+
                             if file_name.startswith(check_prefix):
                                 os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
 
@@ -116,7 +115,7 @@ def main():
 
                     if not data_record_path.endswith('*'):
                         data_record_path += '*'
-                    status = environment.hdfs_client.get(data_record_path, f"dataset-storage/{data_stage}")
+                    status = file_client_get(data_record_path, f"dataset-storage/{data_stage}")
                     if not status:
                         logging.error(f'Download {data_record_path} error.')
                 elif data_record_path.startswith('http'):
@@ -145,7 +144,7 @@ def main():
             os.mkdir('checkpoint-storage')
 
         if nn_args.checkpoint.startswith('hdfs'):
-            status = environment.hdfs_client.get(nn_args.checkpoint, f"checkpoint-storage")
+            status = file_client_get(nn_args.checkpoint, f"checkpoint-storage")
             if not status:
                 logging.error(f'Download checkpoint fail.')
     
@@ -154,7 +153,7 @@ def main():
             os.mkdir('checkpoint-storage')
 
         if nn_args.checkpoint.startswith('hdfs'):
-            status = environment.hdfs_client.get(nn_args.resume_from, f"checkpoint-storage")
+            status = file_client_get(nn_args.resume_from, f"checkpoint-storage")
             if not status:
                 logging.error(f'Download checkpoint fail.')
     

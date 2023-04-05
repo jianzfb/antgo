@@ -20,6 +20,8 @@ from jinja2 import Environment, FileSystemLoader
 import json
 from antgo import tools
 from antgo.script import *
+import yaml
+
 
 # 需要使用python3
 assert(int(sys.version[0]) >= 3)
@@ -33,8 +35,9 @@ DEFINE_string('git', None, '')
 DEFINE_string('branch', None, '')
 DEFINE_string('commit', None, '')
 DEFINE_string('image', '', '')      # 镜像
-DEFINE_int('cpu', 0, 'set cpu number')
-DEFINE_int('memory', 0, 'set memory size (M)')
+DEFINE_int('cpu', 0, 'set cpu number')          # cpu 数
+DEFINE_int('gpu', 0, 'set gpu number')          # gpu 数
+DEFINE_int('memory', 0, 'set memory size (M)')  # 内存大小（单位M）
 DEFINE_string('name', None, '')     # 名字
 DEFINE_string('type', None, '')     # 类型
 DEFINE_indicator('cloud', True, '') # 指定云端运行
@@ -48,7 +51,6 @@ DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distill
 DEFINE_indicator('ssh', True, '')     # ssh 提交
 DEFINE_indicator('k8s', True, '')     # k8s 提交
 DEFINE_indicator('local', True, '')   # 本地提交
-DEFINE_indicator('custom', True, '')  # 开发者自定义任务提交配置
 
 ############## global config ###############
 DEFINE_string('token', None, '')
@@ -164,6 +166,46 @@ def main():
     logging.info('import extent module')
     load_extmodule(args.ext_module)
 
+  ##################################### 支持任务提交脚本配置  ###########################################
+  if action_name == 'submitter':
+    has_config_file = not (args.config == '' or args.config == 'config.py')
+    has_config_file = has_config_file and os.path.exists(args.config)
+    
+    if has_config_file:
+      if not (args.ssh or args.local or args.k8s):
+        # 当前配置脚本为用户定制化提交脚本（在提交任务时，优先使用此脚本提交）
+        # 任务提交脚本，参数必须如下格式:
+        # 镜像名字, 启动命令, GPU 数, CPU 数, 内存大小
+        # image_name, launch_argv, gpu_num, cpu_num, memory_size
+        inner_folder = os.path.join(os.environ['HOME'], '.config', 'antgo')
+        with open(args.config, encoding='utf-8', mode='r') as fp:
+          config_content = yaml.safe_load(fp)
+
+        # 将配置脚本目录写入内部目录
+        code_folder = config_content['folder']
+        shutil.copytree(code_folder, os.path.join(inner_folder, os.path.normpath(code_folder).split('/')[-1]))
+
+        # 将配置文件重新写入 (替换脚本目录地址)
+        config_content['folder'] = os.path.normpath(code_folder).split('/')[-1]
+        with open(os.path.join(inner_folder, 'submit-config.yaml'), encoding='utf-8', mode='w') as fp:
+          yaml.safe_dump(config_content, fp)
+      return
+
+    if has_config_file:
+      # 进入到这里，说明已经指定ssh,local,k8s
+      # 添加ssh,local,k8s的标准任务提交配置
+      shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
+    else:
+      if args.ssh:
+        # 生成ssh提交配置模板
+        ssh_submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'ssh-submit-config.yaml')
+        shutil.copy(ssh_submit_config_file, './')        
+      else:
+        # 生成自定义的提交配置模板
+        submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'submit-config.yaml')
+        shutil.copy(submit_config_file, './')    
+    return
+
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
     os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
@@ -174,21 +216,6 @@ def main():
   # 检查是否后台服务活跃
   if not get_client().alive():
     logging.warn('Antgo auto server not work. Please run "antgo server" to launch.')
-
-  ##################################### 支持任务提交脚本配置  ###########################################
-  if action_name == 'submitter':
-    if args.ssh:     
-      # ssh提交配置
-      if args.config == '' or args.config == 'config.py':
-        # 生成ssh提交配置模板
-        ssh_submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'ssh-submit-config.yaml')
-        shutil.copy(ssh_submit_config_file, './')
-        return
-      else:
-        # 更新ssh提交配置模板
-        assert(os.path.exists(args.config))
-        shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
-        return 
 
   ######################################### 生成最小mvp ###############################################
   if action_name == 'create' and sub_action_name == 'mvp':
@@ -262,17 +289,22 @@ def main():
       
       # step 1.1: 检查提交脚本配置
       if args.local:
+        # 本地提交
         sys_argv_cmd = sys_argv_cmd.replace('--local', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
         local_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
       elif args.ssh:
+        # ssh提交
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'        
         ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
       else:
-        logging.error("Dont set remote mode (--ssh,--local,--custom).")
+        # 自定义脚本提交
+        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+        sys_argv_cmd = f'antgo {sys_argv_cmd}'          
+        custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)
       return
     # 本地任务执行
     elif args.project != '':
