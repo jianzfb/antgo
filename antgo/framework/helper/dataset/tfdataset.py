@@ -1,4 +1,3 @@
-from asyncio.log import logger
 import logging
 import sys
 import numpy as np
@@ -13,6 +12,7 @@ import copy
 from antgo.dataflow.datasetio import *
 import threading
 import json
+from pprint import pprint
 
 
 def _cycle(iterator_fn: typing.Callable) -> typing.Iterable[typing.Any]:
@@ -226,16 +226,15 @@ class TFDataset(torch.utils.data.IterableDataset):
             # 如果已经设置了shuffle queue，则设置默认ratios
             if self.ratios is None:
                 self.ratios = [1 for _ in range(len(self.data_path_list))]
-
         self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
         self._alias = None
         if self._fields is not None and 'alias' in inputs_def:
             self._alias = copy.deepcopy(inputs_def['alias'])
-        
+
         if self._fields is not None:
             if self._alias is None:
                 self._alias = copy.deepcopy(self._fields)
-        
+
         self.pipeline = []
         self.weak_pipeline = []
         self.strong_pipeline = []
@@ -268,7 +267,7 @@ class TFDataset(torch.utils.data.IterableDataset):
         self.auto_ext_info = auto_ext_info
         # 样本计数
         self.sample_id = 0
-        
+
         num_samples_list = []
         self.num_samples = 0
         for i, index_path in enumerate(self.index_path_list):
@@ -281,7 +280,7 @@ class TFDataset(torch.utils.data.IterableDataset):
         if world_size > 1:
             # TODO，现在多卡实现基于文件级别的拆分，粒度较粗
             assert(len(self.data_path_list) >= world_size)
-            
+
             # 公平选择，尽量确保每张卡有相同的样本数量
             select_index_list_in_world = self._fair_select(num_samples_list, world_size)
             select_index_list = select_index_list_in_world[rank]
@@ -295,15 +294,14 @@ class TFDataset(torch.utils.data.IterableDataset):
                 num = np.sum([num_samples_list[i] for i in select_index_list_in_world[rank_i]])
                 if self.num_samples < num:
                     self.num_samples = num
-                        
+
             self.data_path_list = [self.data_path_list[i] for i in use_data_path_index_list]
             self.index_path_list = [self.index_path_list[i] for i in use_data_path_index_list]
             if self.ratios is not None:
                 self.ratios = [self.ratios[i] for i in use_data_path_index_list]
 
-            logging.info(f'Rank {rank} (TOTAL NUM {self.real_num_samples} TARGET NUM {self.num_samples}), data list')
-            logging.info(self.data_path_list)
-            
+            pprint(f'Rank {rank} (TOTAL NUM {self.real_num_samples} TARGET NUM {self.num_samples}), data list')
+            pprint(self.data_path_list)
             
     def _select_next_set(self, num_samples_list, target_num):
         data = num_samples_list
@@ -328,7 +326,6 @@ class TFDataset(torch.utils.data.IterableDataset):
     def _fair_select(self, num_samples_list, world_size):
         select_index_list_in_world = []
         
-        target_num = (sum(num_samples_list) + world_size-1)  // world_size        
         index_list = list(range(len(num_samples_list)))     # 维持全局索引
         num_samples_list = copy.deepcopy(num_samples_list)
         
@@ -336,6 +333,9 @@ class TFDataset(torch.utils.data.IterableDataset):
             if i == world_size - 1:
                 select_index_list_in_world.append(index_list)
                 break
+            
+            # 每次进行平均分配时，重新计算平均分配目标
+            target_num = (sum(num_samples_list) + world_size-i-1)  // (world_size-i)
 
             select_local_index = self._select_next_set(num_samples_list, target_num)
             select_index = [index_list[j] for j in select_local_index]            
@@ -427,7 +427,7 @@ class TFDataset(torch.utils.data.IterableDataset):
     def __iter__(self):
         # 计数
         self.sample_id = 0
-        
+
         worker_info = torch.utils.data.get_worker_info()
         remain_sample_num = 0
         if worker_info is not None:
@@ -494,7 +494,13 @@ class TFDataset(torch.utils.data.IterableDataset):
 
 # print('sdf')
 
-# abcd = TFDataset(data_path_list=['/root/workspace/dataset/hand-lr-det/yongchun_hand_lr-00007-of-00008-tfrecord'])
+# abcd = TFDataset(data_path_list=[
+#     '/root/workspace/dataset/hand-cls/yongchun_hand_gesture-00000-of-00003-tfrecord',
+#     '/root/workspace/dataset/hand-cls/yongchun_hand_gesture-00001-of-00003-tfrecord',
+#     '/root/workspace/dataset/hand-cls/yongchun_hand_gesture-00002-of-00003-tfrecord',
+#     '/root/workspace/dataset/hand-cls/yongchun-cls-23-00000-of-00001-tfrecord']
+# )
+# print('sd')
 # select_all = abcd._fair_select([2,4,6,7,8,5], 3)
 # print(select_all)
 
