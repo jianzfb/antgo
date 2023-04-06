@@ -132,7 +132,6 @@ class TFDataset(torch.utils.data.IterableDataset):
         'gzip' or None.
 
     """
-
     def __init__(self,
                  data_path_list: typing.List[str],
                  ratios: typing.Union[typing.List[float], None]=None,
@@ -265,44 +264,35 @@ class TFDataset(torch.utils.data.IterableDataset):
 
         # 自动扩展样本信息
         self.auto_ext_info = auto_ext_info
-        # 样本计数
-        self.sample_id = 0
+        self.epoch = 10   
+        self.sample_id = 0      # 先默认为0
 
-        num_samples_list = []
+        self.num_samples_list = []
         self.num_samples = 0
         for i, index_path in enumerate(self.index_path_list):
             index = np.loadtxt(index_path, dtype=np.int64)[:, 0]
             self.num_samples += len(index) 
-            num_samples_list.append(len(index))
-        self.real_num_samples = self.num_samples
+            self.num_samples_list.append(len(index))
 
-        rank, world_size = get_dist_info()
+        rank, world_size = get_dist_info()     
+        self.rank = rank
+        self.world_size = world_size
+
+        self.select_index_list_in_world = []    # format: [[],[],[],...]
         if world_size > 1:
             # TODO，现在多卡实现基于文件级别的拆分，粒度较粗
             assert(len(self.data_path_list) >= world_size)
 
             # 公平选择，尽量确保每张卡有相同的样本数量
-            select_index_list_in_world = self._fair_select(num_samples_list, world_size)
-            select_index_list = select_index_list_in_world[rank]
-            use_data_path_index_list = select_index_list
-            use_data_path_num_list = [num_samples_list[i] for i in select_index_list]
-            self.real_num_samples = np.sum(use_data_path_num_list)
+            self.select_index_list_in_world = self._fair_select(self.num_samples_list, world_size)
 
             # 每张卡期望使用的样本数（以最大为准，不足的通过后续重复采样补充）
             self.num_samples = 0
             for rank_i in range(world_size):
-                num = np.sum([num_samples_list[i] for i in select_index_list_in_world[rank_i]])
+                num = np.sum([self.num_samples_list[i] for i in self.select_index_list_in_world[rank_i]])
                 if self.num_samples < num:
                     self.num_samples = num
 
-            self.data_path_list = [self.data_path_list[i] for i in use_data_path_index_list]
-            self.index_path_list = [self.index_path_list[i] for i in use_data_path_index_list]
-            if self.ratios is not None:
-                self.ratios = [self.ratios[i] for i in use_data_path_index_list]
-
-            pprint(f'Rank {rank} (TOTAL NUM {self.real_num_samples} TARGET NUM {self.num_samples}), data list')
-            pprint(self.data_path_list)
-            
     def _select_next_set(self, num_samples_list, target_num):
         data = num_samples_list
         dp = [[0 for i in range(target_num+1)] for _ in range(len(data)+1)]
@@ -325,7 +315,7 @@ class TFDataset(torch.utils.data.IterableDataset):
     
     def _fair_select(self, num_samples_list, world_size):
         select_index_list_in_world = []
-        
+
         index_list = list(range(len(num_samples_list)))     # 维持全局索引
         num_samples_list = copy.deepcopy(num_samples_list)
         
@@ -333,17 +323,22 @@ class TFDataset(torch.utils.data.IterableDataset):
             if i == world_size - 1:
                 select_index_list_in_world.append(index_list)
                 break
-            
+
             # 每次进行平均分配时，重新计算平均分配目标
             target_num = (sum(num_samples_list) + world_size-i-1)  // (world_size-i)
-
             select_local_index = self._select_next_set(num_samples_list, target_num)
+
+            # 如果发现，本次分配方案，会导致剩余样本无法至少每个slot一个样本的话需要强制减少本次分配
+            if len(index_list) - len(select_local_index) < world_size-i-1:
+                remain_select_num = len(index_list) - (world_size-i-1)
+                select_local_index = select_local_index[:remain_select_num]
+
             select_index = [index_list[j] for j in select_local_index]            
             select_index_list_in_world.append(select_index)
-            
+
             num_samples_list = [num_samples_list[j] for j in range(len(num_samples_list)) if j not in select_local_index]               
             index_list = [k for k in index_list if k not in select_index]        
-            
+
         return select_index_list_in_world
 
     def _arrange(self, sample, fields, alias):
@@ -365,11 +360,8 @@ class TFDataset(torch.utils.data.IterableDataset):
             warp_ins[alia] = sample[field]
 
         return warp_ins
-            
-    def __transform(self, sample):
-        # 样本计数 +1
-        self.sample_id += 1
 
+    def __transform(self, sample):
         # 转换样本
         new_sample = {}
         for k in sample.keys():
@@ -425,20 +417,56 @@ class TFDataset(torch.utils.data.IterableDataset):
             return sample
 
     def __iter__(self):
-        # 计数
-        self.sample_id = 0
-
+        # 获得线程信息
         worker_info = torch.utils.data.get_worker_info()
+
+        # 每个epoch后，会重新调用__iter__
+        # WARN: 对于多卡训练环境，在每次epoch时，重新编排数据文件的分配
+        # 先按照单卡配置，进行赋初值
+        real_num_samples = self.num_samples     # 单卡下期望的样本总数就是真实样本总数（只有多卡下才涉及补齐）
+        ratios = self.ratios                    # 每个数据集的采样率
+        data_path_list = self.data_path_list    # 总数据文件tfrecord列表
+        index_path_list = self.index_path_list  # 总数据文件index列表
+        if len(self.select_index_list_in_world) > 0:
+            # 使用re_init_count进行shuffle （每个进程每个线程面对的是相同的re_init_count）
+            local_select_index_list_in_world = copy.deepcopy(self.select_index_list_in_world)
+            np.random.seed(self.epoch)  # 注意seed仅对当前线程有效，所以可以放心使用
+            np.random.shuffle(local_select_index_list_in_world)
+
+            # 选出当前卡，在本次epoch下使用的数据集
+            select_index_list = copy.deepcopy(local_select_index_list_in_world[self.rank])
+            np.random.shuffle(select_index_list)
+
+            # 基于选择的索引，获得具体样本数量列表
+            use_data_path_num_list = [self.num_samples_list[i] for i in select_index_list]
+            real_num_samples = np.sum(use_data_path_num_list)
+
+            # 基于选择的索引，获得文件列表
+            data_path_list = [self.data_path_list[i] for i in select_index_list]
+            index_path_list = [self.index_path_list[i] for i in select_index_list]
+
+            # 基于选择的索引，获得采样率列表
+            if self.ratios is not None:
+                ratios = [self.ratios[i] for i in select_index_list]
+
+            # debug
+            pprint(f'Rank {self.rank} (TOTAL NUM {real_num_samples} TARGET NUM {self.num_samples})')
+            pprint(f'Rank {self.rank} local-index {local_select_index_list_in_world}')
+            pprint(f'Rank {self.rank} use data path list {data_path_list}')
+
         remain_sample_num = 0
         if worker_info is not None:
             shard = worker_info.id, worker_info.num_workers
             np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
-            remain_sample_num = int(self.num_samples - self.real_num_samples)
+            remain_sample_num = int(self.num_samples - real_num_samples)
             if worker_info.num_workers != 1:
                 if worker_info.id != worker_info.num_workers - 1:
                     remain_sample_num = remain_sample_num // worker_info.num_workers
                 else:
                     remain_sample_num = (remain_sample_num // worker_info.num_workers) + (remain_sample_num - remain_sample_num // worker_info.num_workers * worker_info.num_workers)
+
+            # debug
+            pprint(f'Rank {self.rank} thread {worker_info.id} face remain sample_num {remain_sample_num}')
         else:
             shard = None
 
@@ -452,11 +480,11 @@ class TFDataset(torch.utils.data.IterableDataset):
                                     sequence_description=self.sequence_description,
                                     compression_type=self.compression_type,
                                     )
-                for data_path, index_path in zip(self.data_path_list, self.index_path_list)]
+                for data_path, index_path in zip(data_path_list, index_path_list)]
 
         it = None
-        if self.ratios is not None and len(self.ratios) > 0:
-            it = _sample_iterators(loaders, self.ratios, self.infinite, remain_sample_num)
+        if ratios is not None and len(ratios) > 0:
+            it = _sample_iterators(loaders, ratios, self.infinite, remain_sample_num)
         else:
             it = _order_iterators(loaders)
 

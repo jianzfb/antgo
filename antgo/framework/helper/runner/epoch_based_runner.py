@@ -30,7 +30,7 @@ class EpochBasedRunner(BaseRunner):
         if not isinstance(outputs, dict):
             raise TypeError('"model.train_step()"'
                             'and "model.val_step()" must return a dict')
-                            
+
         if 'log_vars' in outputs:
             self.log_buffer.update(outputs['log_vars'], outputs['num_samples'])
         self.outputs = outputs
@@ -51,6 +51,7 @@ class EpochBasedRunner(BaseRunner):
             self.call_hook('after_train_iter')
             self._iter += 1
 
+        self.data_loader.epoch = self._epoch    # 仅在iterator dataset数据集有效
         self.call_hook('after_train_epoch')
         self._epoch += 1
 

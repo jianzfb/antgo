@@ -172,6 +172,9 @@ class BaseTrainer(object):
         model.init_weights()
 
         if self.distributed:
+            if self.cfg.get('syncBN', True):
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(self.device)
+            
             find_unused_parameters = self.cfg.get('find_unused_parameters', False)
             # Sets the `find_unused_parameters` parameter in
             # torch.nn.parallel.DistributedDataParallel
