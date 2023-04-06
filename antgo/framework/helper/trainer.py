@@ -239,7 +239,7 @@ class Trainer(BaseTrainer):
 
         # 模型初始化
         model.init_weights()
-    
+
         if self.distributed:
             if self.cfg.get('syncBN', True):
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(self.device)
@@ -268,10 +268,10 @@ class Trainer(BaseTrainer):
             optimizer = {}
             if is_module_wrapper(model):
                 model = model.module
-                        
+
             for submodule_name, optimizer_dict in self.cfg.optimizer.items():
                 optimizer[submodule_name] = build_optimizer(getattr(model, submodule_name), optimizer_dict)
-        
+
         # build lr scheduler
         # 如果构造复合lr调度，则不在全局hook中注册
         lr_scheduler = {}
@@ -279,7 +279,7 @@ class Trainer(BaseTrainer):
             # lr schedule 复合，对多个子模块独立控制
             for submodule_name, lr_config in self.cfg.lr_config.items():
                 assert('policy' in lr_config)
-                
+
                 policy_type = lr_config.pop('policy')
                 # If the type of policy is all in lower case, e.g., 'cyclic',
                 # then its first letter will be capitalized, e.g., to be 'Cyclic'.
@@ -292,7 +292,7 @@ class Trainer(BaseTrainer):
                 hook_type = policy_type + 'LrUpdaterHook'
                 lr_config['type'] = hook_type
                 lr_scheduler[submodule_name] = build_from_cfg(lr_config, HOOKS)         
-                
+
         # build training strategy
         custom_runner = self.cfg.get('runner', dict(type='EpochBasedRunner', max_epochs=1))
         self.runner = build_runner(
@@ -318,9 +318,9 @@ class Trainer(BaseTrainer):
 
         custom_hooks = self.cfg.get('custom_hooks', None)        
         self.runner.register_training_hooks(
-            self.cfg.lr_config if len(lr_scheduler) == 0 else None,   # 学习率调整策略，比如step,warmup等
-            optimizer_config,                                       # 优化器的相关后处理，比如限制梯度操作等
-            self.cfg.checkpoint_config,                             # checkpoint相关处理
+            self.cfg.lr_config if len(lr_scheduler) == 0 else None,     # 学习率调整策略，比如step,warmup等
+            optimizer_config,                                           # 优化器的相关后处理，比如限制梯度操作等
+            self.cfg.checkpoint_config,                                 # checkpoint相关处理
             self.cfg.log_config,                                         
             self.cfg.get('momentum_config', None),                       
             custom_hooks_config=custom_hooks)
