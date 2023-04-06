@@ -274,7 +274,7 @@ class TFDataset(torch.utils.data.IterableDataset):
             self.num_samples += len(index) 
             self.num_samples_list.append(len(index))
 
-        rank, world_size = get_dist_info()     
+        rank, world_size = get_dist_info()
         self.rank = rank
         self.world_size = world_size
 
@@ -434,9 +434,12 @@ class TFDataset(torch.utils.data.IterableDataset):
             np.random.shuffle(local_select_index_list_in_world)
 
             # 选出当前卡，在本次epoch下使用的数据集
+            # 每个线程，应该拥有相同的shuffle
             select_index_list = copy.deepcopy(local_select_index_list_in_world[self.rank])
             np.random.shuffle(select_index_list)
 
+            pprint(f'Rank {self.rank} thread id {worker_info.id} use select {select_index_list}')
+            
             # 基于选择的索引，获得具体样本数量列表
             use_data_path_num_list = [self.num_samples_list[i] for i in select_index_list]
             real_num_samples = np.sum(use_data_path_num_list)
