@@ -10,6 +10,7 @@ import tfrecord
 from tfrecord.tools.tfrecord2idx import *
 from antgo.ant import environment
 import json
+import logging
 
 
 numpy_dtype_map = {
@@ -82,7 +83,7 @@ class TFDataWriter(object):
                     data_and_description[k] = (json.dumps(v).encode('utf-8'), 'byte')
 
                 if k not in data_and_description:
-                    print(f'ignore {k} in data')
+                    logging.error(f'ignore {k} in data')
 
             if len(data_and_description) == 0:
                 continue
@@ -95,7 +96,7 @@ class TFDataWriter(object):
                 tfwriter = tfrecord.TFRecordWriter(filename)
 
             if (index+1) % data_num == 0:
-                print(f'Finish tfrecord package process {index+1}/{data_num}.')
+                logging.info(f'Finish tfrecord package process {index+1}/{data_num}.')
 
             tfwriter.write(data_and_description)            
             count += 1
@@ -109,7 +110,7 @@ class TFDataWriter(object):
             index_file = os.path.join(self.output_path, "%s-%.5d-of-%.5d-index"%(self.prefix, shard_i, self.num_shards))
             create_index(tfrecord_file, index_file)
 
-        print(f'Finish tfrecord index.')
+        logging.info(f'Finish tfrecord index.')
 
 
 class KVDataWriter(object):
@@ -119,7 +120,7 @@ class KVDataWriter(object):
         self.output_path = output_path
         self.size_in_shard = size_in_shard
         self.keys = keys
-        
+
     def write(self, data_iterator):
         data_num = len(data_iterator)     
         size_in_shard = self.size_in_shard
@@ -140,7 +141,7 @@ class KVDataWriter(object):
             if data is None:
                 continue
             serial_data_bytes = pickle.dumps(data)
-            
+
             if (index // size_in_shard) != shard_i:
                 if kvwriter is not None:
                     if len(cache_list) > 0:
@@ -149,7 +150,7 @@ class KVDataWriter(object):
                         cache_list = []
 
                     kvwriter.flush()
-                
+
                 # 构建新的数据包写对象
                 shard_i = index // size_in_shard
                 filename = os.path.join(self.output_path, "%s-%.5d-of-%.5d-kvrecord"%(self.prefix, shard_i, self.num_shards))
@@ -158,14 +159,14 @@ class KVDataWriter(object):
             suffix = ''
             for k in self.keys:
                 suffix += f'-{data[k]}'
-            
+
             cache_list.append((f'{self.prefix}-{index}{suffix}', serial_data_bytes))
             if len(cache_list) == cache_size:
-                print(f'Finish kv package process {index+1}/{data_num}.')
+                logging.info(f'Finish kv package process {index+1}/{data_num}.')
                 keys, values = zip(*cache_list)
                 kvwriter.write_many(keys, values)
                 cache_list = []
-            
+
             index += 1
 
         if len(cache_list) > 0:
@@ -173,4 +174,4 @@ class KVDataWriter(object):
             kvwriter.write_many(keys, values)
 
         kvwriter.flush()
-        print(f'Finish kv package {data_num}/{data_num}.')
+        logging.info(f'Finish kv package {data_num}/{data_num}.')
