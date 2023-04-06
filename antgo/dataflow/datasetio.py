@@ -26,7 +26,7 @@ class TFDataWriter(object):
         self.prefix = prefix
         self.output_path = output_path
         self.size_in_shard = size_in_shard
-    
+
     def write(self, data_iterator):
         data_num = len(data_iterator)     
         size_in_shard = self.size_in_shard
@@ -46,7 +46,7 @@ class TFDataWriter(object):
         for index, data in enumerate(data_iterator):
             if data is None:
                 continue
-            
+
             data_and_description = {}
             for k,v in data.items():
                 if isinstance(v, str):
@@ -108,7 +108,7 @@ class TFDataWriter(object):
             tfrecord_file = os.path.join(self.output_path, "%s-%.5d-of-%.5d-tfrecord"%(self.prefix, shard_i, self.num_shards))
             index_file = os.path.join(self.output_path, "%s-%.5d-of-%.5d-index"%(self.prefix, shard_i, self.num_shards))
             create_index(tfrecord_file, index_file)
-        
+
         print(f'Finish tfrecord index.')
 
 

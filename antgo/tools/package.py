@@ -1,5 +1,3 @@
-import enum
-from genericpath import samefile
 import sys
 from antgo.dataflow.datasetio import *
 import os
@@ -12,12 +10,13 @@ import requests
 import logging
 from queue import Queue
 import threading
+import time
 
 
 class __SampleDataGenerator(object):
     def __init__(self, json_files, thread_num=1) -> None:
         self.json_file_list = json_files.split(',')
-        
+
         # 预先加载，获得样本总数
         self.num_sample = 0
         self.num_sample_offset = [0]
@@ -33,10 +32,10 @@ class __SampleDataGenerator(object):
         self.data_cache = Queue(10000)        
         self.thread_pool = [
             threading.Thread(target=self.produce, args=(i*assign_sample_num, min((i+1)*assign_sample_num, self.num_sample), i, self.data_cache)) for i in range(thread_num)]
-        
+
         for thread_i in range(thread_num):
             self.thread_pool[thread_i].start()
-            
+
         self.thread_stop_flag = [
             1 for _ in range(thread_num)
         ]
@@ -67,16 +66,16 @@ class __SampleDataGenerator(object):
             stop_ii = len(samples)
             if file_i == start_file_i:
                 start_ii = start_sample_offset
-            
+
             if file_i == stop_file_i:
                 stop_ii = min(stop_sample_offset, len(samples))
-        
+
             for sample in samples[start_ii:stop_ii]:
                 # 转换通用数据格式
                 for k in sample.keys():
                     if k in ['image_url', 'image_file']:
                         continue
-                    
+
                     # 对于list数据直接转换为numpy
                     if isinstance(sample[k], list):
                         if len(sample[k]) > 0:
@@ -90,7 +89,7 @@ class __SampleDataGenerator(object):
                                 for i in range(len(sample[k])):
                                     if len(sample[k][i]) == 0:
                                         sample[k][i] = [0 for _ in range(max_num)]
-                        
+
                         # 转换到numpy类型    
                         sample[k] = np.array(sample[k])
                         # 转换浮点数值
@@ -127,23 +126,23 @@ class __SampleDataGenerator(object):
                     # 图像为空时，直接忽略样本
                     logging.error(f"Sample {sample['image_file']} data abnormal")
                     continue
-                else:            
+                else:
                     # yield sample
                     data_cache.put(sample)
 
         # 设置线程标记
         self.thread_stop_flag[thread_id] = 0
-        
+
     def __len__(self):
         return self.num_sample
 
     def __iter__(self):
         while np.sum(self.thread_stop_flag) > 0:
             try:
-                data = self.data_cache.get(5)   # 最大等待5s
+                data = self.data_cache.get(2)   # 最大等待5s
             except:
                 continue
-            
+
             if data is not None:
                 yield data
 
@@ -152,12 +151,12 @@ def package_to_kv(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs):
     # src_file json 文件 (仅支持标准格式 sample_gt.json)
     if not os.path.exists(tgt_folder):
         os.makedirs(tgt_folder)
-        
+
     # 创建writer 实例
     kvw = KVDataWriter(prefix, tgt_folder, -1)
 
-    # 
-    kvw.write(__SampleDataGenerator(src_file))
+    # 写数据
+    kvw.write(__SampleDataGenerator(src_file, thread_num=kwargs.get('thread_num', 10)))
 
 
 def package_to_tfrecord(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs):
@@ -179,8 +178,10 @@ def package_to_tfrecord(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs
 #     content = json.load(fp)
 #     # content = set(content)
 #     print(len(content))
-    
-# package_to_tfrecord("/root/workspace/extract/annotation.json,/root/workspace/extract/annotation.json", "/root/workspace/extract", "hello", 10000, thread_num=5)
+
+# start_time = time.time()
+# package_to_tfrecord("/root/workspace/dataset/finetune_4/annotation.json", "/root/workspace/dataset/extract", "hello", 100000, thread_num=3)
+# print(f'all time {time.time() - start_time}')
 
 # print('sdf')
 
