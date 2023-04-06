@@ -24,6 +24,10 @@ model = dict(
         latent_dim=512,
         src_domain_batch_size=5,
         gen_loss_weight=1.0,
-        dis_loss_weight=1.0
+        dis_loss_weight=1.0,
+        encoder_config=dict(
+            from_name='backbone',
+            from_index=-1
+        )
     )
 )
