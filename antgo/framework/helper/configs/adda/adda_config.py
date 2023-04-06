@@ -18,9 +18,9 @@ lr_config = dict(
 # 模型配置
 model = dict(
     type='Adda',
+    model=dict(),              # 由具体下游任务定义    
     train_cfg=dict(
         input_dim=1024,
-        model=dict(),              # 由具体下游任务定义
         latent_dim=512,
         src_domain_batch_size=5,
         gen_loss_weight=1.0,

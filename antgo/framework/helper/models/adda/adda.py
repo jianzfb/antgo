@@ -43,7 +43,7 @@ class Adda(BaseModule):
 
         # discriminator (判别器模型)
         assert(train_cfg.get('latent_dim'))
-        self.discriminator = Discriminator(train_cfg.get('latent_dim'))
+        self.discriminator = Discriminator(train_cfg.input_dim, train_cfg.latent_dim)
         self.dis_loss_func = torch.nn.BCELoss()
 
         self.src_domain_batch_size = train_cfg.get('src_domain_batch_size', 5)      # 目标域数据量 在一个batch里
@@ -69,14 +69,16 @@ class Adda(BaseModule):
 
         encoder_feature_proxy = getattr(getattr(self.model, self.encoder_config.from_name), 'forward', None)
         from_index = self.encoder_config.from_index
-        out = None
+        out = {}
         def feature_extract_func(x):
             x = encoder_feature_proxy(x)
             feature = x
             if isinstance(x, tuple):
                 feature = x[from_index]
             batch_size = feature.shape[0]
-            out = feature.view(batch_size, -1)
+            out.update({
+                'feature': feature.view(batch_size, -1)
+            })
             return x
         setattr(getattr(self.model, self.encoder_config.from_name), 'forward', feature_extract_func)
 
@@ -85,8 +87,8 @@ class Adda(BaseModule):
 
         src_domain_batch_size = self.src_domain_batch_size
         tgt_domain_batch_size = num_samples - self.src_domain_batch_size
-        src_domain_encoder_feature = out[:self.src_domain_batch_size]       # 例如，仿真数据 (0)
-        tgt_domain_encoder_feature = out[self.src_domain_batch_size:]       # 例如，真实数据 (1)
+        src_domain_encoder_feature = out['feature'][:self.src_domain_batch_size]       # 例如，仿真数据 (0)
+        tgt_domain_encoder_feature = out['feature'][self.src_domain_batch_size:]       # 例如，真实数据 (1)
 
         # 
         gen_loss = self.dis_loss_func(
@@ -132,10 +134,8 @@ class Adda(BaseModule):
         setattr(getattr(self.model, self.encoder_config.from_name), 'forward', encoder_feature_proxy)
 
         # 结束
-        losses = step_1_total_loss
-        losses.update(step_2_total_loss)
         log_vars = step_1_log_vars
         log_vars.update(step_2_log_vars)
         outputs = dict(
-            loss=losses, log_vars=log_vars, num_samples=num_samples)
+            loss=0.0, log_vars=log_vars, num_samples=num_samples)
         return outputs

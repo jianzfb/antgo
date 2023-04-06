@@ -17,6 +17,7 @@ class ACModule(BaseModule):
     def forward(self, *args, **kwargs):
         out = {}
 
+        feature_extract_proxy = None
         if self.test_cfg.get('feature_config', None) is not None:
             feature_extract_proxy = getattr(getattr(self.model, self.test_cfg.feature_config.from_name), 'forward', None)
             from_index = self.test_cfg.feature_config.from_index
@@ -33,6 +34,7 @@ class ACModule(BaseModule):
 
             setattr(getattr(self.model, self.test_cfg.feature_config.from_name), 'forward', feature_extract_func)
 
+        uncertainty_extract_proxy = None
         if self.test_cfg.get('uncertainty_config', None) is not None:
             uncertainty_extract_proxy = getattr(self.model, self.test_cfg.uncertainty_config.from_name, None)
             with_sigmoid = self.test_cfg.uncertainty_config.with_sigmoid
@@ -52,6 +54,7 @@ class ACModule(BaseModule):
                 return x
             setattr(self.model, self.test_cfg.uncertainty_config.from_name, uncertainty_extract_func)
 
+        bayesian_proxy = None
         if self.test_cfg.get('bayesian_config', None) is not None:
             bayesian_proxy = getattr(self.model, self.test_cfg.bayesian_config.from_name, None)
             p = self.test_cfg.bayesian_config.p
@@ -62,5 +65,14 @@ class ACModule(BaseModule):
             setattr(self.model, self.test_cfg.bayesian_config.from_name, bayesian_func)
 
         result = self.model(*args, **kwargs)
+
+        # 恢复
+        if feature_extract_proxy is not None:
+            setattr(getattr(self.model, self.test_cfg.feature_config.from_name), 'forward', feature_extract_proxy)
+        if uncertainty_extract_proxy is not None:
+            setattr(self.model, self.test_cfg.uncertainty_config.from_name, uncertainty_extract_proxy)
+        if bayesian_proxy is not None:
+            setattr(self.model, self.test_cfg.bayesian_config.from_name, bayesian_proxy)
+
         out.update(result)
         return out
