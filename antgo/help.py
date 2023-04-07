@@ -82,10 +82,22 @@ def check_project_environment(args):
     return True
 
 
-def generate_project_exp_example(template_project_folder, target_folder):
+def generate_project_exp_example(template_project_folder, target_folder, exp_name):
     # step1: 拷贝cifar10分类模型代码
     if not os.path.exists(os.path.join(target_folder, 'cifar10')):
-        shutil.copytree(os.path.join(template_project_folder, 'cifar10'), os.path.join(target_folder, 'cifar10'))
+        # 复制cifar10分类样例代码
+        if exp_name is None or exp_name == '':
+            exp_name = 'cifar10'
+        shutil.copytree(os.path.join(template_project_folder, 'cifar10'), os.path.join(target_folder, exp_name))
+
+        if exp_name != 'cifar10':
+            # 修改main.py的帮助信息
+            with open( os.path.join(target_folder, exp_name, 'main.py'), 'r') as fp:
+                content = fp.read()
+                content = content.replace('cifar10', exp_name)
+            
+            with open( os.path.join(target_folder, exp_name, 'main.py'), 'w') as fp:
+                fp.write(content)
     else:
         logging.warn('MVP code has existed in current path.')
         return

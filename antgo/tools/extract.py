@@ -196,7 +196,7 @@ def extract_from_images(
         json.dump(annotation_list, fp)
 
 
-def extract_from_coco(source_file, target_folder, filter_label, **kwargs):
+def extract_from_coco(source_file, target_folder, filter_label=None, **kwargs):
     if not source_file.endswith('json'):
         logging.error('Source file must be json file')
         return

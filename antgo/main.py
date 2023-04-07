@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
+sys.path.append('/root/workspace/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
@@ -221,7 +222,7 @@ def main():
   if action_name == 'create' and sub_action_name == 'mvp':
     # 在项目目录下生成mvp
     project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')
-    generate_project_exp_example(project_folder, args.tgt)
+    generate_project_exp_example(project_folder, args.tgt, args.name)
     return
 
   ####################################################################################################

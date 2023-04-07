@@ -2,22 +2,22 @@
 # 多机多卡训练
 # TODO
 # 单机多卡训练(4卡运行)
-# bash launch.sh ../cifar10/main.py 4 --exp=xxx --no-validate --process=train
+# bash launch.sh ./cifar10/main.py 4 --exp=cifar10 --no-validate --process=train
 # 单机1卡训练(可以自定义使用第几块卡 --gpu-id=0)
-# python3 ./cifar10/main.py --exp=xxx --gpu-id=0 --no-validate --process=train
+# python3 ./cifar10/main.py --exp=cifar10 --gpu-id=0 --no-validate --process=train
 # 单机CPU训练(仅用于调试)
-# python3 ./cifar10/main.py --exp=xxx --gpu-id=-1 --no-validate --process=train
+# python3 ./cifar10/main.py --exp=cifar10 --gpu-id=-1 --no-validate --process=train
 
 # (2) 评估过程
 # 单机多卡评估(4卡运行)
-# bash launch.sh ./cifar10/main.py 4 --exp=xxx --checkpoint=yyy --process=test
+# bash launch.sh ./cifar10/main.py 4 --exp=cifar10 --checkpoint=yyy --process=test
 # 单机1卡评估(可以自定义使用第几块卡 --gpu-id=0)
-# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=0 --process=test
+# python3 ./cifar10/main.py --exp=cifar10 --checkpoint=yyy --gpu-id=0 --process=test
 # 单机CPU测试(仅用于调试)
-# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=-1 --process=test
+# python3 ./cifar10/main.py --exp=cifar10 --checkpoint=yyy --gpu-id=-1 --process=test
 
 # (3) 模型导出过程
-# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --process=export
+# python3 ./cifar10/main.py --exp=cifar10 --checkpoint=yyy --process=export
 
 # 1.step 通用模块
 from audioop import findfit
@@ -94,12 +94,34 @@ def main():
         # 如果配置的是远程数据路径，则在本地寻找对应路径数据
         if not getattr(cfg.data, data_stage, None):
             continue
-        
-        for i in range(len(getattr(cfg.data, data_stage).data_path_list)):
-            data_record_path = getattr(cfg.data, data_stage).data_path_list[i]
-            if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
-                try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
-                getattr(cfg.data, data_stage).data_path_list[i] = try_local_path   
+
+        if isinstance(getattr(cfg.data, data_stage), list):
+            data_part_0 = getattr(cfg.data, data_stage)[0]
+            data_part_1 = getattr(cfg.data, data_stage)[1]
+
+            if not getattr(data_part_0, 'data_path_list', None):
+                continue
+            for i in range(len(data_part_0.data_path_list)):
+                data_record_path = data_part_0.data_path_list[i]
+                if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
+                    try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
+                    data_part_0.data_path_list[i] = try_local_path
+
+            if not getattr(data_part_1, 'data_path_list', None):
+                continue
+            for i in range(len(data_part_1.data_path_list)):                
+                data_record_path = data_part_1.data_path_list[i]
+                if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
+                    try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
+                    data_part_1.data_path_list[i] = try_local_path
+        else:
+            if not getattr(getattr(cfg.data, data_stage), 'data_path_list', None):
+                continue
+            for i in range(len(getattr(cfg.data, data_stage).data_path_list)):
+                data_record_path = getattr(cfg.data, data_stage).data_path_list[i]
+                if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
+                    try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
+                    getattr(cfg.data, data_stage).data_path_list[i] = try_local_path   
 
     # step3 检查补充配置
     if nn_args.extra_config is not None and nn_args.extra_config != '':
@@ -287,12 +309,12 @@ def main():
     # step5 添加root (运行时，输出结果保存的根目录地址)
     cfg.root = nn_args.root if nn_args.root != '' else './output/'
     cfg.root = os.path.join(cfg.root, nn_args.exp)
-    # step4.1 添加root地址（影响checkpoint_config, evaluation）
+    # step5.1 添加root地址（影响checkpoint_config, evaluation）
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
         cfg.evaluation.out_dir = cfg.root
 
-    # step5: 执行指令(训练、测试、模型导出)
+    # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程
         trainer = Trainer(
