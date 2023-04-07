@@ -753,7 +753,7 @@ def demo_server_start(demo_name,
       os.makedirs(demo_tempate_dir)
 
     html_template = demo_config['html_template']
-    if html_template is None:
+    if html_template is None or html_template == '':
       html_template = 'demo.html'
   
       if not os.path.exists(os.path.join(demo_tempate_dir, html_template)):

@@ -1,14 +1,46 @@
-# Build as antgo/server
+# 容器镜像构建主机需要连通公网
 
-FROM jupyter/scipy-notebook:8f56e3c47fec
-MAINTAINER Project Antgo <jian@mltalker.com>
+# 基础容器镜像, https://github.com/NVIDIA/nvidia-docker/wiki/CUDA
+# 
+# https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
+# require Docker Engine >= 17.05
+#
+# builder stage
+FROM nvidia/cuda:10.2-runtime-ubuntu18.04
 
-# install antgo and its dependence
+# 基础容器镜像的默认用户已经是 root
+# USER root
+
+# 使用国内开源镜像站提供的 pypi 配置
+RUN mkdir -p /root/.pip/
+COPY ./docker/pip.conf /root/.pip/pip.conf
+
+# 拷贝待安装文件到基础容器镜像中的 /tmp 目录
+COPY Miniconda3-latest-Linux-x86_64.sh /tmp
+RUN mkdir -p /tmp/antgo
+COPY ./ /tmp/antgo/
+
+# https://conda.io/projects/conda/en/latest/user-guide/install/linux.html#installing-on-linux
+# 安装 Miniconda3 到基础容器镜像的 /miniconda3 目录中
+RUN bash /tmp/Miniconda3-latest-Linux-x86_64.sh -b -p /miniconda3
+
+# 使用 Miniconda3 默认 python 环境
+RUN cd /tmp/antgo && apt-get update -y && apt-get install -y gcc && /miniconda3/bin/pip install --no-cache-dir -r requirements.txt &&/miniconda3/bin/pip install opencv-python-headless && /miniconda3/bin/python setup.py build_ext install && rm -rf /tmp/* 
+
+# 安装 vim和curl 工具（依然使用华为开源镜像站）
+RUN cp -a /etc/apt/sources.list /etc/apt/sources.list.bak && \
+    sed -i "s@http://.*archive.ubuntu.com@http://repo.huaweicloud.com@g" /etc/apt/sources.list && \
+    sed -i "s@http://.*security.ubuntu.com@http://repo.huaweicloud.com@g" /etc/apt/sources.list && \
+    apt-get update && \
+    apt-get install -y vim curl git && \
+    apt-get clean && \
+    mv /etc/apt/sources.list.bak /etc/apt/sources.list
+
+# 设置容器镜像预置环境变量
+# 请务必设置 PYTHONUNBUFFERED=1, 以免日志丢失
+ENV PATH=$PATH:/miniconda3/bin \
+    PYTHONUNBUFFERED=1
+
+# 设置容器镜像默认用户与工作目录
 USER root
-ADD install.sh install.sh
-RUN bash install.sh
-
-# set enviroment variable
-ENV CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH}:/rocksdb/include
-ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/rocksdb
-ENV LIBRARY_PATH=${LIBRARY_PATH}:/rocksdb
+WORKDIR /tiger

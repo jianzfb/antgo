@@ -7,17 +7,16 @@ from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
-from antgo.crowdsource.browser_server import *
+# from antgo.dataflow import dataset
 from antgo.dataflow.dataset.queue_dataset import *
 from antgo.dataflow.recorder import *
-from antgo.dataflow.dataset.parallel_read import MultiprocessReader
 from antvis.client.httprpc import *
-from antgo.dataflow.dataset.parallel_read import *
+from antgo.crowdsource.browser_server import *
 import requests
 import json
-from jinja2 import Environment, FileSystemLoader
 import traceback
 import threading
+import cv2
 
 
 class BrowserDataRecorder(object):
@@ -55,7 +54,7 @@ class BrowserDataRecorder(object):
 
       file_name = '%s.png' % str(uuid.uuid4())
       image_path = os.path.join(self.dump_dir, file_name)
-      imwrite(image_path, transfer_result)
+      cv2.imwrite(image_path, transfer_result)
       return file_name
     except:
       logger.error('Couldnt transfer image data.')
@@ -93,18 +92,9 @@ class BrowserDataRecorder(object):
             data[data_name]['type'] = value['type']
           else:
             data[data_name]['type'] = value['TYPE']
-
-        # if 'tag' in value or 'TAG' in value:
-        #   if 'tag' in value:
-        #     data[data_name]['tag'] = value['tag']
-        #   else:
-        #     data[data_name]['tag'] = value['TAG']
-
-        # if 'id' in value or 'ID' in value:
-        #   if 'id' in value:
-        #     data[data_name]['id'] = value['id']
-        #   else:
-        #     data[data_name]['id'] = value['ID']
+        
+          if 'bboxes' in value and data[data_name]['type'] == 'IMAGE':
+            data[data_name]['bboxes'] = value['bboxes']
 
         data[data_name]['title'] = data_name
 
@@ -139,18 +129,22 @@ class BrowserDataRecorder(object):
   def record(self, val):
     self.prepare_queue.put(val)
 
-
+  def close(self):
+    pass
+  
 class AntBrowser(AntBase):
   def __init__(self,
                ant_context,
                ant_name,
-               ant_token,
                ant_data_folder,
-               ant_dataset,
                ant_dump_dir,
+               ant_token,
+               ant_task_config,
+               ant_dataset,
                **kwargs):
     super(AntBrowser, self).__init__(ant_name, ant_context, ant_token, **kwargs)
     self.ant_data_source = ant_data_folder
+    self.ant_task_config = ant_task_config
     self.dataset_name = ant_dataset
     self.dump_dir = ant_dump_dir
     self.host_ip = self.context.params.system.get('ip', '127.0.0.1')
@@ -179,7 +173,36 @@ class AntBrowser(AntBase):
   def wait_until_stop(self):
     self.p.join()
 
-  def start(self):
+  def download(self):
+    if not os.path.exists(os.path.join(self.dump_dir, 'check')):
+      os.makedirs(os.path.join(self.dump_dir, 'check'))
+
+    folder = os.path.join(self.dump_dir, 'check')
+    file_name = f'check.json'
+    self.rpc.browser.download(
+      file_folder=folder,
+      file_name=file_name
+    )    
+    with open(os.path.join(folder, file_name), 'r') as fp:
+      content = json.load(fp)
+
+      return content
+  
+  def waiting(self, until_exit=False):
+    # 需要等待本轮标准完成
+    while True:
+      response = self.rpc.info.get()
+      if response['status'] == 'ERROR':
+        print('rpc error...')
+        time.sleep(5)
+        continue
+
+      if response['content']['project_state']['stage'] == 'finish' and not until_exit:
+        break
+      # 等待10分钟后检查
+      time.sleep(10)
+  
+  def start(self, *args, **kwargs):
     # 1.step 获得数据集解析
     running_ant_task = None
     if self.token is not None:
@@ -208,14 +231,19 @@ class AntBrowser(AntBase):
         logger.error('unknow error')
         exit(-1)
 
-    self._running_task = running_ant_task
-    if running_ant_task is not None:
-      self.dataset_name = running_ant_task.dataset_name
+    if running_ant_task is None:
+        # 1.2.step load custom task
+        if self.ant_task_config is not None:
+            custom_task = create_task_from_xml(self.ant_task_config, self.context)
+            if custom_task is None:
+                logger.error('Couldnt load custom task.')
+                exit(-1)
+            running_ant_task = custom_task
 
-    parse_flag = ''
-    dataset_cls = None
-    if self.dataset_name != '':
-      dataset_cls = AntDatasetFactory.dataset(self.dataset_name, parse_flag)
+    self._running_task = running_ant_task
+    if running_ant_task is not None and running_ant_task.dataset is not None:
+      self.dataset_name = running_ant_task.dataset_name
+    dataset_cls = running_ant_task.dataset
 
     # 2.step 配置记录器
     self.rpc = HttpRpc("v1", "antgo/api", self.host_ip, self.host_port)
@@ -230,26 +258,13 @@ class AntBrowser(AntBase):
 
     # 3.1.step 准备web服务资源
     static_folder = '/'.join(os.path.dirname(__file__).split('/')[0:-1])
+    if os.path.exists(self.dump_dir):
+      shutil.rmtree(self.dump_dir)
     browser_static_dir = os.path.join(self.dump_dir, 'browser', 'static')
-    if os.path.exists(browser_static_dir):
-      shutil.rmtree(browser_static_dir)
-
     shutil.copytree(os.path.join(static_folder, 'resource', 'app'), browser_static_dir)
 
     # 3.2.step 准备有效端口
     self.host_port = _pick_idle_port(self.host_port)
-
-    # base_url = '{}:{}'.format(self.host_ip, self.host_port)
-    #
-    # # 3.3.step 准备web配置文件
-    # template_file_folder = os.path.join(static_folder, 'resource', 'browser', 'static')
-    # file_loader = FileSystemLoader(template_file_folder)
-    # env = Environment(loader=file_loader)
-    # template = env.get_template('config.json')
-    # output = template.render(BASE_URL=base_url)
-    #
-    # with open(os.path.join(browser_static_dir, 'static', 'config.json'), 'w') as fp:
-    #   fp.write(output)
 
     # 3.3.step 状态
     train_offset, val_offset, test_offset = 0, 0, 0
@@ -264,7 +279,8 @@ class AntBrowser(AntBase):
       'dataset_offset': test_offset
     }]
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+    if self.context.params.browser is not None and \
+      'offset' in self.context.params.browser.keys():
       if 'TRAIN' in self.context.params.browser.offset.keys():
         train_offset = self.context.params.browser.offset.TRAIN
         offset_config = {
@@ -273,7 +289,8 @@ class AntBrowser(AntBase):
         }
         offset_configs[0] = offset_config
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+    if self.context.params.browser is not None and \
+      'offset' in self.context.params.browser.keys():
       if 'VAL' in self.context.params.browser.offset:
         val_offset = self.context.params.browser.offset.VAL
         offset_config = {
@@ -282,7 +299,8 @@ class AntBrowser(AntBase):
         }
         offset_configs[1] = offset_config
 
-    if self.context.params.browser is not None and 'offset' in self.context.params.browser.keys():
+    if self.context.params.browser is not None and \
+      'offset' in self.context.params.browser.keys():
       if 'TEST' in self.context.params.browser.offset:
         test_offset = self.context.params.browser.offset.TEST
         offset_config = {
@@ -298,7 +316,8 @@ class AntBrowser(AntBase):
         dataset_flag = \
           self.context.params.browser.dataset_flag.lower()
 
-    if dataset_cls is not None:
+    data_json_file = kwargs.get('json_file', None)
+    if dataset_cls is not None and data_json_file is None:
       train_dataset = \
         dataset_cls(dataset_flag, os.path.join(self.ant_data_source, self.dataset_name))
       self._running_dataset = train_dataset
@@ -313,6 +332,39 @@ class AntBrowser(AntBase):
     if not os.path.exists(self.context.recorder.tag_dir):
       os.makedirs(self.context.recorder.tag_dir)
 
+    sample_meta = {}
+    sample_list = []
+    sample_folder = None
+    if data_json_file is not None:
+      # step1: 加载样本信息
+      # 直接使用来自于data_json_file中的样本
+      # 兼容两种常用的存储样本信息方式（1.纯json格式，所有样本以list形式存储；2.样本按行存储，每个样本的信息是json格式）
+      try:
+        # try 1 (纯json格式，所有样本以list形式存储)
+        with open(data_json_file, 'r', encoding="utf-8") as fp:
+          sample_list = json.load(fp)
+          self.context.recorder.dataset_size = len(sample_list)
+      except:
+        # try 2 (样本信息按行存储，每个样本信息是json格式)
+        with open(data_json_file, 'r', encoding="utf-8") as fp:
+          sample_info_str = fp.readline()
+          sample_info_str = sample_info_str.strip()
+          
+          while sample_info_str:
+            sample_info = json.loads(sample_info_str)
+            sample_list.append(sample_info)
+            sample_info_str = fp.readline()
+            sample_info_str = sample_info_str.strip()
+            if sample_info_str == '':
+              break        
+            
+      # step2: 尝试加载样本集meta信息
+      sample_folder = os.path.dirname(data_json_file)
+      data_meta_file = os.path.join(sample_folder, 'meta.json')
+      if os.path.exists(data_meta_file):
+        with open(data_meta_file, 'r', encoding="utf-8") as fp:
+          sample_meta = json.load(fp)
+              
     sample_offset = train_offset
     if dataset_flag == 'test':
       sample_offset = test_offset
@@ -323,14 +375,18 @@ class AntBrowser(AntBase):
     # 设置数据基本信息
     profile_config = {
       'dataset_flag': dataset_flag.upper(),
-      'samples_num': self.running_dataset.size if self.running_dataset is not None else self.context.params.browser.size,
+      'samples_num': self.context.recorder.dataset_size,
       'samples_num_checked': sample_offset
     }
 
     # 设置记录器偏移
     self.context.recorder.sample_index = sample_offset
 
-    white_users = self.context.params.browser.white_users
+    white_users = \
+      self.context.params.browser.white_users.get() if self.context.params.browser.white_users is not None else None
+    if len(white_users) == 0:
+      white_users = None
+    user_input = self.context.params.browser.user_input
     # 在独立进程中启动webserver
     self.p = \
       multiprocessing.Process(
@@ -340,9 +396,9 @@ class AntBrowser(AntBase):
               self.host_port,
               offset_configs,
               profile_config,
-              [],
-              white_users)
+              sample_folder, sample_list, sample_meta, user_input, white_users)
       )
+    self.p.daemon = True
     self.p.start()
 
     # 等待直到http服务开启

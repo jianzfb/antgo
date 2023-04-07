@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from antgo.framework.helper.base_module import BaseModule, ModuleDict, ModuleList, Sequential
 from .base_runner import BaseRunner
 from .builder import RUNNERS, build_runner
@@ -8,7 +7,7 @@ from .checkpoint import (CheckpointLoader, _load_checkpoint,
 from .default_constructor import DefaultRunnerConstructor
 from .dist_utils import (allreduce_grads, allreduce_params, get_dist_info,
                          init_dist, master_only)
-from .epoch_based_runner import EpochBasedRunner, Runner
+from .epoch_based_runner import EpochBasedRunner
 from .fp16_utils import LossScaler, auto_fp16, force_fp32, wrap_fp16_model
 from .hooks import (HOOKS, CheckpointHook, ClosureHook,
                     DistEvalHook, DistSamplerSeedHook, 
@@ -44,7 +43,7 @@ from .utils import get_host_info, get_time_str, obj_from_dict, set_random_seed
 # from mmcv.device import ipu  # isort:skip  # noqa
 
 __all__ = [
-    'BaseRunner', 'Runner', 'EpochBasedRunner', 'IterBasedRunner', 'LogBuffer',
+    'BaseRunner', 'EpochBasedRunner', 'IterBasedRunner', 'LogBuffer',
     'HOOKS', 'Hook', 'CheckpointHook', 'ClosureHook', 'LrUpdaterHook',
     'FixedLrUpdaterHook', 'StepLrUpdaterHook', 'ExpLrUpdaterHook',
     'PolyLrUpdaterHook', 'InvLrUpdaterHook', 'CosineAnnealingLrUpdaterHook',

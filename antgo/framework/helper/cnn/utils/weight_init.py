@@ -483,7 +483,7 @@ class PretrainedInit(object):
     def __call__(self, module):
         from antgo.framework.helper.runner import (_load_checkpoint_with_prefix, load_checkpoint,
                                  load_state_dict)
-        logger = get_logger('mmcv')
+        logger = get_logger('antgo')
         if self.prefix is None:
             print_log(f'load model from: {self.checkpoint}', logger=logger)
             load_checkpoint(

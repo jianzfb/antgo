@@ -4,6 +4,7 @@ from __future__ import print_function
 from contextlib import contextmanager
 from antgo.dataflow.dataset import *
 import antvis.client.mlogger as mlogger
+import os
 
 
 class Params(object):

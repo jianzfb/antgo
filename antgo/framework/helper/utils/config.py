@@ -569,13 +569,6 @@ class Config:
             else:
                 with open(file, 'w', encoding='utf-8') as f:
                     f.write(self.pretty_text)
-        else:
-            import mmcv
-            if file is None:
-                file_format = self.filename.split('.')[-1]
-                return mmcv.dump(cfg_dict, file_format=file_format)
-            else:
-                mmcv.dump(cfg_dict, file)
 
     def merge_from_dict(self, options, allow_list_keys=True):
         """Merge list into cfg_dict.

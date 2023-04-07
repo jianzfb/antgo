@@ -106,7 +106,7 @@ class BaseHandler(tornado.web.RequestHandler):
       raise tornado.web.MissingArgumentError(name)
 
   def timestamp_2_str(self, now_time):
-    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_time))
+    return time.strftime("%Y-%m-%dx%H-%M-%S", time.localtime(now_time))
 
   def response(self, status_code=RESPONSE_STATUS_CODE.SUCCESS, message='', content={}, status=None):
     self.set_status(status_code)

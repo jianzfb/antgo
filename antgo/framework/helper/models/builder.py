@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 
 from antgo.framework.helper.cnn import MODELS as CV_MODELS
@@ -6,6 +5,7 @@ from antgo.framework.helper.utils import Registry
 
 MODELS = Registry('models', parent=CV_MODELS)
 
+CLASSIFIERS = MODELS
 BACKBONES = MODELS
 NECKS = MODELS
 ROI_EXTRACTORS = MODELS

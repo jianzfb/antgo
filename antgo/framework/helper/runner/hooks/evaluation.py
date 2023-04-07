@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import os.path as osp
 import warnings
 from math import inf
@@ -9,6 +8,8 @@ from torch.utils.data import DataLoader
 
 from antgo.framework.helper.fileio import FileClient
 from antgo.framework.helper.utils import is_seq_of
+import json
+import os
 from .hook import Hook
 from .logger import LoggerHook
 
@@ -203,29 +204,20 @@ class EvalHook(Hook):
 
     def before_run(self, runner):
         if not self.out_dir:
+            # 在out_dir没有被设置时，继承runner.work_dir的工作目录
             self.out_dir = runner.work_dir
 
+        # 存储控制对象
         self.file_client = FileClient.infer_client(self.file_client_args,
                                                    self.out_dir)
-
-        # if `self.out_dir` is not equal to `runner.work_dir`, it means that
-        # `self.out_dir` is set so the final `self.out_dir` is the
-        # concatenation of `self.out_dir` and the last level directory of
-        # `runner.work_dir`
-        if self.out_dir != runner.work_dir:
-            basename = osp.basename(runner.work_dir.rstrip(osp.sep))
-            self.out_dir = self.file_client.join_path(self.out_dir, basename)
-            runner.logger.info(
-                (f'The best checkpoint will be saved to {self.out_dir} by '
-                 f'{self.file_client.name}'))
-
+        # 添加固定路径格式
+        self.out_dir = osp.join(self.out_dir, 'output', 'metric')
+        
         if self.save_best is not None:
             if runner.meta is None:
                 warnings.warn('runner.meta is None. Creating an empty one.')
                 runner.meta = dict()
-            runner.meta.setdefault('hook_msgs', dict())
-            self.best_ckpt_path = runner.meta['hook_msgs'].get(
-                'best_ckpt', None)
+            runner.meta.setdefault('hook_msgs', dict())            
 
     def before_train_iter(self, runner):
         """Evaluate the model only at the start of training by iteration."""
@@ -270,14 +262,17 @@ class EvalHook(Hook):
 
     def _do_evaluate(self, runner):
         """perform evaluation and save ckpt."""
-        results = self.test_fn(runner.model, self.dataloader)
+        needed_info = self.metric_func.keys()['gt']
+        results = self.test_fn(runner.model, self.dataloader, needed_info)
         runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
-        key_score = self.evaluate(runner, results)
+        key_score, metric_info = self.evaluate(runner, results)
         # the key_score may be `None` so it needs to skip the action to save
         # the best checkpoint
+        
         if self.save_best and key_score:
             self._save_ckpt(runner, key_score)
-
+            self._save_metric(runner, metric_info)
+        
     def _should_evaluate(self, runner):
         """Judge whether to perform evaluation.
 
@@ -313,6 +308,20 @@ class EvalHook(Hook):
                 return False
         return True
 
+    def _save_metric(self, runner, info):
+        current = ''
+        if self.by_epoch:
+            current = f'epoch_{runner.epoch + 1}'
+            cur_type, cur_time = 'epoch', runner.epoch + 1
+        else:
+            current = f'iter_{runner.iter + 1}'
+            cur_type, cur_time = 'iter', runner.iter + 1
+
+        info.update({
+            'current': current    
+        })
+        self.file_client.put_text(json.dumps(info), os.path.join(self.out_dir, 'best.json'))
+    
     def _save_ckpt(self, runner, key_score):
         """Save the best checkpoint.
 
@@ -333,22 +342,20 @@ class EvalHook(Hook):
             best_score = key_score
             runner.meta['hook_msgs']['best_score'] = best_score
 
-            if self.best_ckpt_path and self.file_client.isfile(
-                    self.best_ckpt_path):
+            if self.best_ckpt_path and self.file_client.isfile(self.best_ckpt_path):
                 self.file_client.remove(self.best_ckpt_path)
                 runner.logger.info(
                     (f'The previous best checkpoint {self.best_ckpt_path} was '
                      'removed'))
 
-            best_ckpt_name = f'best_{self.key_indicator}_{current}.pth'
-            self.best_ckpt_path = self.file_client.join_path(
-                self.out_dir, best_ckpt_name)
-            runner.meta['hook_msgs']['best_ckpt'] = self.best_ckpt_path
-
+            # best_ckpt_name = f'best_{self.key_indicator}_metric_{best_score}_cur_{current}.pth'
+            best_ckpt_name = 'best.pth'
+            self.best_ckpt_path = self.file_client.join_path(self.out_dir, best_ckpt_name)            
             runner.save_checkpoint(
                 self.out_dir,
                 filename_tmpl=best_ckpt_name,
                 create_symlink=False)
+            
             runner.logger.info(
                 f'Now best checkpoint is saved as {best_ckpt_name}.')
             runner.logger.info(
@@ -359,7 +366,7 @@ class EvalHook(Hook):
         """Evaluate the results.
 
         Args:
-            runner (:obj:`mmcv.Runner`): The underlined training runner.
+            runner The underlined training runner.
             results (list): Output results.
         """
         eval_res = {}
@@ -368,8 +375,14 @@ class EvalHook(Hook):
                 results, logger=runner.logger, **self.eval_kwargs)
         else:
             gts = []
-            for gt_i in range(len(self.dataloader.dataset)):
-                gts.append(self.dataloader.dataset.get_ann_info(gt_i))
+            needed_info = self.metric_func.keys()['gt']
+            for sample in results:
+                gt = {}
+                for k in needed_info:
+                    v = sample[k]
+                    gt[k] = v
+                    sample.pop(k)
+                gts.append(gt)
 
             eval_res = self.metric_func(results, gts)
 
@@ -378,10 +391,6 @@ class EvalHook(Hook):
         runner.log_buffer.ready = True
 
         if self.save_best is not None:
-            # If the performance of model is pool, the `eval_res` may be an
-            # empty dict and it will raise exception when `self.save_best` is
-            # not None. More details at
-            # https://github.com/open-mmlab/mmdetection/issues/6265.
             if not eval_res:
                 warnings.warn(
                     'Since `eval_res` is an empty dict, the behavior to save '
@@ -391,9 +400,14 @@ class EvalHook(Hook):
             if self.key_indicator == 'auto':
                 # infer from eval_results
                 self._init_rule(self.rule, list(eval_res.keys())[0])
-            return eval_res[self.key_indicator]
 
-        return None
+            eval_metric_info = {
+                'score': eval_res,
+                'indicator': self.key_indicator
+            }
+            return eval_res[self.key_indicator], eval_metric_info
+
+        return None, None
 
 
 class DistEvalHook(EvalHook):
@@ -509,18 +523,23 @@ class DistEvalHook(EvalHook):
             tmpdir = osp.join(runner.work_dir, '.eval_hook')
 
         # 所有节点都需要运行
+        needed_info = []        
+        if self.metric_func is not None:
+            needed_info = self.metric_func.keys()['gt']
         results = self.test_fn(
             runner.model,
             self.dataloader,
             tmpdir=tmpdir,
-            gpu_collect=False)
+            gpu_collect=False,
+            needed_info=needed_info)
 
         if runner.rank == 0:
             # 仅在master节点进行统计模型分数
             print('\n')
             runner.log_buffer.output['eval_iter_num'] = len(self.dataloader)
-            key_score = self.evaluate(runner, results)
+            key_score, metric_info = self.evaluate(runner, results)
             # the key_score may be `None` so it needs to skip the action to
             # save the best checkpoint
             if self.save_best and key_score:
                 self._save_ckpt(runner, key_score)
+                self._save_metric(runner, metric_info)

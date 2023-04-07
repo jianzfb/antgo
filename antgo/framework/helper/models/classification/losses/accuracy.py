@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from numbers import Number
 
 import numpy as np

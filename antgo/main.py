@@ -6,536 +6,630 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
-from typing import NamedTuple
-from antgo.ant.demo import *
-from antgo.ant.train import *
-from antgo.ant.challenge import *
-from antgo.ant.browser import *
-from antgo.ant.batch import *
-from antgo.ant.activelearning import *
-from antgo.ant.ensemble import *
-from antgo.ant import activelearning_api
-from antgo.ant import spider_api
-from antgo.ant.utils import *
-from antgo.sandbox.sandbox import *
+sys.path.append('/root/workspace/antgo')
+import os
 from antgo.utils.utils import *
+from antgo.utils.args import *
+from antgo.ant.utils import *
+from antgo.ant.client import get_client, launch_server
+from antgo.command import *
+from antgo.framework.helper.tools.util import *
+from antgo.help import *
+from antgo import config
 from antgo import version
-import traceback
 from jinja2 import Environment, FileSystemLoader
-
-import multiprocessing
-import subprocess
-
-if sys.version > '3':
-    PY3 = True
-else:
-    PY3 = False
+import json
+from antgo import tools
+from antgo.script import *
+import yaml
 
 
-def _check_environment():
-  is_in_mltalker = True if os.environ.get('ANT_ENVIRONMENT', '') != '' else False
-  return is_in_mltalker
+# 需要使用python3
+assert(int(sys.version[0]) >= 3)
 
-
-_ant_support_commands = ["train",
-                         "challenge",
-                         "activelearning",
-                         "dataset",
-                         "predict",
-                         "ensemble",
-                         "demo",
-                         "spider",
-                         "browser",
-                         "startproject",
-                         "config"]
 
 #############################################
 #######   antgo parameters            #######
 #############################################
-flags.DEFINE_string('main_file', None, 'main file')
-flags.DEFINE_string('main_param', None, 'model parameters')
-flags.DEFINE_string('main_folder', None, 'resource folder')
-flags.DEFINE_string('version', None, 'minist antgo version')
-flags.DEFINE_string('task', None, 'task file')
-flags.DEFINE_string('task_t', '', 'task type')
-flags.DEFINE_string('task_ep', '', 'holdout/repeated-holdout/bootstrap/kfold')
-flags.DEFINE_string('task_em', '', 'define based on task type')
-flags.DEFINE_integer('task_badcase_num', 100, 'badcase analysis (num)')
-flags.DEFINE_integer('task_badcase_category', 1, 'badcase analysis (category)')
-flags.DEFINE_string('dataset', None, 'dataset name')
-flags.DEFINE_string('file', '', '')
-flags.DEFINE_string('signature', '123', 'signature')
-flags.DEFINE_string('devices', '', 'devices')
-flags.DEFINE_string('servers', '', '')
-flags.DEFINE_string('dump', None, 'dump dir')
-flags.DEFINE_string('token', None, 'token')
-flags.DEFINE_string('proxy', None, 'proxy')
-flags.DEFINE_string('name', None, 'name')
-flags.DEFINE_string('author', None, 'author')
-flags.DEFINE_string('net', None, 'GENERAL')
-flags.DEFINE_string('max_time', '100d', 'max running time')
-flags.DEFINE_string('from_experiment', None, 'load model from experiment')
-flags.DEFINE_string('restore_experiment', None, 'restore experiment')
-flags.DEFINE_string('factory', None, '')
-flags.DEFINE_string('config', None, 'config file')
-flags.DEFINE_string('benchmark', None, 'benchmark experiments')
-flags.DEFINE_string('host_ip', '127.0.0.1', 'host ip address')
-flags.DEFINE_integer('host_port', 80, 'port')
-flags.DEFINE_string('html_template', None, 'html template')
-flags.DEFINE_indicator('worker', '')
-flags.DEFINE_indicator('master', '')
-flags.DEFINE_indicator('unlabel', '')           # 未标注数据
-flags.DEFINE_indicator('candidate', '')         # 候选数据
-flags.DEFINE_indicator('skip_training', '')
-flags.DEFINE_indicator('research', 'research mode or not')
-flags.DEFINE_string('running_platform', 'local', 'local/cloud')
-flags.DEFINE_string('param', '', '')  # k:v,k:v (v内部需要分段时使用/切分)
+DEFINE_string('project', '', 'set project name')
+DEFINE_string('git', None, '')
+DEFINE_string('branch', None, '')
+DEFINE_string('commit', None, '')
+DEFINE_string('image', '', '')      # 镜像
+DEFINE_int('cpu', 0, 'set cpu number')          # cpu 数
+DEFINE_int('gpu', 0, 'set gpu number')          # gpu 数
+DEFINE_int('memory', 0, 'set memory size (M)')  # 内存大小（单位M）
+DEFINE_string('name', None, '')     # 名字
+DEFINE_string('type', None, '')     # 类型
+DEFINE_indicator('cloud', True, '') # 指定云端运行
+DEFINE_string("address", None, "")
+DEFINE_indicator("auto", True, '')  # 是否项目自动优化
+DEFINE_string('id', None, '')
+DEFINE_int('port', 0, 'set port')
+DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 
+############## submitter ###################
+DEFINE_indicator('ssh', True, '')     # ssh 提交
+DEFINE_indicator('k8s', True, '')     # k8s 提交
+DEFINE_indicator('local', True, '')   # 本地提交
 
-FLAGS = flags.AntFLAGS
-Config = config.AntConfig
+############## global config ###############
+DEFINE_string('token', None, '')
+############## project config ##############
+DEFINE_string('semi', "", 'set semi supervised method')
+DEFINE_string("distillation", "", "set distillation method")
+DEFINE_string("activelearning", "", "set activelearning method")
+DEFINE_string("ensemble", "", "set ensemble method")
+
+############## tool config ##############
+DEFINE_string("src", "./", "set src folder/file")
+DEFINE_string("tgt", "./", "set tgt folder/file")
+DEFINE_int("frame-rate", 30, "video frame rate")
+DEFINE_string("prefix", None, "filter by prefixe")
+DEFINE_string("suffix", None, "filter by suffix")
+DEFINE_string("ext", None, "filter by ext")
+DEFINE_string("white-users", None, "name:password,name:password")
+DEFINE_string("tags", None, "tag info")
+DEFINE_string("no-tags", None, "tag info")
+DEFINE_indicator("feedback", True, "")
+DEFINE_indicator("user-input", True, "")
+DEFINE_int('num', 0, "number")
+DEFINE_indicator("to", True, "")
+DEFINE_indicator("from", True, "")
+DEFINE_indicator("extra", True, "load extra package(mano,smpl,...)")
+DEFINE_indicator("shuffle", True, "")
+DEFINE_int("max-size", 0, "")
+DEFINE_float("ext-ratio", 0.35, "")
+DEFINE_int("ext-size", 0, "")
+DEFINE_indicator("ignore-incomplete", True, "")
+
+#############################################
+DEFINE_nn_args()
+
+action_level_1 = ['train', 'eval', 'export', 'config', 'submitter', 'server', 'activelearning']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool']
 
 
 def main():
-  # 1.step antgo logo
+  # 显示antgo logo
   main_logo()
+  
+  # 备份脚本参数
+  sys_argv_cp = sys.argv
+  
+  # 解析参数
+  action_name = sys.argv[1]
+  sub_action_name = None
+  if action_name in action_level_1:
+    sys.argv = [sys.argv[0]] + sys.argv[2:]
+  else:
+    sub_action_name = sys.argv[2]
+    sys.argv = [sys.argv[0]] + sys.argv[3:]
+  args = parse_args()
 
-  # 3.step parse antgo running params
-  if len(sys.argv) >= 2:
-    if sys.argv[1].startswith('--') or sys.argv[1].startswith('-'):
-      flags.cli_param_flags(sys.argv[1:])
-    else:
-      flags.cli_param_flags(sys.argv[2:])
-
-  # token
-  token = FLAGS.token()
-  if not PY3 and token is not None:
-    token = unicode(token)
-
-  if sys.argv[1] == 'config':
+  ######################################### 配置文件操作 ################################################
+  # 检查配置文件是否存在
+  if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
+    # 使用指定配置文件更新
     if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
       os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
-    if FLAGS.config() is not None:
-      if not os.path.exists(FLAGS.config()):
-        logger.error('Config file not exist.')
-        return
+    config_data = {'FACTORY': './.factory', 'USER_TOKEN': ''}
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
 
-      # 使用指定配置文件更新
-      shutil.copy(FLAGS.config(), os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'))
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn('Using default config file.')
 
-      # 解析配置文件，并创建对应信息
-      Config.parse_xml(FLAGS.config())
-      if not os.path.exists(Config.data_factory):
-        os.makedirs(Config.data_factory)
-      if not os.path.exists(Config.task_factory):
-        os.makedirs(Config.task_factory)
+  # 配置操作
+  if action_name == 'config':
+    config_data = {'FACTORY': '', 'USER_TOKEN': ''}
+    # 读取现有数值
+    config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+    config.AntConfig.parse_xml(config_xml)
+    config_data['FACTORY'] = getattr(config.AntConfig, 'factory', '')
+    config_data['USER_TOKEN'] = getattr(config.AntConfig, 'token', '')
 
-      logger.info('Success update config file.')
-    else:
-      # 在当前目录生成默认配置文件
-      # --dataset, --token, 自动配置
-      config_data = {'DATASET_FACTORY': '', 'USER_TOKEN': ''}
-      if FLAGS.dataset() is not None:
-        if not os.path.exists(FLAGS.dataset()):
-          logger.error('Dataset factory path dont exist.')
-          return
-        config_data['DATASET_FACTORY'] = FLAGS.dataset()
+    if args.root is not None:
+      config_data['FACTORY'] = args.root
+    if args.token is not None:
+      config_data['USER_TOKEN'] = args.token
 
-        # 创建目录
-        if not os.path.exists(os.path.join(FLAGS.dataset(), 'dataset')):
-          os.makedirs(os.path.join(FLAGS.dataset(), 'dataset'))
-        if not os.path.exists(os.path.join(FLAGS.dataset(), 'task')):
-          os.makedirs(os.path.join(FLAGS.dataset(), 'task'))
-      if FLAGS.token() is not None:
-         config_data['USER_TOKEN'] = FLAGS.token()
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
 
-      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-      config_template = env.get_template('config.xml')
-      config_content = config_template.render(**config_data)
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
 
-      with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
-        fp.write(config_content)
-
-      logger.info('Finish antgo global config.')
-    return
-
-  # 检查配置文件是否存在
-  if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
-    logger.error('Missing config file, please run antgo config.')
+    logging.info('Update config file.')
     return
 
   # 解析配置文件
   config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-  Config.parse_xml(config_xml)
+  config.AntConfig.parse_xml(config_xml)
 
-  # 检查最低版本与当前版本的兼容性
-  if FLAGS.running_platform == 'local' and FLAGS.version() is not None:
-    a, b, c = FLAGS.version().split('.')
-    sys_a, sys_b, sys_c = version.split('.')
-    if int(sys_a) < int(a) or int(sys_b) < int(b) or int(sys_c) < int(c):
-      logger.error('Antgo version dont satisfy task minimum request (%s).'%FLAGS.version())
+  if not os.path.exists(config.AntConfig.factory):
+    os.makedirs(config.AntConfig.factory)
+  if not os.path.exists(config.AntConfig.data_factory):
+    os.makedirs(config.AntConfig.data_factory)
+  if not os.path.exists(config.AntConfig.task_factory):
+    os.makedirs(config.AntConfig.task_factory)
+
+  ######################################### 支持扩展 ###############################################
+  if args.extra and not os.path.exists('extra'):
+    logging.info('download extra package')
+    os.system('wget http://image.mltalker.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
+  
+  if args.ext_module != '':
+    logging.info('import extent module')
+    load_extmodule(args.ext_module)
+
+  ##################################### 支持任务提交脚本配置  ###########################################
+  if action_name == 'submitter':
+    has_config_file = not (args.config == '' or args.config == 'config.py')
+    has_config_file = has_config_file and os.path.exists(args.config)
+    
+    if has_config_file:
+      if not (args.ssh or args.local or args.k8s):
+        # 当前配置脚本为用户定制化提交脚本（在提交任务时，优先使用此脚本提交）
+        # 任务提交脚本，参数必须如下格式:
+        # 镜像名字, 启动命令, GPU 数, CPU 数, 内存大小
+        # image_name, launch_argv, gpu_num, cpu_num, memory_size
+        inner_folder = os.path.join(os.environ['HOME'], '.config', 'antgo')
+        with open(args.config, encoding='utf-8', mode='r') as fp:
+          config_content = yaml.safe_load(fp)
+
+        # 将配置脚本目录写入内部目录
+        code_folder = config_content['folder']
+        shutil.copytree(code_folder, os.path.join(inner_folder, os.path.normpath(code_folder).split('/')[-1]))
+
+        # 将配置文件重新写入 (替换脚本目录地址)
+        config_content['folder'] = os.path.normpath(code_folder).split('/')[-1]
+        with open(os.path.join(inner_folder, 'submit-config.yaml'), encoding='utf-8', mode='w') as fp:
+          yaml.safe_dump(config_content, fp)
       return
 
-  # 4.step check factory
-  factory = getattr(Config, 'factory', None)
-  if factory is None or \
-      factory == '' or not os.path.exists(Config.factory):
-    logger.error('Factory folder is missing, please run antgo config.')
+    if has_config_file:
+      # 进入到这里，说明已经指定ssh,local,k8s
+      # 添加ssh,local,k8s的标准任务提交配置
+      shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
+    else:
+      if args.ssh:
+        # 生成ssh提交配置模板
+        ssh_submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'ssh-submit-config.yaml')
+        shutil.copy(ssh_submit_config_file, './')        
+      else:
+        # 生成自定义的提交配置模板
+        submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'submit-config.yaml')
+        shutil.copy(submit_config_file, './')    
     return
 
-  if not os.path.exists(Config.data_factory):
-    os.makedirs(Config.data_factory)
-  if not os.path.exists(Config.task_factory):
-    os.makedirs(Config.task_factory)
-
-  task_factory = Config.task_factory
-  data_factory = Config.data_factory
-
-  # 5.step parse antgo execute command
-  # 5.1.step other command (train, challenge, compose, deploy, server)
-  ant_cmd = sys.argv[1]
-  ant_cmd = ant_cmd.split('/')[0]
-  ant_cmd_api = '' if sys.argv[1] == ant_cmd else sys.argv[1].split('/')[-1]
-  if ant_cmd not in _ant_support_commands:
-    logger.error('Antgo cli support( %s )command.'%",".join(_ant_support_commands))
+  ######################################### 后台监控服务 ################################################
+  if action_name == 'server':
+    os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
     return
+    # launch_server(args.port, args.root, args.ext_module)
+    # return
+
+  # 检查是否后台服务活跃
+  if not get_client().alive():
+    logging.warn('Antgo auto server not work. Please run "antgo server" to launch.')
+
+  ######################################### 生成最小mvp ###############################################
+  if action_name == 'create' and sub_action_name == 'mvp':
+    # 在项目目录下生成mvp
+    project_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'mvp')
+    generate_project_exp_example(project_folder, args.tgt, args.name)
+    return
+
+  ####################################################################################################
+  # 执行指令
+  if action_name in action_level_1:
+    # 云端任务执行
+    if args.cloud:
+      # 检查项目环境
+      if not check_project_environment(args):
+        return
+
+      # 检查项目和实验是否存在
+      if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+        logging.error(f'Project {args.project} hasnot create.')
+        return
+
+      project_info = {}      
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+        project_info = json.load(fp)
+
+      if args.exp not in project_info['exp']:
+        logging.error(f'Exp {args.exp} not exist in project {args.project}.')
+        return
+
+      if not os.path.exists(args.exp):
+        logging.error(f'Exp code not found in current folder.')
+        return
   
-  if ant_cmd_api != '':
-    # api 
-    if ant_cmd == 'activelearning':
-      func = getattr(activelearning_api, 'activelearning_api_'+ant_cmd_api, None)
-      if func is None:
-        logger.error('%s/%s dont support.'%(ant_cmd, ant_cmd_api))
+      # 记录commit
+      rep = git.Repo('./')     
+      if not isinstance(project_info['exp'][args.exp], list):
+        project_info['exp'][args.exp] = []
+      
+      exp_info = exp_basic_info()
+      exp_info['exp'] = args.exp
+      exp_info['id'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
+      exp_info['branch'] = rep.active_branch.name
+      exp_info['commit'] = rep.active_branch.commit.name_rev
+      exp_info['state'] = 'running'
+      exp_info['stage'] = args.stage
+      project_info['exp'][args.exp].append(
+        exp_info
+      )
+
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+        json.dump(project_info, fp)
+      
+      # 云端提交        
+      sys_argv_cp.append(f'--id={exp_info["id"]}')
+      filter_sys_argv_cp = []
+      for t in sys_argv_cp:
+        if t.startswith('--project'):
+          continue
+        if t.startswith('--root'):
+          continue
+        
+        filter_sys_argv_cp.append(t)
+      
+      assert(args.root)
+      sys_argv_cp = filter_sys_argv_cp
+      sys_argv_cp.append(f'--root={args.root}/{args.project}')
+      
+      sys_argv_cmd = ' '.join(sys_argv_cp[1:])
+      sys_argv_cmd = sys_argv_cmd.replace('--cloud', '')
+      
+      # step 1.1: 检查提交脚本配置
+      if args.local:
+        # 本地提交
+        sys_argv_cmd = sys_argv_cmd.replace('--local', '')
+        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+        sys_argv_cmd = f'antgo {sys_argv_cmd}'
+        local_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
+      elif args.ssh:
+        # ssh提交
+        sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
+        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+        sys_argv_cmd = f'antgo {sys_argv_cmd}'        
+        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
+      else:
+        # 自定义脚本提交
+        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+        sys_argv_cmd = f'antgo {sys_argv_cmd}'          
+        custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)
+      return
+    # 本地任务执行
+    elif args.project != '':
+      # 可能，运行环境就是本地
+      # 检查项目环境
+      if not check_project_environment(args):
+        return
+
+      # 检查项目和实验是否存在
+      if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+        logging.error(f'Project {args.project} hasnot create.')
+        return
+
+      project_info = {}      
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+        project_info = json.load(fp)
+
+      if args.exp not in project_info['exp']:
+        logging.error(f'Exp {args.exp} not exist in project {args.project}.')
         return
       
-      func()
-    elif ant_cmd == 'spider':
-      func = getattr(spider_api, 'spider_api_'+ant_cmd_api, None)
-      if func is None:
-        logger.error('%s/%s dont support.'%(ant_cmd, ant_cmd_api))
+      if not os.path.exists(args.exp):
+        logging.error(f'Exp code not found in current folder.')
         return
 
-      func()
+      # 记录commit
+      rep = git.Repo('./')             
+      if not isinstance(project_info['exp'][args.exp], list):
+        project_info['exp'][args.exp] = []
+      
+      exp_info = exp_basic_info()
+      exp_info['exp'] = args.exp
+      exp_info['id'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
+      exp_info['branch'] = rep.active_branch.name
+      exp_info['commit'] = rep.active_branch.commit.name_rev
+      exp_info['state'] = 'running'
+      exp_info['stage'] = args.stage
+      project_info['exp'][args.exp].append(
+        exp_info
+      )
 
-  if ant_cmd == 'startproject':
-    project_name = FLAGS.name()
-    if project_name == "":
-      project_name = 'AntgoProject'
+      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+        json.dump(project_info, fp)
 
-    if os.path.exists(os.path.join(os.curdir, project_name)):
-      while True:
-        project_i = 0
-        if not os.path.exists(os.path.join(os.curdir, '%s-%d'%(project_name, project_i))):
-          project_name = '%s-%d'%(project_name, project_i)
-          break
+      # exp, exp:id
+      args.id = exp_info['id']
 
-        project_i += 1
+    # 执行任务
+    auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
+    script_folder = os.path.join(os.path.dirname(__file__), 'script')
+    if action_name == 'train':
+      if args.checkpoint is None:
+        args.checkpoint = ''
+      if args.resume_from is None:
+        args.resume_from = ''
+        
+      if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
+        # cpu run
+        # (1)安装;(2)数据准备;(3)运行
+        command_str = f'bash install.sh; /usr/bin/python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; /usr/bin/python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
 
-    os.makedirs(os.path.join(os.curdir, project_name))
+        os.system(command_str)
+      elif len(args.gpu_id.split(',')) == 1:
+        # single gpu run
+        # (1)安装;(2)数据准备;(3)运行
+        gpu_id = args.gpu_id.split(',')[0]
+        command_str = f'bash install.sh; /usr/bin/python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; /usr/bin/python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
 
-    # generate main file and main param templates
-    template_file_folder = os.path.join(os.path.dirname(__file__), 'resource', 'templates')
-    file_loader = FileSystemLoader(template_file_folder)
-    env = Environment(loader=file_loader)
-    template = env.get_template('task_main_file.template')
-    output = template.render(ModelTime=datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d'),
-                             ModelName=FLAGS.name(),
-                             ModelAuthor=FLAGS.author() if FLAGS.author() is not None else 'xxx',
-                             tensorflow=False,
-                             GAN=False)
+        os.system(command_str)
+      else:
+        # multi gpu run
+        # (1)安装;(2)数据准备;(3)运行
+        gpu_num = len(args.gpu_id.split(','))
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
+             
+        os.system(command_str)
+    elif action_name == 'activelearning':
+      if args.checkpoint is None:
+        args.checkpoint = ''
 
-    with open(os.path.join(os.curdir, project_name, '%s_main.py' % FLAGS.name()),'w') as fp:
-      fp.write(output)
+      if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
+        # cpu run
+        # (1)安装;(2)数据准备;(3)运行
+        command_str = f'bash install.sh; /usr/bin/python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; /usr/bin/python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
 
-    template = env.get_template('task_main_param.template')
-    output = template.render(ModelTime=datetime.fromtimestamp(timestamp()).strftime('%Y-%m-%d'),
-                             ModelName=FLAGS.name(),
-                             ModelAuthor=FLAGS.author() if FLAGS.author() is not None else 'xxx')
-    with open(os.path.join(os.curdir, project_name, '%s_param.yaml' % FLAGS.name()),'w') as fp:
-      fp.write(output)
+        os.system(command_str)
+      elif len(args.gpu_id.split(',')) == 1:
+        # single gpu run
+        # (1)安装;(2)数据准备;(3)运行
+        gpu_id = args.gpu_id.split(',')[0]
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
 
-    template = env.get_template('task.template')
-    output = template.render(ModelName=FLAGS.name())
-    with open(os.path.join(os.curdir, project_name, '%s_task.xml' % FLAGS.name()),'w') as fp:
-      fp.write(output)
+        os.system(command_str)
+      else:
+        # multi gpu run
+        # (1)安装;(2)数据准备;(3)运行
+        gpu_num = len(args.gpu_id.split(','))
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_validate:
+          command_str += ' --no-validate'
+        if args.resume_from is not None:
+          command_str += f' --resume-from={args.resume_from}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        if args.max_epochs > 0:
+          command_str += f' --max-epochs={args.max_epochs}'
 
-    template = env.get_template('task_shell.template')
-    output = ''
-    if FLAGS.token() is not None:
-      output = template.render(token=FLAGS.token(),
-                               main_file='%s_main.py' % FLAGS.name(),
-                               main_param='%s_param.yaml' % FLAGS.name())
-    else:
-      output = template.render(task='%s_task.xml' % FLAGS.name(),
-                               main_file='%s_main.py' % FLAGS.name(),
-                               main_param='%s_param.yaml' % FLAGS.name())
-
-    with open(os.path.join(os.curdir, project_name, 'run.sh'), 'w') as fp:
-      fp.write(output)
-
-    return
-
-  # 7.step check related params
-  # 7.1 must set name
-  name = FLAGS.name()
-  if name is None:
-    logger.error('Must set experiemnt name.')
-    return
-
-  # 7.2 check main folder (all related model code, includes main_file and main_param)
-  main_folder = FLAGS.main_folder()
-  if main_folder is None:
-    main_folder = os.path.abspath(os.curdir)
-
-  if os.path.exists(os.path.join(main_folder, '%s.tar.gz'%name)):
-    untar_shell = 'openssl enc -d -aes256 -in %s.tar.gz -k %s | tar xz -C %s' % (name, FLAGS.signature(), '.')
-    subprocess.call(untar_shell, shell=True, cwd=main_folder)
-    os.remove(os.path.join(main_folder, '%s.tar.gz' % name))
-
-    main_folder = os.path.join(main_folder, name)
-    os.chdir(main_folder)
-
-  # 7.3 check dump dir (all running data is stored here)
-  dump_dir = FLAGS.dump()
-  if dump_dir is None:
-    dump_dir = os.path.join(os.path.abspath(os.curdir), 'dump')
-    if not os.path.exists(dump_dir):
-      os.makedirs(dump_dir)
-
-  # 7.4 check main file
-  main_file = FLAGS.main_file()
-  if main_file is None or not os.path.exists(os.path.join(main_folder, main_file)):
-    if not (FLAGS.worker() or FLAGS.master()):
-      logger.error('Main executing file dont exist.')
-      return
-
-  # 8 step ant running
-  # 8.1 step what is task
-  task = FLAGS.task()
-  if task is not None:
-    if os.path.exists(os.path.join(task_factory, task)):
-      task = os.path.join(task_factory, task)
-    else:
-      task = os.path.join(main_folder, task)
-
-  dataset = FLAGS.dataset()
-  if task is None and dataset is not None:
-    # build default task
-    with open(os.path.join(task_factory, '%s.xml'%name), 'w') as fp:
-      task_content = '<task><task_name>%s</task_name><task_type>%s</task_type><task_badcase><badcase_num>%d</badcase_num><badcase_category>%d</badcase_category></task_badcase>' \
-                     '<input>' \
-                     '<source_data><data_set_name>%s</data_set_name>' \
-                     '</source_data>' \
-                     '<estimation_procedure><type>%s</type></estimation_procedure>' \
-                     '<evaluation_measures><evaluation_measure>%s</evaluation_measure></evaluation_measures>' \
-                     '</input>' \
-                     '</task>'%(name, FLAGS.task_t(), FLAGS.task_badcase_num(), FLAGS.task_badcase_category(), dataset, FLAGS.task_ep(), FLAGS.task_em())
-      fp.write(task_content)
-    task = os.path.join(task_factory, '%s.xml'%name)
-
-  # 8.2 step load ant context
-  ant_context = None
-  if main_file is not None and main_file != '':
-    try:
-      ant_context = main_context(main_file, main_folder)
-    except Exception as e:
-      traceback.print_exc()
-      print('Fail to load main_file %s.'%main_file)
-      return
+        os.system(command_str)
+    elif action_name == 'eval':
+      assert(args.checkpoint is not None)      
+      # (1)安装;(2)数据准备;(3)运行
+      if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
+        # cpu run
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        os.system(command_str)
+      elif len(args.gpu_id.split(',')) == 1:
+        # single gpu run
+        gpu_id = args.gpu_id.split(',')[0]
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        os.system(command_str)
+      else:
+        # multi gpu run
+        gpu_num = len(args.gpu_id.split(','))
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.checkpoint is not None:
+          command_str += f' --checkpoint={args.checkpoint}'
+        os.system(command_str)
+    elif action_name == 'export':
+      assert(args.checkpoint is not None)
+      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root}')
   else:
-    ant_context = Context()
+    if action_name == 'create':
+      if sub_action_name == 'project':
+        assert(args.name is not None)
+        assert(args.git is not None)
+        if os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.name}.json')):
+          logging.error(f'Project {args.name} has existed.')
+          return
+
+        # 加载项目默认模板
+        with open(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project.json'), 'r') as fp:
+          project_config = json.load(fp)
+
+        # 配置定制化项目
+        project_config['name'] = args.name    # 项目名称
+        project_config['type'] = args.type if args.type is not None else '' # 项目类型
+        project_config['git'] = args.git      # 项目git地址
+        project_config['image'] = args.image  # 项目需要的定制化的镜像
+        project_config['auto'] = args.auto    # 项目是否进行自动化更新  （半监督\蒸馏\迁移）
+        # 设置自动优化工具
+        project_config['tool']['semi']['method'] = args.semi
+        project_config['tool']['distillation']['method'] = args.distillation
+        project_config['tool']['activelearning']['method'] = args.activelearning
+        project_config['tool']['ensemble']['method'] = args.ensemble
+
+        # 在本地存储项目信息
+        with open(os.path.join(config.AntConfig.task_factory,f'{args.name}.json'), 'w') as fp:
+          json.dump(project_config, fp)
+
+        # 准备项目代码
+        prepare_project_environment(args.git, args.branch, args.commit)
+      elif sub_action_name == 'exp':
+        # 检查项目环境
+        if not check_project_environment(args):
+          return
+
+        # 获得基本项目信息
+        if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+          logging.error(f'Project {args.project} has not been created.')
+          return
+        project_info = {}
+        with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+          project_info = json.load(fp) 
+
+        # 项目必须存在git
+        assert(project_info['git'] != '')    
+        
+        # 创建项目实验
+        assert(args.name is not None)
+        if args.name in project_info['exp']:
+          logging.error(f'Experiment {args.name} existed')
+          return        
   
-  # 8.3 step load model config
-  main_param = FLAGS.main_param()
-  if main_param is not None:
-    main_config_path = os.path.join(main_folder, main_param)
-    try:
-      with open(main_config_path, 'r') as fp:
-        # 用户配置参数
-        params = yaml.load(fp, Loader=yaml.FullLoader)
+        if not os.path.exists(args.name):
+          # 如果不存在实验目录，创建
+          os.makedirs(args.name)
 
-        # 扩展参数
-        ext_params = {}
-        if FLAGS.param() != '':
-          for p in FLAGS.param().split(','):
-            k,v = p.split(":")     
-            ext_params[k] = v
+        if args.name not in project_info['exp']:
+          project_info['exp'][args.name] = []
 
-        # 系统全局参数
-        params.update({
-          'system': {'research': FLAGS.research(), 
-                    'skip_training': FLAGS.skip_training(),
-                    'ip': FLAGS.host_ip(),
-                    'port': FLAGS.host_port(),
-                    'devices': FLAGS.devices(),
-                    'running_platform': FLAGS.running_platform(),
-                    'unlabel': FLAGS.unlabel(),
-                    'candidate': FLAGS.candidate(),
-                    'ext_params': ext_params},
-        })
-        ant_context.params = params
-    except Exception as e:
-      traceback.print_exc()
-      print('Fail to load main_param %s.'%main_param)
-      return
+        with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
+          json.dump(project_info, fp)
+    elif action_name == 'add':
+      # expert, product, basline, train/label, train/unlabel, test, val
+      project_add_action(sub_action_name, args)
+    elif action_name == 'del':
+      # expert, product, basline, train/label, train/unlabel, test, val
+      project_del_action(sub_action_name, args)
+    elif action_name == 'tool':
+      # 工具相关
+      if sub_action_name.startswith('extract'):
+        # extract/videos, extract/images
+        tool_func = getattr(tools, f'extract_from_{sub_action_name.split("/")[1]}', None)
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+        tool_func(
+          args.src, 
+          args.tgt, 
+          frame_rate=args.frame_rate, 
+          filter_prefix=args.prefix, 
+          filter_suffix=args.suffix, 
+          filter_ext=args.ext,
+          feedback=args.feedback,
+          num=args.num,
+          shuffle=args.shuffle,
+          max_size=args.max_size,
+          ext_ratio=args.ext_ratio)
+      elif sub_action_name.startswith('browser'):
+        tool_func = getattr(tools, f'browser_{sub_action_name.split("/")[-1]}', None)
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+        tool_func(args.src, args.tags, args.white_users, args.feedback, args.user_input)
+      elif sub_action_name.startswith('filter'):
+        tool_func = getattr(tools, f'filter_by_{sub_action_name.split("/")[1]}', None)
 
-  ant_context.name = name
-  ant_context.data_factory = data_factory
-  ant_context.task_factory = task_factory
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return 
+        
+        tool_func(args.src, args.tgt, args.tags, args.no_tags)
+        return
+      elif sub_action_name.startswith('package'):
+        tool_func = getattr(tools, f'package_to_{sub_action_name.split("/")[1]}', None)
 
-  # 8.4 step load experiment
-  if FLAGS.from_experiment() is not None and \
-          FLAGS.running_platform() == 'local':
-    experiment_path = ''
-    if os.path.isdir(FLAGS.from_experiment()):
-      # 绝对路径指定的实验
-      experiment_path = FLAGS.from_experiment()
-    else:
-      experiment_path = os.path.join(dump_dir, FLAGS.from_experiment())
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+        
+        # src: json文件路径
+        # tgt: 打包数据存放目录
+        # prefix: 打包数据的文件前缀
+        # num: 每个shard内样本条数
+        tool_func(args.src, args.tgt, args.prefix, args.num)
+      elif sub_action_name.startswith('download'):
+        tool_func = getattr(tools, f'download_from_{sub_action_name.split("/")[1]}', None)
 
-    if not os.path.exists(experiment_path):
-      logger.error('Couldnt find experiment %s.'%FLAGS.from_experiment())
-      return
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+ 
+        tool_func(args.tgt, args.tags)
+      elif sub_action_name.startswith('label'):
+        if sub_action_name.split("/")[1] == 'start':
+          tool_func = getattr(tools, f'label_{sub_action_name.split("/")[1]}', None)
+          if tool_func is None:
+            logging.error(f'Tool {sub_action_name} not exist.')
+            return
 
-    # 设置实验目录
-    ant_context.from_experiment = experiment_path
+          tool_func(args.src, args.tgt, args.tags, args.type, args.white_users, ignore_incomplete=args.ignore_incomplete, root=args.root, exp=args.exp)
+          return
+        else:
+          tool_func = None
+          if args.to:
+            tool_func = getattr(tools, f'label_to_{sub_action_name.split("/")[1]}', None)
+          else:
+            tool_func = getattr(tools, f'label_from_{sub_action_name.split("/")[1]}', None)
 
-  # time stamp
-  time_stamp = timestamp()
-  if ant_cmd == "train":
-    try:
-      with running_sandbox(sandbox_time=FLAGS.max_time(),
-                          sandbox_dump_dir=main_folder,
-                          sandbox_experiment=None,
-                          sandbox_user_token=token,
-                          sandbox_user_proxy=FLAGS.proxy(),
-                          sandbox_user_signature=FLAGS.signature()):
-        running_process = AntTrain(ant_context,
-                                  name,
-                                  data_factory,
-                                  dump_dir,
-                                  token,
-                                  task,
-                                  dataset,
-                                  main_file=main_file,
-                                  main_folder=main_folder,
-                                  main_param=main_param,
-                                  time_stamp=time_stamp,
-                                  running_platform=FLAGS.running_platform(),
-                                  proxy=FLAGS.proxy(),
-                                  signature=FLAGS.signature())
-        running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-  elif ant_cmd == 'challenge':
-    try:
-      with running_sandbox(sandbox_dump_dir=main_folder,
-                          sandbox_experiment=None,
-                          sandbox_user_token=token,
-                          sandbox_user_proxy=FLAGS.proxy(),
-                          sandbox_user_signature=FLAGS.signature()):
-        running_process = AntChallenge(ant_context,
-                                      name,
-                                      data_factory,
-                                      dump_dir,
-                                      token,
-                                      task,
-                                      dataset,
-                                      FLAGS.benchmark(),
-                                      main_file=main_file,
-                                      main_folder=main_folder,
-                                      main_param=main_param,
-                                      time_stamp=time_stamp,
-                                      running_platform=FLAGS.running_platform())
-        running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-  elif ant_cmd == "demo":
-    try:
-      running_process = AntDemo(ant_context,
-                                name,
-                                dump_dir,
-                                token,
-                                task,
-                                html_template=FLAGS.html_template(),
-                                time_stamp=time_stamp,
-                                devices=FLAGS.devices())
+          if tool_func is None:
+            logging.error(f'Tool {sub_action_name} not exist.')
+            return
 
-      running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-  elif ant_cmd == "predict":
-    try:
-      running_process = AntBatch(ant_context,
-                                name,
-                                token,
-                                data_factory,
-                                dump_dir,
-                                task,
-                                dataset,
-                                unlabel=FLAGS.unlabel(),
-                                devices=FLAGS.devices(),
-                                restore_experiment=FLAGS.restore_experiment())
-      running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-  elif ant_cmd == "activelearning":
-    try:
-      running_process = AntActiveLearning(ant_context,
-                                          name,
-                                          data_factory,
-                                          dump_dir,
-                                          token,
-                                          task,
-                                          main_file=main_file,
-                                          main_folder=main_folder,
-                                          main_param=main_param,
-                                          time_stamp=time_stamp)
-      running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-  elif ant_cmd == 'browser':
-    try:
-      running_process = AntBrowser(ant_context,
-                                  name,
-                                  token,
-                                  data_factory,
-                                  dataset,
-                                  dump_dir)
-      running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-  elif ant_cmd == 'ensemble':
-    assert(ant_cmd_api in ['train', 'merge', 'release'])
-    try:
-      running_process = AntEnsemble(ant_context,
-                                    name,
-                                    data_factory,
-                                    dump_dir,
-                                    token,
-                                    task,
-                                    dataset,
-                                    ant_cmd_api,
-                                    main_file=main_file,
-                                    main_folder=main_folder,
-                                    main_param=main_param,
-                                    time_stamp=time_stamp,
-                                    skip_training=FLAGS.skip_training(),
-                                    running_platform=FLAGS.running_platform())
-      running_process.start()
-    except Exception as e:
-      print(e)
-      traceback.print_exc()
-
-  # 9.step clear context
-  ant_context.wait_until_clear()
+          tool_func(args.src, args.tgt, prefix=args.prefix, tags=args.tags, ignore_incomplete=args.ignore_incomplete)
+    elif action_name == 'show':
+      show_action(sub_action_name, args)
+    elif action_name == 'get':
+      get_action(sub_action_name, args)
+    elif action_name == 'update':
+      update_project_config(sub_action_name, args)
 
 if __name__ == '__main__':
   main()

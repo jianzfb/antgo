@@ -5,7 +5,7 @@ import warnings
 import torch
 import torch.nn as nn
 
-from core.bbox import bbox_overlaps
+from antgo.framework.helper.models.detectors.core.bbox import bbox_overlaps
 from antgo.framework.helper.models.builder import LOSSES
 from .utils import weighted_loss
 

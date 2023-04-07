@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from .registry import MODULE_WRAPPERS
 
 

@@ -1,13 +1,123 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 
 import torch.nn as nn
 from antgo.framework.helper.cnn import ConvModule
 from antgo.framework.helper.base_module import BaseModule
 from torch.nn.modules.batchnorm import _BatchNorm
+from antgo.framework.helper.models.builder import BACKBONES
 
-from ..builder import BACKBONES
-from ..utils import InvertedResidual, make_divisible
+
+def make_divisible(value, divisor, min_value=None, min_ratio=0.9):
+    """Make divisible function.
+
+    This function rounds the channel number down to the nearest value that can
+    be divisible by the divisor.
+
+    Args:
+        value (int): The original channel number.
+        divisor (int): The divisor to fully divide the channel number.
+        min_value (int, optional): The minimum value of the output channel.
+            Default: None, means that the minimum value equal to the divisor.
+        min_ratio (float): The minimum ratio of the rounded channel
+            number to the original channel number. Default: 0.9.
+    Returns:
+        int: The modified output channel number
+    """
+
+    if min_value is None:
+        min_value = divisor
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than (1-min_ratio).
+    if new_value < min_ratio * value:
+        new_value += divisor
+    return new_value
+
+
+class InvertedResidual(BaseModule):
+    """InvertedResidual block for MobileNetV2.
+
+    Args:
+        in_channels (int): The input channels of the InvertedResidual block.
+        out_channels (int): The output channels of the InvertedResidual block.
+        stride (int): Stride of the middle (first) 3x3 convolution.
+        expand_ratio (int): adjusts number of channels of the hidden layer
+            in InvertedResidual by this amount.
+        conv_cfg (dict, optional): Config dict for convolution layer.
+            Default: None, which means using conv2d.
+        norm_cfg (dict): Config dict for normalization layer.
+            Default: dict(type='BN').
+        act_cfg (dict): Config dict for activation layer.
+            Default: dict(type='ReLU6').
+        with_cp (bool): Use checkpoint or not. Using checkpoint will save some
+            memory while slowing down the training speed. Default: False.
+
+    Returns:
+        Tensor: The output tensor
+    """
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 stride,
+                 expand_ratio,
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN'),
+                 act_cfg=dict(type='ReLU6'),
+                 with_cp=False,
+                 init_cfg=None):
+        super(InvertedResidual, self).__init__(init_cfg)
+        self.stride = stride
+        assert stride in [1, 2], f'stride must in [1, 2]. ' \
+            f'But received {stride}.'
+        self.with_cp = with_cp
+        self.use_res_connect = self.stride == 1 and in_channels == out_channels
+        hidden_dim = int(round(in_channels * expand_ratio))
+
+        layers = []
+        if expand_ratio != 1:
+            layers.append(
+                ConvModule(
+                    in_channels=in_channels,
+                    out_channels=hidden_dim,
+                    kernel_size=1,
+                    conv_cfg=conv_cfg,
+                    norm_cfg=norm_cfg,
+                    act_cfg=act_cfg))
+        layers.extend([
+            ConvModule(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim,
+                kernel_size=3,
+                stride=stride,
+                padding=1,
+                groups=hidden_dim,
+                conv_cfg=conv_cfg,
+                norm_cfg=norm_cfg,
+                act_cfg=act_cfg),
+            ConvModule(
+                in_channels=hidden_dim,
+                out_channels=out_channels,
+                kernel_size=1,
+                conv_cfg=conv_cfg,
+                norm_cfg=norm_cfg,
+                act_cfg=None)
+        ])
+        self.conv = nn.Sequential(*layers)
+
+    def forward(self, x):
+
+        def _inner_forward(x):
+            if self.use_res_connect:
+                return x + self.conv(x)
+            else:
+                return self.conv(x)
+
+        if self.with_cp and x.requires_grad:
+            out = cp.checkpoint(_inner_forward, x)
+        else:
+            out = _inner_forward(x)
+
+        return out
 
 
 @BACKBONES.register_module()
@@ -17,8 +127,8 @@ class MobileNetV2(BaseModule):
     Args:
         widen_factor (float): Width multiplier, multiply number of
             channels in each layer by this amount. Default: 1.0.
-        out_indices (Sequence[int], optional): Output from which stages.
-            Default: (1, 2, 4, 7).
+        out_indices (None or Sequence[int]): Output from which stages.
+            Default: (7, ).
         frozen_stages (int): Stages to be frozen (all param fixed).
             Default: -1, which means not freezing any parameters.
         conv_cfg (dict, optional): Config dict for convolution layer.
@@ -32,9 +142,6 @@ class MobileNetV2(BaseModule):
             and its variants only. Default: False.
         with_cp (bool): Use checkpoint or not. Using checkpoint will save some
             memory while slowing down the training speed. Default: False.
-        pretrained (str, optional): model pretrained path. Default: None
-        init_cfg (dict or list[dict], optional): Initialization config dict.
-            Default: None
     """
 
     # Parameters to build layers. 4 parameters are needed to construct a
@@ -45,41 +152,28 @@ class MobileNetV2(BaseModule):
 
     def __init__(self,
                  widen_factor=1.,
-                 out_indices=(1, 2, 4, 7),
+                 in_channels=3,
+                 out_indices=(7, ),
                  frozen_stages=-1,
                  conv_cfg=None,
                  norm_cfg=dict(type='BN'),
                  act_cfg=dict(type='ReLU6'),
                  norm_eval=False,
                  with_cp=False,
-                 pretrained=None,
-                 init_cfg=None):
+                 init_cfg=[
+                     dict(type='Kaiming', layer=['Conv2d']),
+                     dict(
+                         type='Constant',
+                         val=1,
+                         layer=['_BatchNorm', 'GroupNorm'])
+                 ]):
         super(MobileNetV2, self).__init__(init_cfg)
-
-        self.pretrained = pretrained
-        assert not (init_cfg and pretrained), \
-            'init_cfg and pretrained cannot be specified at the same time'
-        if isinstance(pretrained, str):
-            warnings.warn('DeprecationWarning: pretrained is deprecated, '
-                          'please use "init_cfg" instead')
-            self.init_cfg = dict(type='Pretrained', checkpoint=pretrained)
-        elif pretrained is None:
-            if init_cfg is None:
-                self.init_cfg = [
-                    dict(type='Kaiming', layer='Conv2d'),
-                    dict(
-                        type='Constant',
-                        val=1,
-                        layer=['_BatchNorm', 'GroupNorm'])
-                ]
-        else:
-            raise TypeError('pretrained must be a str or None')
-
         self.widen_factor = widen_factor
         self.out_indices = out_indices
-        if not set(out_indices).issubset(set(range(0, 8))):
-            raise ValueError('out_indices must be a subset of range'
-                             f'(0, 8). But received {out_indices}')
+        for index in out_indices:
+            if index not in range(0, 8):
+                raise ValueError('the item in out_indices must in '
+                                 f'range(0, 8). But received {index}')
 
         if frozen_stages not in range(-1, 8):
             raise ValueError('frozen_stages must be in range(-1, 8). '
@@ -95,7 +189,7 @@ class MobileNetV2(BaseModule):
         self.in_channels = make_divisible(32 * widen_factor, 8)
 
         self.conv1 = ConvModule(
-            in_channels=3,
+            in_channels=in_channels,
             out_channels=self.in_channels,
             kernel_size=3,
             stride=2,
@@ -153,9 +247,8 @@ class MobileNetV2(BaseModule):
                 InvertedResidual(
                     self.in_channels,
                     out_channels,
-                    mid_channels=int(round(self.in_channels * expand_ratio)),
-                    stride=stride,
-                    with_expand_conv=expand_ratio != 1,
+                    stride,
+                    expand_ratio=expand_ratio,
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg,
                     act_cfg=self.act_cfg,
@@ -163,6 +256,18 @@ class MobileNetV2(BaseModule):
             self.in_channels = out_channels
 
         return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+
+        outs = []
+        for i, layer_name in enumerate(self.layers):
+            layer = getattr(self, layer_name)
+            x = layer(x)
+            if i in self.out_indices:
+                outs.append(x)
+
+        return tuple(outs)
 
     def _freeze_stages(self):
         if self.frozen_stages >= 0:
@@ -174,24 +279,10 @@ class MobileNetV2(BaseModule):
             for param in layer.parameters():
                 param.requires_grad = False
 
-    def forward(self, x):
-        """Forward function."""
-        x = self.conv1(x)
-        outs = []
-        for i, layer_name in enumerate(self.layers):
-            layer = getattr(self, layer_name)
-            x = layer(x)
-            if i in self.out_indices:
-                outs.append(x)
-        return tuple(outs)
-
     def train(self, mode=True):
-        """Convert the model into training mode while keep normalization layer
-        frozen."""
         super(MobileNetV2, self).train(mode)
         self._freeze_stages()
         if mode and self.norm_eval:
             for m in self.modules():
-                # trick: eval have effect on BatchNorm only
                 if isinstance(m, _BatchNorm):
                     m.eval()

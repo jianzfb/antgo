@@ -18,8 +18,9 @@ from antgo.ant.activelearning_v2 import *
 class InteractContext(Context):
   def __init__(self):
     super(InteractContext, self).__init__(interact_mode=True)
+    self.server_map = {}
 
-  def __prepare_context(self, name, param, **kwargs):
+  def _prepare_context(self, name, param, **kwargs):
     # 1.step 获取基本配置信息
     config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
     if not os.path.exists(config_xml):
@@ -117,7 +118,7 @@ class InteractContext(Context):
       else:
         task = os.path.join(self.main_folder, task)
 
-    dataset = kwargs.get('dataset', '')
+    dataset = kwargs.get('dataset', 'unkown')
     if task is None and dataset is not None:
       # build default task
       with open(os.path.join(self.task_factory, '%s.xml' % name), 'w') as fp:
@@ -139,7 +140,7 @@ class InteractContext(Context):
   @contextmanager
   def Train(self, exp_name, exp_param, **kwargs):
     # 1.step 配置基本信息
-    self.__prepare_context(exp_name, exp_param, **kwargs)
+    self._prepare_context(exp_name, exp_param, **kwargs)
     # 2.step 创建时间戳
     time_stamp = timestamp()
     try:
@@ -169,7 +170,7 @@ class InteractContext(Context):
   @contextmanager
   def Challenge(self, exp_name, exp_param, benchmark='', **kwargs):
     # 1.step 配置基本信息
-    self.__prepare_context(exp_name, exp_param, **kwargs)
+    self._prepare_context(exp_name, exp_param, **kwargs)
 
     try:
       # 5.step 创建挑战过程调度对象
@@ -197,7 +198,7 @@ class InteractContext(Context):
   @contextmanager
   def Predict(self, exp_name, exp_param, **kwargs):
     # 1.step 配置基本信息
-    self.__prepare_context(exp_name, exp_param, **kwargs)
+    self._prepare_context(exp_name, exp_param, **kwargs)
 
     if 'predict' in kwargs:
       params = self.params._params
@@ -229,14 +230,14 @@ class InteractContext(Context):
       raise sys.exc_info()[0]
 
   @contextmanager
-  def Ensemble(self, exp_name, exp_param, **kwargs):
+  def Ensemble(self, exp_name, exp_param={}, **kwargs):
     # 1.step 配置基本信息
-    self.__prepare_context(exp_name, exp_param, **kwargs)
+    self._prepare_context(exp_name, exp_param, **kwargs)
 
-    if 'ensemble' in kwargs:
+    if 'config' in kwargs:
       params = self.params._params
       params.update({
-        'ensemble': kwargs['ensemble']
+        'ensemble': kwargs['config']
       })
       self.params = params
 
@@ -248,8 +249,7 @@ class InteractContext(Context):
                     self.dump_dir,
                     self.api_token,
                     self.task,
-                    self.dataset,
-                    kwargs.get('stage', 'merge'))
+                    self.dataset)
       # 准备ensemble控制
       ensemble_handler.start()
       yield ensemble_handler
@@ -269,12 +269,12 @@ class InteractContext(Context):
   @contextmanager
   def Demo(self, exp_name, exp_param, html_template=None,  **kwargs):
     # 1.step 配置基本信息
-    self.__prepare_context(exp_name, exp_param, **kwargs)
+    self._prepare_context(exp_name, exp_param, **kwargs)
 
-    if 'demo' in kwargs:
+    if 'config' in kwargs:
       params = self.params._params
       params.update({
-        'demo': kwargs['demo']
+        'demo': kwargs['config']
       })
       self.params = params
 
@@ -303,12 +303,12 @@ class InteractContext(Context):
   @contextmanager
   def Browser(self, exp_name, exp_param, **kwargs):
     # 1.step 配置基本信息
-    self.__prepare_context(exp_name, exp_param, **kwargs)
+    self._prepare_context(exp_name, exp_param, **kwargs)
 
-    if 'browser' in kwargs:
+    if 'config' in kwargs:
       params = self.params._params
       params.update({
-        'browser': kwargs['browser']
+        'browser': kwargs['config']
       })
       self.params = params
 
@@ -317,7 +317,7 @@ class InteractContext(Context):
                            exp_name,
                            self.api_token,
                            self.data_factory,
-                           kwargs.get('dataset', ''),
+                           self.dataset,
                            self.dump_dir)
       # 浏览控制
       browser.start()
@@ -336,12 +336,12 @@ class InteractContext(Context):
   @contextmanager
   def Activelearning(self, exp_name, exp_param, **kwargs):
     # 1.step 配置基本信息
-    self.__prepare_context(exp_name, exp_param, **kwargs)
+    self._prepare_context(exp_name, exp_param, **kwargs)
 
-    if 'activelearning' in kwargs:
+    if 'config' in kwargs:
       params = self.params._params
       params.update({
-        'activelearning': kwargs['activelearning']
+        'activelearning': kwargs['config']
       })
       self.params = params
 
@@ -367,4 +367,109 @@ class InteractContext(Context):
       traceback.print_exc()
       raise sys.exc_info()[0]
 
+  def __getattr__(self, __name: str):
+    assert(__name in ['ensemble', 'browser', 'demo', 'activelearning'])
+    if __name in self.server_map:
+      return self.server_map[__name]
 
+    cc = self
+    class Server(object):
+      def __init__(self, name) -> None:
+        self.name = name
+        self.handler = None
+        cc.server_map[self.name] = self
+
+      def start(self, exp_name, exp_param={}, **kwargs):
+        if self.name == 'ensemble':
+          cc._prepare_context(exp_name, exp_param, **kwargs)
+
+          if 'config' in kwargs:
+            params = cc.params._params
+            params.update({
+              'ensemble': kwargs['config']
+            })
+            cc.params = params
+
+          self.handler = \
+            AntEnsemble(cc,
+                        exp_name,
+                        cc.data_factory,
+                        cc.dump_dir,
+                        cc.api_token,
+                        cc.task,
+                        cc.dataset)
+          # 准备ensemble控制
+          self.handler.start()
+        elif self.name == 'browser':
+          # 1.step 配置基本信息
+          cc._prepare_context(exp_name, exp_param, **kwargs)
+
+          if 'config' in kwargs:
+            if 'size' not in kwargs['config']:
+              kwargs['config'].update({'size': 0})
+            params = cc.params._params
+            params.update({
+              'browser': kwargs['config']
+            })
+            cc.params = params
+
+          self.handler = AntBrowser(cc,
+                                exp_name,
+                                cc.data_factory,
+                                cc.dump_dir,
+                                cc.api_token,   
+                                cc.task,                             
+                                cc.dataset)
+          # 浏览控制
+          self.handler.start(**kwargs)
+        elif self.name == 'demo':
+          # 1.step 配置基本信息
+          cc._prepare_context(exp_name, exp_param, **kwargs)
+
+          if 'config' in kwargs:
+            params = cc.params._params
+            params.update({
+              'demo': kwargs['config']
+            })
+            cc.params = params
+
+            self.handler = AntDemo(cc,
+                          exp_name,
+                          cc.dump_dir,
+                          cc.api_token,
+                          cc.task,
+                          html_template=kwargs.get('html_template', ''),
+                          time_stamp=timestamp())
+            # demo
+            self.handler.start()          
+        elif self.name == 'activelearning':
+          # 1.step 配置基本信息
+          cc._prepare_context(exp_name, exp_param, **kwargs)
+
+          if 'config' in kwargs:
+            params = cc.params._params
+            params.update({
+              'activelearning': kwargs['config']
+            })
+            cc.params = params
+
+            self.handler = AntActiveLearningV2(
+              cc,
+              exp_name,
+              cc.data_factory,
+              cc.dump_dir,
+              cc.api_token,
+              cc.task)
+            self.handler.start(**kwargs)          
+
+      def exit(self):
+        if self.handler is not None:
+          # 关闭recorder
+          self.handler.context.recorder.close()
+          # 环境回收
+          self.handler.context.wait_until_clear()
+      
+      def __getattr__(self, __name: str):
+        return getattr(self.handler, __name)
+
+    return Server(__name)

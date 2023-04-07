@@ -1,0 +1,1 @@
+bash ssh-submit.sh zhangjian.52 "" 10.227.75.84 0 0 0 "ls -lh" "ubuntu:18.04"

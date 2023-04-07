@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 
+import sys
 import copy
 
 import tornado.httpserver
@@ -32,11 +33,13 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 import base64
 import imagesize
+from antgo.utils import colormap
 
 
 MB = 1024 * 1024
 GB = 1024 * MB
 MAX_STREAMED_SIZE = 1*GB
+
 class LiveApiHandler(BaseHandler):
   @gen.coroutine
   def get(self):
@@ -102,20 +105,59 @@ class LabelStateHandler(BaseHandler):
   def post(self):
     running_state = self.get_argument('running_state', None)
     running_stage = self.get_argument('running_stage', None)
-    running_round = self.get_argument("running_round", '0')
+    running_round = self.get_argument("running_round", '-1')
     if running_state is None or running_stage is None:
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
       return
 
     assert(running_state in ['running', 'abnormal', 'overtime', 'pending'])
-    assert(running_stage in ['waiting', 'training', 'labeling', 'finish'])
+    assert(running_stage in ['waiting', 'labeling', 'finish'])
+    # running_stage的finish状态需要由前端触发，标记本轮标注已经结束
+
+    if running_stage == 'labeling':
+      running_round = int(running_round)
+      if running_round == -1:
+        self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
+        return 
+
+      self.db['running']['state'] = running_state
+      self.db['running']['stage'] = running_stage
+      self.db['running']['round'] = (int)(running_round)
+      self.response(RESPONSE_STATUS_CODE.SUCCESS)
+      return
+
+    # 强制完成标记 （如果是true，则即使是未完成所有样本标注，也强制设置完成标记）
+    is_force = self.get_argument('force', False)
+    if running_stage == 'finish':
+      # 检查是否每个数据已经完成审核或标注
+      sample_num = len(self.db['samples'])
+      completed_num = 0
+      for sample in self.db['samples']:
+        if sample['state'] == 'completed':
+          completed_num += 1
+        
+      if sample_num != completed_num and not is_force:
+        self.response(
+          RESPONSE_STATUS_CODE.SUCCESS, 
+          content={
+            'finish': False,
+            'completed_num': completed_num,
+            'sample_num': sample_num
+          })
+        return 
+      else:
+        self.response(
+          RESPONSE_STATUS_CODE.SUCCESS, 
+          content={
+            'finish': True
+          })
+  
     if running_stage == 'waiting':
       # 切换运行状态为等待, 清空标注样本
       self.db['samples'] = []
 
     self.db['running']['state'] = running_state
     self.db['running']['stage'] = running_stage
-    self.db['running']['round'] = (int)(running_round)
     self.response(RESPONSE_STATUS_CODE.SUCCESS)
 
 
@@ -348,7 +390,7 @@ class LabelGetSampleHandler(BaseHandler):
           # 将当前样本状态切换为等待状态
           self.db['samples'][sample_i]['state'] = 'waiting'     # 重置状态
           self.db['samples'][sample_i]['assigner'] = ''         # 清空已经分配的操作者
-          self.db['samples'][sample_i]['created_time'] = 0       # 清空创建时间
+          self.db['samples'][sample_i]['created_time'] = 0      # 清空创建时间
 
     # 仅有当前样本处在未锁定状态才允许进行重新分配标注人员
     if self.db['samples'][sample_i]['state'] != 'labeling':
@@ -379,6 +421,9 @@ class LabelNextSampleHandler(BaseHandler):
       self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
       return
 
+    # TODO, 需要根据当前标注样本索引，继续向下寻找
+    # update_sample = self.get_argument('sample', None)
+  
     # 发现下一个还没有标注的样本(没有被分配的样本)
     waiting_label_sample_i = -1
     # state: labeling/completed/waiting
@@ -394,7 +439,7 @@ class LabelNextSampleHandler(BaseHandler):
           # 将当前样本状态切换为等待状态
           self.db['samples'][sample_i]['state'] = 'waiting'     # 重置状态
           self.db['samples'][sample_i]['assigner'] = ''         # 清空已经分配的操作者
-          self.db['samples'][sample_i]['created_time'] = 0       # 清空创建时间
+          self.db['samples'][sample_i]['created_time'] = 0      # 清空创建时间
           waiting_label_sample_i = sample_i
           break
 
@@ -540,11 +585,6 @@ class UserInfoHandler(BaseHandler):
 class LabelExportHandler(BaseHandler):
   @gen.coroutine
   def get(self):
-    # user = self.get_current_user()
-    # if user is None:
-    #   self.response(RESPONSE_STATUS_CODE.REQUEST_INVALID)
-    #   return
-
     export_samples = []
     for sample_id, sample in enumerate(self.db['samples']):
       export_sample = {
@@ -571,7 +611,19 @@ class LabelExportHandler(BaseHandler):
             v = copy.deepcopy(label_result['shape'])
             v['labels'] = label_result['label']
             temp['result'].append({
-              'value': v
+              'value': v,
+              'width': sample['width'],
+              'height': sample['height'],           
+              'type': label_result['type']
+            })
+          elif label_result['type'] == 'CHOICES':
+            v = {}
+            v['labels'] = label_result['label']
+            temp['result'].append({
+              'value': v,
+              'width': sample['width'],
+              'height': sample['height'],
+              'type': label_result['type']
             })
 
         export_sample['annotations'].append(temp)
@@ -580,7 +632,7 @@ class LabelExportHandler(BaseHandler):
 
     # 导出数据下载
     project_name = self.db['task_metas']['task_name']
-    now_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
+    now_time = time.strftime("%Y-%m-%dx%H:%M:%S", time.localtime(time.time()))
     random_id = str(uuid.uuid4())
     export_file_name = f'{project_name}-{now_time}-{random_id}.json'
     with open(os.path.join(self.settings.get('static_path'), export_file_name), 'w') as fp:
@@ -621,7 +673,8 @@ def label_server_start(
     task_metas,
     sample_metas,
     label_metas,
-    samples=[],
+    sample_folder=None,
+    sample_list=[],
     running_metas=None,
     white_users=None):
   # register sig
@@ -639,8 +692,105 @@ def label_server_start(
     # 2.step launch show server
     db = {}
     # 添加默认样本列表
-    db['samples'] = samples
+    db['samples'] = []
 
+    if len(sample_list) > 0 and sample_folder is not None:
+      sample_folder = os.path.abspath(sample_folder)  # 将传入的路径转换为绝对路径    
+      # 为样本所在目录建立软连接到static下面
+      os.system(f'cd {static_dir}; ln -s {sample_folder} dataset;')
+                  
+      # 将默认导入的样本直转换成新格式,并写入本地数据库
+      for sample_i, sample_info in enumerate(sample_list):
+        label_info = []
+        # 添加目标框标注信息
+        if len(sample_info['bboxes']) > 0:
+          box_num = len(sample_info['bboxes'])
+          for bi in range(box_num):
+            box = sample_info['bboxes'][bi]
+            label = sample_info['labels'][bi]
+            label_info.append({
+                  'type': 'RECT',
+                  'shape': {
+                    'x': box[0],
+                    'y': box[1],
+                    'width': box[2]-box[0],
+                    'height': box[3]-box[1]
+                  },
+                  'label': label
+            })
+        elif 'bboxes' in sample_info['predictions']:
+          box_num = len(sample_info['predictions']['bboxes'])
+          for bi in range(box_num):
+            box = sample_info['predictions']['bboxes'][bi]
+            label = sample_info['predictions']['labels'][bi]
+            label_info.append({
+                  'type': 'RECT',
+                  'shape': {
+                    'x': box[0],
+                    'y': box[1],
+                    'width': box[2]-box[0],
+                    'height': box[3]-box[1]
+                  },
+                  'label': label
+            })
+        
+        # 添加多边形标注信息
+        if len(sample_info['segments']) > 0:
+          segment_num = len(sample_info['segments'])
+          for bi in range(segment_num):
+            points = sample_info['segments'][bi]
+            label = sample_info['labels'][bi]
+            label_info.append({
+                  'type': 'POLYGON',
+                  'shape': {
+                    'points': points
+                  },
+                  'label': label
+            })
+        elif 'segments' in sample_info['predictions']:
+          box_num = len(sample_info['predictions']['segments'])
+          for bi in range(box_num):
+            points = sample_info['predictions']['segments'][bi]
+            label = sample_info['predictions']['segments'][bi]
+            label_info.append({
+                  'type': 'POLYGON',
+                  'shape': {
+                    'points': points
+                  },
+                  'label': label
+            })
+        
+        # 添加关键点标注信息
+        # pass
+        
+        # 添加图片类别
+        if sample_info['image_label_name'] != '':
+          label_info.append({
+              'type': 'CHOICES',
+              'choices': [sample_info['image_label_name']]
+          })     
+        elif 'image_label_name' in sample_info['predictions']:
+          label_info.append({
+              'type': 'CHOICES',
+              'choices': [sample_info['predictions']['image_label_name']]
+          })          
+        
+        # 加入数据库中
+        db['samples'].append({
+              'image_file': f'/static/dataset/{sample_info["image_file"]}' if sample_info['image_file'] != '' else sample_info['image_url'],
+              # 'image_file': 'https://www.ssfiction.com/wp-content/uploads/2020/08/20200805_5f2b1669e9a24.jpg',
+              'height': sample_info['height'],
+              'width': sample_info['width'],
+              'sample_id': sample_i,
+              'completed_time': 0,
+              'created_time': 0,
+              'update_time': 0,
+              'operators': [],
+              'assigner': '',
+              'state': 'waiting',
+              'label_info': label_info,
+        })
+    
     # 设置样本基本信息
     db['sample_metas'] = sample_metas
 
@@ -649,11 +799,17 @@ def label_server_start(
     db['task_metas'] = task_metas
 
     # 设置标注基本信息
-    assert('label_category' in label_metas)
-    for i, label_config in enumerate(label_metas['label_category']):
+    assert('category' in label_metas)
+    label_category = label_metas['category']
+    label_metas['label_category'] = label_category
+    for i, label_config in enumerate(label_metas['label_category']):      
       if 'color' not in label_config or 'background_color' not in label_config:
-        label_config['color'] = 'green'
-        label_config['background_color'] = '#00800026'
+        # 自动选择配色
+        color = colormap.highlight[i%len(colormap.highlight)]['color']
+        background_color = colormap.dark[i%len(colormap.dark)]['color']
+        
+        label_config['color'] = color
+        label_config['background_color'] = background_color
 
     db['label_metas'] = label_metas
 
@@ -692,6 +848,7 @@ def label_server_start(
         (r"/antgo/api/label/sample/get/", LabelGetSampleHandler),         # 得到指定样本信息
         (r"/antgo/api/label/sample/next/", LabelNextSampleHandler),       # 得到下一个需要进行标注的样本信息
         (r"/antgo/api/label/export/", LabelExportHandler),                # 标注导出
+        (r"/antgo/api/label/export/download/", LabelExportHandler),       # 标注导出
         (r"/antgo/api/label/import/", LabelImportHandler),                # 标注导入
         (r"/antgo/api/user/info/", UserInfoHandler),                  # 获得用户信息
         (r"/antgo/api/user/login/", LoginHandler),  # 登录，仅支持预先指定用户
@@ -732,7 +889,7 @@ if __name__ == '__main__':
     'stage': 'labeling'
   }
   label_metas = {
-        'label_category': [
+        'category': [
           {
             'class_name': 'A',
             'class_index': 0,
@@ -754,7 +911,7 @@ if __name__ == '__main__':
   }
   samples = [
             {
-              'image_file': '/static/data/1.jpeg',
+              'image_file': '/static/data/1.png',
               'height': 800,
               'width': 1200,
               'sample_id': 0,
@@ -788,7 +945,7 @@ if __name__ == '__main__':
               ],
             },
             {
-              'image_file': '/static/data/2.jpeg',
+              'image_file': '/static/data/1.png',
               'height': 800,
               'width': 1200,
               'sample_id': 1,
@@ -801,7 +958,7 @@ if __name__ == '__main__':
               'label_info': [],
             },
             {
-              'image_file': '/static/data/3.jpeg',
+              'image_file': '/static/data/1.png',
               'height': 800,
               'width': 1200,
               'sample_id': 2,
@@ -818,4 +975,4 @@ if __name__ == '__main__':
     samples[i] = copy.deepcopy(samples[i])
     samples[i]['sample_id'] = i
 
-  label_server_start('/Users/jian/Downloads/BB', 9000, task_metas, sample_metas, label_metas, samples, running_metas, white_users)
+  label_server_start('/Users/bytedance/Downloads/workspace/my/A', 9000, task_metas, sample_metas, label_metas, samples, running_metas, white_users)

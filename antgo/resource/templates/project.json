@@ -1,0 +1,65 @@
+{
+    "image":"",
+    "web":"",
+    "git": "",
+    "expert": [],
+    "product": "",
+    "baseline": "",
+    "type": "",
+    "submitter": {
+        "method": "",
+        "gpu_num": 0,
+        "cpu_num": 4,
+        "memory": 8000
+    },
+    "tool":{
+        "semi": {
+            "method": "",
+            "config": {}
+        },
+        "distillation": {
+            "method": "",
+            "config": {}
+        },
+        "activelearning": {
+            "method": "",
+            "config": {}
+        },
+        "ensemble":{
+            "method": "",
+            "config": {},
+            "best": {}
+        },
+        "label":{
+            "category": [],
+            "type": "",
+            "meta": {
+                "skeleton": []
+            }
+        }
+    },
+    "dataset": {
+        "train": {
+            "label": [],
+            "pseudo-label":[],
+            "unlabel": []
+        },
+        "test": {},
+        "val": {}
+    },
+    "exp":{
+
+    },
+    "best": {
+        "exp":"",
+        "branch":"",
+        "commit":"",
+        "web":"",
+        "metric":{},
+        "dataset": {"test": "", "train": []},
+        "checkpoint": "",
+        "create_time": "",
+        "finish_time": ""
+    },
+    "auto": false
+}

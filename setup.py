@@ -25,16 +25,10 @@ def ext_modules():
                 ["antgo/utils/_bbox.pyx"],
                 include_dirs=[np.get_include()],
                 extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
-                ),
-      Extension('antgo.utils._nms',
-                ["antgo/utils/_nms.pyx"],
-                include_dirs=[np.get_include()],
-                extra_compile_args=["-Wno-cpp", "-Wno-unused-function", '-std=c99']
                 )
     ]
 
     return some_extention
-
 
 
 def readme():
@@ -54,7 +48,7 @@ def read_requirements(filename):
 
 
 setup(name='antgo',
-      version='0.0.20',
+      version='0.0.21',
       description='machine learning experiment platform',
       __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',

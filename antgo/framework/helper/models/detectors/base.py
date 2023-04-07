@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 import numpy as np
@@ -6,8 +5,6 @@ from numpy.lib.function_base import insert
 import torch
 import torch.distributed as dist
 from antgo.framework.helper.runner import BaseModule
-
-# from mmdet.core.visualization import imshow_det_bboxes
 
 
 class BaseDetector(BaseModule):
@@ -22,13 +19,6 @@ class BaseDetector(BaseModule):
     def with_neck(self):
         """bool: whether the detector has a neck"""
         return hasattr(self, 'neck') and self.neck is not None
-
-    # TODO: these properties need to be carefully handled
-    # for both single stage & two stage detectors
-    @property
-    def with_shared_head(self):
-        """bool: whether the detector has a shared head in the RoI Head"""
-        return hasattr(self, 'roi_head') and self.roi_head.with_shared_head
 
     @property
     def with_bbox(self):
@@ -60,82 +50,44 @@ class BaseDetector(BaseModule):
         assert isinstance(imgs, list)
         return [self.extract_feat(img) for img in imgs]
 
-    def forward_train(self, imgs, img_metas, **kwargs):
+    def forward_train(self, image, image_meta, **kwargs):
         """
         Args:
-            img (list[Tensor]): List of tensors of shape (1, C, H, W).
+            image (list[Tensor]): List of tensors of shape (1, C, H, W).
                 Typically these should be mean centered and std scaled.
-            img_metas (list[dict]): List of image info dict where each dict
+            image_meta (list[dict]): List of image info dict where each dict
                 has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
                 For details on the values of these keys, see
                 :class:`mmdet.datasets.pipelines.Collect`.
             kwargs (keyword arguments): Specific to concrete implementation.
         """
-        # NOTE the batched image size information may be useful, e.g.
-        # in DETR, this is needed for the construction of masks, which is
-        # then used for the transformer_head.
-        batch_input_shape = tuple(imgs[0].size()[-2:])
-        for img_meta in img_metas:
+        batch_input_shape = tuple(image[0].size()[-2:])
+        for img_meta in image_meta:
             img_meta['batch_input_shape'] = batch_input_shape
 
     @abstractmethod
-    def simple_test(self, img, img_metas, **kwargs):
+    def simple_test(self, image, image_meta, **kwargs):
         pass
 
-    @abstractmethod
-    def aug_test(self, imgs, img_metas, **kwargs):
-        """Test function with test time augmentation."""
-        pass
-
-    def forward_test(self, imgs, img_metas, **kwargs):
+    def forward_test(self, image, image_meta, **kwargs):
         """
         Args:
-            imgs (List[Tensor]): the outer list indicates test-time
+            image (List[Tensor]): the outer list indicates test-time
                 augmentations and inner Tensor should have a shape NxCxHxW,
                 which contains all images in the batch.
-            img_metas (List[List[dict]]): the outer list indicates test-time
+            image_meta (List[List[dict]]): the outer list indicates test-time
                 augs (multiscale, flip, etc.) and the inner list indicates
                 images in a batch.
         """
-        # for var, name in [(imgs, 'imgs'), (img_metas, 'img_metas')]:
-        #     if not isinstance(var, list):
-        #         raise TypeError(f'{name} must be a list, but got {type(var)}')
-        if not isinstance(imgs, list):
-            imgs = [imgs]
-            img_metas = [img_metas]
+        batch_size = len(image_meta)
+        for img_id in range(batch_size):
+            image_meta[img_id]['batch_input_shape'] = tuple(image.size()[-2:])
 
-        num_augs = len(imgs)
-        if num_augs != len(img_metas):
-            raise ValueError(f'num of augmentations ({len(imgs)}) '
-                             f'!= num of image meta ({len(img_metas)})')
+        # assert(num_augs == 1)
+        return self.simple_test(image, image_meta, **kwargs)
 
-        # NOTE the batched image size information may be useful, e.g.
-        # in DETR, this is needed for the construction of masks, which is
-        # then used for the transformer_head.
-        for img, img_meta in zip(imgs, img_metas):
-            batch_size = len(img_meta)
-            for img_id in range(batch_size):
-                img_meta[img_id]['batch_input_shape'] = tuple(img.size()[-2:])
-
-        if num_augs == 1:
-            # proposals (List[List[Tensor]]): the outer list indicates
-            # test-time augs (multiscale, flip, etc.) and the inner list
-            # indicates images in a batch.
-            # The Tensor should have a shape Px4, where P is the number of
-            # proposals.
-            if 'proposals' in kwargs:
-                kwargs['proposals'] = kwargs['proposals'][0]
-            return self.simple_test(imgs[0], img_metas[0], **kwargs)
-        else:
-            assert imgs[0].size(0) == 1, 'aug test does not support ' \
-                                         'inference with batch size ' \
-                                         f'{imgs[0].size(0)}'
-            # TODO: support test augmentation for predefined proposals
-            assert 'proposals' not in kwargs
-            return self.aug_test(imgs, img_metas, **kwargs)
-
-    def forward(self, image, image_metas, return_loss=True, **kwargs):
+    def forward(self, image, image_meta, return_loss=True, **kwargs):
         """Calls either :func:`forward_train` or :func:`forward_test` depending
         on whether ``return_loss`` is ``True``.
 
@@ -146,13 +98,13 @@ class BaseDetector(BaseModule):
         the outer list indicating test time augmentations.
         """
         if torch.onnx.is_in_onnx_export():
-            assert len(image_metas) == 1
-            return self.onnx_export(image[0], image_metas[0])
+            assert len(image_meta) == 1
+            return self.onnx_export(image[0], image_meta[0])
 
         if return_loss:
-            return self.forward_train(image, image_metas, **kwargs)
+            return self.forward_train(image, image_meta, **kwargs)
         else:
-            return self.forward_test(image, image_metas, **kwargs)
+            return self.forward_test(image, image_meta, **kwargs)
 
     def _parse_losses(self, losses):
         """Parse the raw outputs (losses) of the network.
@@ -191,10 +143,11 @@ class BaseDetector(BaseModule):
 
         log_vars['loss'] = loss
         for loss_name, loss_value in log_vars.items():
-            # reduce loss when distributed training
-            if dist.is_available() and dist.is_initialized():
-                loss_value = loss_value.data.clone()
-                dist.all_reduce(loss_value.div_(dist.get_world_size()))
+            # TODO, 仅用于统计作用，有时存在数值不稳定，不清楚为什么？
+            # # reduce loss when distributed training
+            # if dist.is_available() and dist.is_initialized():
+            #     loss_value = loss_value.data.clone()
+            #     dist.all_reduce(loss_value.div_(dist.get_world_size()))
             log_vars[loss_name] = loss_value.item()
 
         return loss, log_vars
@@ -234,7 +187,7 @@ class BaseDetector(BaseModule):
                 
         loss, log_vars = self._parse_losses(losses)
         outputs = dict(
-            loss=loss, log_vars=log_vars, num_samples=len(data['image_metas']))
+            loss=loss, log_vars=log_vars, num_samples=len(data['image_meta']))
 
         return outputs
 
@@ -253,6 +206,6 @@ class BaseDetector(BaseModule):
 
         return results
         
-    def onnx_export(self, img, img_metas):
+    def onnx_export(self, image, image_meta):
         raise NotImplementedError(f'{self.__class__.__name__} does '
                                   f'not support ONNX EXPORT')

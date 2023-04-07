@@ -7,9 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 
 import time
-
 import cv2
-
 from antgo.resource.html import *
 from antgo.ant.base import *
 from antgo.ant.base import _pick_idle_port
@@ -26,15 +24,13 @@ import socket
 import requests
 import json
 import zipfile
+import imagesize
 
 
 class ActivelearningDataRecorder(object):
   def __init__(self, rpc, dump_dir):
     self.rpc = rpc
     self.activelearning_static_dir = os.path.join(dump_dir, 'static')
-    self.activelearning_label_dir = os.path.join(dump_dir, 'label')
-    if not os.path.exists(self.activelearning_label_dir):
-      os.makedirs(self.activelearning_label_dir)
 
   def record(self, sample):
     if not os.path.exists(os.path.join(self.activelearning_static_dir, 'data')):
@@ -77,33 +73,8 @@ class ActivelearningDataRecorder(object):
     # 更新待标注样本
     self.rpc.label.sample.fresh.post(samples=samples)
 
-  def start(self, round=0):
-    # 更新标注服务状态
-    self.rpc.info.post(running_state='running',  running_stage='labeling', running_round=round)
-
-    # 等待标注完成
-    while True:
-      response = self.rpc.info.get()
-      if response['status'] == 'ERROR':
-        print('rpc error...')
-        time.sleep(5)
-        continue
-
-      if response['content']['project_state']['stage'] == 'finish':
-        break
-      time.sleep(5)
-
-    # 下载标注结果，到dumpdir
-    if not os.path.exists(os.path.join(self.activelearning_label_dir, f'{round}')):
-      os.makedirs(os.path.join(self.activelearning_label_dir, f'{round}'))
-
-    self.rpc.label.export.download(
-      file_folder=os.path.join(self.activelearning_label_dir, f'{round}'),
-      file_name='label.json'
-    )
-
-    # 更新标注服务状态
-    self.rpc.info.post(running_state='running',  running_stage='waiting', running_round=round)
+  def close(self):
+    pass
 
 
 class AntActiveLearningV2(AntBase):
@@ -126,6 +97,7 @@ class AntActiveLearningV2(AntBase):
     self._running_dataset = None
     self._running_task = None
     self.p = None
+    self._round = -1
 
   @property
   def running_dataset(self):
@@ -146,7 +118,54 @@ class AntActiveLearningV2(AntBase):
   def wait_until_stop(self):
     self.p.join()
 
-  def start(self):
+  def labeling(self):
+    # 启动新一轮标注
+    response = self.rpc.info.get()
+    if response['content']['project_state']['stage'] == 'labeling':
+      logger.error(f'Label Round {self._round} is not finish.')
+      return
+
+    self._round += 1
+    self.rpc.info.post(running_state='running',  running_stage='labeling', running_round=self._round)
+
+  def waiting(self):
+    # 完成本轮标注，后台会清空标注信息
+    self.rpc.info.post(running_state='running',  running_stage='waiting', running_round=self._round)
+    
+  def state(self):
+    response = self.rpc.info.get()
+    return response['content']['project_state']   
+
+  def download(self, waiting_finish=True):
+    if waiting_finish:
+      # 需要等待本轮标准完成
+      while True:
+        response = self.rpc.info.get()
+        if response['status'] == 'ERROR':
+          print('rpc error...')
+          time.sleep(5)
+          continue
+
+        if response['content']['project_state']['stage'] == 'finish':
+          break
+        # 等待10分钟后检查
+        time.sleep(10)
+        
+    if not os.path.exists(os.path.join(self.ant_dump_dir, 'label', f'{self._round}')):
+      os.makedirs(os.path.join(self.ant_dump_dir, 'label', f'{self._round}'))
+
+    folder = os.path.join(self.ant_dump_dir, 'label', f'{self._round}')
+    file_name = f'label.json'
+    self.rpc.label.export.download(
+      file_folder=folder,
+      file_name=file_name
+    )    
+    with open(os.path.join(folder, file_name), 'r') as fp:
+      content = json.load(fp)
+
+      return content
+
+  def start(self, **kwargs):
     # 0.step loading challenge task
     running_ant_task = None
     if self.token is not None:
@@ -217,7 +236,7 @@ class AntActiveLearningV2(AntBase):
 
       # 在独立进程中启动webserver
       sample_metas = {'filters': []}
-      label_metas = self.context.params.activelearning.label_metas.get()
+      metas = self.context.params.activelearning.metas.get()
       white_users = self.context.params.activelearning.white_users.get() \
         if self.context.params.activelearning.white_users is not None else None
       task_metas = {
@@ -225,6 +244,16 @@ class AntActiveLearningV2(AntBase):
         'task_name': self.running_task.task_name,
         'label_type': self.context.params.activelearning.label_type
       }
+      
+      data_json_file = kwargs.get('json_file', None)
+      sample_folder = None
+      sample_list = []
+      if data_json_file is not None:
+        # 直接使用来自于data_json_file中的样本
+        with open(data_json_file, 'r') as fp:
+          sample_list = json.load(fp)      
+        sample_folder = os.path.dirname(data_json_file)
+        
       self.p = \
         multiprocessing.Process(
           target=label_server_start,
@@ -232,11 +261,16 @@ class AntActiveLearningV2(AntBase):
                 self.host_port,
                 task_metas,
                 sample_metas,
-                label_metas,
-                [],
-                {'state': 'running', 'stage': self.context.params.activelearning.get('stage', 'waiting')},
+                metas,
+                sample_folder,
+                sample_list,
+                {
+                  'state': 'running', 
+                  'stage': 'waiting'    # 标注服务启动后，处在等待状态。之后数据推送好后，重制状态使其处在标注状态
+                },
                 white_users)
         )
+      self.p.daemon = True  # 主进程结束后，自进程也将结束
       self.p.start()
 
       # 等待直到http服务开启

@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import copy
 import os.path as osp
 from abc import ABCMeta, abstractmethod
@@ -7,8 +6,6 @@ from typing import List
 from io import StringIO
 import numpy as np
 from numbers import Number
-# from mmcls.core.evaluation import precision_recall_f1, support
-# from mmcls.models.losses import accuracy
 from antgo.dataflow.dataset import Dataset
 
 

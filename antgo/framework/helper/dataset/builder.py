@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import copy
 import platform
 import random
@@ -8,23 +7,25 @@ from functools import partial
 import numpy as np
 from numpy.random.mtrand import sample
 import torch
+from torch.utils.data.dataset import IterableDataset
 from antgo.framework.helper.parallel import collate
 from antgo.framework.helper.runner import get_dist_info
 from antgo.framework.helper.utils import TORCH_VERSION, Registry, build_from_cfg, digit_version
 from torch.utils.data import DataLoader
 
+
 from .samplers import (ClassAwareSampler, DistributedGroupSampler,
                        DistributedSampler, GroupSampler, InfiniteBatchSampler,
-                       InfiniteGroupBatchSampler, SemiSampler, DistributedSemiSampler)
+                       InfiniteGroupBatchSampler, KVSampler, DistributedKVSampler)
 
-if platform.system() != 'Windows':
-    # https://github.com/pytorch/pytorch/issues/973
-    import resource
-    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    base_soft_limit = rlimit[0]
-    hard_limit = rlimit[1]
-    soft_limit = min(max(4096, base_soft_limit), hard_limit)
-    resource.setrlimit(resource.RLIMIT_NOFILE, (soft_limit, hard_limit))
+# if platform.system() != 'Windows':
+#     # https://github.com/pytorch/pytorch/issues/973
+#     import resource
+#     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+#     base_soft_limit = rlimit[0]
+#     hard_limit = rlimit[1]
+#     soft_limit = min(max(4096, base_soft_limit), hard_limit)
+#     resource.setrlimit(resource.RLIMIT_NOFILE, (soft_limit, hard_limit))
 
 DATASETS = Registry('dataset')
 PIPELINES = Registry('pipeline')
@@ -58,24 +59,19 @@ def _concat_dataset(cfg, default_args=None):
 
 
 def build_dataset(cfg, default_args=None):
-    from .dataset_wrappers import (ClassBalancedDataset, ConcatDataset,
-                                   MultiImageMixDataset, RepeatDataset)
+    from .dataset_wrappers import (ConcatDataset, RepeatDataset, IterConcatDataset)
     if isinstance(cfg, (list, tuple)):
-        dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
+        type_list = [cfg[i].type for i in range(len(cfg))]
+        if 'TFDataset' in type_list:
+            dataset = IterConcatDataset([build_dataset(c, default_args) for c in cfg])
+        else:
+            dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
     elif cfg['type'] == 'ConcatDataset':
         dataset = ConcatDataset(
             [build_dataset(c, default_args) for c in cfg['datasets']])
     elif cfg['type'] == 'RepeatDataset':
         dataset = RepeatDataset(
             build_dataset(cfg['dataset'], default_args), cfg['times'])
-    elif cfg['type'] == 'ClassBalancedDataset':
-        dataset = ClassBalancedDataset(
-            build_dataset(cfg['dataset'], default_args), cfg['oversample_thr'])
-    elif cfg['type'] == 'MultiImageMixDataset':
-        cp_cfg = copy.deepcopy(cfg)
-        cp_cfg['dataset'] = build_dataset(cp_cfg['dataset'])
-        cp_cfg.pop('type')
-        dataset = MultiImageMixDataset(**cp_cfg)
     elif isinstance(cfg.get('ann_file'), (list, tuple)):
         dataset = _concat_dataset(cfg, default_args)
     else:
@@ -125,24 +121,23 @@ def build_dataloader(dataset,
         DataLoader: A PyTorch dataloader.
     """
     rank, world_size = get_dist_info()
-
-    semi_config = kwargs.get('semi', None)
-    semi_loader_strategy = None
-    if semi_config is not None:
-        semi_loader_strategy = semi_config['strategy']
-        kwargs.pop('semi')
-
     if dist:
         # When model is :obj:`DistributedDataParallel`,
         # `batch_size` of :obj:`dataloader` is the
         # number of training samples on each GPU.
-        batch_size = samples_per_gpu
+        batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu)
         num_workers = workers_per_gpu
     else:
         # When model is obj:`DataParallel`
         # the batch size is samples on all the GPUS
-        batch_size = num_gpus * samples_per_gpu
+        batch_size = num_gpus * samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu)
         num_workers = num_gpus * workers_per_gpu
+
+    strategy = None
+    if isinstance(samples_per_gpu, list):
+        strategy = {}
+        for index, s in enumerate(samples_per_gpu):
+            strategy[index] = s
 
     if runner_type == 'IterBasedRunner':
         # this is a batch sampler, which can yield
@@ -178,38 +173,24 @@ def build_dataloader(dataset,
             # DistributedGroupSampler will definitely shuffle the data to
             # satisfy that images on each GPU are in the same group
             if shuffle:
-                if semi_loader_strategy is None:
-                    sampler = DistributedGroupSampler(
-                        dataset, samples_per_gpu, world_size, rank, seed=seed)
-                else:
-                    sampler = DistributedSemiSampler(
-                        dataset, samples_per_gpu, world_size, rank, seed=seed, strategy=semi_loader_strategy
-                    )
+                sampler = DistributedGroupSampler(
+                    dataset, 
+                    samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu),
+                    world_size, 
+                    rank, 
+                    seed=seed, 
+                    strategy=strategy)
+
             else:
                 sampler = DistributedSampler(
-                    dataset, world_size, rank, shuffle=False, seed=seed)
+                    dataset, world_size, rank, shuffle=False, seed=seed, strategy=strategy)
         else:
-            if semi_loader_strategy is None:
-                sampler = GroupSampler(dataset,
-                                    samples_per_gpu) if shuffle else None
-            else:
-                assert(shuffle)
-                sampler = SemiSampler(dataset, samples_per_gpu, semi_loader_strategy)
+            sampler = GroupSampler(
+                dataset,
+                samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu),
+                strategy=strategy) if shuffle else None
 
         batch_sampler = None
-
-    # # 指定sampler
-    # custom_sampler_cls = kwargs.get('sampler', None)
-    
-    # if custom_sampler_cls is not None:
-    #     if dist:
-    #         sampler = custom_sampler_cls(dataset, world_size, rank, shuffle=False, seed=seed)
-    #     else:
-    #         sampler = custom_sampler_cls(dataset, samples_per_gpu)
-
-    init_fn = partial(
-        worker_init_fn, num_workers=num_workers, rank=rank,
-        seed=seed) if seed is not None else None
 
     if (TORCH_VERSION != 'parrots'
             and digit_version(TORCH_VERSION) >= digit_version('1.7.0')):
@@ -218,9 +199,13 @@ def build_dataloader(dataset,
         warnings.warn('persistent_workers is invalid because your pytorch '
                       'version is lower than 1.7.0')
 
+    init_fn = partial(
+        worker_init_fn, num_workers=num_workers, rank=rank,
+        seed=seed) if seed is not None else None
+        
     data_loader = DataLoader(
         dataset,
-        batch_size=batch_size,
+        batch_size=int(batch_size),
         sampler=sampler,
         num_workers=num_workers,
         batch_sampler=batch_sampler,
@@ -232,6 +217,91 @@ def build_dataloader(dataset,
     return data_loader
 
 
+def build_kv_dataloader(dataset,
+                     samples_per_gpu,
+                     workers_per_gpu,
+                     num_gpus=1,
+                     dist=True,
+                     shuffle=True,
+                     seed=0,
+                     runner_type='EpochBasedRunner',
+                     persistent_workers=False,
+                     ignore_stack=[],
+                     **kwargs):
+    sampler = None
+    if dist:
+        # When model is :obj:`DistributedDataParallel`,
+        # `batch_size` of :obj:`dataloader` is the
+        # number of training samples on each GPU.
+        batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu)
+        num_workers = workers_per_gpu
+    else:
+        # When model is obj:`DataParallel`
+        # the batch size is samples on all the GPUS
+        batch_size = num_gpus * (samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu))
+        num_workers = num_gpus * workers_per_gpu
+
+    strategy = None
+    if isinstance(samples_per_gpu, list):
+        strategy = {}
+        for index, s in enumerate(samples_per_gpu):
+            strategy[index] = s
+    
+    rank, world_size = get_dist_info()
+    if dist:
+        sampler = DistributedKVSampler(
+            dataset,
+            batch_size, 
+            num_replicas=world_size,
+            shuffle=shuffle,
+            rank=rank,
+            seed=seed, 
+            drop_last=kwargs.get('drop_last', False), 
+            strategy=strategy)
+    else:
+        sampler = \
+            KVSampler(
+                dataset, 
+                samples_per_gpu if not isinstance(samples_per_gpu, list) else np.sum(samples_per_gpu), 
+                drop_last=kwargs.get('drop_last', False), 
+                shuffle=shuffle,
+                strategy=strategy)
+
+    init_fn = partial(
+        worker_init_fn, num_workers=num_workers, rank=rank,
+        seed=seed) if seed is not None else None
+        
+    data_loader = DataLoader(
+        dataset,
+        batch_size=None,
+        sampler=sampler,
+        num_workers=num_workers,
+        batch_sampler=None,
+        pin_memory=kwargs.pop('pin_memory', False),
+        collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
+        worker_init_fn=init_fn)
+
+    return data_loader
+
+
+def build_iter_dataloader(dataset,   
+                          samples_per_gpu,
+                          workers_per_gpu,
+                          ignore_stack=[],
+                          **kwargs):
+    batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else int(np.sum(samples_per_gpu))
+    dataset.samples_per_gpu = samples_per_gpu
+    data_loader = torch.utils.data.DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        num_workers=workers_per_gpu,
+        pin_memory=kwargs.pop('pin_memory', False),
+        collate_fn=partial(collate, samples_per_gpu=batch_size, ignore_stack=ignore_stack),
+        drop_last=kwargs.get('drop_last', True))
+
+    return data_loader
+
+
 def worker_init_fn(worker_id, num_workers, rank, seed):
     # The seed of each worker equals to
     # num_worker * rank + worker_id + user_seed
@@ -239,3 +309,8 @@ def worker_init_fn(worker_id, num_workers, rank, seed):
     np.random.seed(worker_seed)
     random.seed(worker_seed)
     torch.manual_seed(worker_seed)
+
+    # 初始化
+    worker_info = torch.utils.data.get_worker_info()
+    if getattr(worker_info.dataset, 'worker_init_fn', None):
+        worker_info.dataset.worker_init_fn(worker_id)

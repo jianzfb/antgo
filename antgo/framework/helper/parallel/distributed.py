@@ -39,9 +39,6 @@ class MMDistributedDataParallel(DistributedDataParallel):
         if ('parrots' not in TORCH_VERSION
                 and digit_version(TORCH_VERSION) >= digit_version('1.7')
                 and self.reducer._rebuild_buckets()):
-            # print_log(
-            #     'Reducer buckets have been rebuilt in this iteration.',
-            #     logger='mmcv')
             print('Reducer buckets have been rebuilt in this iteration.')
 
         if ('parrots' not in TORCH_VERSION
@@ -95,9 +92,6 @@ class MMDistributedDataParallel(DistributedDataParallel):
         if ('parrots' not in TORCH_VERSION
                 and digit_version(TORCH_VERSION) >= digit_version('1.7')
                 and self.reducer._rebuild_buckets()):
-            # print_log(
-            #     'Reducer buckets have been rebuilt in this iteration.',
-            #     logger='mmcv')
             print('Reducer buckets have been rebuilt in this iteration.')
 
         if ('parrots' not in TORCH_VERSION

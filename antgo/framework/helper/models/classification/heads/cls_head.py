@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 
 import torch
@@ -23,7 +22,7 @@ class ClsHead(nn.Module):
     """
 
     def __init__(self,
-                 loss=dict(type='CrossEntropyLoss', loss_weight=1.0),
+                 loss=dict(type='CrossEntropyLoss', loss_weight=1.0, class_weight=None),
                  topk=(1, ),
                  cal_acc=False,
                  init_cfg=None):
@@ -37,7 +36,7 @@ class ClsHead(nn.Module):
             assert _topk > 0, 'Top-k should be larger than 0'
         self.topk = topk
 
-        self.compute_loss = CrossEntropyLoss(loss_weight=1.0)
+        self.compute_loss = CrossEntropyLoss(loss_weight=loss['loss_weight'], class_weight=loss['class_weight'])
         self.compute_accuracy = Accuracy(topk=self.topk)
         self.cal_acc = cal_acc
 
@@ -61,13 +60,14 @@ class ClsHead(nn.Module):
     def forward_train(self, cls_score, gt_label, **kwargs):
         if isinstance(cls_score, tuple):
             cls_score = cls_score[-1]
-        losses = self.loss(cls_score, gt_label, **kwargs)
+            
+        losses = self.loss(cls_score, gt_label.view(-1), **kwargs)
         return losses
 
-    def simple_test(self, x, softmax=True, post_process=True):
+    def simple_test(self, x, softmax=True, post_process=True, **kwargs):
         """Inference without augmentation.
 
-        Args:
+    Args:
             x (tuple[Tensor]): The input features.
                 Multi-stage inputs are acceptable but only the last stage will
                 be used to classify. The shape of every item should be
@@ -91,7 +91,6 @@ class ClsHead(nn.Module):
                 F.softmax(cls_score, dim=1) if cls_score is not None else None)
         else:
             pred = cls_score
-
         return pred
 
     def pre_logits(self, x):

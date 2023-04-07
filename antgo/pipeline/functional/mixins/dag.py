@@ -209,7 +209,7 @@ class DagMixin:
                     if len(val['call_args']['*arg'][0].function.split('/')) > 1:
                         dag[key]['op_name'] = val['call_args']['*arg'][0].function
                     else:
-                        dag[key]['op_name'] = 'towhee/' + val['call_args']['*arg'][0].function
+                        dag[key]['op_name'] = 'antgo/' + val['call_args']['*arg'][0].function
                 else:
                     dag[key]['op_name'] = 'dummy_input'
                     dag[key]['parent_ids'] = []

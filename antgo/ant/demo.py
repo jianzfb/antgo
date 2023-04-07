@@ -174,9 +174,6 @@ class AntDemo(AntBase):
     )
     self.p.start()
 
-    if self.context.is_interact_mode:
-      return
-
     # 5.step 启动运行预测过程
     # prepare ablation blocks
     logger.info('Prepare model ablation blocks.')

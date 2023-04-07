@@ -1,7 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import torch
 
-from core.bbox import bbox_overlaps
+from antgo.framework.helper.models.detectors.core.bbox import bbox_overlaps
 
 
 def isr_p(cls_score,

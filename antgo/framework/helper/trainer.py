@@ -16,7 +16,7 @@ import torchvision.transforms as transforms
 from torch.nn.parallel.data_parallel import DataParallel
 from antgo.framework.helper.utils.config import Config
 from antgo.framework.helper.apis.train import *
-from antgo.framework.helper.dataset import (build_dataloader, build_dataset)
+from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader, build_iter_dataloader)
 from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, get_device
 from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import *
@@ -28,10 +28,13 @@ from antgo.framework.helper.utils import *
 from antgo.framework.helper.models.dummy_module import *
 from antgo.framework.helper.models.proxy_module import *
 from antgo.framework.helper.models.distillation import *
-from antgo.framework.helper.models.semi import *
 from antgo.framework.helper.runner.hooks.hook import *
+from antgo.framework.helper.parallel.utils import is_module_wrapper
+from .base_trainer import *
 from thop import profile
 import copy
+import logging
+import tempfile
 
 import torch.distributed as dist
 from contextlib import contextmanager
@@ -47,74 +50,11 @@ try:
     from aimet_torch.onnx_utils import OnnxExportApiArgs
     from aimet_torch.model_preparer import prepare_model
     from aimet_common.utils import start_bokeh_server_session
-    from aimet_torch import visualize_model
 except:
     print('Dont support aimet.')
     pass
 
-'''
-cfg_dict = dict(
-    optimizer = dict(type='Adam', lr=1e-4),
-    optimizer_config = dict(grad_clip=None),
-    lr_config = dict(
-        policy='step',
-        by_epoch=True,
-        warmup=None,
-        gamma=0.1,
-        step=[15, 17]),
-    log_config = dict(
-        interval=5,    
-        hooks=[
-            dict(type='TextLoggerHook'),
-        ]),
-    checkpoint_config = dict(interval=1,out_dir='./'),        
-    seed=0,
-    data = dict(
-        train=dict(
-                    type='InterHand26MReader',
-                    dir='/root/paddlejob/workspace/env_run/portrait/InterHand2.6M/data/InterHand2.6M',
-                    trans_test='rootnet',
-                    output_hm_shape=(64, 64, 64),
-                    input_img_shape=(256, 256),
-                    bbox_3d_size=400,      
-                    output_root_hm_shape=64, 
-                    bbox_3d_size_root=400,
-                    pipeline=[dict(type='Compose', processes=[['ToTensor', {}]])],
-                    inputs_def = {
-                        'fields': [
-                            ['image'],
-                            ['joint_coord','rel_root_depth','hand_type'],
-                            ['joint_valid', 'root_valid', 'hand_type_valid', 'inv_trans', 'capture', 'cam', 'frame']
-                        ]
-                    }
-                ),
-        train_dataloader=dict(samples_per_gpu=32,workers_per_gpu=2),
-        val=dict(
-                type='InterHand26MReader',
-                dir='/root/paddlejob/workspace/env_run/portrait/InterHand2.6M/data/InterHand2.6M',
-                train_or_test='val',
-                trans_test='rootnet',
-                output_hm_shape=(64, 64, 64),
-                input_img_shape=(256, 256),
-                bbox_3d_size=400,  
-                output_root_hm_shape=64, 
-                bbox_3d_size_root=400,
-                pipeline=[dict(type='Compose', processes=[['ToTensor', {}]])],
-                inputs_def = {
-                    'fields': [
-                        ['image'],
-                        ['joint_coord','rel_root_depth','hand_type'],
-                        ['joint_valid', 'root_valid', 'hand_type_valid', 'inv_trans', 'capture', 'cam', 'frame', 'TID']
-                    ]
-                }
-            ),
-        val_dataloader=dict(samples_per_gpu=16, workers_per_gpu=1),
-        ),
-    gpu_ids=[0],
-    log_level=logging.INFO,
-    evaluation=dict(out_dir='./out')
-)
-'''
+
 def _default_forward_pass_callback(model, data_loader):
     # switch to eval state
     model.eval()
@@ -201,28 +141,34 @@ def calculate_quantsim(model, val_dataloader, dummy_input, use_cuda, path, prefi
     quantsim.export(path=path, filename_prefix=prefix, dummy_input=dummy_input.cpu())
     return quantsim
 
-class Trainer(object):
-    def __init__(self, cfg_dict, work_dir="./", device='cuda', distributed=False, diff_seed=True, deterministic=True):
-        self.cfg = Config.fromstring(json.dumps(cfg_dict), '.json')
-
+class Trainer(BaseTrainer):
+    def __init__(self, cfg, work_dir="./", gpu_id=-1, distributed=False, diff_seed=True, deterministic=True, find_unused_parameters=False):
+        if isinstance(cfg, dict):
+            self.cfg = Config.fromstring(json.dumps(cfg), '.json')
+        else:
+            self.cfg = cfg
+            
         self.data_loaders = None
         self.runner = None
         self.work_dir = work_dir
         self.train_generator = None
         self.val_dataloader = None
         self.distributed = distributed
+        self.find_unused_parameters = find_unused_parameters
         self.meta = {}
 
         # set multi-process settings
-        # 如 opencv_num_threads, OMP_NUM_THREADS, MKL_NUM_THREADS
         setup_multi_processes(self.cfg)
 
+        gpu_id = int(gpu_id)
+        device = 'cpu' if gpu_id < 0 else 'cuda'
+        self.cfg.gpu_ids = [gpu_id] if gpu_id >= 0 else []
         if self.distributed:
-            init_dist("pytorch", **self.cfg.get('dist_params', {}))
+            init_dist(**self.cfg.get('dist_params', {}))
             # re-set gpu_ids with distributed training mode
             _, world_size = get_dist_info()
             self.cfg.gpu_ids = range(world_size)
-
+        
         # set random seeds
         seed = init_random_seed(self.cfg.get('seed', 0), device=device)
         seed = seed + dist.get_rank() if diff_seed else seed
@@ -231,7 +177,7 @@ class Trainer(object):
         self.meta['seed'] = seed
         self.device = device
 
-    def make_dataloader(self, with_validate=False):
+    def config_dataloader(self, with_validate=False):
         # 创建数据集
         dataset = build_dataset(self.cfg.data.train)
 
@@ -240,7 +186,7 @@ class Trainer(object):
             samples_per_gpu=2,
             workers_per_gpu=2,
             # `num_gpus` will be ignored if distributed
-            num_gpus=len(self.cfg.gpu_ids),
+            num_gpus=1,
             dist=self.distributed,
             seed=self.cfg.seed,
             runner_type='EpochBasedRunner',
@@ -250,17 +196,14 @@ class Trainer(object):
             **train_dataloader_default_args,
             **self.cfg.data.get('train_dataloader', {})
         }
-        semi_cfg = self.cfg.get('semi',None)
-        if semi_cfg is not None:
-            # 半监督加载策略，仅在训练时使用
-            semi_loader_strategy = semi_cfg.get('strategy', {'labeled': 1,'unlabeled': 1})
-            train_loader_cfg.update({
-                'semi': {
-                    'strategy': semi_loader_strategy
-                }
-            })
-        self.train_generator = build_dataloader(dataset, **train_loader_cfg)
-        
+
+        if getattr(dataset, 'is_kv', False):
+            self.train_generator = build_kv_dataloader(dataset, **train_loader_cfg)
+        elif isinstance(dataset, torch.utils.data.IterableDataset):
+            self.train_generator = build_iter_dataloader(dataset, **train_loader_cfg)
+        else:
+            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
+
         if with_validate:
             val_dataloader_default_args = dict(
                 samples_per_gpu=1,
@@ -273,32 +216,40 @@ class Trainer(object):
                     **val_dataloader_default_args,
                     **self.cfg.data.get('val_dataloader', {})
             }
-            val_dataset = build_dataset(self.cfg.data.val, dict(test_mode=True))
-            self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
+            val_dataset = build_dataset(self.cfg.data.val)
 
-    def make_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
+            if getattr(dataset, 'is_kv', False):
+                self.val_dataloader = build_kv_dataloader(val_dataset, **val_dataloader_args)
+            elif isinstance(dataset, torch.utils.data.IterableDataset):
+                val_dataset.is_infinite = False
+                self.val_dataloader = build_iter_dataloader(val_dataset, **val_dataloader_args)
+            else:
+                self.val_dataloader = build_dataloader(val_dataset, **val_dataloader_args)
+
+    def config_model(self, model_builder=None, resume_from=None, load_from=None, revise_keys=[(r'^module\.', '')]):
         # prepare network
-        logger = get_logger('model', log_level=self.cfg.log_level)
+        logger = get_logger('model', log_level=self.cfg.get('log_level', logging.INFO))
         logger.info("Creating graph and optimizer...")
 
+        # 构建网络
         if model_builder is not None:
             model = model_builder()
         else:
             model = build_model(self.cfg.model)
-        
+
         # 模型初始化
         model.init_weights()
 
         if self.distributed:
-            find_unused_parameters = self.cfg.get('find_unused_parameters', False)
-            # Sets the `find_unused_parameters` parameter in
-            # torch.nn.parallel.DistributedDataParallel
+            if self.cfg.get('syncBN', True):
+                model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(self.device)
+
             model = build_ddp(
                 model,
                 self.device,
                 device_ids=[int(os.environ['LOCAL_RANK'])],
                 broadcast_buffers=False,
-                find_unused_parameters=find_unused_parameters)
+                find_unused_parameters=self.find_unused_parameters)
         else:
             model = build_dp(model, self.device, device_ids=self.cfg.gpu_ids)
 
@@ -306,10 +257,44 @@ class Trainer(object):
         auto_scale_lr(self.cfg, self.distributed, logger)
 
         # build optimizer
-        optimizer = build_optimizer(model, self.cfg.optimizer)
+        # 如果构造optimizer调度，则不在全局hook中注册
+        optimizer = None
+        if 'type' in self.cfg.optimizer:
+            # optimizer 简单，全局控制
+            optimizer = build_optimizer(model, self.cfg.optimizer)
+        else:
+            # optimizer 复合，对多个子模块独立控制
+            # 需要模型自己控制
+            optimizer = {}
+            if is_module_wrapper(model):
+                model = model.module
+
+            for submodule_name, optimizer_dict in self.cfg.optimizer.items():
+                optimizer[submodule_name] = build_optimizer(getattr(model, submodule_name), optimizer_dict)
+
+        # build lr scheduler
+        # 如果构造复合lr调度，则不在全局hook中注册
+        lr_scheduler = {}
+        if 'policy' not in self.cfg.lr_config:
+            # lr schedule 复合，对多个子模块独立控制
+            for submodule_name, lr_config in self.cfg.lr_config.items():
+                assert('policy' in lr_config)
+
+                policy_type = lr_config.pop('policy')
+                # If the type of policy is all in lower case, e.g., 'cyclic',
+                # then its first letter will be capitalized, e.g., to be 'Cyclic'.
+                # This is for the convenient usage of Lr updater.
+                # Since this is not applicable for `
+                # CosineAnnealingLrUpdater`,
+                # the string will not be changed if it contains capital letters.
+                if policy_type == policy_type.lower():
+                    policy_type = policy_type.title()
+                hook_type = policy_type + 'LrUpdaterHook'
+                lr_config['type'] = hook_type
+                lr_scheduler[submodule_name] = build_from_cfg(lr_config, HOOKS)         
 
         # build training strategy
-        custom_runner = self.cfg.get('custom_runner', dict(type='EpochBasedRunner', max_epochs=1))
+        custom_runner = self.cfg.get('runner', dict(type='EpochBasedRunner', max_epochs=1))
         self.runner = build_runner(
             custom_runner,        # 忽略max_epochs，开发者控制最大epoch
             default_args=dict(
@@ -317,26 +302,25 @@ class Trainer(object):
                 optimizer=optimizer,
                 work_dir=self.work_dir,
                 logger=logger,
-                meta=self.meta))
+                meta=self.meta,
+                lr_scheduler=lr_scheduler))
 
         # an ugly workaround to make .log and .log.json filenames the same
-        self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+        self.runner.timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
 
-        optimizer_config = self.cfg.get('optimizer_config', {})
-        if 'type' not in optimizer_config:
-            optimizer_config = OptimizerHook(**optimizer_config)
+        optimizer_config = None
+        if not isinstance(optimizer, dict):
+            # 对于复合optimizer，不进行后台hook
+            # 对于optimizer的控制由模型的train_step内部自己控制
+            optimizer_config = self.cfg.get('optimizer_config', {})
+            if 'type' not in optimizer_config:
+                optimizer_config = OptimizerHook(**optimizer_config)
 
-        custom_hooks = self.cfg.get('custom_hooks', None)
-        semi_cfg = self.cfg.get('semi',None)
-        if semi_cfg is not None and semi_cfg.get('hooks', None):
-            if custom_hooks is None:
-                custom_hooks = []
-            custom_hooks.extend(semi_cfg.get('hooks'))
-        
+        custom_hooks = self.cfg.get('custom_hooks', None)        
         self.runner.register_training_hooks(
-            self.cfg.lr_config,                                     # 学习率调整策略，比如step,warmup等
-            optimizer_config,                                       # 优化器的相关后处理，比如限制梯度操作等
-            self.cfg.checkpoint_config,                             # checkpoint相关处理
+            self.cfg.lr_config if len(lr_scheduler) == 0 else None,     # 学习率调整策略，比如step,warmup等
+            optimizer_config,                                           # 优化器的相关后处理，比如限制梯度操作等
+            self.cfg.checkpoint_config,                                 # checkpoint相关处理
             self.cfg.log_config,                                         
             self.cfg.get('momentum_config', None),                       
             custom_hooks_config=custom_hooks)
@@ -357,9 +341,6 @@ class Trainer(object):
 
             if 'type' not in eval_cfg:
                 eval_hook = DistEvalHook if self.distributed else EvalHook
-                if semi_cfg is not None:
-                    eval_hook = SubModulesDistEvalHook if self.distributed else SubModulesEvalHook
-
                 self.runner.register_hook(
                     eval_hook(self.val_dataloader, **eval_cfg), priority='LOW')
             else:
@@ -368,76 +349,23 @@ class Trainer(object):
                     build_from_cfg(eval_cfg, HOOKS), priority='LOW'
                 )
 
-        if resume_from is not None:
+        if resume_from:
             self.runner.resume(resume_from)
-        elif load_from is not None:
+        elif load_from:
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
-
-    @contextmanager
-    def train_context(self, max_epochs):
-        self.runner._max_epochs = max_epochs
-        self.runner.call_hook('before_run')
-        yield self.runner
-
-        time.sleep(1)  # wait for some hooks like loggers to finish
-        self.runner.call_hook('after_run')
-
-    def run_on_train(self, **kwargs):
-        self.runner.train(self.train_generator, **kwargs)
-
-    def run_on_val(self, **kwargs):
-        self.runner.val(self.val_dataloader, **kwargs)
-    
-    def run_before(self):
-        self.runner.call_hook('before_run')
-        
-    def run_after(self):
-        self.runner.call_hook('after_run')
-
-    def export(self, dummy_input, checkpoint=None, model_builder=None, path='./', prefix='model'):
-        f32_model = None
-        if model_builder is not None:
-            f32_model = model_builder()
         else:
-            f32_model = build_model(self.cfg.model)
+            if self.distributed:
+                # 为了稳妥起见，把rank0的权重保存下来，其余进程进行加载保证所有卡的起始权重相同
+                checkpoint_path = os.path.join(tempfile.gettempdir(), "initial_weights.pt")
+                rank, _ = get_dist_info()
+                if rank == 0:
+                    torch.save(model.state_dict(), checkpoint_path)
 
-        # 加载checkpoint
-        if checkpoint is not None:
-            ckpt = torch.load(checkpoint, map_location='cpu')
-            f32_model.load_state_dict(ckpt['state_dict'], strict=True)
-
-        # 获得浮点模型的 FLOPS、PARAMS
-        # model = DummyModelWarp(f32_model)        
-        # model = model.eval()
-        f32_model.eval()
-        f32_model.forward = f32_model.onnx_export
-        f32_model = f32_model.to('cpu')
-        dummy_input = dummy_input.to('cpu')
-        flops, params = profile(f32_model, inputs=(dummy_input,))
-        print('FLOPs = ' + str(flops/1000**3) + 'G')
-        print('Params = ' + str(params/1000**2) + 'M')
-
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        # Export the model
-        torch.onnx.export(
-                f32_model,                                      # model being run
-                dummy_input,                                # model input (or a tuple for multiple inputs)
-                os.path.join(path, f'{prefix}.onnx'),       # where to save the model (can be a file or file-like object)
-                export_params=True,                         # store the trained parameter weights inside the model file
-                opset_version=11,                           # the ONNX version to export the model to
-                do_constant_folding=True,                   # whether to execute constant folding for optimization
-                input_names = ['input'],                    # the model's input names
-        )
-
-        # 模型可视化
-        if not os.path.exists(os.path.join(path, 'visualization')):
-            os.makedirs(os.path.join(path, 'visualization'))
-        visualization_dir = os.path.join(path, 'visualization')
-        visualize_model.visualize_weight_ranges(f32_model, visualization_dir)
-        visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(f32_model, visualization_dir)
-
+                dist.barrier()
+                self.runner.load_checkpoint(checkpoint_path)
+                # 删除临时模型文件
+                os.remove(checkpoint_path)
+        
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
         # 计算浮点模型
@@ -613,15 +541,15 @@ class Trainer(object):
         else:
             model = build_dp(model, self.device, device_ids=self.cfg.gpu_ids)
 
-        # 自动调整单设备下的学习率到多设备下的学习率
-        auto_scale_lr(self.cfg, self.distributed, logger)
-
         ###############################     STEP - 1    ###############################
         # Finetune the quantized model
         if not self.distributed or (get_dist_info()[0] == 0):        
             print('Starting Model Finetune')
         # build optimizer        
         optimizer = build_optimizer(model, self.cfg.optimizer)
+
+        # 自动调整单设备下的学习率到多设备下的学习率
+        auto_scale_lr(self.cfg, self.distributed, logger)
 
         # build training strategy
         self.runner = build_runner(
@@ -634,7 +562,7 @@ class Trainer(object):
                 meta=self.meta))
 
         # an ugly workaround to make .log and .log.json filenames the same
-        self.runner.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+        self.runner.timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
 
         optimizer_config = self.cfg.optimizer_config
         if self.distributed and 'type' not in self.cfg.optimizer_config:

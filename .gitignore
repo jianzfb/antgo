@@ -4,9 +4,13 @@
 **/DS_Store
 *.so
 *.egg
+*.eggs
 *.egg-info
 dist
 build
 example/dump
 test
 dump
+extend
+*.tar
+*.zip

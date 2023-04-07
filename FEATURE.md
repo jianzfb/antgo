@@ -1,0 +1,592 @@
+# 简明教程
+
+## 安装代码库
+```
+pip3 install antgo
+```
+
+## 快速体验模型训练（Cifar10）
+```
+# 第一步 创建mvp代码（Cifar10分类任务训练）
+antgo create mvp
+
+# 第二步 开始训练（使用GPU 0）
+python3 ./cifar10/main.py --exp=cifar10 --gpu-id=0 --process=train
+
+# 第三步 查看训练日志
+# 在./output/cifar10/output/checkpoint下你将获得checkpoint epoch_1500.pth
+# 在测试集上的top-1指标约为0.95
+
+# 第四步 导出onnx模型
+python3 ./cifar10/main.py --exp=cifar10 --checkpoint=./output/cifar10/output/checkpoint/epoch_1500.pth --process=export
+```
+
+## 开发自定义模型
+
+### 第一步 基于mvp构建模板代码（基于Cifar10分类任务的代码）
+```
+antgo create mvp --name=mydet
+```
+将在当前目录下生成模板代码，如下格式
+```
+|-- mydet
+    |-- configs
+        |-- config.py
+    |-- models
+        |-- wideres.py
+    |-- __init__.py
+    |-- dataset.py
+    |-- hooks.py
+    |-- metrics.py
+    |-- main.py
+|-- install.sh
+|-- launch.sh
+|-- system.py
+|-- README.md
+|-- requirements.txt
+```
+
+### 第二步 基于模板进行修改
+* 自定义数据集
+
+转换数据到标准格式
+
+> 场景1
+> 
+> 图片样本在一个文件夹中，我们使用如下工具将样本组织成标准格式，
+> ```
+> # --max-size 用于指定图片长边最大值
+> antgo tool extract/images --src=图片目录地址 --tgt=目标地址 --prefix=文件名前缀过滤 --suffix=文件名后缀过滤 --ext=文件扩展名过滤 --shuffle --max-size=256
+> ```
+
+> 场景2
+> 
+> 从视频文件中采样，我们使用如下工具将样本组织成标准格式，
+> ```
+> antgo tool extract/videos --src=视频文件目录地址 --tgt=目标地址 --frame-rate=15 --max-size=256
+> ```
+
+> 场景3
+>
+> 转换标准coco格式数据，到标准格式
+> ```
+> antgo tool extract/coco --src=coco格式的json文件地址 --tgt=目标地址
+> ```
+
+> 场景4
+> 
+> 基于标准格式数据，裁切出目标局部区域，并重新组织成标准格式
+> （对局部区域进行进行化分析时，经常使用）
+> ```
+> # --ext-ratio 用于指定如何对目标框进行外扩
+> antgo tool extract/crop --src= --tgt=目标地址 --ext-ratio=0.3
+> ```
+
+
+基于标准格式进行tfrecord训练数据打包
+
+> 
+```
+# --num 指定打包后单个文件中的样本数量
+antgo tool package/tfrecord --src=在第一步转换好的地址下的json文件路径 --tgt=打包目标路径 --prefix=打包后文件名前缀指定 --num=40000
+```
+打包后，打包文件样式如下
+```
+|-- package
+    |-- yongchun_hand_gesture-00000-of-00003-index
+    |-- yongchun_hand_gesture-00000-of-00003-tfrecord
+    |-- yongchun_hand_gesture-00001-of-00003-index
+    |-- yongchun_hand_gesture-00001-of-00003-tfrecord
+    |-- yongchun_hand_gesture-00002-of-00003-index
+    |-- yongchun_hand_gesture-00002-of-00003-tfrecord
+```
+
+修改配置文件中的数据配置字段
+```
+|-- mydet
+    |-- configs
+        |-- config.py
+```
+
+```
+# 数据配置
+data=dict(
+    train=dict(
+        type="TFDataset",
+        data_path_list=['yongchun_hand_gesture-00000-of-00003-tfrecord'],
+        pipeline=[
+            dict(type='DecodeImage', to_rgb=True),
+            dict(type="KeepRatio", aspect_ratio=1.77),
+            dict(type="Rotation", degree=15, border_value=128),            
+            dict(type='ResizeS', target_dim=[448,256]),
+            dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
+            dict(type='IImageToTensor', keys=['image']),            
+        ],
+        inputs_def={
+            'fields': ["image", 'bboxes', 'labels', 'image_meta']
+        },
+        shuffle_queue_size=20480
+    ),
+    train_dataloader=dict(
+        samples_per_gpu=128, 
+        workers_per_gpu=4,
+        drop_last=True,
+        shuffle=True,
+        ignore_stack=['bboxes', 'labels', 'image_meta']
+    ),
+    val=dict(
+        type="TFDataset",
+        data_path_list=['yongchun_hand_gesture-00002-of-00003-tfrecord'],
+        pipeline=[
+            dict(type='DecodeImage', to_rgb=True),
+            dict(type='ResizeS', target_dim=[448,256]),                                                         
+            dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),            
+            dict(type='IImageToTensor', keys=['image']),              
+        ],
+        inputs_def={
+            'fields': ["image", 'bboxes', 'labels', 'image_meta']
+        }
+    ),
+    val_dataloader=dict(
+        samples_per_gpu=128, 
+        workers_per_gpu=4,
+        drop_last=False,
+        shuffle=False,
+        ignore_stack=['bboxes', 'labels', 'image_meta']
+    ),       
+    test=dict(
+        type="TFDataset",
+        data_path_list=['yongchun_hand_gesture-00002-of-00003-tfrecord'],
+        pipeline=[
+            dict(type='DecodeImage', to_rgb=True),
+            dict(type='ResizeS', target_dim=[448,256]),                                                         
+            dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),            
+            dict(type='IImageToTensor', keys=['image']),              
+        ],
+        inputs_def={
+            'fields': ["image", 'bboxes', 'labels', 'image_meta']
+        }
+    ),
+    test_dataloader=dict(
+        samples_per_gpu=128, 
+        workers_per_gpu=4,
+        drop_last=False,
+        shuffle=False,
+        ignore_stack=['bboxes', 'labels', 'image_meta']
+    ),   
+)
+```
+
+* 自定义模型
+
+系统采用注册机制实现模块的动态构建。所以我们可以在任何位置实现模型的定义，并注册到系统中。
+
+举例来说，见文件
+```
+|-- mydet
+    |-- models
+        |-- wideres.py
+```
+
+```
+@MODELS.register_module()
+class WideResNet(nn.Module):
+    def __init__(self, num_classes, depth=28, widen_factor=2, dropout=0.0, dense_dropout=0.0, **kwargs):
+        ......
+```
+
+这行代码
+
+```
+@MODELS.register_module()
+```
+实现模型到系统的注册。
+
+然后我们从模型配置文件中，可以看到如何配置我们自定义的模型，见下
+```
+# 模型配置
+model = dict(
+    type='ImageClassifier',
+    backbone=dict(
+        type='WideResNet',
+        num_classes=4,     
+        depth=28,
+        widen_factor=8,
+        dropout=0,
+        dense_dropout=0.2          
+    ),
+    head=dict(
+        type='ClsHead',
+        loss=dict(type='CrossEntropyLoss', loss_weight=1.0, class_weight=[100,3,1,2])
+    )
+)
+```
+这里，我们将自定义的WideResNet作为分类模型ImageClassifier的backbone使用了。
+
+
+* 模型训练
+
+同样的模型训练方式
+```
+python3 ./mydet/main.py --exp=mydet --gpu-id=0 --process=train
+```
+
+* 导出onnx模型
+
+同样的模型导出方式
+```
+python3 ./mydet/main.py --exp=mydet --checkpoint=./output/mydet/output/checkpoint/epoch_xxx.pth --process=export
+```
+
+## 高阶应用——模型迭代自动化流水线
+
+开始进入我们的高级应用，全力解放无意义的码代码。数据驱动模型迭代流水线，
+```mermaid
+graph LR;
+id1[(采集)]-->无标签数据
+无标签数据-->模型聚合预测-->主动学习-->高质量伪标签-->监督训练
+主动学习-->低质量伪标签-->人工标注-->标签数据
+监督训练.->半监督训练
+无标签数据-->半监督训练
+标签数据-->半监督训练
+标签数据-->监督训练
+监督训练.->蒸馏训练
+标签数据-->蒸馏训练
+
+```
+
+### 配置任务自动化提交脚本
+
+* 基于SSH任务提交
+
+生成默认配置 ssh-submit-config.yaml
+```
+antgo submitter --ssh
+```
+替换，如下
+```
+config:
+    username: yourname
+    password: '' # 不启用，ssh需要开通免密登陆
+    ip: your machine ip address
+```
+
+将更新的配置文件，注册到系统
+```
+antgo submitter --ssh --config=ssh-submit-config.yaml
+```
+
+* 基于自定义脚本任务提交
+
+脚本功能和接口规范
+
+> 脚本功能/职责
+> 
+> * 提交脚本需要负责把当前目录下的代码环境打包上传到目标机器，基于指定镜像调用启动命令
+>
+> 脚本参数
+> 
+> * 镜像名称, 启动命令, GPU数, CPU数, 内存大小(单位M)
+> image, launch_argv, gpu_num, cpu_num, memory_size
+
+
+生成脚本配置文件 submit-config.yaml
+```
+antgo submitter
+```
+替换，如下
+```
+# folder 设置你的提交脚本代码文件夹路径
+# script 设置提交脚本文件路径
+folder: 'replace with your submit code folder'
+script: 'replace with your launch script'
+```
+
+脚本注册到系统
+```
+antgo submitter --config=submit-config.yaml
+```
+
+### 配置私有远程存储（必须，默认仅支持本地存储）
+
+### 项目创建
+```
+# 可以添加--auto参数，项目将执行自动优化流水线
+# --image 指定项目使用的基础镜像
+antgo create project --name=projectname --git=projectgit --image=image
+```
+
+#### 项目组织结构
+项目将拥有类似如下的组织结构
+```
+|-- mydet1
+    |-- configs
+        |-- config.py
+    |-- models
+        |-- wideres.py
+    |-- __init__.py
+    |-- dataset.py
+    |-- hooks.py
+    |-- metrics.py
+    |-- main.py
+|-- mydet2
+    |-- configs
+        |-- config.py
+    |-- models
+        |-- wideres.py
+    |-- __init__.py
+    |-- dataset.py
+    |-- hooks.py
+    |-- metrics.py
+    |-- main.py
+|-- install.sh
+|-- launch.sh
+|-- system.py
+|-- README.md
+|-- requirements.txt
+```
+这里mydet1，mydet2是这个项目下的两个不同的实验。一个项目下面允许存在多个不同的实验，比如说可以把不同的模型作为不同的实验。
+
+在一个项目中，三类抽象的模型种类
+
+* 专家模型
+    主要是指参数量或计算量较大的模型，指标较好，但是不能实际部署
+* 产品模型
+    主要是指能够实现线上部署的模型
+* Baseline模型
+    主要是指基础模型，常作为PK对象存在
+
+#### 配置项目信息
+* 自动化提交配置
+
+为项目设置如何自动化提交任务
+```
+# 如果指定--ssh，是指使用ssh提交任务，需要提前配置好 基于ssh任务提交信息。
+# 如果不指定，则将使用用户自定义的任务提交方案，如果没有设置，则无法实现自动提交。
+# --gpu GPU数
+# --cpu CPU数
+# --memory 内存大小（单位M）
+antgo update project/submitter --gpu=1 --cpu=10 --memory=10000
+```
+
+* 标注配置
+```
+# label_config.py 是配置文件信息，在文件中设置如下字段
+# type=''       # 标注类别，目前支持CLASS,RECT,POINT,SKELETON
+# category=[]   # 样本类别，比如检测目标类别，["car", "train", "person"]
+# 如果标注类别是SKELETON，则还需提供meta信息的定义，用于指定点之间的连接关系
+# meta=dict(skeleton=[])
+antgo update project/label --config=label_config.py
+```
+
+* 半监督训练配置
+```
+# semi_config.py 是配置文件信息，在文件中设置半监督模型配置，可以参考
+# 框架自带的 dense 半监督算法的配置 antgo/framework/helper/configs/semi/dense_config.py
+# 如果使用系统自带的方案，可以通过设置--name= 使用。注意，目前支持dense(适用于检测任务), mpl(适用于分类任务)
+antgo update project/semi --config=semi_config.py
+
+# 如果要清空配置，则运行
+antgo update project/semi --config=
+```
+
+* 蒸馏训练配置
+```
+# distillation_config.py 是配置文件信息，在文件中设置蒸馏模型配置
+antgo update project/distillation --config=distillation_config.py
+
+# 如果要清空配置，则运行
+antgo update project/distillation --config=
+```
+
+* 主动学习配置
+```
+# ac_config.py 是配置文件信息，在文件中设置主动学习模型配置，可以参考
+# 框架自带的主动学习算法配置 antgo/framework/helper/configs/activelearning/ac_config.py
+antgo update project/activelearning --config=ac_config.py
+
+# 如果要清空配置，则运行
+antgo update project/activelearning --config=
+```
+
+* 添加产品模型
+```
+# 注意，一个项目仅能存在一个产品模型，多次添加会覆盖之前的。
+# --exp 指定将现存的哪个实验模型作为产品模型
+# --project 指定针对的是哪个项目
+antgo add product --exp=expname --project=projectname
+```
+
+* 添加专家模型
+```
+# 注意，一个项目能存在多个专家模型。
+# --exp 指定将现存的哪个实验模型作为专家模型
+# --project 指定针对的是哪个项目
+antgo add expert --exp=expname --project=projectname
+```
+
+* 添加Baseline模型
+```
+# 注意，一个项目仅能存在一个Baseline模型，多次添加会覆盖之前的。
+# --exp 指定将现存的哪个实验模型作为基准模型
+# --project 指定针对的是哪个项目
+antgo add baseline --exp=expname --project=projectname
+```
+
+### 实验创建
+```
+antgo create exp --project=projectname --name=expname
+```
+
+### 训练实验
+```
+# 基于ssh进行训练任务提交
+antgo train --exp=expname --root=模型训练信息存储根目录 --gpu-id=0 --cloud --ssh
+```
+
+### 提交新增有标签数据
+```
+# --project 设置为哪个项目添加无标签数据
+# --address 打包好的无标签数据地址
+# --tags 为此数据设置一个标记
+# --num 数据量
+antgo add train/label --tags= --num= --address= --project=projectname
+```
+
+### 提交新增无标签数据
+```
+# --project 设置为哪个项目添加无标签数据
+# --address 打包好的无标签数据地址
+# --tags 为此数据设置一个标记
+# --num 数据量
+antgo add train/unlabel --tags= --num= --address= --project=projectname
+```
+
+## 辅助工具
+### 模型DEMO创建
+```
+    import sys
+    import numpy as np
+
+    from antgo.interactcontext import InteractContext
+    ctx = InteractContext()
+
+    ctx.demo.start("b_exp", config={
+            'support_user_upload': True,
+            'support_user_input': False,
+    })
+    for data, info in ctx.demo.running_dataset.iterator_value():
+        # 在此处接受传入的数据，并使用模型处理
+
+        print(data)
+
+        # 将模型运行结果返回
+        ctx.recorder.record({
+            'id': info['id'],
+            'score': {
+                'data': np.random.randint(0,255,(255,255), dtype=np.uint8),
+                'type': 'IMAGE'
+            },
+            'description': {
+                'data': 'hello the world',
+                'type': 'STRING'
+            }
+        })
+        print('finish')
+    ctx.demo.exit()
+
+```
+### 数据查验
+
+```
+    import sys
+    import numpy as np
+
+    from antgo.interactcontext import InteractContext
+    ctx = InteractContext()
+
+    # 创建浏览服务，默认会开启本地http服务
+    # tags: 设置查验标签
+    # white_users: 设置允许参与查验的用户信息
+    ctx.browser.start("b_exp", config = {
+            'tags': ['hello', 'world'],
+            'white_users': {'jian@baidu.com': {'password': '112233'}},
+        })
+
+    # 导入数据
+    for id in range(10):
+        ctx.recorder.record({
+            'id': id,
+            'score': {
+                'data': np.random.randint(0,255,(255,255), dtype=np.uint8),
+                'type': 'IMAGE'
+            },
+            'description': {
+                'data': f'hello the world {id}',
+                'type': 'STRING'
+            }
+        })
+    
+    # 只有在web页面上，对所有数据检查完备后返回
+    ctx.browser.waiting()
+
+    # 下载检查结果
+    content = ctx.browser.download()
+    print(content)
+    ctx.browser.exit()
+```
+
+### 数据标注工具
+
+这是主动学习的标注模块。
+```
+    import sys
+    import numpy as np
+
+    from antgo.interactcontext import InteractContext
+    ctx = InteractContext()
+
+    # 需要在这里设置标注配置信息，如
+    # category: 设置类别信息
+    # white_users: 设置允许参与的标注人员信息
+    # label_type: 设置标注类型，目前仅支持'RECT','POINT','POLYGON'
+    ctx.activelearning.start("b_exp", config={
+            'metas':{
+                'category': [
+                    {
+                        'class_name': 'A',
+                        'class_index': 0,
+                    },
+                    {
+                        'class_name': 'B',
+                        'class_index': 1,           
+                    }
+                ]
+            },
+            'white_users': {'jian@baidu.com': {'password': '112233'}},
+            'label_type': 'RECT',   # 设置标注类型，'RECT','POINT','POLYGON'
+        }
+    )
+
+    # 切换到标注状态
+    ctx.activelearning.labeling()
+
+    # 动态添加需要标注的样本
+    for i in range(10):
+        # 添加等待标注样本
+        ctx.recorder.record(
+            {
+                'id': i,
+                'image': np.random.randint(0,255,(255,255), dtype=np.uint8)
+            }
+        )
+
+    # 下载当前标注结果（后台等待标注完成后，再下载）
+    result = ctx.activelearning.download()
+
+    # 切换到等待状态
+    ctx.activelearning.waiting()
+
+    # 全局结束
+    ctx.activelearning.exit()
+```

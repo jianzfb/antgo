@@ -17,6 +17,7 @@ class BaseExecution:
         # Single input.
         else:
             args = [getattr(arg[0], self._index[0])]
+        
         return self._op(*args, **kws)
 
     def __call__(self, *arg, **kws):

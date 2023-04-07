@@ -44,17 +44,22 @@ class COCOCompatibleEval(object):
         
         self.without_background = without_background
     
+    def keys(self):
+        # 约束使用此评估方法，需要具体的关键字信息
+        return {'pred': ['box', 'label'], 'gt': ['image_meta', 'bboxes', 'labels']}
+
     def __call__(self, preds, gts):
         # gts 格式 'info', 'licenses', 'images', 'annotations', 'categories’
         # 将GT 转换为COCO格式
+        # image_metas, bboxes, labels
         images = []
         annotations = []
         bbox_id = 0
         for image_id, gt in enumerate(gts):
-            image_file = gt['image_metas']['image_file']
-            bboxes = [[box[0], box[1], box[2]-box[0], box[3]-box[1]] for box in gt['gt_bbox'].tolist()]
+            image_file = gt['image_meta']['image_file'] if 'image_file' in gt['image_meta'] else ''
+            bboxes = [[box[0], box[1], box[2]-box[0], box[3]-box[1]] for box in gt['bboxes'].tolist()]
             areas = [box[2]*box[3] for box in bboxes]
-            category_ids = [l for l in gt['gt_class'].tolist()]
+            category_ids = [l for l in gt['labels'].tolist()]
 
             for _, (bbox, area, category_id) in enumerate(zip(bboxes, areas, category_ids)):
                 if self.without_background:
@@ -134,7 +139,6 @@ class COCOCompatibleEval(object):
             tag_and_value[tag] = value
 
         return tag_and_value
-
 
 
 # cc = COCOBboxEval()

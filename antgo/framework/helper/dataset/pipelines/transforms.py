@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import inspect
 import math
 import random
@@ -6,9 +5,9 @@ import numbers
 from numbers import Number
 from typing import Sequence
 import numpy as np
+from PIL import Image
 import cv2
 from ..builder import PIPELINES
-import torchvision.transforms as transforms
 
 
 def imflip(img, direction='horizontal'):
@@ -213,7 +212,7 @@ def impad(img,
 
 
 @PIPELINES.register_module()
-class RandomResizedCrop(object):
+class IRandomResizedCrop(object):
     """Crop the given image to random size and aspect ratio.
 
     A crop of random size (default: of 0.08 to 1.0) of the original size and a
@@ -462,7 +461,7 @@ class RandomResizedCrop(object):
         return repr_str
 
 @PIPELINES.register_module()
-class RandomFlip(object):
+class IRandomFlip(object):
     """Flip the image randomly.
 
     Flip the image randomly based on flip probaility and flip direction.
@@ -504,7 +503,7 @@ class RandomFlip(object):
 
 
 @PIPELINES.register_module()
-class RandomErasing(object):
+class IRandomErasing(object):
     """Randomly selects a rectangle region in an image and erase pixels.
 
     Args:
@@ -684,7 +683,7 @@ def imnormalize_(img, mean, std, to_rgb=True):
 
 
 @PIPELINES.register_module()
-class Normalize(object):
+class INormalize(object):
     """Normalize the image.
 
     Args:
@@ -694,17 +693,20 @@ class Normalize(object):
             default is true.
     """
 
-    def __init__(self, mean, std, to_rgb=False):
+    def __init__(self, mean, std, to_rgb=False, keys=['image']):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
         self.to_rgb = to_rgb
+        self.keys = keys
 
     def __call__(self, results):
-        for key in ['image']:
+        for key in self.keys:
             results[key] = imnormalize(results[key], self.mean, self.std,
                                             self.to_rgb)
-        results['img_norm_cfg'] = dict(
-            mean=self.mean, std=self.std, to_rgb=self.to_rgb)
+
+        if 'image_meta' in results:
+            results['image_meta']['img_norm_cfg'] = \
+                dict(mean=self.mean, std=self.std, to_rgb=self.to_rgb)
         return results
 
     def __repr__(self):
@@ -716,227 +718,41 @@ class Normalize(object):
 
 
 @PIPELINES.register_module()
-class Resize(object):
-    """Resize images.
-
-    Args:
-        size (int | tuple): Images scales for resizing (h, w).
-            When size is int, the default behavior is to resize an image
-            to (size, size). When size is tuple and the second value is -1,
-            the image will be resized according to adaptive_side. For example,
-            when size is 224, the image is resized to 224x224. When size is
-            (224, -1) and adaptive_size is "short", the short side is resized
-            to 224 and the other side is computed based on the short side,
-            maintaining the aspect ratio.
-        interpolation (str): Interpolation method. For "cv2" backend, accepted
-            values are "nearest", "bilinear", "bicubic", "area", "lanczos". For
-            "pillow" backend, accepted values are "nearest", "bilinear",
-            "bicubic", "box", "lanczos", "hamming".
-            More details can be found in `mmcv.image.geometric`.
-        adaptive_side(str): Adaptive resize policy, accepted values are
-            "short", "long", "height", "width". Default to "short".
-        backend (str): The image resize backend type, accepted values are
-            `cv2` and `pillow`. Default: `cv2`.
-    """
-    interpolation_map={
-        'nearest': cv2.INTER_NEAREST ,
-        'bilinear': cv2.INTER_LINEAR ,
-        'bicubic': cv2.INTER_CUBIC,
-        'area': cv2.INTER_LINEAR,
-        'lanczos': cv2.INTER_LANCZOS4
-    }
-
-    def __init__(self,
-                 size,
-                 interpolation='bilinear',
-                 adaptive_side='short'):
-        assert isinstance(size, int) or ((isinstance(size, tuple) or isinstance(size, list))
-                                         and len(size) == 2)
-        if isinstance(size, list):
-            size = tuple(size)
-        assert adaptive_side in {'short', 'long', 'height', 'width'}
-
-        self.adaptive_side = adaptive_side
-        self.adaptive_resize = False
-        if isinstance(size, int):
-            assert size > 0
-            size = (size, size)
-        else:
-            assert size[0] > 0 and (size[1] > 0 or size[1] == -1)
-            if size[1] == -1:
-                self.adaptive_resize = True
-
-        self.size = size
-        self.interpolation = interpolation
-
-    def _resize_img(self, results):
-        for key in ['image']:
-            img = results[key]
-            ignore_resize = False
-            if self.adaptive_resize:
-                h, w = img.shape[:2]
-                target_size = self.size[0]
-
-                condition_ignore_resize = {
-                    'short': min(h, w) == target_size,
-                    'long': max(h, w) == target_size,
-                    'height': h == target_size,
-                    'width': w == target_size
-                }
-
-                if condition_ignore_resize[self.adaptive_side]:
-                    ignore_resize = True
-                elif any([
-                        self.adaptive_side == 'short' and w < h,
-                        self.adaptive_side == 'long' and w > h,
-                        self.adaptive_side == 'width',
-                ]):
-                    width = target_size
-                    height = int(target_size * h / w)
-                else:
-                    height = target_size
-                    width = int(target_size * w / h)
-            else:
-               width, height = self.size
-            if not ignore_resize:
-                img = cv2.resize(
-                    img,
-                    (width, height),
-                    interpolation=Resize.interpolation_map[self.interpolation])
-                results[key] = img
-                results['img_shape'] = img.shape
+class IToGray(object):
+    def __init__(self, keys=['image']):
+        self.keys = keys
 
     def __call__(self, results):
-        self._resize_img(results)
-        return results
-
-    def __repr__(self):
-        repr_str = self.__class__.__name__
-        repr_str += f'(size={self.size}, '
-        repr_str += f'interpolation={self.interpolation})'
-        return repr_str
-
-    def reset(self, target_dim):
-        if type(target_dim) == list or type(target_dim) == tuple:
-            self.size = target_dim
-        else:
-            self.size = [target_dim, target_dim]  # w,h
-
-    def get(self):
-        return self.size
-
-@PIPELINES.register_module()
-class CenterCrop(object):
-    r"""Center crop the image.
-
-    Args:
-        crop_size (int | tuple): Expected size after cropping with the format
-            of (h, w).
-        efficientnet_style (bool): Whether to use efficientnet style center
-            crop. Defaults to False.
-        crop_padding (int): The crop padding parameter in efficientnet style
-            center crop. Only valid if efficientnet style is True. Defaults to
-            32.
-        interpolation (str): Interpolation method, accepted values are
-            'nearest', 'bilinear', 'bicubic', 'area', 'lanczos'. Only valid if
-            ``efficientnet_style`` is True. Defaults to 'bilinear'.
-        backend (str): The image resize backend type, accepted values are
-            `cv2` and `pillow`. Only valid if efficientnet style is True.
-            Defaults to `cv2`.
-
-
-    Notes:
-        - If the image is smaller than the crop size, return the original
-          image.
-        - If efficientnet_style is set to False, the pipeline would be a simple
-          center crop using the crop_size.
-        - If efficientnet_style is set to True, the pipeline will be to first
-          to perform the center crop with the ``crop_size_`` as:
-
-        .. math::
-            \text{crop_size_} = \frac{\text{crop_size}}{\text{crop_size} +
-            \text{crop_padding}} \times \text{short_edge}
-
-        And then the pipeline resizes the img to the input crop size.
-    """
-    interpolation_map={
-        'nearest': cv2.INTER_NEAREST ,
-        'bilinear': cv2.INTER_LINEAR ,
-        'bicubic': cv2.INTER_CUBIC,
-        'area': cv2.INTER_LINEAR,
-        'lanczos': cv2.INTER_LANCZOS4
-    }
-
-    def __init__(self,
-                 crop_size,
-                 efficientnet_style=False,
-                 crop_padding=32,
-                 interpolation='bilinear'):
-        if efficientnet_style:
-            assert isinstance(crop_size, int)
-            assert crop_padding >= 0
-            assert interpolation in ('nearest', 'bilinear', 'bicubic', 'area',
-                                     'lanczos')
-        else:
-            assert isinstance(crop_size, int) or (isinstance(crop_size, tuple)
-                                                  and len(crop_size) == 2)
-        if isinstance(crop_size, int):
-            crop_size = (crop_size, crop_size)
-        assert crop_size[0] > 0 and crop_size[1] > 0
-        self.crop_size = crop_size
-        self.efficientnet_style = efficientnet_style
-        self.crop_padding = crop_padding
-        self.interpolation = interpolation
-
-    def __call__(self, results):
-        crop_height, crop_width = self.crop_size[0], self.crop_size[1]
-        for key in ['image']:
-            img = results[key]
-            # img.shape has length 2 for grayscale, length 3 for color
-            img_height, img_width = img.shape[:2]
-
-            # https://github.com/tensorflow/tpu/blob/master/models/official/efficientnet/preprocessing.py#L118 # noqa
-            if self.efficientnet_style:
-                img_short = min(img_height, img_width)
-                crop_height = crop_height / (crop_height +
-                                             self.crop_padding) * img_short
-                crop_width = crop_width / (crop_width +
-                                           self.crop_padding) * img_short
-
-            y1 = max(0, int(round((img_height - crop_height) / 2.)))
-            x1 = max(0, int(round((img_width - crop_width) / 2.)))
-            y2 = min(img_height, y1 + crop_height) - 1
-            x2 = min(img_width, x1 + crop_width) - 1
-
-            # crop the image
-            img = imcrop(img, bboxes=np.array([x1, y1, x2, y2]))
-
-            if self.efficientnet_style:
-                img = cv2.resize(
-                    img,
-                    tuple(self.crop_size[::-1]),
-                    interpolation=CenterCrop.interpolation_map[self.interpolation])
-            img_shape = img.shape
-            results[key] = img
-        results['img_shape'] = img_shape
-
-        return results
-
-    def __repr__(self):
-        repr_str = self.__class__.__name__ + f'(crop_size={self.crop_size}'
-        repr_str += f', efficientnet_style={self.efficientnet_style}'
-        repr_str += f', crop_padding={self.crop_padding}'
-        repr_str += f', interpolation={self.interpolation}'
-        return repr_str
-
-@PIPELINES.register_module()
-class ToGray(object):
-    def __init__(self):
-        pass
-
-    def __call__(self, results):
-        for key in ['image']:
+        for key in self.keys:
             image = results[key]
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             results[key] = np.expand_dims(gray, -1)
         return results
+
+
+@PIPELINES.register_module()
+class INumpyToPIL(object):
+    def __init__(self, keys=['image'], mode=None):
+        self.keys = keys
+        if mode is None:
+            mode = 'RGB'
+        assert(mode in ['RGB', 'L'])
+        self.mode = mode
+
+    def __call__(self, samples):
+        for key in self.keys:
+            samples[key] = Image.fromarray(samples[key]).convert(self.mode)
+                
+        return samples
+
+
+@PIPELINES.register_module()
+class IPILToNumpy(object):
+    def __init__(self, keys=['image']):
+        self.keys = keys
+
+    def __call__(self, samples):
+        for key in self.keys:
+            samples[key] = np.array(samples[key])
+                
+        return samples

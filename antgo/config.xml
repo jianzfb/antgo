@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <antgo>
-    <factory>{{DATASET_FACTORY}}</factory>
+    <factory>{{FACTORY}}</factory>
     <server_ip>www.mltalker.com</server_ip>
     <server_port>8999</server_port>
     <server_user_token>{{USER_TOKEN}}</server_user_token>

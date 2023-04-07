@@ -11,7 +11,7 @@ class MeanTeacher(Hook):
         interval=1,
         warm_up=100,
         decay_intervals=None,
-        decay_factor=0.1,
+        decay_factor=0.0,
     ):
         assert momentum >= 0 and momentum <= 1
         self.momentum = momentum

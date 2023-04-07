@@ -1,7 +1,5 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import os.path as osp
 import warnings
-
 from antgo.framework.helper.fileio import FileClient
 from ..dist_utils import allreduce_params, master_only
 from .hook import HOOKS, Hook
@@ -70,34 +68,22 @@ class CheckpointHook(Hook):
 
     def before_run(self, runner):
         if not self.out_dir:
+            # 在out_dir没有被设置时，继承runner.work_dir的工作目录
             self.out_dir = runner.work_dir
 
-        self.file_client = FileClient.infer_client(self.file_client_args,
-                                                   self.out_dir)
+        self.file_client = \
+            FileClient.infer_client(
+                self.file_client_args, self.out_dir)
 
-        # if `self.out_dir` is not equal to `runner.work_dir`, it means that
-        # `self.out_dir` is set so the final `self.out_dir` is the
-        # concatenation of `self.out_dir` and the last level directory of
-        # `runner.work_dir`
-        if self.out_dir != runner.work_dir:
-            basename = osp.basename(runner.work_dir.rstrip(osp.sep))
-            self.out_dir = self.file_client.join_path(self.out_dir, basename)
-
-        runner.logger.info((f'Checkpoints will be saved to {self.out_dir} by '
+        # 添加固定路径格式
+        self.out_dir = osp.join(self.out_dir, 'output', 'checkpoint')
+        runner.logger.info(
+            (f'Checkpoints will be saved to {self.out_dir} by '
                             f'{self.file_client.name}.'))
 
         # disable the create_symlink option because some file backends do not
         # allow to create a symlink
-        if 'create_symlink' in self.args:
-            if self.args[
-                    'create_symlink'] and not self.file_client.allow_symlink:
-                self.args['create_symlink'] = False
-                warnings.warn(
-                    ('create_symlink is set as True by the user but is changed'
-                     'to be False because creating symbolic link is not '
-                     f'allowed in {self.file_client.name}'))
-        else:
-            self.args['create_symlink'] = self.file_client.allow_symlink
+        self.args['create_symlink'] = False
 
     def after_train_epoch(self, runner):
         if not self.by_epoch:
@@ -132,6 +118,7 @@ class CheckpointHook(Hook):
             runner.meta.setdefault('hook_msgs', dict())
             runner.meta['hook_msgs']['last_ckpt'] = self.file_client.join_path(
                 self.out_dir, cur_ckpt_filename)
+
         # remove other checkpoints
         if self.max_keep_ckpts > 0:
             if self.by_epoch:

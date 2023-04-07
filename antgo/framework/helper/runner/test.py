@@ -12,7 +12,8 @@ import torch.distributed as dist
 from .dist_utils import get_dist_info
 from antgo.framework.helper.utils import *
 
-def single_gpu_test(model, data_loader):
+
+def single_gpu_test(model, data_loader, needed_info=None):
     """Test model with a single gpu.
 
     This method tests model with a single gpu and displays test progress bar.
@@ -30,13 +31,11 @@ def single_gpu_test(model, data_loader):
     prog_bar = ProgressBar(len(dataset))
     for data in data_loader:
         with torch.no_grad():
-            if type(data) == list or type(data) == tuple:
-                result = model(*data, return_loss=False)
-            else:
-                data.update({
+            assert(type(data) == dict)
+            data.update({
                     'return_loss': False
                 })
-                result = model(**data)
+            result = model(**data)
 
         # result is dict
         batch_size = 0
@@ -48,6 +47,13 @@ def single_gpu_test(model, data_loader):
                 batch_size = len(var_value)
             results[var_name].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in var_value])
 
+        if needed_info is not None:
+            for key in needed_info:
+                if key not in results:
+                    results[key] = []
+                
+                results[key].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in data[key]])
+        
         for _ in range(batch_size):
             prog_bar.update()
     
@@ -62,7 +68,7 @@ def single_gpu_test(model, data_loader):
     return rearrange_results
 
 
-def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
+def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False, needed_info=None):
     """Test model with multiple gpus.
 
     This method tests model with multiple gpus and collects the results
@@ -107,6 +113,13 @@ def multi_gpu_test(model, data_loader, tmpdir=None, gpu_collect=False):
             if batch_size == 0:
                 batch_size = len(var_value)
             results[var_name].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in var_value])
+
+        if needed_info is not None:
+            for key in needed_info:
+                if key not in results:
+                    results[key] = []
+                
+                results[key].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in data[key]])
 
         if rank == 0:
             batch_size_all = batch_size * world_size

@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import random
 
 import numpy as np

@@ -1,18 +1,18 @@
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
-from antgo.framework.helper.runner import  load_checkpoint, _load_checkpoint, load_state_dict
-from antgo.framework.helper.base_module import *
-from antgo.framework.helper.models.detectors.multi_stream_detector import *
-from antgo.framework.helper.models.distillation.loss import *
-from ..builder import DISTILLER, build_distill_loss, build_model
+# import torch.nn as nn
+# import torch.nn.functional as F
+# import torch
+# from antgo.framework.helper.runner import  load_checkpoint, _load_checkpoint, load_state_dict
+# from antgo.framework.helper.base_module import *
+# from antgo.framework.helper.models.detectors.multi_stream_detector import *
+# from antgo.framework.helper.models.distillation.loss import *
+# from ..builder import DISTILLER, build_distill_loss, build_model
 
-from collections import OrderedDict
-import copy
+# from collections import OrderedDict
+# import copy
 
 
-@DISTILLER.register_module()
-class DetectionDistiller(MultiSteamDetector):
+# @DISTILLER.register_module()
+# class DetectionDistiller(MultiSteamDetector):
     """Base distiller for detectors.
     It typically consists of teacher_model and student_model.
     """
@@ -63,7 +63,7 @@ class DetectionDistiller(MultiSteamDetector):
 
     def forward_train(self, 
                       image, 
-                      image_metas, 
+                      image_meta, 
                       **kwargs):
         """
         Args:
@@ -77,8 +77,8 @@ class DetectionDistiller(MultiSteamDetector):
         Returns:
             dict[str, Tensor]: A dictionary of loss components(student's losses and distiller's losses).
         """
-        super().forward_train(image, image_metas, **kwargs)
-        student_loss = self.student.forward_train(image, image_metas, **kwargs)
+        super().forward_train(image, image_meta, **kwargs)
+        student_loss = self.student.forward_train(image, image_meta, **kwargs)
 
         with torch.no_grad():
             # 此处提出的是不包含head的feature

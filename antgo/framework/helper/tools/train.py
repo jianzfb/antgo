@@ -66,7 +66,7 @@ def main():
         distributed = False
     else:
         distributed = True
-        init_dist(args.launcher, **cfg.get('dist_params', {}))
+        init_dist(**cfg.get('dist_params', {}))
         # re-set gpu_ids with distributed training mode
         _, world_size = get_dist_info()
         cfg.gpu_ids = range(world_size)
@@ -78,7 +78,7 @@ def main():
     # dump config
     cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))
     # init the logger before other steps
-    timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
     log_file = osp.join(cfg.work_dir, f'{timestamp}.log')
     logger = get_logger('model',log_file=log_file, log_level=cfg.log_level)
 

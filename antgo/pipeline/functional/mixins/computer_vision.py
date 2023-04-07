@@ -8,13 +8,13 @@ from __future__ import print_function
 import cv2
 import numpy as np
 import os
+import json
 
 
 class ComputerVisionMixin:
   """
   Mixin for computer vision problems.
   """
-
   def image_imshow(self, title='image'):  # pragma: no cover
     for im in self:
       cv2.imshow(title, im)
@@ -25,7 +25,6 @@ class ComputerVisionMixin:
     """
     read images from a camera.
     """
-    # from towhee.utils.cv2_utils import cv2
     cnt = limit
 
     def inner():
@@ -60,16 +59,6 @@ class ComputerVisionMixin:
         yield frame
 
     return cls(inner())
-
-  @classmethod
-  def read_audio(cls, path):
-    from towhee.utils.av_utils import av
-
-    acontainer = av.open(path)
-
-    audio_stream = acontainer.streams.audio[0]
-
-    return cls(acontainer.decode(audio_stream))
 
   def map_group(self, output_path, rows=10, cols=10):
     count = 0
@@ -118,10 +107,10 @@ class ComputerVisionMixin:
 
   def to_video(self,
                output_path,
+               width,
+               height,
+               rate=30,
                codec=None,
-               rate=None,
-               width=None,
-               height=None,
                format=None,
                template=None,
                audio_src=None):
@@ -146,6 +135,7 @@ class ComputerVisionMixin:
         audio_src:
             The audio to encode with the video.
     """
+    assert(width is not None and height is not None)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 用于mp4格式的生成的参数
     out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
 
@@ -156,3 +146,12 @@ class ComputerVisionMixin:
       out.write(array)
 
     out.release()
+
+  def to_json(self, path):
+    total = []
+    for data in self:
+      assert(isinstance(data, dict))
+      total.append(data)
+      
+    with open(path, 'w') as fp:
+      json.dump(total, fp)

@@ -76,6 +76,9 @@ class CifarBase(Dataset):
       self.data_samples, self.ids = self.load_samples()
       return
 
+    if not os.path.exists(self.dir):
+      os.makedirs(self.dir)
+
     # fixed seed
     self.seed = time.time()
 
@@ -110,14 +113,19 @@ class CifarBase(Dataset):
   def size(self):
     return len(self.ids)
 
+  def get_cat_ids(self, idx):
+    return self.label[idx]
+  
+  def get_ann_info(self, idx):
+    return {'label': self.label[idx]}
+  
   def at(self, id):
     if self.train_or_test == 'sample':
       return self.data_samples[id]
     return self.image[id], self.label[id]
-
+  
   def data_pool(self):
     if self.train_or_test == 'sample':
-      # self.sample_data_pool(self.data_samples, self.ids)
       sample_idxs = copy.deepcopy(self.ids)
       if self.rng:
         self.rng.shuffle(sample_idxs)

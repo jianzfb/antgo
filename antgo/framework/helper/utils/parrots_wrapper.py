@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from functools import partial
 
 import torch

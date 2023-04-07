@@ -23,8 +23,6 @@ class DataFrameMixin:
 
     1. define an operators with `register` decorator
 
-    >>> from towhee import register
-    >>> from towhee import DataFrame
     >>> @register
     ... def add_1(x):
     ...     return x+1
@@ -46,8 +44,6 @@ class DataFrameMixin:
 
     1. Select the entity on one specified field:
 
-    >>> from towhee import Entity
-    >>> from towhee import DataFrame
     >>> df = DataFrame([Entity(a=i, b=i, c=i) for i in range(2)])
     >>> df.select['a']().to_list()
     [<Entity dict_keys(['a'])>, <Entity dict_keys(['a'])>]
@@ -115,7 +111,6 @@ class DataFrameMixin:
 
         Examples:
 
-        >>> from towhee import Entity, DataFrame
         >>> entities = [Entity(num=i) for i in range(3)]
         >>> df = DataFrame(entities)
         >>> df
@@ -153,7 +148,6 @@ class DataFrameMixin:
         Examples:
         1. convert dicts into entities:
 
-        >>> from towhee import DataFrame
         >>> (
         ...     DataFrame([dict(a=1, b=2), dict(a=2, b=3)])
         ...         .as_entity()
@@ -164,7 +158,6 @@ class DataFrameMixin:
 
         2. convert tuples into entities:
 
-        >>> from towhee import DataFrame
         >>> (
         ...     DataFrame([(1, 2), (2, 3)])
         ...         .as_entity(schema=['a', 'b'])
@@ -175,7 +168,6 @@ class DataFrameMixin:
 
         3. convert single value into entities:
 
-        >>> from towhee import DataFrame
         >>> (
         ...     DataFrame([1, 2])
         ...         .as_entity(schema=['a'])
@@ -205,7 +197,6 @@ class DataFrameMixin:
 
         Examples:
 
-        >>> from towhee import DataFrame
         >>> df = (
         ...     DataFrame(['{"x": 1}'])
         ...         .parse_json()
@@ -226,7 +217,6 @@ class DataFrameMixin:
 
         Examples:
 
-        >>> from towhee import DataFrame, Entity
         >>> (
         ...     DataFrame([Entity(x=1)])
         ...         .as_json()
@@ -247,7 +237,6 @@ class DataFrameMixin:
 
         1. unpack multiple values from entities:
 
-        >>> from towhee import DataFrame
         >>> (
         ...     DataFrame([(1, 2), (2, 3)])
         ...         .as_entity(schema=['a', 'b'])
@@ -280,7 +269,6 @@ class DataFrameMixin:
 
         Examples:
 
-        >>> from towhee import Entity, DataFrame
 
         >>> entities = [Entity(num=i) for i in range(5)]
         >>> df = DataFrame(entities)
@@ -312,7 +300,6 @@ class DataFrameMixin:
 
         Examples:
 
-        >>> from towhee import Entity, DataFrame
         >>> entities = [Entity(a=i, b=i + 1) for i in range(3)]
         >>> entities.append(Entity(a=3, b=''))
         >>> df = DataFrame(entities)
@@ -342,7 +329,6 @@ class DataFrameMixin:
 
         Examples:
 
-        >>> from towhee import Entity, DataFrame
         >>> entities = [Entity(a=i, b=i + 1) for i in range(3)]
         >>> df = DataFrame(entities)
         >>> df

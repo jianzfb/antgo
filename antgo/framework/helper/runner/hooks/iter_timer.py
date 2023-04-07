@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import time
 
 from .hook import HOOKS, Hook
