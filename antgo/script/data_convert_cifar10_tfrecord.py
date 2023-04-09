@@ -17,7 +17,12 @@ class __CifarDataGenerator(object):
     
     def __iter__(self):
         for i in range(self.dataset.size):
-            yield self.dataset.sample(i)
+            sample = self.dataset.sample(i)
+            sample.update({
+                'tag': f'{i}',
+                'image_file': f'{i}.png'
+            })
+            yield sample
     
 def main():
     tgt_folder = './dataset/tfrecord'

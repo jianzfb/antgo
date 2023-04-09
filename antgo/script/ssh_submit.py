@@ -13,8 +13,10 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # step1: 加载ssh配置文件
     ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
-    assert(os.path.exists(ssh_submit_config_file))
-    
+    if not os.path.exists(ssh_submit_config_file):
+        logging.error('No ssh submit config.')
+        return False
+
     with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
         config_content = yaml.safe_load(fp)
 

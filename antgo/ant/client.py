@@ -97,7 +97,7 @@ class ServerBase(object):
 
         # self.task_order = [('activelearning', 'label'),('supervised', 'activelearning'),('label', 'supervised')]
         # self.task_order = [('supervised','semi-supervised')]
-        self.task_priority = {'activelearning': 1, 'supervised':2,'semi-supervised':3, 'distillation':3, 'label': 1}
+        self.task_priority = {'supervised':1, 'activelearning': 2, 'semi-supervised':3, 'distillation':3, 'label': 1}
         self.task_cmd = {
             "activelearning": "antgo activelearning",
             "label": "antgo tool label/start",
@@ -151,11 +151,13 @@ class ServerBase(object):
         exp_info['id'] = ''         # 清空exp id
 
         if project_event == 'train/label' or project_event == 'product':
+            logging.info(f'Trigger {project_event}')
             # 启动监督训练，训练产品模型
             exp_info['checkpoint'] = '' # 清空checkpoint
 
             next_exp_stage = 'supervised'
             if next_exp_stage not in self.task_set:
+                logging.info(f'Add {next_exp_stage} into task queue.')
                 self.task_set.add(next_exp_stage)
                 self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))     
 
@@ -163,18 +165,20 @@ class ServerBase(object):
             update_product_info = self.schedule(project_name, project_info, exp_info, auto_find_next_task=False)
             if update_product_info is not None:
                 project_info = update_product_info
-                  
+
             # update project info
             with open(os.path.join(config.AntConfig.task_factory, f'{project_name}.json'), 'w') as fp:
                 json.dump(project_info, fp)
             file_lock.release()
             return True
         elif project_event == 'train/unlabel':
+            logging.info(f'Trigger {project_event}')
             # 启动主动学习，挑选等待标注样本
             next_exp_stage = 'activelearning'
             if len(project_info['tool']['activelearning']['config']) > 0:
                 # 存在主动学习的配置方案
                 if next_exp_stage not in self.task_set:
+                    logging.info(f'Add {next_exp_stage} into task queue.')
                     self.task_set.add(next_exp_stage)
                     self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))       
 
@@ -183,6 +187,7 @@ class ServerBase(object):
             if len(project_info['tool']['semi']['config']) > 0:
                 # 存在半监督学习的配置方案
                 if next_exp_stage not in self.task_set:
+                    logging.info(f'Add {next_exp_stage} into task queue.')
                     self.task_set.add(next_exp_stage)
                     self.task_queue.put((self.task_priority[next_exp_stage], next_exp_stage))  
 
@@ -285,6 +290,13 @@ class ServerBase(object):
                 if self.ext_module is not None:
                     next_task_cmd += f" --ext-module={self.ext_module}"
 
+                # 创建临时目录
+                old_folder = os.path.abspath(os.curdir)
+                temp_folder = f'{exp_name}.{exp_id}.label'
+                if not os.path.exists(temp_folder):
+                    os.makedirs(temp_folder)
+                os.chdir(temp_folder)
+
                 logging.info(f'Submit task command {next_task_cmd}')
                 if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task[1]):
                     # 提交任务成功
@@ -305,6 +317,14 @@ class ServerBase(object):
                     logging.error(f'Fail submit label task.')
                     # 将next_task重新加入队列 （任务集合保持不变）
                     self.task_queue.put(next_task)
+                    
+                # 恢复原状
+                # 切换回之前的目录为当前目录（仅对当前线程有效）
+                os.chdir(old_folder) 
+                # 对于local模型，不进行删除操作      
+                if submitter_method != 'local':
+                    if temp_folder is not None:
+                        shutil.rmtree(temp_folder)
                 return project_info
 
             # 其余涉及模型的任务（训练，预测等）
@@ -338,10 +358,12 @@ class ServerBase(object):
                 # 当前目录下存在git记录，默认为当前项目实际目录地址
                 logging.warn(f'In current default folder {old_folder}, exists some project, wouldnt git clone from {project_info["git"]} again')
             else:
+                # git_folder == project_name                
+                git_folder = project_info["git"].split('/')[-1].split('.')[0]
                 if not os.path.exists(f'./{project_name}'):
-                    git_folder = project_info["git"].split('/')[-1].split('.')[0]
                     os.system(f'git clone {project_info["git"]}')    
-                    os.chdir(git_folder)
+                # 切换git_folder为当前目录（仅对当前线程有效）
+                os.chdir(git_folder)
 
             if submitter_func(project_name, next_task_cmd, submitter_gpu_num, submitter_cpu_num, submitter_memory, next_task[1]):
                 # 提交任务成功
@@ -362,8 +384,12 @@ class ServerBase(object):
 
             # 恢复原状
             if git_folder is not None:
-                os.chdir(old_folder)
-                shutil.rmtree(git_folder)
+                # 切换回之前的目录为当前目录（仅对当前线程有效）
+                os.chdir(old_folder) 
+            # 对于local模型，不进行删除操作      
+            if submitter_method != 'local':
+                if git_folder is not None:
+                    shutil.rmtree(git_folder)
 
             return project_info
 
@@ -441,7 +467,7 @@ class LocalServer(ServerBase):
                             # 标注任务完成，开始调度下一轮任务
                             logging.info(f'Finish label task {exp_name}.{exp_id} project {project_name}.')
                             exp_info['state'] = 'finish'
-                            
+
                             # 获得新打包的标注数据集
                             # root, dataset, label
                             labeled_dataset_records = file_client_ls(os.path.join(self.root, project_name, 'dataset', 'label'))
@@ -449,10 +475,14 @@ class LocalServer(ServerBase):
                                 existed_dataset_records = [
                                     aabb['address'] for aabb in project_info['dataset']['train']['label']
                                 ]
+                                temp_set = set()
                                 for data_record_file in labeled_dataset_records:
                                     # 同一个数据文件，存在*-index和*-tfrecord
                                     finding_file = '-'.join(data_record_file.split('-')[:-1])
-                                    
+                                    if finding_file in temp_set:
+                                        continue
+
+                                    temp_set.add(finding_file)
                                     if finding_file not in existed_dataset_records:
                                         project_info['dataset']['train']['label'].append(
                                             {
@@ -462,7 +492,7 @@ class LocalServer(ServerBase):
                                                 'address': finding_file
                                             }
                                         )
-                            
+
                             # 保存项目新信息(在任务调度时可能需要重新读取项目信息，提前把更新内容保存)
                             with open(os.path.join(config.AntConfig.task_factory, project_file), 'w') as fp:
                                 json.dump(project_info, fp)
@@ -536,43 +566,29 @@ class LocalServer(ServerBase):
                                 except:
                                     logging.error("Abnormal analyze project best record.")
 
-                            # 获得任务生成的数据（标注数据，伪标签数据）
-                            dataset_record_folder = os.path.join(self.root, project_name, 'dataset', 'label')
-                            if file_client_exists(dataset_record_folder):
-                                record_list = file_client_ls(dataset_record_folder)
-                                existed_record_list = [b['address'] for b in project_info['dataset']['train']['pseudo-label']]
-                                diff_record_list = []
-                                for record_path in record_list:
-                                    if record_path in existed_record_list:
+                            # 获得任务生成的数据（伪标签数据）
+                            pseudo_label_dataset_records = file_client_ls(os.path.join(self.root, project_name, 'dataset', 'pseudo-label'))
+                            if len(pseudo_label_dataset_records) > 0:
+                                existed_dataset_records = [
+                                    aabb['address'] for aabb in project_info['dataset']['train']['pseudo-label']
+                                ]
+                                temp_set = set()
+                                for data_record_file in pseudo_label_dataset_records:
+                                    # 同一个数据文件，存在*-index和*-tfrecord
+                                    finding_file = '-'.join(data_record_file.split('-')[:-1])
+                                    if finding_file in temp_set:
                                         continue
-                                    diff_record_list.append(record_path)
 
-                                for record_path in record_list:
-                                    basic_info = dataset_basic_info()
-                                    basic_info.update({
-                                        'status': True,
-                                        'address': record_path
-                                    })
-                                    project_info['dataset']['train']['label'].append(basic_info)
-
-                            dataset_record_folder = os.path.join(self.root, project_name, 'dataset', 'pseudo-label')
-                            if file_client_exists(dataset_record_folder):
-                                record_list = file_client_ls(dataset_record_folder)
-                                existed_record_list = [b['address'] for b in project_info['dataset']['train']['pseudo-label']]
-                                diff_record_list = []
-                                for record_path in record_list:
-                                    if record_path in existed_record_list:
-                                        continue
-                                    diff_record_list.append(record_path)
-
-                                for record_path in diff_record_list:
-                                    basic_info = dataset_basic_info()
-                                    basic_info.update({
-                                        'status': True,
-                                        'address': record_path
-                                    })
-                                    project_info['dataset']['train']['pseudo-label'].append(basic_info)
-
+                                    temp_set.add(finding_file)
+                                    if finding_file not in existed_dataset_records:
+                                        project_info['dataset']['train']['label'].append(
+                                            {
+                                                'tag': '',
+                                                'num': 0,
+                                                'status': True,
+                                                'address': finding_file
+                                            }
+                                        )
 
                             # 保存项目新信息(在任务调度时可能需要重新读取项目信息，提前把更新内容保存)
                             with open(os.path.join(config.AntConfig.task_factory, project_file), 'w') as fp:
@@ -658,6 +674,9 @@ def get_client():
     client_handler = ClientHandler()
     return client_handler
 
+def get_lock():
+    global file_lock
+    return file_lock
 
 def launch_server(port, root, ext_module):
     # step1: 尝试使用httpserver，使用MLTALKER服务管理

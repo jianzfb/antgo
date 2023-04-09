@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
-sys.path.append('/root/workspace/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
@@ -250,7 +249,19 @@ def main():
       if not os.path.exists(args.exp):
         logging.error(f'Exp code not found in current folder.')
         return
-  
+
+      # 检查任务提交功能
+      if args.ssh:
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
+        if not os.path.exists(ssh_submit_config_file):
+          logging.error('No ssh submit config.')
+          return
+      elif not args.local:
+        submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'submit-config.yaml')    
+        if not os.path.exists(submit_config_file):
+            logging.error('No custom submit script config')
+            return
+
       # 记录commit
       rep = git.Repo('./')     
       if not isinstance(project_info['exp'][args.exp], list):
@@ -352,7 +363,13 @@ def main():
 
       # exp, exp:id
       args.id = exp_info['id']
-
+    
+    # 检查后端存储功能
+    if args.root is not None and args.root != '':
+      status = FileClient.infer_client(uri=args.root)
+      if status is None:
+        logging.error(f"Fail check backend storage {args.root}")
+    
     # 执行任务
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
     script_folder = os.path.join(os.path.dirname(__file__), 'script')
@@ -365,7 +382,7 @@ def main():
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'bash install.sh; /usr/bin/python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; /usr/bin/python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -380,7 +397,7 @@ def main():
         # single gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'bash install.sh; /usr/bin/python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; /usr/bin/python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -413,7 +430,7 @@ def main():
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'bash install.sh; /usr/bin/python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; /usr/bin/python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -483,10 +500,15 @@ def main():
   else:
     if action_name == 'create':
       if sub_action_name == 'project':
-        assert(args.name is not None)
-        assert(args.git is not None)
-        if os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.name}.json')):
-          logging.error(f'Project {args.name} has existed.')
+        if args.git is None or args.git == '':
+          logging.error('Must set project git with --git')
+          return
+
+        # 自动提取git的后缀作为项目名称
+        project_name = args.git.split('/')[-1].split('.')[0]
+
+        if os.path.exists(os.path.join(config.AntConfig.task_factory,f'{project_name}.json')):
+          logging.error(f'Project {project_name} has existed.')
           return
 
         # 加载项目默认模板
@@ -494,7 +516,7 @@ def main():
           project_config = json.load(fp)
 
         # 配置定制化项目
-        project_config['name'] = args.name    # 项目名称
+        project_config['name'] = project_name    # 项目名称
         project_config['type'] = args.type if args.type is not None else '' # 项目类型
         project_config['git'] = args.git      # 项目git地址
         project_config['image'] = args.image  # 项目需要的定制化的镜像
@@ -506,11 +528,12 @@ def main():
         project_config['tool']['ensemble']['method'] = args.ensemble
 
         # 在本地存储项目信息
-        with open(os.path.join(config.AntConfig.task_factory,f'{args.name}.json'), 'w') as fp:
+        with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'w') as fp:
           json.dump(project_config, fp)
 
         # 准备项目代码
         prepare_project_environment(args.git, args.branch, args.commit)
+        pprint(project_config)
       elif sub_action_name == 'exp':
         # 检查项目环境
         if not check_project_environment(args):
@@ -532,7 +555,7 @@ def main():
         if args.name in project_info['exp']:
           logging.error(f'Experiment {args.name} existed')
           return        
-  
+
         if not os.path.exists(args.name):
           # 如果不存在实验目录，创建
           os.makedirs(args.name)
