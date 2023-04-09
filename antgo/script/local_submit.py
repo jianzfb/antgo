@@ -36,16 +36,16 @@ def local_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_s
 
 # 检查任务资源是否满足
 def local_submit_resource_check_func(gpu_num, cpu_num, memory_size):
-    # 单位时间内仅可以一个任务在执行
-    if not os.path.exists(os.path.join(config.AntConfig.factory, '.local_submit_process.pid')):
-        return True
+    # # 单位时间内仅可以一个任务在执行
+    # if not os.path.exists(os.path.join(config.AntConfig.factory, '.local_submit_process.pid')):
+    #     return True
     
-    with open(os.path.join(config.AntConfig.factory, '.local_submit_process.pid'), 'r') as fp:
-        process_pid = fp.read().strip()
+    # with open(os.path.join(config.AntConfig.factory, '.local_submit_process.pid'), 'r') as fp:
+    #     process_pid = fp.read().strip()
         
-    # 检查process_pid是否在运行
-    process_dir = os.path.join('/proc', str(process_pid))
-    if os.path.exists(process_dir):
-        return False
+    # # 检查process_pid是否在运行
+    # process_dir = os.path.join('/proc', str(process_pid))
+    # if os.path.exists(process_dir):
+    #     return False
     
     return True

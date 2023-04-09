@@ -25,11 +25,11 @@ python3 ./cifar10/main.py --exp=cifar10 --checkpoint=./output/cifar10/output/che
 
 ### 第一步 基于mvp构建模板代码（基于Cifar10分类任务的代码）
 ```
-antgo create mvp --name=mydet
+antgo create mvp --name=mycls
 ```
 将在当前目录下生成模板代码，如下格式
 ```
-|-- mydet
+|-- mycls
     |-- configs
         |-- config.py
     |-- models
@@ -103,77 +103,75 @@ antgo tool package/tfrecord --src=在第一步转换好的地址下的json文件
 
 修改配置文件中的数据配置字段
 ```
-|-- mydet
+|-- mycls
     |-- configs
         |-- config.py
 ```
 
 ```
-# 数据配置
+# 修改点1：
+# data_path_list，中添加打包好的数据文件 ***.tfrecord
+# 修改点2
+# pipeline，中添加合适的数据增强算子（这里以分类模型为例，给出了常用的增强方案）
+# 框架中兼容了tochvision包提供的所有增强算子，也实现了大量的扩展数据增强算子，详见antgo/dataflow/imgaug/operators.py
+
 data=dict(
     train=dict(
         type="TFDataset",
-        data_path_list=['yongchun_hand_gesture-00000-of-00003-tfrecord'],
-        pipeline=[
-            dict(type='DecodeImage', to_rgb=True),
-            dict(type="KeepRatio", aspect_ratio=1.77),
-            dict(type="Rotation", degree=15, border_value=128),            
-            dict(type='ResizeS', target_dim=[448,256]),
-            dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
-            dict(type='IImageToTensor', keys=['image']),            
+        data_path_list=[],
+        pipeline=[    
+            dict(type='Meta', keys=['image_file', 'tag']),
+            dict(type='INumpyToPIL', keys=['image'], mode='RGB'),
+            dict(type='RandomHorizontalFlip', keys=['image']),
+            dict(type='RandomCrop', size=(32,32), padding=int(32*0.125), fill=128, padding_mode='constant', keys=['image']), 
+            dict(type='ToTensor', keys=['image']),
+            dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
         ],
-        inputs_def={
-            'fields': ["image", 'bboxes', 'labels', 'image_meta']
-        },
-        shuffle_queue_size=20480
+        inputs_def={'fields': ['image', 'label', 'image_meta']},
+        description={'image': 'numpy', 'label': 'int', 'image_file': 'str', 'tag': 'str'}
     ),
     train_dataloader=dict(
         samples_per_gpu=128, 
-        workers_per_gpu=4,
+        workers_per_gpu=2,
         drop_last=True,
         shuffle=True,
-        ignore_stack=['bboxes', 'labels', 'image_meta']
-    ),
+    ),    
     val=dict(
         type="TFDataset",
-        data_path_list=['yongchun_hand_gesture-00002-of-00003-tfrecord'],
-        pipeline=[
-            dict(type='DecodeImage', to_rgb=True),
-            dict(type='ResizeS', target_dim=[448,256]),                                                         
-            dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),            
-            dict(type='IImageToTensor', keys=['image']),              
+        data_path_list=[],
+        pipeline=[    
+            dict(type='Meta', keys=['image_file', 'tag']),
+            dict(type='INumpyToPIL', keys=['image'], mode='RGB'),                  
+            dict(type='ToTensor', keys=['image']),
+            dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),                  
         ],
-        inputs_def={
-            'fields': ["image", 'bboxes', 'labels', 'image_meta']
-        }
+        inputs_def={'fields': ['image', 'label', 'image_meta']},
+        description={'image': 'numpy', 'label': 'int', 'image_file': 'str', 'tag': 'str'}
     ),
     val_dataloader=dict(
         samples_per_gpu=128, 
-        workers_per_gpu=4,
+        workers_per_gpu=2,
         drop_last=False,
         shuffle=False,
-        ignore_stack=['bboxes', 'labels', 'image_meta']
-    ),       
+    ),   
     test=dict(
         type="TFDataset",
-        data_path_list=['yongchun_hand_gesture-00002-of-00003-tfrecord'],
-        pipeline=[
-            dict(type='DecodeImage', to_rgb=True),
-            dict(type='ResizeS', target_dim=[448,256]),                                                         
-            dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),            
-            dict(type='IImageToTensor', keys=['image']),              
+        data_path_list=[],
+        pipeline=[    
+            dict(type='Meta', keys=['image_file', 'tag']),
+            dict(type='INumpyToPIL', keys=['image'], mode='RGB'),                  
+            dict(type='ToTensor', keys=['image']),
+            dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),                  
         ],
-        inputs_def={
-            'fields': ["image", 'bboxes', 'labels', 'image_meta']
-        }
+        inputs_def={'fields': ['image', 'label', 'image_meta']},
+        description={'image': 'numpy', 'label': 'int', 'image_file': 'str', 'tag': 'str'},
     ),
     test_dataloader=dict(
         samples_per_gpu=128, 
-        workers_per_gpu=4,
+        workers_per_gpu=2,
         drop_last=False,
         shuffle=False,
-        ignore_stack=['bboxes', 'labels', 'image_meta']
-    ),   
+    )
 )
 ```
 
@@ -181,9 +179,9 @@ data=dict(
 
 系统采用注册机制实现模块的动态构建。所以我们可以在任何位置实现模型的定义，并注册到系统中。
 
-举例来说，见文件
+举例来说，见文件，这里自定义了wideres backebone的模型定义，
 ```
-|-- mydet
+|-- mycls
     |-- models
         |-- wideres.py
 ```
@@ -195,13 +193,11 @@ class WideResNet(nn.Module):
         ......
 ```
 
-这行代码
+这行代码，实现模型到系统的注册。
 
 ```
 @MODELS.register_module()
 ```
-实现模型到系统的注册。
-
 然后我们从模型配置文件中，可以看到如何配置我们自定义的模型，见下
 ```
 # 模型配置
@@ -228,14 +224,14 @@ model = dict(
 
 同样的模型训练方式
 ```
-python3 ./mydet/main.py --exp=mydet --gpu-id=0 --process=train
+python3 ./mycls/main.py --exp=mycls --gpu-id=0 --process=train
 ```
 
 * 导出onnx模型
 
 同样的模型导出方式
 ```
-python3 ./mydet/main.py --exp=mydet --checkpoint=./output/mydet/output/checkpoint/epoch_xxx.pth --process=export
+python3 ./mycls/main.py --exp=mycls --checkpoint=./output/mycls/output/checkpoint/epoch_xxx.pth --process=export
 ```
 
 ## 高阶应用——模型迭代自动化流水线
@@ -307,19 +303,29 @@ script: 'replace with your launch script'
 antgo submitter --config=submit-config.yaml
 ```
 
-### 配置私有远程存储（必须，默认仅支持本地存储）
+### 配置私有远程存储
+默认情况，使用阿里云盘作为远程存储。如果使用其他存储，需要自行实现相关操作。
+
+
+### 启动服务
+用来监控实验完成情况，并启动自动化优化流水线
+```
+antgo server --root=ali:///project
+```
 
 ### 项目创建
 ```
-# 可以添加--auto参数，项目将执行自动优化流水线
-# --image 指定项目使用的基础镜像
-antgo create project --name=projectname --git=projectgit --image=image
+# --auto，项目将执行自动优化流水线
+# --image，指定项目使用的基础镜像，如果不设置，将设置为antgo默认镜像环境
+# 注意，调用创建命令前，项目代码需要提前拥有git仓库。
+# 注意，项目名称自动以projectgit的后缀命名
+antgo create project --git=projectgit --image=image
 ```
 
 #### 项目组织结构
 项目将拥有类似如下的组织结构
 ```
-|-- mydet1
+|-- mycls1
     |-- configs
         |-- config.py
     |-- models
@@ -329,7 +335,7 @@ antgo create project --name=projectname --git=projectgit --image=image
     |-- hooks.py
     |-- metrics.py
     |-- main.py
-|-- mydet2
+|-- mycls2
     |-- configs
         |-- config.py
     |-- models
@@ -345,68 +351,80 @@ antgo create project --name=projectname --git=projectgit --image=image
 |-- README.md
 |-- requirements.txt
 ```
-这里mydet1，mydet2是这个项目下的两个不同的实验。一个项目下面允许存在多个不同的实验，比如说可以把不同的模型作为不同的实验。
+这里mycls1，mycls2是这个项目下的两个不同的实验。一个项目下面允许存在多个不同的实验，比如说可以把不同的模型作为不同的实验。
 
-在一个项目中，三类抽象的模型种类
+在一个项目中，拥有三种抽象的模型种类
 
 * 专家模型
+
     主要是指参数量或计算量较大的模型，指标较好，但是不能实际部署
 * 产品模型
+
     主要是指能够实现线上部署的模型
 * Baseline模型
+
     主要是指基础模型，常作为PK对象存在
 
 #### 配置项目信息
-* 自动化提交配置
+* 提交配置
 
 为项目设置如何自动化提交任务
 ```
-# 如果指定--ssh，是指使用ssh提交任务，需要提前配置好 基于ssh任务提交信息。
-# 如果不指定，则将使用用户自定义的任务提交方案，如果没有设置，则无法实现自动提交。
+# --ssh，是指使用ssh提交任务，需要提前配置好 基于ssh任务提交信息。（如果不指定，则将使用用户自定义的任务提交方案，如果没有设置，则无法实现自动提交。）
+# --project 设置更新的项目名称
 # --gpu GPU数
 # --cpu CPU数
 # --memory 内存大小（单位M）
-antgo update project/submitter --gpu=1 --cpu=10 --memory=10000
+antgo update project/submitter --gpu=1 --cpu=10 --memory=10000 --project=projectname
 ```
 
 * 标注配置
+
+    创建label_config.py配置文件，在文件中设置如下字段
+    
+    * type  
+
+        标注类别，目前支持CLASS,RECT,POINT,SKELETON
+    * category
+
+        样本类别，比如检测目标类别，["car", "train", "person"]
+    * meta
+
+        如果标注类别是SKELETON，则还需提供meta信息的定义，用于指定点之间的连接关系。meta=dict(skeleton=[])
 ```
-# label_config.py 是配置文件信息，在文件中设置如下字段
-# type=''       # 标注类别，目前支持CLASS,RECT,POINT,SKELETON
-# category=[]   # 样本类别，比如检测目标类别，["car", "train", "person"]
-# 如果标注类别是SKELETON，则还需提供meta信息的定义，用于指定点之间的连接关系
-# meta=dict(skeleton=[])
-antgo update project/label --config=label_config.py
+antgo update project/label --config=label_config.py --project=projectname
 ```
 
 * 半监督训练配置
+
+    创建semi_config.py配置文件，在文件中设置半监督模型配置，可以参考框架自带的 dense 半监督算法的配置 antgo/framework/helper/configs/semi/dense_config.py。如果使用系统自带的方案，可以通过设置--name= 使用。注意，目前支持dense(适用于检测任务), mpl(适用于分类任务)
 ```
-# semi_config.py 是配置文件信息，在文件中设置半监督模型配置，可以参考
-# 框架自带的 dense 半监督算法的配置 antgo/framework/helper/configs/semi/dense_config.py
-# 如果使用系统自带的方案，可以通过设置--name= 使用。注意，目前支持dense(适用于检测任务), mpl(适用于分类任务)
-antgo update project/semi --config=semi_config.py
+# 使用semi_config.py配置
+antgo update project/semi --config=semi_config.py --project=projectname
 
 # 如果要清空配置，则运行
-antgo update project/semi --config=
+antgo update project/semi --name= --config= --project=projectname
 ```
 
 * 蒸馏训练配置
+
+    创建distillation_config.py 是配置文件，在文件中设置蒸馏模型配置
 ```
-# distillation_config.py 是配置文件信息，在文件中设置蒸馏模型配置
-antgo update project/distillation --config=distillation_config.py
+antgo update project/distillation --config=distillation_config.py --project=projectname
 
 # 如果要清空配置，则运行
-antgo update project/distillation --config=
+antgo update project/distillation --name= --config= --project=projectname
 ```
 
 * 主动学习配置
+
+    创建ac_config.py 是配置文件信息，在文件中设置主动学习模型配置，可以参考框架自带的主动学习算法配置 antgo/framework/helper/configs/activelearning/ac_config.py
+
 ```
-# ac_config.py 是配置文件信息，在文件中设置主动学习模型配置，可以参考
-# 框架自带的主动学习算法配置 antgo/framework/helper/configs/activelearning/ac_config.py
-antgo update project/activelearning --config=ac_config.py
+antgo update project/activelearning --config=ac_config.py --project=projectname
 
 # 如果要清空配置，则运行
-antgo update project/activelearning --config=
+antgo update project/activelearning --name= --config= --project=projectname
 ```
 
 * 添加产品模型
@@ -421,33 +439,44 @@ antgo add product --exp=expname --project=projectname
 ```
 # 注意，一个项目能存在多个专家模型。
 # --exp 指定将现存的哪个实验模型作为专家模型
+# --id 指定具体实验id （可以通过 antgo show exp --project=projectname 查看具体实验信息）
 # --project 指定针对的是哪个项目
-antgo add expert --exp=expname --project=projectname
+antgo add expert --exp=expname --id=xxx --project=projectname
 ```
 
 * 添加Baseline模型
 ```
 # 注意，一个项目仅能存在一个Baseline模型，多次添加会覆盖之前的。
 # --exp 指定将现存的哪个实验模型作为基准模型
+# --id 指定具体实验id （可以通过 antgo show exp --project=projectname 查看具体实验信息）
 # --project 指定针对的是哪个项目
-antgo add baseline --exp=expname --project=projectname
+antgo add baseline --exp=expname --id=xxx --project=projectname
 ```
 
+### 项目查看
+```
+antgo show project
+antgo show project --project=projectname
+```
 ### 实验创建
 ```
 antgo create exp --project=projectname --name=expname
+```
+### 实验查看
+```
+antgo show exp --project=projectname
 ```
 
 ### 训练实验
 ```
 # 基于ssh进行训练任务提交
-antgo train --exp=expname --root=模型训练信息存储根目录 --gpu-id=0 --cloud --ssh
+antgo train --exp=expname --project=projectname --root=ali:///project --gpu-id=0 --cloud --ssh
 ```
 
 ### 提交新增有标签数据
 ```
 # --project 设置为哪个项目添加无标签数据
-# --address 打包好的无标签数据地址
+# --address 打包好的无标签数据地址 (支持ali://云盘)
 # --tags 为此数据设置一个标记
 # --num 数据量
 antgo add train/label --tags= --num= --address= --project=projectname

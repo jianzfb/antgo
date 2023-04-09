@@ -14,6 +14,7 @@ from antgo import config
 import json
 from pprint import pprint
 import time
+import yaml
 from antgo.framework.helper.utils import Config
 from antgo.ant.client import *
 
@@ -68,15 +69,16 @@ def check_project_environment(args):
     project_git = project_info['git']
     if not is_in_project_folder:
         # 无代码环境，处理流程
-        if args.branch is not None:
-            if args.commit is not None:
-                os.system(f'git clone {project_git} -b {args.branch}; git reset --soft {args.commit}')
-            else:
-                os.system(f'git clone {project_git}; -b {args.branch};')
-        else:
-            os.system(f'git clone {project_git}')
-
         git_folder = project_git.split('/')[-1].split('.')[0]
+        if not os.path.exists(git_folder): 
+            if args.branch is not None:
+                if args.commit is not None:
+                    os.system(f'git clone {project_git} -b {args.branch}; git reset --soft {args.commit}')
+                else:
+                    os.system(f'git clone {project_git}; -b {args.branch};')
+            else:
+                os.system(f'git clone {project_git}')
+
         os.chdir(f'./{git_folder}')
 
     return True
@@ -98,6 +100,10 @@ def generate_project_exp_example(template_project_folder, target_folder, exp_nam
             
             with open( os.path.join(target_folder, exp_name, 'main.py'), 'w') as fp:
                 fp.write(content)
+
+            # 修改标准配置文件
+            os.remove(os.path.join(target_folder, exp_name, 'configs', 'config.py'))
+            shutil.copy(os.path.join(template_project_folder, 'config.py'), os.path.join(target_folder, exp_name, 'configs'))
     else:
         logging.warn('MVP code has existed in current path.')
         return
@@ -116,51 +122,93 @@ def generate_project_exp_example(template_project_folder, target_folder, exp_nam
 
 
 def project_add_action(action_name, args):
-    assert(args.project)
+    if args.project == '':
+        logging.error('Must set --project')
+        return
+    
     if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} not existed.')
         return        
 
+    get_lock().acquire()
     project_info = {}
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp) 
 
     if action_name == 'expert':
-        assert(args.exp in project_info['exp'])
-        assert(args.id is not None)
-        
-        exp_with_id = f'{args.exp}/{args.id}'
-        if exp_with_id in project_info['expert']:
-            logging.error(f'{exp_with_id} has existed in project {args.project}')
+        if args.exp not in project_info['exp']:
+            logging.error(f'Exp {args.exp} not in project {args.project}.')
+            get_lock().release()
             return
 
-        project_info['expert'].append(exp_with_id)        
+        is_finding_exp = False
+        for exp_info in project_info['exp'][args.exp]:
+            if args.id == exp_info['id']:
+                is_finding_exp = True
+                break
+
+        if not is_finding_exp:
+            logging.error(f'Exp {args.exp} ID {args.id} not in project exp list.')
+            get_lock().release()
+            return
+        
+        exp_with_id = f'{args.exp}.{args.id}'
+        if exp_with_id in project_info['expert']:
+            logging.error(f'Exp {args.exp} ID {args.id} has existed in project {args.project} expert list')
+            get_lock().release()
+            return
+
+        project_info['expert'].append(exp_with_id)
+        pprint(project_info['expert'])
     elif action_name == 'product':
-        assert(args.project)
-        assert(args.exp)
         if args.exp not in project_info['exp']:
             logging.error(f'Exp {args.exp} not in project exp list.')
-            return
-        assert(args.exp in project_info['exp'])    
+            get_lock().release()
+            return 
         project_info['product'] = args.exp
 
         # 因为要触发后台，任务调度服务，提前保存项目信息
         with open(os.path.join(config.AntConfig.task_factory, f'{args.project}.json'), 'w') as fp:
             json.dump(project_info, fp)  
-
+        
+        pprint(project_info['product'])
+        get_lock().release()
         ######### trigger:start #########
         # 重新训练产品模型（监督训练->半监督训练->蒸馏训练）
         get_client().trigger(f'{args.project}.product')
         ######### trigger:end   #########        
         return
     elif action_name == 'baseline':
-        assert(args.exp in project_info['exp'])   
-        assert(args.id is not None)
-        exp_with_id = f'{args.exp}/{args.id}'
-        
-        project_info['baseline'] = exp_with_id    
+        if args.exp not in project_info['exp']:
+            logging.error(f'Exp {args.exp} not in project {args.project}.')
+            get_lock().release()
+            return
+
+        is_finding_exp = False
+        for exp_info in project_info['exp'][args.exp]:
+            if args.id == exp_info['id']:
+                is_finding_exp = True
+                break
+
+        if not is_finding_exp:
+            logging.error(f'Exp {args.exp} ID {args.id} not in project exp list.')
+            get_lock().release()
+            return
+
+        exp_with_id = f'{args.exp}.{args.id}'
+        project_info['baseline'] = exp_with_id
+        pprint(project_info['baseline'])
     elif action_name == 'train/label':
-        assert(args.address is not None)
+        if args.address is None:
+            logging.error('Must set --address')
+            get_lock().release()
+            return
+        
+        if not file_client_exists(f'{args.address}-index') or not file_client_exists(f'{args.address}-tfrecord'):
+            logging.error(f'Data {args.address} dont exist')
+            get_lock().release()
+            return
+        
         project_info['dataset']['train']['label'].append(
             {
                 "tag": args.tags,
@@ -174,13 +222,24 @@ def project_add_action(action_name, args):
         with open(os.path.join(config.AntConfig.task_factory, f'{args.project}.json'), 'w') as fp:
             json.dump(project_info, fp)  
 
+        pprint(project_info['dataset']['train']['label'])
+        get_lock().release()
         ######### trigger:start #########
         # 基于更新后的有标签数据，基于当前最佳产品模型，重新监督训练/蒸馏训练
         get_client().trigger(f'{args.project}.train/label')
         ######### trigger:end   #########
         return
     elif action_name == 'train/unlabel':
-        assert(args.address is not None)
+        if args.address is None:
+            logging.error('Must set --address')
+            get_lock().release()
+            return
+        
+        if not file_client_exists(f'{args.address}-index') or not file_client_exists(f'{args.address}-tfrecord'):
+            logging.error(f'Data {args.address} dont exist')
+            get_lock().release()
+            return
+
         project_info['dataset']['train']['unlabel'].append(
             {
                 "tag": args.tags,
@@ -193,53 +252,73 @@ def project_add_action(action_name, args):
         # 因为要触发后台，任务调度服务，提前保存项目信息
         with open(os.path.join(config.AntConfig.task_factory, f'{args.project}.json'), 'w') as fp:
             json.dump(project_info, fp)  
-
+        
+        pprint(project_info['dataset']['train']['unlabel'])
+        get_lock().release()
         ######### trigger:start #########
         # 基于更新后的无标签数据，基于当前最佳产品模型，重新半监督模型训练
         get_client().trigger(f'{args.project}.train/unlabel')
         ######### trigger:end   #########
         return
     elif action_name == 'test':
-        assert(args.address is not None)
+        if args.address is None:
+            logging.error('Must set --address')
+            get_lock().release()
+            return
+                
         project_info['dataset']['test'] = {
             "tag": args.tags,
             "num": args.num,
             "status": True,
             'address': args.address
         }
+        pprint(project_info['dataset']['test'])
     elif action_name == 'val':
-        assert(args.address is not None)
+        if args.address is None:
+            logging.error('Must set --address')
+            get_lock().release()
+            return
+        
         project_info['dataset']['val'] = {
             "tag": args.tags,
             "num": args.num,
             "status": True,
             'address': args.address
         }
+        project_info['dataset']['val']
     else:
         logging.error(f'Command {action_name} dont support.')
 
     # 在本地存储项目信息
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
         json.dump(project_info, fp)
+    get_lock().release()
 
 
 def project_del_action(action_name, args):
-    assert(args.project)
+    if args.project == '':
+        logging.error('Must set --project')
+        return
+
     if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} not existed.')
         return
 
+    get_lock().acquire()
     project_info = {}
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp) 
 
     if action_name == 'expert':
-        assert(args.exp in project_info['exp'])
-        assert(args.id is not None)
-        exp_with_id = f'{args.exp}/{args.id}'
-
+        if args.exp not in project_info['exp']:
+            logging.error(f'Exp {args.exp} not in project {args.project}.')
+            get_lock().release()
+            return
+        
+        exp_with_id = f'{args.exp}.{args.id}'
         if exp_with_id not in project_info['expert']:
             logging.error(f'{exp_with_id} not exist in project {args.project}')
+            get_lock().release()
             return
 
         project_info['expert'].remove(exp_with_id)
@@ -275,10 +354,15 @@ def project_del_action(action_name, args):
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
         json.dump(project_info, fp)    
 
+    get_lock().release()
+
 
 def show_action(action_name, args):
     if action_name == 'best':
-        assert(args.project != '')
+        if args.project == '':
+            logging.error('Must set --project')
+            return
+
         if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
             logging.error(f'Project {args.project} not existed.')
             return   
@@ -289,23 +373,37 @@ def show_action(action_name, args):
                     
         pprint(project_info['best'])
     elif action_name == 'project':
-        all_projects = []
-        for project_file in os.listdir(config.AntConfig.task_factory):
-            if not project_file.endswith('.json'):
-                continue
-            all_projects.append(project_file.replace('.json', ''))
-        
-        pprint(all_projects)
+        if args.project == '':
+            all_projects = []
+            for project_file in os.listdir(config.AntConfig.task_factory):
+                if not project_file.endswith('.json'):
+                    continue
+                all_projects.append(project_file.replace('.json', ''))
+
+            pprint(all_projects)
+        else:
+            if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
+                logging.error(f'Project {args.project} not existed.')
+                return
+
+            project_info = {}
+            with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+                project_info = json.load(fp) 
+
+            pprint(project_info)
     elif action_name == "exp":
-        assert(args.project != '')
+        if args.project == '':
+            logging.error('Must set --project')
+            return
+
         if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
             logging.error(f'Project {args.project} not existed.')
             return   
-        
+
         project_info = {}
         with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
             project_info = json.load(fp) 
-                    
+
         pprint(project_info['exp'])
 
 
@@ -314,11 +412,15 @@ def get_action(action_name, args):
 
 
 def update_project_config(sub_action_name, args):
-    assert(args.project != '')
+    if args.project == '':
+        logging.error('Must set --project')
+        return
+
     if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} not existed.')
-        return     
-    
+        return
+
+    get_lock().acquire()
     project_info = {}
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp) 
@@ -334,30 +436,32 @@ def update_project_config(sub_action_name, args):
             with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
                 json.dump(project_info, fp)
             logging.info(f'Success remove {sub_action_name} config')  
+            get_lock().release()
             return    
-
         if not os.path.exists(args.config):
             if args.name not in ['dense', 'detmpl', 'mpl']:
                 logging.error(f'Missing config file, {sub_action_name} couldnt config')
+                get_lock().release()
                 return
             else:
                 args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
 
         if not os.path.exists(args.config):
             logging.error(f'Config file {args.config} not exist')
+            get_lock().release()
             return
 
         # 读取配置
         assert(args.config.endswith('.py'))
         cfg = Config.fromfile(args.config)
-        
+
         # 设置半监督算法的名字        
         project_info['tool']['semi']['method'] = args.name
         # 设置半监督的配置
         project_info['tool']['semi']['config'].update(
             cfg._cfg_dict.to_dict()
         )
-        
+
         # print info
         pprint(project_info['tool']['semi'])
     elif sub_action_name == 'project/distillation':
@@ -369,31 +473,34 @@ def update_project_config(sub_action_name, args):
 
             with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
                 json.dump(project_info, fp)
-            logging.info(f'Success remove {sub_action_name} config')              
+            logging.info(f'Success remove {sub_action_name} config')    
+            get_lock().release()          
             return    
 
         if not os.path.exists(args.config):
             if args.name not in ['dense', 'detmpl', 'mpl']:
                 logging.error(f'Missing config file, {sub_action_name} couldnt config')
+                get_lock().release()
                 return
             else:
                 args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
 
         if not os.path.exists(args.config):
             logging.error(f'Config file {args.config} not exist')
+            get_lock().release()
             return
 
         # 读取配置
         assert(args.config.endswith('.py'))
         cfg = Config.fromfile(args.config)
-        
+
         # 设置蒸馏算法的名字        
         project_info['tool']['distillation']['method'] = args.name
         # 设置蒸馏的配置
         project_info['tool']['distillation']['config'].update(
             cfg._cfg_dict.to_dict()
         )
-        
+
         # print info
         pprint(project_info['tool']['distillation'])
     elif sub_action_name == 'project/activelearning':
@@ -405,20 +512,23 @@ def update_project_config(sub_action_name, args):
 
             with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
                 json.dump(project_info, fp)
-            logging.info(f'Success remove {sub_action_name} config')              
+            logging.info(f'Success remove {sub_action_name} config') 
+            get_lock().release()             
             return    
 
         if not os.path.exists(args.config):
             if args.name not in ['dense', 'detmpl', 'mpl', 'ac']:
                 logging.error(f'Missing config file, {sub_action_name} couldnt config')
+                get_lock().release()
                 return
             else:
                 args.config = os.path.join(os.path.dirname(__file__), 'framework', 'helper', 'configs', sub_action_name.split('/')[-1], f'{args.name}_config.py')
 
         if not os.path.exists(args.config):
             logging.error(f'Config file {args.config} not exist')
+            get_lock().release()
             return
-        
+
         # 读取配置
         assert(args.config.endswith('.py'))
         cfg = Config.fromfile(args.config)
@@ -439,20 +549,24 @@ def update_project_config(sub_action_name, args):
         cfg.type = cfg.type.upper()
         if cfg.type not in ['', 'CLASS', 'RECT','POINT','POLYGON', 'SKELETON']:
             logging.error(f"Dont support label type {cfg.type}")
+            get_lock().release()
             return
 
         if not isinstance(cfg.category, list):
             logging.error(f"Label category must be list type")
+            get_lock().release()
             return
-        
+
         if cfg.type == 'SKELETON':
             # 对于关键点标注，需要添加meta/skeleton信息
             if cfg.get('meta', None):
                 logging.error('Must set meta/skeleton info for SKELETON label')
+                get_lock().release()
                 return
 
             if len(cfg.meta.get('skeleton', [])) == 0:
                 logging.error('Must set meta/skeleton info for SKELETON label')
+                get_lock().release()
                 return
 
         project_info['tool']['label']['category'] = cfg.category    # 标注类别 ['clsname', 'clsname', ...]
@@ -468,19 +582,40 @@ def update_project_config(sub_action_name, args):
         elif args.local:
             project_info['submitter']['method'] = 'local'
         else:
+            # 检查本地是否存在定制化提交脚本
+            submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'submit-config.yaml')    
+            if not os.path.exists(submit_config_file):
+                logging.error('No custom submit script config')
+                get_lock().release()
+                return
+
+            with open(submit_config_file, encoding='utf-8', mode='r') as fp:
+                config_content = yaml.safe_load(fp)
+            script_folder = config_content['folder']
+            script_file = config_content['script']
+            if not os.path.exists(os.path.join(script_folder, script_file)):
+                logging.error('Custom submit scrip launch file not exist.')
+                get_lock().release()
+                return
+
             project_info['submitter']['method'] = 'custom'
 
-        project_info['submitter']['gpu_num'] = args.gpu
-        project_info['submitter']['cpu_num'] = args.cpu
-        project_info['submitter']['memory'] = args.memory
+        if args.gpu >= 0:
+            project_info['submitter']['gpu_num'] = args.gpu
+        if args.cpu >= 0:
+            project_info['submitter']['cpu_num'] = args.cpu
+        if args.memory >= 0:
+            project_info['submitter']['memory'] = args.memory
 
         # print info
         pprint(project_info['submitter'])
     else:
         logging.error(f"Dont support {sub_action_name}")
+        get_lock().release()
         return
 
     with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
         json.dump(project_info, fp)
 
     logging.info(f'Success update {sub_action_name} config')    
+    get_lock().release()

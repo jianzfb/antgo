@@ -1,17 +1,22 @@
+from curses.ascii import isdigit
+from decimal import localcontext
 import inspect
 import os
 import os.path as osp
+from pathlib import Path
 import re
 import tempfile
 from threading import local
 import warnings
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
+from aligo import Aligo
 from pathlib import Path
 from typing import Iterable, Iterator, Optional, Tuple, Union
 from antgo.framework.helper.utils.path import is_filepath
 from antgo.ant import environment
 import shutil
+import time
 
 
 class BaseStorageBackend(metaclass=ABCMeta):
@@ -453,6 +458,199 @@ class HDFSBackend(BaseStorageBackend):
         return status
 
 
+class AliBackend(BaseStorageBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        local_config_file = 'aligo.json'
+        if os.path.exists(local_config_file):
+            if not os.path.exists(Path.home().joinpath('.aligo')):
+                os.makedirs(Path.home().joinpath('.aligo'))
+                
+            shutil.copy(local_config_file, Path.home().joinpath('.aligo'))
+
+        self.ali = Aligo()  # 第一次使用，会弹出二维码，供扫描登录
+        if not os.path.exists(local_config_file):
+            shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
+        self.prefix = 'ali://'
+        
+    def get(self, filepath) -> bytes:
+        if not os.path.exists('./temp'):
+            os.makedirs('./temp')
+
+        self.download(filepath, './temp')
+        filename = filepath.split('/')[-1]
+
+        with open(os.path.join(f'./temp/{filename}'), 'rb') as f:
+            value_buf = f.read()
+        return value_buf        
+    
+    def get_text(self,
+                 filepath: str,
+                 encoding: str = 'utf-8') -> str:
+        if not os.path.exists('./temp'):
+            os.makedirs('./temp')
+
+        self.download(filepath, './temp')
+        filename = filepath.split('/')[-1]
+
+        with open(os.path.join(f'./temp/{filename}'), 'r', encoding=encoding) as f:
+            value_buf = f.read()
+        return value_buf        
+
+    def put(self, obj: bytes, filepath: str) -> None:
+        if not os.path.exists('./temp'):
+            os.makedirs('./temp')
+        filename = filepath.split('/')[-1]
+
+        with open(os.path.join('./temp', filename), 'wb') as f:
+            f.write(obj)
+
+        p = filepath.find(filename)
+        parent_path = filepath[:p]
+        self.upload(parent_path, os.path.join('./temp', filename))
+
+    def put_text(self,
+                 obj: str,
+                 filepath: str,
+                 encoding: str = 'utf-8') -> None:
+        if not os.path.exists('./temp'):
+            os.makedirs('./temp')
+        filename = filepath.split('/')[-1]
+
+        with open(os.path.join('./temp', filename), 'w', encoding=encoding) as f:
+            f.write(obj)
+
+        p = filepath.find(filename)
+        parent_path = filepath[:p]
+        self.upload(parent_path, os.path.join('./temp', filename))
+    
+    def remove(self, filepath: str) -> None:
+        pass
+
+    def exists(self, filepath: str) -> bool:
+        filepath = filepath.replace(self.prefix, '')
+        file = self.ali.get_file_by_path(filepath)
+        if file is None:
+            file = self.ali.get_folder_by_path(filepath)
+            if file is None:
+                return False
+
+        return True
+
+    def isdir(self, filepath: str) -> bool:
+        file = self.ali.get_folder_by_path(filepath)
+        if file is None:
+            return False
+
+        return True
+    
+    def isfile(self, filepath: str) -> bool:
+        file = self.ali.get_file_by_path(filepath)
+        if file is None:
+            return False
+        
+        return True
+    
+    def join_path(self, filepath: str, *filepaths: str) -> str:
+        """Concatenate all file paths.
+
+        Join one or more filepath components intelligently. The return value
+        is the concatenation of filepath and any members of *filepaths.
+
+        Args:
+            filepath (str or Path): Path to be concatenated.
+
+        Returns:
+            str: The result of concatenation.
+        """
+        return osp.join(filepath, *filepaths)
+    
+    def ls(self, remote_folder):
+        remote_folder = remote_folder.replace(self.prefix, '')
+        file_handler = self.ali.get_folder_by_path(remote_folder)
+        if file_handler is None:
+            return []
+
+        ll = self.ali.get_file_list(file_handler.file_id)
+        ll = [f'{self.prefix}{os.path.join(remote_folder, l.name)}' for l in ll]
+        return ll
+
+    def mkdir(self, remote_path, p=False):
+        # remote prefix
+        remote_path = remote_path.replace(self.prefix, '')
+        remote_path = os.path.normpath(remote_path)
+        # 迭代创建目录
+        levels = remote_path.split('/')[1:]
+        level_num = len(levels)
+        find_file = None
+        find_i = 0
+        for i in range(level_num,0,-1):
+            check_path = '/'+'/'.join(levels[:i])            
+            find_file = self.ali.get_folder_by_path(check_path)
+            if find_file:
+                break
+            find_i = i
+
+        if find_i == 0:
+            # 已经存在，不进行重新创建
+            return find_file.file_id
+
+        sub_folder = '/'.join(levels[find_i-1:])
+        ss = self.ali.create_folder(sub_folder,find_file.file_id)
+        return ss.file_id
+
+    def download(self, remote_path, local_path):
+        # user = ali.get_user
+        remote_path = remote_path.replace(self.prefix, '')
+        download_as_multi_files = False
+        if remote_path.endswith('*'):
+            download_as_multi_files = True
+            file = self.ali.get_folder_by_path(os.path.dirname(remote_path))
+        else:
+            file = self.ali.get_file_by_path(remote_path)
+            if file is None:
+                file = self.ali.get_folder_by_path(remote_path)
+
+        if file is None:
+            return False
+
+        if file.type == 'file':
+            self.ali.download_file(file=file, local_folder=local_path)
+        else:
+            if not download_as_multi_files:
+                self.ali.download_folder(file.file_id, local_folder=local_path)
+            else:
+                ll = self.ali.get_file_list(file.file_id)
+                prefix = remote_path.split('/')[-1][:-1]
+                filter_ll = []
+                if prefix == '':
+                    filter_ll = ll
+                else:
+                    for l in ll:
+                        if l.name.startswith(prefix):
+                            filter_ll.append(l)
+                self.ali.download_files(filter_ll, local_folder=local_path)
+
+        return True
+    
+    def upload(self, remote_path, local_path, is_exist=False):
+        # 检查远程目录是否存在
+        file_id = self.mkdir(remote_path, True)
+        if file_id is None:
+            # error
+            return False
+
+        if os.path.isdir(local_path):
+            # 目录
+            self.ali.upload_folder(local_path, file_id)
+        else:
+            # 文件
+            self.ali.upload_file(local_path, file_id)
+        
+        return True
+
+
+
 class FileClient:
     """A general file client to access files in different backends.
 
@@ -492,6 +690,7 @@ class FileClient:
     _backends = {
         'disk': HardDiskBackend,
         'hdfs': HDFSBackend,
+        'ali': AliBackend
     }
     # This collection is used to record the overridden backends, and when a
     # backend appears in the collection, the singleton pattern is disabled for
@@ -552,9 +751,12 @@ class FileClient:
         if file_client_args is None:
             if uri.startswith('hdfs'):
                 file_client_args = {'backend': 'hdfs'}
+            elif uri.startswith('ali'):
+                file_client_args = {'backend': 'ali'}
+            elif uri.startswith('/') or uri.startswith('./'):
+                file_client_args = {'backend': 'disk'}
         if file_client_args is None:
-            # 默认情况下，后台存储使用disk
-            return cls()
+            return None
 
         return cls(**file_client_args)
 
@@ -838,30 +1040,36 @@ class FileClient:
 
 def file_client_get(remote_path, local_path):
     status = FileClient.infer_client(uri=remote_path).download(remote_path, local_path)
+    time.sleep(1)
     return status
 
 
 def file_client_put(remote_path, local_path, is_exist=False):
     status = FileClient.infer_client(uri=remote_path).upload(remote_path, local_path, is_exist)
+    time.sleep(1)
     return status
 
 
 def file_client_ls(remote_folder):
     result = FileClient.infer_client(uri=remote_folder).ls(remote_folder)
+    time.sleep(1)
     return result
 
 
 def file_client_mkdir(remote_path, p=False):
     status = FileClient.infer_client(uri=remote_path).mkdir(remote_path, p)
+    time.sleep(1)
     return status
 
 
 def file_client_rm(remote_path):
     status = FileClient.infer_client(uri=remote_path).remove(remote_path)
+    time.sleep(1)
     return status
 
 
 def file_client_exists(remote_path):
     status = FileClient.infer_client(uri=remote_path).exists(remote_path)
+    time.sleep(1)
     return status
 

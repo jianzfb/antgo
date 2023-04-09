@@ -2,26 +2,24 @@
 # 多机多卡训练
 # TODO
 # 单机多卡训练(4卡运行)
-# bash launch.sh ./cifar10/main.py 4 --exp=cifar10 --no-validate --process=train
+# bash launch.sh ./cifar10/main.py 4 --exp=xxx --no-validate --process=train
 # 单机1卡训练(可以自定义使用第几块卡 --gpu-id=0)
-# python3 ./cifar10/main.py --exp=cifar10 --gpu-id=0 --no-validate --process=train
+# python3 ./cifar10/main.py --exp=xxx --gpu-id=0 --no-validate --process=train
 # 单机CPU训练(仅用于调试)
-# python3 ./cifar10/main.py --exp=cifar10 --gpu-id=-1 --no-validate --process=train
+# python3 ./cifar10/main.py --exp=xxx --gpu-id=-1 --no-validate --process=train
 
 # (2) 评估过程
 # 单机多卡评估(4卡运行)
-# bash launch.sh ./cifar10/main.py 4 --exp=cifar10 --checkpoint=yyy --process=test
+# bash launch.sh ./cifar10/main.py 4 --exp=xxx --checkpoint=yyy --process=test
 # 单机1卡评估(可以自定义使用第几块卡 --gpu-id=0)
-# python3 ./cifar10/main.py --exp=cifar10 --checkpoint=yyy --gpu-id=0 --process=test
+# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=0 --process=test
 # 单机CPU测试(仅用于调试)
-# python3 ./cifar10/main.py --exp=cifar10 --checkpoint=yyy --gpu-id=-1 --process=test
+# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --gpu-id=-1 --process=test
 
 # (3) 模型导出过程
-# python3 ./cifar10/main.py --exp=cifar10 --checkpoint=yyy --process=export
+# python3 ./cifar10/main.py --exp=xxx --checkpoint=yyy --process=export
 
 # 1.step 通用模块
-from audioop import findfit
-from genericpath import isdir
 import shutil
 import sys
 import os
@@ -88,6 +86,12 @@ def main():
         cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
     if 'evaluation' in cfg:
         cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
+
+    for data_stage in ['train', 'val', 'test']:
+        # 实验默认的训练，验证，测试数据
+        # 如果配置的是远程数据路径，则在本地寻找对应路径数据
+        if not getattr(cfg.data, data_stage, None):
+            continue
 
     for data_stage in ['train', 'val', 'test']:
         # 实验默认的训练，验证，测试数据
@@ -294,13 +298,13 @@ def main():
 
     # step4 检查checkpoint
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':
-        if not nn_args.checkpoint.startswith('/'):
+        if not nn_args.checkpoint.startswith('/') and not nn_args.checkpoint.startswith('./'):
             checkpoint_file_name = nn_args.checkpoint.split('/')[-1]
             nn_args.checkpoint = os.path.join('checkpoint-storage', checkpoint_file_name)
             if not os.path.exists(nn_args.checkpoint):
                 logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
     if nn_args.resume_from is not None and nn_args.resume_from != '':
-        if not nn_args.resume_from.startswith('/'):
+        if not nn_args.resume_from.startswith('/') and not nn_args.resume_from.startswith('./'):
             checkpoint_file_name = nn_args.resume_from.split('/')[-1]
             nn_args.resume_from = os.path.join('checkpoint-storage', checkpoint_file_name)
             if not os.path.exists(nn_args.resume_from):
@@ -313,7 +317,7 @@ def main():
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
         cfg.evaluation.out_dir = cfg.root
-
+    
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程

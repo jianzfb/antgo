@@ -40,8 +40,20 @@ def main():
 
             for data_info in data_info_list:
                 if data_info['status'] and data_info['address'] != '':
-                    if data_info['address'].startswith('hdfs'):
-                        # hdfs
+                    if data_info['address'].startswith('/'):
+                        # 本地路径
+                        data_folder = os.path.dirname(data_info['address'])
+                        target_data_folder = f"dataset-storage/{data_stage}"
+
+                        check_prefix = data_info['address'].split('/')[-1]
+                        for file_name in os.listdir(data_folder):
+                            if os.path.exists(f'{target_data_folder}/{file_name}'):
+                                # 目标文件已经存在，直接跳过
+                                continue
+
+                            if file_name.startswith(check_prefix):
+                                os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
+                    else:
                         check_prefix = data_info['address'].split('/')[-1]
                         is_existed = False
                         for file_name in os.listdir(f"dataset-storage/{data_stage}"):
@@ -57,26 +69,7 @@ def main():
                         status = file_client_get(data_info['address'], f"dataset-storage/{data_stage}")
                         if not status:
                             logging.error(f'Download {data_info["address"]} error.')
-                    elif data_info['address'].startswith('http'):
-                        # http
-                        file_name = data_info['address'].split('?')[0].split('/')
-                        if file_name.endswith('.tar'):
-                            if not os.path.exists(f'dataset-storage/{data_stage}/{file_name}'):            
-                                os.system(f'cd dataset-storage/{data_stage} && wget {data_info["address"]} && tar -xf {file_name}')
-                    elif data_info['address'].startswith('/'):
-                        # 本地路径
-                        data_folder = os.path.dirname(data_info['address'])
-                        target_data_folder = f"dataset-storage/{data_stage}"
-
-                        check_prefix = data_info['address'].split('/')[-1]
-                        for file_name in os.listdir(data_folder):
-                            if os.path.exists(f'{target_data_folder}/{file_name}'):
-                                # 目标文件已经存在，直接跳过
-                                continue
-
-                            if file_name.startswith(check_prefix):
-                                os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
-
+                    
     # 下载配置中的数据到本地
     if not os.path.exists(nn_args.config):
         # 查找位置1
@@ -101,8 +94,20 @@ def main():
                 os.makedirs(f"dataset-storage/{data_stage}/")
 
             for data_record_path in getattr(cfg.data, data_stage).data_path_list:
-                if data_record_path.startswith('hdfs'):
-                    # hdfs
+                if data_record_path.startswith('/') or data_record_path.startswith('./'):
+                    # 本地路径
+                    data_folder = os.path.dirname(data_record_path)
+                    target_data_folder = f"dataset-storage/{data_stage}"
+
+                    check_prefix = data_record_path.split('/')[-1]
+                    for file_name in os.listdir(data_folder):
+                        if os.path.exists(f'{target_data_folder}/{file_name}'):
+                            # 目标文件已经存在，直接跳过
+                            continue
+
+                        if file_name.startswith(check_prefix):
+                            os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
+                else:
                     check_prefix = data_record_path.split('/')[-1]
                     is_existed = False
                     for file_name in os.listdir(f"dataset-storage/{data_stage}"):
@@ -118,45 +123,26 @@ def main():
                     status = file_client_get(data_record_path, f"dataset-storage/{data_stage}")
                     if not status:
                         logging.error(f'Download {data_record_path} error.')
-                elif data_record_path.startswith('http'):
-                    # http
-                    file_name = data_record_path.split('?')[0].split('/')
-                    if file_name.endswith('.tar'):
-                        if not os.path.exists(f'dataset-storage/{data_stage}/{file_name}'):            
-                            os.system(f'cd dataset-storage/{data_stage} && wget {data_record_path} && tar -xf {file_name}')
-                elif data_record_path.startswith('/'):
-                    # 本地路径
-                    data_folder = os.path.dirname(data_record_path)
-                    target_data_folder = f"dataset-storage/{data_stage}"
-
-                    check_prefix = data_record_path.split('/')[-1]
-                    for file_name in os.listdir(data_folder):
-                        if os.path.exists(f'{target_data_folder}/{file_name}'):
-                            # 目标文件已经存在，直接跳过
-                            continue
-
-                        if file_name.startswith(check_prefix):
-                            os.system(f'ln -s {data_folder}/{file_name} {target_data_folder}/{file_name}')                    
 
     # 下载checkpoint到本地
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':
         if not os.path.exists('checkpoint-storage'):
             os.mkdir('checkpoint-storage')
 
-        if nn_args.checkpoint.startswith('hdfs'):
+        if not nn_args.checkpoint.startswith('/') and not nn_args.checkpoint.startswith('./'):
             status = file_client_get(nn_args.checkpoint, f"checkpoint-storage")
             if not status:
                 logging.error(f'Download checkpoint fail.')
-    
+
     if nn_args.resume_from is not None and nn_args.resume_from != '':
         if not os.path.exists('checkpoint-storage'):
             os.mkdir('checkpoint-storage')
 
-        if nn_args.checkpoint.startswith('hdfs'):
+        if not nn_args.checkpoint.startswith('/') and not  nn_args.checkpoint.startswith('./'):
             status = file_client_get(nn_args.resume_from, f"checkpoint-storage")
             if not status:
                 logging.error(f'Download checkpoint fail.')
-    
+
     
 if __name__ == "__main__":
     main()
