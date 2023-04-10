@@ -139,13 +139,13 @@ class DecodeImage(BaseOperator):
             self.__call__(sample['cutmix'], context)
 
         # decode semantic label 
-        if 'semantic' in sample.keys():
+        if 'segments' in sample.keys():
             if self.backend.lower() == 'cv':
-                data = np.frombuffer(sample['semantic'], dtype='uint8')
+                data = np.frombuffer(sample['segments'], dtype='uint8')
                 sem = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)  # BGR mode, but need RGB mode
             else:
                 im = Image.open(BytesIO(im))
-            sample['semantic'] = sem
+            sample['segments'] = sem
 
         return sample
 
@@ -187,12 +187,6 @@ class Meta(BaseOperator):
 # FINISH FIX
 class KeepRatio(BaseOperator):
     def __init__(self, aspect_ratio=1, focus_on_objects=False,inputs=None):
-        """ Transform the image data to numpy format.
-
-        Args:
-            to_rgb (bool): whether to convert BGR to RGB
-            with_mixup (bool): whether or not to mixup image and gt_bbbox/gt_score
-        """
         super(KeepRatio, self).__init__(inputs=inputs)
         self.aspect_ratio = aspect_ratio
         self.focus_on_objects = focus_on_objects
@@ -251,14 +245,16 @@ class KeepRatio(BaseOperator):
         if len(gt_bbox) > 0:
             gt_bbox[:, [0,2]] = gt_bbox[:, [0,2]] - left
             gt_bbox[:, [1,3]] = gt_bbox[:, [1,3]] - top
-            
+        
+        # 调整joints2d NxCx2
         if 'joints2d' in sample and len(sample['joints2d']) != 0:
-            sample['joints2d'][:, 0] = sample['joints2d'][:, 0] - left
-            sample['joints2d'][:, 1] = sample['joints2d'][:, 1] - top
+            sample['joints2d'][:, :, 0] = sample['joints2d'][:, :, 0] - left
+            sample['joints2d'][:, :, 1] = sample['joints2d'][:, :, 1] - top
             
+            # 调整jonits_vis NxC
             if 'joints_vis' in sample and len(sample['joints_vis']) != 0:
-                pos_outlie_x = sample['joints2d'][:, 0] <= 0
-                pos_outlie_y = sample['joints2d'][:, 1] <= 0
+                pos_outlie_x = sample['joints2d'][:, :, 0] <= 0
+                pos_outlie_y = sample['joints2d'][:, :, 1] <= 0
 
                 pos_outlie = pos_outlie_x | pos_outlie_y | sample['joints_vis'] == 0
                 sample['joints_vis'][pos_outlie] = 0
@@ -270,6 +266,9 @@ class KeepRatio(BaseOperator):
         im = im[top:bottom, left:right, :].copy()
         rhi, rwi = im.shape[:2]
         height, width = im.shape[:2]
+
+        if 'segments' in sample and sample['segments'].size != 0:
+            sample['segments'] = sample['segments'][top:bottom, left:right].copy()
 
         # 随机填充，保持比例
         image_new = im
@@ -296,20 +295,27 @@ class KeepRatio(BaseOperator):
                 right_padding = (nwi - rwi) - left_padding
 
             # 调整image
-            image_new = cv2.copyMakeBorder(image_new, top_padding, bottom_padding, left_padding, right_padding,
-                                         cv2.BORDER_CONSTANT, value=(128, 128, 128))
+            image_new = cv2.copyMakeBorder(
+                image_new, top_padding, bottom_padding, left_padding, right_padding, cv2.BORDER_CONSTANT, value=(128, 128, 128))
+
+            # 调整segments
+            if 'segments' in sample and sample['segments'].size != 0:
+                sample['segments'] = cv2.copyMakeBorder(
+                sample['segments'], top_padding, bottom_padding, left_padding, right_padding, cv2.BORDER_CONSTANT, value=255)
 
             # 调整bbox
             if len(gt_bbox) > 0:
                 gt_bbox[:, [0,2]] = gt_bbox[:, [0,2]] + left_padding
                 gt_bbox[:, [1,3]] = gt_bbox[:, [1,3]] + top_padding
             
+            # 调整joints2d NxCx2
             if 'joints2d' in sample and len(sample['joints2d']) > 0:
                 gt_kpts = sample['joints2d']
-                gt_kpts[:, 0] = gt_kpts[:, 0] + left_padding
-                gt_kpts[:, 1] = gt_kpts[:, 1] + top_padding
+                gt_kpts[:, :, 0] = gt_kpts[:, :, 0] + left_padding
+                gt_kpts[:, :, 1] = gt_kpts[:, :, 1] + top_padding
                 sample['joints2d'] = gt_kpts
-                
+
+                # 调整joints_vis NxC
                 if 'joints_vis' in sample and len(sample['joints_vis']) > 0:
                     pos_outlie_x = sample['joints2d'][:, 0] <= 0
                     pos_outlie_y = sample['joints2d'][:, 1] <= 0
@@ -322,7 +328,6 @@ class KeepRatio(BaseOperator):
         sample['height'] = image_new.shape[0]
         sample['width'] = image_new.shape[1]
 
-        # vis_2d_boxes_in_image(image_new, gt_bbox, './a.png')        
         if 'image_meta' in sample:
             sample['image_meta']['image_shape'] = (image_new.shape[0], image_new.shape[1])
         return sample
@@ -401,22 +406,21 @@ class Rotation(BaseOperator):
 
             sample['joints2d'] = gt_kpts
 
-        if 'semantic' in sample:
+        if 'segments' in sample:
             label = cv2.warpAffine(
-                sample['semantic'],
+                sample['segments'],
                 M=rot_mat,
                 dsize=im.shape[1::-1],
                 flags=cv2.INTER_NEAREST,
                 borderMode=cv2.BORDER_CONSTANT,
                 borderValue=self._label_border_value)
-            sample['semantic'] = label
+            sample['segments'] = label
 
         sample['height'] = image_rotated.shape[0]
         sample['width'] = image_rotated.shape[1]
         if 'image_meta' in sample:
             sample['image_shape'] = (image_rotated.shape[0], image_rotated.shape[1])
-        
-        # vis_2d_boxes_in_image(image_rotated, sample['bboxes'], sample['labels'], './a.png') 
+
         sample['image'] = image_rotated
         return sample
 
@@ -531,8 +535,7 @@ class MultiscaleTestResize(BaseOperator):
 class RandomFlipImage(BaseOperator):
     def __init__(self, 
                 prob=0.5, 
-                is_normalized=False, 
-                is_mask_flip=False, 
+                is_normalized=False,
                 swap_ids=[[1,3,19,5,7,9,11,13,15],[2,4,20,6,8,10,12,14,16]], 
                 swap_labels=[[0,1],[1,0]],
                 inputs=None):
@@ -540,17 +543,14 @@ class RandomFlipImage(BaseOperator):
         Args:
             prob (float): the probability of flipping image
             is_normalized (bool): whether the bbox scale to [0,1]
-            is_mask_flip (bool): whether flip the segmentation
         """
         super(RandomFlipImage, self).__init__(inputs=inputs)
         self.prob = prob
         self.is_normalized = is_normalized
-        self.is_mask_flip = is_mask_flip
         self.swap_ids = swap_ids
         self.swap_labels = swap_labels
         if not (isinstance(self.prob, float) and
-                isinstance(self.is_normalized, bool) and
-                isinstance(self.is_mask_flip, bool)):
+                isinstance(self.is_normalized, bool)):
             raise TypeError("{}: input type is invalid.".format(self))
 
     def flip_segms(self, segms, height, width):
@@ -625,19 +625,13 @@ class RandomFlipImage(BaseOperator):
                         self)
                     raise BboxError(m)
                 sample['bboxes'] = gt_bbox
-                
+
                 if len(self.swap_labels) > 0:
                     temp = copy.deepcopy(sample['labels'])
                     for before_label, after_label in self.swap_labels:
                         selected_ids = sample['labels'] == before_label
                         temp[selected_ids] = after_label
-                    
                     sample['labels'] = temp
-
-            if 'segments' in sample.keys():
-                if self.is_mask_flip and len(sample['segments']) != 0:
-                    sample['segments'] = self.flip_segms(sample['segments'],
-                                                        height, width)
 
             if 'joints2d' in sample.keys() and sample['joints2d'].shape[0] > 0:
                 gt_keypoints = sample['joints2d']
@@ -655,14 +649,13 @@ class RandomFlipImage(BaseOperator):
 
                 sample['joints2d'] = gt_keypoints.copy()
 
-            if 'semantic' in sample.keys() and sample['semantic'] is not None:
-                sample['semantic'] = sample['semantic'][:, ::-1]
+            if 'segments' in sample and sample['segments'].size > 0:
+                sample['segments'] = sample['segments'][:, ::-1]
 
             if 'image_meta' in sample:
                 sample['image_meta']['flipped'] = True
             sample['image'] = im
 
-        # vis_2d_boxes_in_image(sample['image'].copy(), sample['bboxes'], sample['labels'], './d.png') 
         return sample
 
 
@@ -763,67 +756,6 @@ class GridMaskOp(BaseOperator):
         # now, ignore curr_iter
         curr_iter = sample['curr_iter'] if 'curr_iter' in sample else 0
         sample['image'] = self.gridmask_op(sample['image'], curr_iter)
-        return sample
-
-
-# FINISH FIX
-class AutoAugmentImage(BaseOperator):
-    def __init__(self, is_normalized=False, autoaug_type="v1", inputs=None):
-        """
-        Args:
-            is_normalized (bool): whether the bbox scale to [0,1]
-            autoaug_type (str): autoaug type, support v0, v1, v2, v3, test
-        """
-        super(AutoAugmentImage, self).__init__(inputs=inputs)
-        self.is_normalized = is_normalized
-        self.autoaug_type = autoaug_type
-        if not isinstance(self.is_normalized, bool):
-            raise TypeError("{}: input type is invalid.".format(self))
-
-    def __call__(self, sample, context=None):
-        """
-        Learning Data Augmentation Strategies for Object Detection, see https://arxiv.org/abs/1906.11172
-        """
-        gt_bbox = sample['bboxes']
-        im = sample['image']
-        if not isinstance(im, np.ndarray):
-            raise TypeError("{}: image is not a numpy array.".format(self))
-        if len(im.shape) != 3:
-            raise ImageError("{}: image is not 3-dimensional.".format(self))
-        if len(gt_bbox) == 0:
-            return sample
-
-        # gt_boxes : [x1, y1, x2, y2]
-        # norm_gt_boxes: [y1, x1, y2, x2]
-        height, width, _ = im.shape
-        norm_gt_bbox = np.ones_like(gt_bbox, dtype=np.float32)
-        if not self.is_normalized:
-            norm_gt_bbox[:, 0] = gt_bbox[:, 1] / float(height)
-            norm_gt_bbox[:, 1] = gt_bbox[:, 0] / float(width)
-            norm_gt_bbox[:, 2] = gt_bbox[:, 3] / float(height)
-            norm_gt_bbox[:, 3] = gt_bbox[:, 2] / float(width)
-        else:
-            norm_gt_bbox[:, 0] = gt_bbox[:, 1]
-            norm_gt_bbox[:, 1] = gt_bbox[:, 0]
-            norm_gt_bbox[:, 2] = gt_bbox[:, 3]
-            norm_gt_bbox[:, 3] = gt_bbox[:, 2]
-
-        from .autoaugment_utils import distort_image_with_autoaugment
-        im, norm_gt_bbox = distort_image_with_autoaugment(im, norm_gt_bbox,
-                                                            self.autoaug_type)
-        if not self.is_normalized:
-            gt_bbox[:, 0] = norm_gt_bbox[:, 1] * float(width)
-            gt_bbox[:, 1] = norm_gt_bbox[:, 0] * float(height)
-            gt_bbox[:, 2] = norm_gt_bbox[:, 3] * float(width)
-            gt_bbox[:, 3] = norm_gt_bbox[:, 2] * float(height)
-        else:
-            gt_bbox[:, 0] = norm_gt_bbox[:, 1]
-            gt_bbox[:, 1] = norm_gt_bbox[:, 0]
-            gt_bbox[:, 2] = norm_gt_bbox[:, 3]
-            gt_bbox[:, 3] = norm_gt_bbox[:, 2]
-
-        sample['bboxes'] = gt_bbox
-        sample['image'] = im
         return sample
 
 
@@ -943,82 +875,10 @@ class RandomDistort(BaseOperator):
         return sample
 
 
-# FINISH FIX
-class ExpandImage(BaseOperator):
-    # FINISH CORRET (JIAN)
-    # only for det task
-    def __init__(self, max_ratio, prob, mean=[127.5, 127.5, 127.5], inputs=None):
-        """
-        Args:
-            max_ratio (float): the ratio of expanding
-            prob (float): the probability of expanding image
-            mean (list): the pixel mean
-        """
-        super(ExpandImage, self).__init__(inputs=inputs)
-        self.max_ratio = max_ratio
-        self.mean = mean
-        self.prob = prob
-
-    def __call__(self, sample, context):
-        """
-        Expand the image and modify bounding box.
-        Operators:
-            1. Scale the image width and height.
-            2. Construct new images with new height and width.
-            3. Fill the new image with the mean.
-            4. Put original image into new image.
-            5. Rescale the bounding box.
-            6. Determine if the new bbox is satisfied in the new image.
-        Returns:
-            sample: the image, bounding box are replaced.
-        """
-
-        prob = np.random.uniform(0, 1)
-        assert 'image' in sample, 'not found image data'
-        im = sample['image']
-        gt_bbox = sample['bboxes']
-        gt_class = sample['labels']
-        im_height, im_width = im.shape[:2]
-        if prob < self.prob:
-            if self.max_ratio - 1 >= 0.01:
-                expand_ratio = np.random.uniform(1, self.max_ratio)
-                height = int(im_height * expand_ratio)
-                width = int(im_width * expand_ratio)
-                h_off = math.floor(np.random.uniform(0, height - im_height))
-                w_off = math.floor(np.random.uniform(0, width - im_width))
-                expand_bbox = [
-                    -w_off / im_width, -h_off / im_height,
-                    (width - w_off) / im_width, (height - h_off) / im_height
-                ]
-                expand_im = np.ones((height, width, 3))
-                expand_im = np.uint8(expand_im * np.squeeze(self.mean))
-                expand_im = Image.fromarray(expand_im)
-                im = Image.fromarray(im)
-                expand_im.paste(im, (int(w_off), int(h_off)))
-                expand_im = np.asarray(expand_im)
-
-                if 'joints2d' in sample.keys() and 'joints_ignore' in sample.keys():
-                    keypoints = (sample['joints2d'],
-                                 sample['joints_ignore'])
-                    gt_bbox, gt_class, _, gt_keypoints = filter_and_process(
-                        expand_bbox, gt_bbox, gt_class, keypoints=keypoints)
-                    sample['joints2d'] = gt_keypoints[0]
-                    sample['joints_ignore'] = gt_keypoints[1]
-                else:
-                    gt_bbox, gt_class, _ = filter_and_process(expand_bbox, gt_bbox, gt_class)
-                sample['image'] = expand_im
-                sample['bboxes'] = gt_bbox
-                sample['labels'] = gt_class
-                sample['width'] = width
-                sample['height'] = height
-
-        return sample
-
-
-# FINISH FIX
+# FINISH FIX(?)
 class CropImage(BaseOperator):
     # 已经完成验证
-    def __init__(self, prob, batch_sampler, satisfy_all=False, avoid_no_bbox=True, inputs=None):
+    def __init__(self, prob=0.5, batch_sampler=[[1, 50, 0.3, 1.0, 0.5, 2.0, 0.3, 1.0]], satisfy_all=False, avoid_no_bbox=True, inputs=None):
         """
         Args:
             batch_sampler (list): Multiple sets of different
@@ -1157,6 +1017,14 @@ class CropImage(BaseOperator):
             sample['width'] = im.shape[1]
             sample['height'] = im.shape[0]
 
+            if 'segments' in sample and sample['segments'].size != 0:
+                sample['segments'] = sample['segments'][ymin:ymax, xmin:xmax].copy()
+
+            if 'joints2d' in sample.keys() and sample['joints2d'].shape[0] > 0:
+                gt_keypoints = sample['joints2d'] 
+                gt_keypoints = gt_keypoints - np.array([xmin,ymin]).reshape(1,1,2)
+                sample['joints2d'] = gt_keypoints
+            
             if 'image_meta' in sample and 'transform_matrix' in sample['image_meta']:
                 base_trans = sample['image_meta']['transform_matrix']
                 crop_trans = self.gen_trans_from_bbox((xmin+xmax)/2.0, (ymin+ymax)/2.0, im_width, im_height, im.shape[1], im.shape[0], 1.0, 0.0, inv=False)
@@ -1199,14 +1067,15 @@ class NormalizeBox(BaseOperator):
             gt_bbox[i][3] = gt_bbox[i][3] / height
         sample['bboxes'] = gt_bbox
 
+        # NxCx2
         if 'joints2d' in sample.keys():
             gt_keypoint = sample['joints2d']
 
-            for i in range(gt_keypoint.shape[1]):
+            for i in range(gt_keypoint.shape[2]):
                 if i % 2:
-                    gt_keypoint[:, i] = gt_keypoint[:, i] / height
+                    gt_keypoint[:, :, i] = gt_keypoint[:, :, i] / height
                 else:
-                    gt_keypoint[:, i] = gt_keypoint[:, i] / width
+                    gt_keypoint[:, :, i] = gt_keypoint[:, :, i] / width
             sample['joints2d'] = gt_keypoint
 
         return sample
@@ -1242,7 +1111,7 @@ class Permute(BaseOperator):
                     im = im[[2, 1, 0], :, :]
                 sample[k] = im
                 
-            if k == 'semantic':
+            if k == 'segments':
                 label = sample[k]
                 if self.channel_first:
                     label = np.expand_dims(label, 0)
@@ -1558,19 +1427,18 @@ class ResizeS(BaseOperator):
             sample['bboxes'] = np.concatenate([x1, y1, x2, y2], axis=-1)
         
         if 'joints2d' in sample and len(sample['joints2d']) > 0:
-            scale_array = np.array([scale_x, scale_y, 1], dtype=np.float32)
+            scale_array = np.array([scale_x, scale_y], dtype=np.float32).reshape(1,1,2)
             sample['joints2d'] = sample['joints2d'] * scale_array
             x = sample['joints2d'][:, :, 0:1]
             x = np.clip(x, 0, resize_w - 1)
 
             y = sample['joints2d'][:, :, 1:2]
             y = np.clip(y, 0, resize_h - 1)
+            sample['joints2d'] = np.concatenate([x, y], axis=-1)
 
-            if len(sample['joints2d'].shape) == 3:
-                v = sample['joints2d'][:, :, 2:3]
-                sample['joints2d'] = np.concatenate([x, y, v], axis=-1)
-            else:
-                sample['joints2d'] = np.concatenate([x, y], axis=-1)
+        if 'segments' in sample and sample['segments'].size != 0:
+            sample['segments'] = \
+                cv2.resize(sample['segments'], (resize_w, resize_h), interpolation=cv2.INTER_NEAREST)
 
         sample['image_meta']['image_shape'] = (resize_h, resize_w)
         sample['image_meta']['scale_factor'] =  [scale_x, scale_y] * 2
@@ -1692,47 +1560,7 @@ class ColorDistort(BaseOperator):
         return sample
 
 
-class PadBox(BaseOperator):
-    def __init__(self, num_max_boxes=50, inputs=None):
-        """
-        Pad zeros to bboxes if number of bboxes is less than num_max_boxes.
-        Args:
-            num_max_boxes (int): the max number of bboxes
-        """
-        self.num_max_boxes = num_max_boxes
-        super(PadBox, self).__init__(inputs=inputs)
-
-    def __call__(self, sample, context=None):
-        assert 'gt_bbox' in sample
-        bbox = sample['gt_bbox']
-        gt_num = min(self.num_max_boxes, len(bbox))
-        num_max = self.num_max_boxes
-        fields = context['fields'] if context else []
-        pad_bbox = np.zeros((num_max, 4), dtype=np.float32)
-        if gt_num > 0:
-            pad_bbox[:gt_num, :] = bbox[:gt_num, :]
-        sample['gt_bbox'] = pad_bbox
-        if 'gt_class' in fields:
-            pad_class = np.zeros((num_max), dtype=np.int32)
-            if gt_num > 0:
-                pad_class[:gt_num] = sample['gt_class'][:gt_num, 0]
-            sample['gt_class'] = pad_class
-        if 'gt_score' in fields:
-            pad_score = np.zeros((num_max), dtype=np.float32)
-            if gt_num > 0:
-                pad_score[:gt_num] = sample['gt_score'][:gt_num, 0]
-            sample['gt_score'] = pad_score
-        # in training, for example in op ExpandImage,
-        # the bbox and gt_class is expandded, but the difficult is not,
-        # so, judging by it's length
-        if 'is_difficult' in fields:
-            pad_diff = np.zeros((num_max), dtype=np.int32)
-            if gt_num > 0:
-                pad_diff[:gt_num] = sample['difficult'][:gt_num, 0]
-            sample['difficult'] = pad_diff
-        return sample
-
-
+# FINSH FIX
 class BboxXYXY2XYWH(BaseOperator):
     """
     Convert bbox XYXY format to XYWH format.
@@ -1742,11 +1570,11 @@ class BboxXYXY2XYWH(BaseOperator):
         super(BboxXYXY2XYWH, self).__init__(inputs=inputs)
 
     def __call__(self, sample, context=None):
-        assert 'gt_bbox' in sample
-        bbox = sample['gt_bbox']
+        assert 'bboxes' in sample
+        bbox = sample['bboxes']
         bbox[:, 2:4] = bbox[:, 2:4] - bbox[:, :2]
         bbox[:, :2] = bbox[:, :2] + bbox[:, 2:4] / 2.
-        sample['gt_bbox'] = bbox
+        sample['bboxes'] = bbox
         return sample
 
 
@@ -2000,18 +1828,19 @@ class RandomScaledCrop(BaseOperator):
             sample['labels'] = sample['labels'][valid]
 
         if 'joints2d' in sample and len(sample['joints2d']) > 0:
-            scale_array = np.array([scale, scale], dtype=np.float32)                  
-            shift_array = np.array([offset_x, offset_y], dtype=np.float32)
+            scale_array = np.array([scale, scale], dtype=np.float32).reshape(1,1,2)              
+            shift_array = np.array([offset_x, offset_y], dtype=np.float32).reshape(1,1,2)
             joints2d = sample['joints2d']*scale_array - shift_array
 
-            joints_vis = sample['joints_vis']
-            invalid_p =  joints2d[:,0] < 0 or joints2d[:,0] > target_crop_w or joints2d[:,1] < 0 or joints2d[:,1] > target_crop_h
-            joints_vis[invalid_p] = 0
-
-            joints2d[:,0] = np.clip(joints2d[:,0], 0, target_crop_w)
-            joints2d[:,1] = np.clip(joints2d[:,1], 0, target_crop_h)
+            if 'joints_vis' in sample:
+                joints_vis = sample['joints_vis']
+                invalid_p =  joints2d[:,0] < 0 or joints2d[:,0] > target_crop_w or joints2d[:,1] < 0 or joints2d[:,1] > target_crop_h
+                joints_vis[invalid_p] = 0
+                sample['joints_vis'] = joints_vis
+            
+            joints2d[:,:,0] = np.clip(joints2d[:,:,0], 0, target_crop_w)
+            joints2d[:,:,1] = np.clip(joints2d[:,:,1], 0, target_crop_h)
             sample['joints2d'] = joints2d
-            sample['joints_vis'] = joints_vis
 
         img = sample['image']
         img = cv2.resize(img, (resize_w, resize_h), interpolation=self.interp)
@@ -2189,7 +2018,7 @@ class ResizeStepScaling(BaseOperator):
             sample['bboxes'] = boxes
 
         if 'joints2d' in sample and len(sample['joints2d']) > 0:
-            scale_array = np.array([scale_factor, scale_factor], dtype=np.float32)      
+            scale_array = np.array([scale_factor, scale_factor], dtype=np.float32).reshape(1,1,2)    
             joints2d = sample['joints2d'] * scale_array
             sample['joints2d'] = joints2d            
 
@@ -2249,7 +2078,7 @@ class ResizeRangeScaling(BaseOperator):
             sample['bboxes'] = boxes
         
         if 'joints2d' in sample and len(sample['joints2d']) > 0:
-            scale_array = np.array([scale, scale], dtype=np.float32)      
+            scale_array = np.array([scale, scale], dtype=np.float32).reshape(1,1,2)
             joints2d = sample['joints2d'] * scale_array
             sample['joints2d'] = joints2d            
         
@@ -2297,7 +2126,7 @@ class ResizeByLong(BaseOperator):
             sample['bboxes'] = boxes
         
         if 'joints2d' in sample and len(sample['joints2d']) > 0:
-            scale_array = np.array([scale, scale], dtype=np.float32)      
+            scale_array = np.array([scale, scale], dtype=np.float32).reshape(1,1,2) 
             joints2d = sample['joints2d'] * scale_array
             sample['joints2d'] = joints2d            
         
