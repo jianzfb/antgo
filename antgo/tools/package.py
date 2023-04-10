@@ -27,6 +27,9 @@ class __SampleDataGenerator(object):
                 self.num_sample_offset.append(self.num_sample_offset[-1]+len(content))
         assign_sample_num = (self.num_sample + (thread_num - 1)) // thread_num
 
+        self.thread_stop_flag = [
+            1 for _ in range(thread_num)
+        ]
         # 启动线程池进行数据生产
         # 数据队列 (队列最大容量10000)
         self.data_cache = Queue(10000)        
@@ -35,10 +38,6 @@ class __SampleDataGenerator(object):
 
         for thread_i in range(thread_num):
             self.thread_pool[thread_i].start()
-
-        self.thread_stop_flag = [
-            1 for _ in range(thread_num)
-        ]
 
     def produce(self, start_i, stop_i, thread_id, data_cache):
         # 发现从start_i 到 stop_i，来自于的json_file集合

@@ -17,7 +17,11 @@ from .operators import (
   Permute,
   MixupImage,
   CutmixImage,
-  Meta)
+  Meta,
+  RandomScaledCrop,
+  ResizeByLong,
+  ResizeRangeScaling,
+  ResizeStepScaling)
 
 __all__ = [
   'DecodeImage', 
@@ -34,5 +38,9 @@ __all__ = [
   'Permute',
   'MixupImage',
   'CutmixImage',
+  'RandomScaledCrop',
+  'ResizeByLong',
+  'ResizeRangeScaling',
+  'ResizeStepScaling',
   'Meta'
 ]
