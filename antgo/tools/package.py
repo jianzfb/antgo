@@ -11,6 +11,7 @@ import logging
 from queue import Queue
 import threading
 import time
+import copy
 
 
 class __SampleDataGenerator(object):
@@ -27,12 +28,11 @@ class __SampleDataGenerator(object):
                 self.num_sample_offset.append(self.num_sample_offset[-1]+len(content))
         assign_sample_num = (self.num_sample + (thread_num - 1)) // thread_num
 
-        self.thread_stop_flag = [
-            1 for _ in range(thread_num)
-        ]
+        # 线程标记
+        self.thread_stop_flag = [1 for _ in range(thread_num)]
         # 启动线程池进行数据生产
         # 数据队列 (队列最大容量10000)
-        self.data_cache = Queue(10000)        
+        self.data_cache = Queue(100)        
         self.thread_pool = [
             threading.Thread(target=self.produce, args=(i*assign_sample_num, min((i+1)*assign_sample_num, self.num_sample), i, self.data_cache)) for i in range(thread_num)]
 
@@ -69,7 +69,8 @@ class __SampleDataGenerator(object):
             if file_i == stop_file_i:
                 stop_ii = min(stop_sample_offset, len(samples))
 
-            for sample in samples[start_ii:stop_ii]:
+            for sample_i in range(start_ii, stop_ii):
+                sample = copy.deepcopy(samples[sample_i])
                 # 转换通用数据格式
                 for k in sample.keys():
                     if k in ['image_url', 'image_file']:
@@ -105,12 +106,23 @@ class __SampleDataGenerator(object):
                 # 加载图像
                 assert(sample['image_file'] != '' or sample['image_url'] != '')
                 if sample['image_url'] != '':
-                    try:
-                        pic = requests.get(sample['image_url'], timeout=20)
-                        sample['image'] = pic.content                
-                    except:
-                        logging.error("Couldnt download %s."%sample['image_url'])
-                        sample['image'] = b''
+                    wait_count = 5
+                    while wait_count > 0:
+                        try:
+                            pic = requests.get(sample['image_url'], timeout=20)
+                            if pic.status_code != 200:
+                                sample['image'] = b''
+                                wait_count -= 1
+                                time.sleep(2)
+                                continue
+
+                            sample['image'] = pic.content
+                            break
+                        except:
+                            logging.error("Couldnt download %s."%sample['image_url'])
+                            sample['image'] = b''
+                            wait_count -= 1
+                            time.sleep(2)               
                 else:
                     image_path = os.path.join(src_folder, sample['image_file'])
                     if os.path.exists(image_path):
@@ -138,7 +150,7 @@ class __SampleDataGenerator(object):
     def __iter__(self):
         while np.sum(self.thread_stop_flag) > 0:
             try:
-                data = self.data_cache.get(2)   # 最大等待5s
+                data = self.data_cache.get(True, timeout=5)   # 最大等待5s
             except:
                 continue
 

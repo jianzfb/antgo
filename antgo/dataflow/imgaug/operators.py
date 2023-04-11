@@ -139,7 +139,7 @@ class DecodeImage(BaseOperator):
             self.__call__(sample['cutmix'], context)
 
         # decode semantic label 
-        if 'segments' in sample.keys():
+        if 'segments' in sample and sample['segments'].size > 0:
             if self.backend.lower() == 'cv':
                 data = np.frombuffer(sample['segments'], dtype='uint8')
                 sem = cv2.imdecode(data, cv2.IMREAD_GRAYSCALE)  # BGR mode, but need RGB mode
@@ -406,7 +406,7 @@ class Rotation(BaseOperator):
 
             sample['joints2d'] = gt_kpts
 
-        if 'segments' in sample:
+        if 'segments' in sample and sample['segments'].size > 0:
             label = cv2.warpAffine(
                 sample['segments'],
                 M=rot_mat,

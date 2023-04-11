@@ -104,7 +104,7 @@ def draw_skeleton(image, kps, radius=1):
     return image
 
 
-def check_img_to_save(img_path, img, label, joint):
+def check_img_to_save(img_path, img, label, joint, joint2):
     img_path = img_path.replace("/", "#")
     # if label is not None:
     #     after_kpts = decode_keypoint(label)
@@ -112,14 +112,17 @@ def check_img_to_save(img_path, img, label, joint):
     test_image = (img.add(0.5) * 255).cpu().data.numpy()[0].astype(np.uint8)
     test_image = cv2.cvtColor(test_image, cv2.COLOR_GRAY2RGB)
     test_image2 = test_image.copy()
+    test_image3 = test_image.copy()    
     if label is not None:
         test_image = draw_skeleton(test_image, np.array(after_kpts) * 8)
         # test_image = draw_skeleton(test_image, np.array(label) * 8)
     test_image2 = draw_skeleton(test_image2, np.array(joint[:, :2]) * 8)
-
+    test_image3 = draw_skeleton(test_image3, np.array(joint2[:, :2]) * 8)
+    
     test_image = cv2.resize(test_image, (128, 128))
     test_image2 = cv2.resize(test_image2, (128, 128))
-    saveimg = np.concatenate([test_image, test_image2], axis=1)
+    test_image3 = cv2.resize(test_image3, (128, 128))
+    saveimg = np.concatenate([test_image, test_image2, test_image3], axis=1)
     import os
 
     if not os.path.exists("outputs/check"):
