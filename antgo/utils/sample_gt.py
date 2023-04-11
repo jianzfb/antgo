@@ -11,9 +11,9 @@ class SampleGTTemplate(object):
         
         with open(os.path.join(parent_folder, 'resource', 'templates', 'sample_meta.json'), 'r') as fp:
             self.meta_info = json.load(fp)   
-        
+
     def get(self):
         return copy.deepcopy(self.sample_info)
-    
+
     def meta(self):
         return copy.deepcopy(self.meta_info)

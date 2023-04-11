@@ -19,7 +19,8 @@ from .operators import (
   RandomScaledCrop,
   ResizeByLong,
   ResizeRangeScaling,
-  ResizeStepScaling)
+  ResizeStepScaling,
+  AutoAugmentImage)
 
 __all__ = [
   'DecodeImage', 
@@ -38,5 +39,6 @@ __all__ = [
   'ResizeByLong',
   'ResizeRangeScaling',
   'ResizeStepScaling',
+  'AutoAugmentImage',
   'Meta'
 ]
