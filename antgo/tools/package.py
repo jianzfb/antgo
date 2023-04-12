@@ -1,4 +1,5 @@
 import sys
+sys.path.append('/root/workspace/antgo')
 from antgo.dataflow.datasetio import *
 import os
 import json
@@ -29,7 +30,7 @@ class __SampleDataGenerator(object):
                     content = json.load(fp)
                     self.num_sample += len(content)
                     self.num_sample_offset.append(self.num_sample_offset[-1]+len(content))
-                    self.num_sample_list.append(num)
+                    self.num_sample_list.append(len(content))
             else:
                 with open(json_file, 'r') as fp:
                     content = fp.readline()
@@ -47,6 +48,8 @@ class __SampleDataGenerator(object):
                     self.num_sample_offset.append(self.num_sample_offset[-1]+num)
                     self.num_sample_list.append(num)
 
+        print(f"Sample num {self.num_sample}")
+        
         # 每个线程 分配的样本数
         assign_sample_num = (self.num_sample + (thread_num - 1)) // thread_num
 
@@ -216,6 +219,7 @@ class __SampleDataGenerator(object):
             if file_i == stop_file_i:
                 stop_ii = min(stop_sample_offset, self.num_sample_list[file_i])
 
+            print(f'thread_id {thread_id} start_ii {start_ii} stop_ii {stop_ii} in file_i {file_i}')
             if self.mode == 'line':
                 self.line_mode_produce(start_ii, stop_ii, json_file, data_cache, src_folder)
             else:
@@ -271,7 +275,7 @@ def package_to_tfrecord(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs
 #     print(len(content))
 
 # start_time = time.time()
-# package_to_tfrecord("/root/workspace/dataset/finetune_4/annotation.json", "/root/workspace/dataset/extract", "hello", 100000, thread_num=3)
+# package_to_tfrecord("/root/workspace/shuffle-hard-mining-v5/annotation_label_0.json,/root/workspace/shuffle-hard-mining-v5/annotation_label_0.json,/root/workspace/shuffle-hard-mining-v5/annotation_label_0.json", "/root/workspace/dataset/extract", "hello", 100000, thread_num=2, mode='json')
 # print(f'all time {time.time() - start_time}')
 
 # print('sdf')
