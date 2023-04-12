@@ -10,9 +10,9 @@ from antgo.framework.helper.models.builder import HEADS
 
 
 @HEADS.register_module()
-class SimpleQNetLite0PoseHeatmap(nn.Module):
+class SimpleQNetLite0PoseHeatmap2D(nn.Module):
     def __init__(self, num_deconv_filters, num_joints):
-        super(SimpleQNetLite0PoseHeatmap, self).__init__()
+        super(SimpleQNetLite0PoseHeatmap2D, self).__init__()
         self.deconv_dim = num_deconv_filters
         self.deconv_layer0, self.deconv_layer1 = self._make_deconv_layer()
 

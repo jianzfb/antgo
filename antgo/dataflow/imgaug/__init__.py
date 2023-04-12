@@ -12,7 +12,6 @@ from .operators import (
   ColorDistort,
   RandomErasingImage,
   CropImage,
-  Permute,
   MixupImage,
   CutmixImage,
   Meta,
@@ -20,7 +19,9 @@ from .operators import (
   ResizeByLong,
   ResizeRangeScaling,
   ResizeStepScaling,
-  AutoAugmentImage)
+  AutoAugmentImage,
+  Permute,
+  UnSqueeze)
 
 __all__ = [
   'DecodeImage', 
@@ -40,5 +41,6 @@ __all__ = [
   'ResizeRangeScaling',
   'ResizeStepScaling',
   'AutoAugmentImage',
+  'UnSqueeze',
   'Meta'
 ]

@@ -184,6 +184,18 @@ class Meta(BaseOperator):
         return sample
 
 
+class UnSqueeze(BaseOperator):
+    def __init__(self, axis, keys=[], inputs=None):
+        super(UnSqueeze, self).__init__(inputs=inputs)
+        self.axis = axis
+        self.keys = keys
+        
+    def __call__(self, sample, context=None):
+        for key in self.keys:
+            sample[key] = np.expand_dims(sample[key], self.axis)
+        
+        return sample
+
 # FINISH FIX
 class KeepRatio(BaseOperator):
     def __init__(self, aspect_ratio=1, focus_on_objects=False,inputs=None):

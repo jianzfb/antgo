@@ -103,7 +103,7 @@ class SingleStageDetector(BaseDetector):
         feat = self.extract_feat(image)
         results_list = self.bbox_head.simple_test(
             feat, image_meta, rescale=rescale)
-        
+
         bbox_results = {
             'box': torch.stack([a for a, _ in results_list], dim=0),
             'label': torch.stack([b for _, b in results_list], dim=0)

@@ -107,7 +107,7 @@ class Tester(object):
 
     def evaluate(self):
         # 添加运行标记
-        running_flag(self.cfg)
+        running_flag(self.cfg.get('root', None))
 
         rank, _ = get_dist_info()        
         json_file = './result.json'
@@ -154,4 +154,4 @@ class Tester(object):
                     json.dump(metric_dict, fp)
 
         # 添加完成标记
-        finish_flag(self.cfg)
+        finish_flag(self.cfg.get('root', None))

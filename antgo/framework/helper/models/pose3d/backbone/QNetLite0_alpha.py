@@ -204,7 +204,7 @@ class Bottleneck(nn.Module):
 class KetNetF(nn.Module):
     """KetNetF"""
 
-    def __init__(self, architecture):
+    def __init__(self, architecture, in_channels=1):
         super(KetNetF, self).__init__()
         self.norm_layer = nn.BatchNorm2d
         self.stage_with_dcn=(False, False, False, False, False, False, False, False)
@@ -220,7 +220,7 @@ class KetNetF(nn.Module):
         self.layers = layers[architecture]
         stage_dcn = [None for with_dcn in self.stage_with_dcn]
 
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=5, stride=2, padding=2, bias=False)
         self.bn1 = self.norm_layer(32, eps=1e-5, momentum=0.1, affine=True)
         self.relu1 = nn.ReLU(inplace=True)
 

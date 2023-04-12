@@ -363,7 +363,7 @@ class Activelearning(Tester):
 
     def select(self, exp_name):
         # 添加运行标记
-        running_flag(self.cfg.root)
+        running_flag(self.cfg.get('root', None))
 
         rank, _ = get_dist_info()        
         sample_results = None
@@ -476,4 +476,4 @@ class Activelearning(Tester):
                 os.system('rm ./activelearning/data.tar')
 
             # 添加完成标记
-            finish_flag(self.cfg.root)
+            finish_flag(self.cfg.get('root', None))
