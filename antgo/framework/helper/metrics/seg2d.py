@@ -27,12 +27,13 @@ class SegMIOU(object):
     def __call__(self, preds, gts):
         confusion = np.zeros((self.class_num, self.class_num))
         for pred, gt in zip(preds, gts):
-            sample_confusion = self._fast_hist(np.array(pred).flatten(), np.array(gt).flatten())
+            sample_confusion = self._fast_hist(np.array(pred['pred_segments']).flatten(), np.array(gt['segments']).flatten())
             confusion += sample_confusion
 
         iou = np.diag(confusion) / np.maximum(1.0,confusion.sum(axis=1) + confusion.sum(axis=0) - np.diag(confusion))
         miou_val = float(np.nanmean(iou))
 
+        print()
         print("======== MIOU Err: %f ========" % (miou_val))
         error_info = {
             'miou': miou_val

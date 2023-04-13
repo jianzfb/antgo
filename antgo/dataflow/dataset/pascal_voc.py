@@ -28,6 +28,9 @@ PASCAL2012_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2012"
 class PascalBase(Dataset):
   def __init__(self, year, image_set, dir=None, ext_params=None):
     super(PascalBase, self).__init__(image_set, dir, ext_params)
+    if not os.path.exists(self.dir):
+      os.makedirs(self.dir)
+
     self._year = year
     self._image_set = image_set
     self._devkit_path = dir
@@ -58,13 +61,19 @@ class PascalBase(Dataset):
       maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
       if maybe_data_path is None:
         # auto untar
-        tar = tarfile.open(os.path.join(self.dir, 'VOCtrainval_11-May-2012.tar'), 'r')
-        tar.extractall(self.dir)
-        tar.close()
+        try:
+          tar = tarfile.open(os.path.join(self.dir, 'VOCtrainval_11-May-2012.tar'), 'r')
+          tar.extractall(self.dir)
+          tar.close()
+        except:
+          print(f'Untar {os.path.join(self.dir, "VOCtrainval_11-May-2012.tar")} fail')
 
-        tar = tarfile.open(os.path.join(self.dir, 'VOC2012test.tar'), 'r')
-        tar.extractall(self.dir)
-        tar.close()
+        try:
+          tar = tarfile.open(os.path.join(self.dir, 'VOC2012test.tar'), 'r')
+          tar.extractall(self.dir)
+          tar.close()
+        except:
+          print(f'Untar {os.path.join(self.dir, "VOC2012test.tar")} fail')
 
     self._data_path = os.path.join(self.dir,'VOCdevkit', 'VOC' + self._year)
     self._classes = ('background',
@@ -112,7 +121,7 @@ class PascalBase(Dataset):
                      20: (0, 64, 128)}
     self._c_2_rgb_index = {}
     for k, v in self._c_2_rgb.items():
-      self._c_2_rgb_index[k] = v[0]*255*255+v[1]*255+v[2]
+      self._c_2_rgb_index[k] = v[2]*255*255+v[1]*255+v[0]
 
     self._action_classes = {'phoning': 1,
                             'playinginstrument': 2,
@@ -130,6 +139,7 @@ class PascalBase(Dataset):
     self._class_to_ind = dict(zip(self._classes, range(self._num_classes)))
     self._image_ext = '.jpg'
     self._image_index = self._load_image_set_index()
+    self._image_index_num = len(self._image_index)
 
     # PASCAL specific config options
     self.config = {'cleanup': True,
@@ -147,6 +157,12 @@ class PascalBase(Dataset):
       train_aug = getattr(self, 'aug', None)
       task_type = getattr(self, 'task_type', None)
       if train_aug is not None and task_type == 'SEGMENTATION':
+        if not os.path.exists(os.path.join(self.dir, 'SegmentationClassAug')):
+          os.system(f'cd {self.dir} && wget http://vllab1.ucmerced.edu/~whung/adv-semi-seg/SegmentationClassAug.zip && unzip SegmentationClassAug.zip')
+
+        if not os.path.exists(os.path.join(self.dir, 'trainaug.txt')):
+          os.system(f'cd {self.dir} && wget https://gist.githubusercontent.com/sun11/2dbda6b31acc7c6292d14a872d0c90b7/raw/5f5a5270089239ef2f6b65b1cc55208355b5acca/trainaug.txt')
+  
         assert(os.path.exists(os.path.join(self.dir, 'SegmentationClassAug')))
         assert(os.path.exists(os.path.join(self.dir, 'trainaug.txt')))
         with open(os.path.join(self.dir, 'trainaug.txt'), 'r') as fp:
@@ -163,102 +179,26 @@ class PascalBase(Dataset):
 
   @property
   def size(self):
-    return len(self._image_index) + len(self._aug_dataset)
+    return self._image_index_num + len(self._aug_dataset)
 
   def data_pool(self):
-    if self.train_or_test == 'sample':
-      sample_idxs = list(range(self.size))
-      if self.rng:
-        self.rng.shuffle(sample_idxs)
-
-      for index in sample_idxs:
-        yield self.data_samples[index]
-      return
-
-    epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if epoch >= max_epoches:
-        break
-      epoch += 1
-
-      # data index shuffle
-      idxs = np.arange(len(self._image_index))
-      if self.rng:
-        self.rng.shuffle(idxs)
-
-      for k in idxs:
-        # real index
-        index = self._image_index[k]
-        if self.train_or_test == 'test' and self._year == '2012':
-          image = imread(self.image_path_from_index(index))
-          yield [image, {'file_id': index + self._image_ext}]
-
-          continue
-
-        # annotation
-        gt_roidb = self._load_roidb(index)
-
-        task_type = getattr(self, 'task_type', None)
-        if task_type is not None:
-          if task_type == 'ACTION_CLASSIFICATION':
-            keep_index = []
-            for obj_index, obj_name in enumerate(gt_roidb['category']):
-              if obj_name == 'person':
-                keep_index.append(obj_index)
-
-            if len(keep_index) == 0:
-              continue
-
-            keep_index = [ki for ki in keep_index if gt_roidb['person_action'][ki] is not None]
-            if len(keep_index) == 0:
-              continue
-
-            gt_roidb['category_id'] = np.concatenate([gt_roidb['person_action'][ki].reshape((1,-1)) for ki in keep_index])
-            gt_roidb['bbox'] = gt_roidb['bbox'][keep_index,:]
-            gt_roidb['area'] = gt_roidb['area'][keep_index]
-            gt_roidb['difficult'] = [gt_roidb['difficult'][ki] for ki in keep_index]
-
-            gt_roidb.pop('person_action')
-
-        # image
-        image = imread(self.image_path_from_index(index))
-        # image original size
-        gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
-        gt_roidb['id'] = k
-        
-        # [img, groundtruth]
-        gt_roidb.update({'file_id': index})
-        yield [image, gt_roidb]
-
-      if len(self._aug_dataset) > 0:
-        aug_indxs = np.arange(len(self._aug_dataset))
-        if self.rng:
-          self.rng.shuffle(aug_indxs)
-
-        for k in aug_indxs:
-          image_path = self._aug_dataset[k]
-          image_seg_path = self._aug_seg[k]
-
-          image = imread(image_path)
-          seg_img = imread(image_seg_path)
-          if len(seg_img.shape) == 3:
-            seg_img = seg_img[:,:,0]
-
-          seg_img[np.where(seg_img == 255)] = 0
-
-          yield image, {'segmentation_map': seg_img,
-                        'id': k+len(self._image_index),
-                        'info': (image.shape[0], image.shape[1], image.shape[2])}
-
+    raise NotImplemented
   
   def at(self, id):
     if self.train_or_test == 'sample':
       return self.data_samples[id]
 
+    if id >= self._image_index_num:
+        image_path = self._aug_dataset[id - self._image_index_num]
+        image_seg_path = self._aug_seg[id - self._image_index_num]
+        image = imread(image_path)
+        seg_img = imread(image_seg_path)
+        if len(seg_img.shape) == 3:
+          seg_img = seg_img[:,:,0]
+        return [image, {'segments': seg_img}]
+
     index = self._image_index[id]
     gt_roidb = self._load_roidb(index)
-
     task_type = getattr(self, 'task_type', None)
     if task_type is not None:
       if task_type == 'ACTION_CLASSIFICATION':
@@ -306,7 +246,7 @@ class PascalBase(Dataset):
 
   def _load_roidb(self, index):
     return self._load_pascal_annotation(index)
-    
+
   def _load_image_set_index(self):
     """
     Load the indexes listed in this dataset's image set file.
@@ -362,14 +302,15 @@ class PascalBase(Dataset):
     if segmented is not None:
       has_seg = int(segmented.text)
 
-    seg_img = None
+    seg_img_index = None
     if has_seg:
       seg_file = os.path.join(self._data_path, 'SegmentationClass', index + '.png')
       seg_img = imread(seg_file)
+      seg_img_int = seg_img.astype(np.int32)
+      seg_img_index = seg_img_int[:,:,0]*255*255 + seg_img_int[:,:,1]*255 + seg_img_int[:,:,2]
 
     # Load object bb and segmentation into a data frame.
-    segmentation = []
-    segmentation_map = None
+    # 目标框
     person_action = []
     for ix, obj in enumerate(objs):
       bbox = obj.find('bndbox')
@@ -384,18 +325,6 @@ class PascalBase(Dataset):
       area[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
       category.append(obj.find('name').text.lower().strip())
       difficult.append(int(obj.find('difficult').text))
-
-      if has_seg and seg_img is not None:
-        obj_seg = np.zeros((seg_img.shape[0], seg_img.shape[1]), np.uint8)
-        seg_img_int = seg_img.astype(np.int32)
-        seg_img_index = seg_img_int[:,:,0]*255*255 + seg_img_int[:,:,1]*255 + seg_img_int[:,:,2]
-
-        obj_seg[np.where(seg_img_index == self._c_2_rgb_index[cls])] = cls
-        segmentation.append(obj_seg)
-        if segmentation_map is None:
-          segmentation_map = np.zeros((seg_img.shape[0], seg_img.shape[1]), np.uint8)
-
-        segmentation_map[np.where(seg_img_index == self._c_2_rgb_index[cls])] = cls
 
       if category[-1] == 'person':
         action_cls = obj.find('actions')
@@ -419,7 +348,11 @@ class PascalBase(Dataset):
                   'person_action': person_action}
 
     if has_seg:
-      annotation.update({'segmentation': segmentation, 'segmentation_map': segmentation_map})
+      # 语义分割
+      segmentation = np.zeros((seg_img_index.shape[0], seg_img_index.shape[1]), np.uint8)
+      for cls in set(category_id.tolist()):
+        segmentation[np.where(seg_img_index == self._c_2_rgb_index[cls])] = cls
+      annotation.update({'segments': segmentation})
 
     return annotation
 
@@ -446,3 +379,13 @@ class Pascal2012(PascalBase):
     validation_pascal2012 = Pascal2012('val', self.dir)
 
     return self, validation_pascal2012
+
+# p2012 = Pascal2012('train', '/root/workspace/dataset/temp_dataset', ext_params={'task_type': 'SEGMENTATION', 'aug': True})
+# print(f'p2012 size {p2012.size}')
+# for i in range(p2012.size):
+#   result = p2012.sample(i)
+#   print(i)
+# value = p2012.sample(0)
+# print(value.keys())
+# value = p2012.sample(1)
+# print(value)

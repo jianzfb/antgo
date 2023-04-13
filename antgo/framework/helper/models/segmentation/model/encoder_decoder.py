@@ -52,7 +52,11 @@ class EncoderDecoder(BaseModule):
     def forward_test(self, image, **kwargs):
         x = self.extract_feat(image)
         seg_predict = self.decode_head.simple_test(x)
-        return seg_predict
+        seg_predict = F.interpolate(seg_predict, size=(image.shape[2:]), mode='bilinear')
+        seg_predict = torch.argmax(seg_predict, 1)
+        return {
+            'pred_segments': seg_predict
+        }
 
     def onnx_export(self, image):
         feat = self.extract_feat(image)

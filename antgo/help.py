@@ -101,9 +101,12 @@ def generate_project_exp_example(template_project_folder, target_folder, exp_nam
             with open( os.path.join(target_folder, exp_name, 'main.py'), 'w') as fp:
                 fp.write(content)
 
-            # 修改标准配置文件
+            # 修改标准配置文件 (lsp, pascal_voc)
             os.remove(os.path.join(target_folder, exp_name, 'configs', 'config.py'))
-            shutil.copy(os.path.join(template_project_folder, 'config.py'), os.path.join(target_folder, exp_name, 'configs'))
+            if os.path.exists(os.path.join(template_project_folder, f'{exp_name}_config.py')):
+                shutil.copy(os.path.join(template_project_folder, f'{exp_name}_config.py'), os.path.join(target_folder, exp_name, 'configs'))
+            else:      
+               shutil.copy(os.path.join(template_project_folder, 'config.py'), os.path.join(target_folder, exp_name, 'configs'))
     else:
         logging.warn('MVP code has existed in current path.')
         return

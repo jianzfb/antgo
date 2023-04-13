@@ -184,6 +184,283 @@ class Meta(BaseOperator):
         return sample
 
 
+class ConvertRandomObjJointsAndOffset(BaseOperator):
+    def __init__(self, input_size, heatmap_size, num_joints, scale_factor=0.5, center_factor=0.25, rot_factor=30, with_random=True, inputs=None):
+        super().__init__(inputs=inputs)
+        self.input_size = input_size
+        self._heatmap_size = heatmap_size
+        self._scale_factor = scale_factor
+        self._center_factor = center_factor
+        self.with_random = with_random 
+        self._rot_factor = rot_factor
+        self.num_joints = num_joints
+        self._feat_stride = np.array(self.input_size) / np.array(self._heatmap_size) 
+        self._sigma = 2.0       
+
+    def extend_bbox(self, bbox, image_shape=None):
+        x1, y1, x2, y2 = bbox
+        wb, hb = x2 - x1, y2 - y1
+        scale = 0.15
+
+        if image_shape is not None:
+            height, width = image_shape
+            newx1 = x1 - wb * scale if x1 - wb * scale > 0 else 0
+            newx2 = x2 + wb * scale if x2 + wb * scale < width else width - 1
+            newy1 = y1 - hb * scale if y1 - hb * scale > 0 else 0
+            newy2 = y2 + hb * scale if y2 + hb * scale < height else height - 1
+        else:
+            newx1 = x1 - wb * scale
+            newx2 = x2 + wb * scale
+            newy1 = y1 - hb * scale
+            newy2 = y2 + hb * scale
+        exbox = [int(newx1), int(newy1), int(newx2), int(newy2)]
+        return exbox
+  
+    def _cal_offset(self, heatmap, roi, pt_ori):
+        offset_x = np.zeros((heatmap.shape[0], heatmap.shape[1]))
+        offset_y = np.zeros((heatmap.shape[0], heatmap.shape[1]))
+        weight = np.zeros((heatmap.shape[0], heatmap.shape[1]))
+        weight[heatmap != 0] = 1
+
+        for x in range(roi[0], roi[2]):
+            offset_x[roi[1] : roi[3], x] = pt_ori[0] - x
+        for y in range(roi[1], roi[3]):
+            offset_y[y, roi[0] : roi[2]] = pt_ori[1] - y
+
+        return offset_x, offset_y, weight
+
+    def _target_generator(self, joints_25d, num_joints, _feat_stride):
+        # print(np.max(joints_3d))
+        target_weight = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+        target = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+
+        offset_x = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+        offset_y = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+        tmp_size = 4  # self._sigma * 4
+
+        for i in range(num_joints):
+            mu_x = int(joints_25d[i, 0] / _feat_stride[0] + 0.5)
+            mu_y = int(joints_25d[i, 1] / _feat_stride[1] + 0.5)
+            fmu_x = joints_25d[i, 0] / _feat_stride[0]
+            fmu_y = joints_25d[i, 1] / _feat_stride[1]
+
+            pt_ori = [
+                joints_25d[i, 0] / _feat_stride[0],
+                joints_25d[i, 1] / _feat_stride[1],
+            ]
+            # check if any part of the gaussian is in-bounds
+            ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]
+            br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]
+            if ul[0] >= self._heatmap_size[1] or ul[1] >= self._heatmap_size[0] or br[0] < 0 or br[1] < 0:
+                continue
+
+            # generate gaussian
+            size = 2 * tmp_size + 1
+            x = np.arange(0, size, 1, np.float32)
+            y = x[:, np.newaxis]
+            x0 = y0 = size // 2
+            # the gaussian is not normalized, we want the center value to be equal to 1
+            g = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * (self._sigma**2)))
+
+            fx = np.array([-1, 0, 1])
+            fy = fx[:, np.newaxis]
+            fg = np.exp(-((fx - (fmu_x - mu_x)) ** 2 + (fy - (fmu_y - mu_y)) ** 2) / (2 * (self._sigma**2)))
+            g[y0 - 1 : y0 + 2, x0 - 1 : x0 + 2] += fg
+            g /= g.max()
+
+            # usable gaussian range
+            g_x = max(0, -ul[0]), min(br[0], self._heatmap_size[1]) - ul[0]
+            g_y = max(0, -ul[1]), min(br[1], self._heatmap_size[0]) - ul[1]
+            # image range
+            img_x = max(0, ul[0]), min(br[0], self._heatmap_size[1])
+            img_y = max(0, ul[1]), min(br[1], self._heatmap_size[0])
+
+            target[i, img_y[0] : img_y[1], img_x[0] : img_x[1]] = g[g_y[0] : g_y[1], g_x[0] : g_x[1]]
+
+            offset_x[i], offset_y[i], target_weight[i] = self._cal_offset(
+                target[i], [img_x[0], img_y[0], img_x[1], img_y[1]], pt_ori
+            )
+
+        return target, offset_x, offset_y, target_weight
+
+    def _box_to_center_scale(self, x, y, w, h, aspect_ratio=1.0, scale_mult=1.0):
+        """Convert box coordinates to center and scale.
+        adapted from https://github.com/Microsoft/human-pose-estimation.pytorch
+        """
+        pixel_std = 1
+        center = np.zeros((2), dtype=np.float32)
+        center[0] = x + w * 0.5
+        center[1] = y + h * 0.5
+
+        if w > aspect_ratio * h:
+            h = w / aspect_ratio
+        elif w < aspect_ratio * h:
+            w = h * aspect_ratio
+        scale = np.array([w * 1.0 / pixel_std, h * 1.0 / pixel_std], dtype=np.float32)
+        if center[0] != -1:
+            scale = scale * scale_mult
+        return center, scale
+
+    def get_dir(self, src_point, rot_rad):
+        """Rotate the point by `rot_rad` degree."""
+        sn, cs = np.sin(rot_rad), np.cos(rot_rad)
+
+        src_result = [0, 0]
+        src_result[0] = src_point[0] * cs - src_point[1] * sn
+        src_result[1] = src_point[0] * sn + src_point[1] * cs
+
+        return src_result
+
+    def get_3rd_point(self, a, b):
+        """Return vector c that perpendicular to (a - b)."""
+        direct = a - b
+        return b + np.array([-direct[1], direct[0]], dtype=np.float32)
+
+    def get_affine_transform(self, center, scale, rot, output_size, shift=np.array([0, 0], dtype=np.float32), inv=0):
+        if not isinstance(scale, np.ndarray) and not isinstance(scale, list):
+            scale = np.array([scale, scale])
+
+        scale_tmp = scale
+        src_w = scale_tmp[0]
+        dst_w = output_size[0]
+        dst_h = output_size[1]
+
+        rot_rad = np.pi * rot / 180
+        src_dir = self.get_dir([0, src_w * -0.5], rot_rad)
+        dst_dir = np.array([0, dst_w * -0.5], np.float32)
+
+        src = np.zeros((3, 2), dtype=np.float32)
+        dst = np.zeros((3, 2), dtype=np.float32)
+        src[0, :] = center + scale_tmp * shift
+        src[1, :] = center + src_dir + scale_tmp * shift
+        dst[0, :] = [dst_w * 0.5, dst_h * 0.5]
+        dst[1, :] = np.array([dst_w * 0.5, dst_h * 0.5]) + dst_dir
+
+        src[2:, :] = self.get_3rd_point(src[0, :], src[1, :])
+        dst[2:, :] = self.get_3rd_point(dst[0, :], dst[1, :])
+
+        if inv:
+            trans = cv2.getAffineTransform(np.float32(dst), np.float32(src))
+        else:
+            trans = cv2.getAffineTransform(np.float32(src), np.float32(dst))
+
+        return trans
+
+    def affine_transform(self, pt, t):
+        new_pt = np.array([pt[0], pt[1], 1.0]).T
+        new_pt = np.dot(t, new_pt)
+        return new_pt[:2]
+
+    def __call__(self, sample, context=None):
+        image = sample['image']
+
+        joints2d = sample['joints2d']
+        if joints2d.size == 0:
+            image_h, image_w = image.shape[:2]
+            
+            inp_h, inp_w = self.input_size            
+            xmin = np.random.randint(0, image_w - inp_w)
+            ymin = np.random.randint(0, image_h - inp_h)
+            center, scale = self._box_to_center_scale(xmin, ymin, inp_w, inp_h, 1.0)
+            trans = self.get_affine_transform(center, scale, 0, [inp_w, inp_h])
+
+            # 裁减图像
+            image = cv2.warpAffine(image, trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
+            target_weight = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+            target = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+            offset_x = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+            offset_y = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+            # 关节点可见性
+            joints_vis = np.zeros((self.num_joints), dtype=np.float32)
+            sample = {
+                'image': image,
+                'heatmap': target,
+                'offset_x': offset_x,
+                'offset_y': offset_y,
+                'heatmap_weight': target_weight,
+                'joints_vis': joints_vis,
+                'joints2d': np.zeros((self.num_joints, 2)),
+                'bboxes': np.array([xmin, ymin, xmin+inp_w, ymin+inp_h])
+            }
+            return sample
+        
+        bbox = np.zeros((4), dtype=np.int32)
+        if len(joints2d.shape) == 3:
+            obj_num = joints2d.shape[0]
+            obj_i = np.random.randint(0, obj_num)
+            joints2d = joints2d[obj_i]
+            
+            if 'bboxes' in sample and len(sample['bboxes']) > 0:
+                bbox = sample['bboxes'][obj_i]
+            else:
+                x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
+                bbox = [x1, y1, x2, y2]
+        else:
+            if 'bboxes' in sample and len(sample['bboxes']) > 0:
+                bbox = sample['bboxes']
+            else:
+                x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
+                bbox = [x1, y1, x2, y2]
+        
+        # 动态扩展bbox
+        bbox = self.extend_bbox(bbox, image.shape[:2])
+        xmin, ymin, xmax, ymax = bbox
+        center, scale = self._box_to_center_scale(xmin, ymin, xmax - xmin, ymax - ymin, 1.0)
+        if self.with_random:
+            sf = self._scale_factor
+            ran_tmp = np.clip((np.random.rand() - 0.2) * 1.2 * sf + 1, 1 - 0.1, 1 + sf)
+            scale = scale * ran_tmp
+
+        if self.with_random:
+            cf = self._center_factor
+            dx = (xmax - xmin) * np.random.uniform(-cf, cf)
+            dy = (ymax - ymin) * np.random.uniform(-cf, cf)
+            center[0] += dx
+            center[1] += dy
+
+        r = 0.0
+        if self.with_random:
+            rf = self._rot_factor
+            r = np.clip(np.random.randn() * rf, -rf * 2, rf * 2) if np.random.uniform(0, 1) <= 0.7 else 0
+
+        inp_h, inp_w = self.input_size
+        trans = self.get_affine_transform(center, scale, r, [inp_w, inp_h])
+
+        # 裁减图像
+        image = cv2.warpAffine(image, trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
+        # 转换2D关键点
+        for i in range(self.num_joints):
+            joints2d[i, 0:2] = self.affine_transform(joints2d[i, 0:2], trans)
+
+        # 转换监督目标
+        target, offset_x, offset_y, target_weight = \
+            self._target_generator(joints2d, self.num_joints, self._feat_stride)
+
+        # 关节点可见性
+        if 'joints_vis' in sample:
+            joints_vis = sample['joints_vis']
+        else:
+            joints_vis = np.ones((self.num_joints), dtype=np.float32)
+
+        # for joint_i, (x,y) in enumerate(joints2d):
+        #     x, y = int(x), int(y)
+        #     if joints_vis[joint_i]:
+        #         cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
+        # cv2.imwrite(f'./aabb/112233.png', image)
+
+        sample = {
+            'image': image,
+            'heatmap': target,
+            'offset_x': offset_x,
+            'offset_y': offset_y,
+            'heatmap_weight': target_weight,
+            'joints_vis': joints_vis,
+            'joints2d': joints2d,
+            'bboxes': np.array(bbox)
+        }
+        return sample
+
+
 class UnSqueeze(BaseOperator):
     def __init__(self, axis, keys=[], inputs=None):
         super(UnSqueeze, self).__init__(inputs=inputs)
@@ -312,6 +589,7 @@ class KeepRatio(BaseOperator):
 
             # 调整segments
             if 'segments' in sample and sample['segments'].size != 0:
+                # 无效位置填充255
                 sample['segments'] = cv2.copyMakeBorder(
                 sample['segments'], top_padding, bottom_padding, left_padding, right_padding, cv2.BORDER_CONSTANT, value=255)
 
@@ -359,7 +637,7 @@ class Rotation(BaseOperator):
     """
     Rotate the image with bounding box
     """
-    def __init__(self, degree=30, border_value=[0, 0, 0], label_border_value=0,inputs=None):
+    def __init__(self, degree=30, border_value=[0, 0, 0], label_border_value=255,inputs=None):
         super(Rotation, self).__init__(inputs=inputs)
         self._degree = degree
         self._border_value = border_value
@@ -419,6 +697,7 @@ class Rotation(BaseOperator):
             sample['joints2d'] = gt_kpts
 
         if 'segments' in sample and sample['segments'].size > 0:
+            # 无效位置填充255
             label = cv2.warpAffine(
                 sample['segments'],
                 M=rot_mat,
@@ -1932,10 +2211,10 @@ class RandomScaledCrop(BaseOperator):
         sample['image'] = canvas
 
         if 'segments' in sample and sample['segments'].size != 0:
+            # 无效区域填充255
             segments = sample['segments']
             segments = cv2.resize(segments, (resize_w, resize_h), interpolation=self.interp)
-            segments_canvas = np.zeros((target_crop_h, target_crop_w), dtype=segments.dtype)
-            
+            segments_canvas = np.ones((target_crop_h, target_crop_w), dtype=segments.dtype) * 255
             segments_canvas[:min(target_crop_h, resize_h), :min(target_crop_w, resize_w)] = \
                 segments[offset_y:offset_y + target_crop_h, offset_x:offset_x + target_crop_w]
             sample['segments'] = segments_canvas.copy()
@@ -2098,7 +2377,7 @@ class ResizeStepScaling(BaseOperator):
 
         if 'segments' in sample and sample['segments'].size != 0:
             segments = sample['segments']
-            segments = resize(segments, (w, h), cv2.INTER_LINEAR)
+            segments = resize(segments, (w, h), cv2.INTER_NEAREST)
             sample['segments'] = segments
 
         return sample

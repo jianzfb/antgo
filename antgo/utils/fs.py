@@ -48,15 +48,14 @@ def maybe_here(dest_dir, target_file):
   while maybe_dest_dir is not None:
     target_file_path = os.path.join(maybe_dest_dir, target_file)
     if not os.path.exists(target_file_path):
-      is_over = False
+      is_over = True
       for ff in os.listdir(maybe_dest_dir):
         if ff[0] == '.':
           continue
         if os.path.isdir(os.path.join(maybe_dest_dir, ff)):
           maybe_dest_dir = os.path.join(maybe_dest_dir, ff)
+          is_over = False
           break
-
-        is_over = True
 
       if is_over:
         maybe_dest_dir = None

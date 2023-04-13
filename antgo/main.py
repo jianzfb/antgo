@@ -43,6 +43,7 @@ DEFINE_string('type', None, '')     # 类型
 DEFINE_indicator('cloud', True, '') # 指定云端运行
 DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')  # 是否项目自动优化
+DEFINE_indicator("finetune", True, '')  # 是否启用finetune模式
 DEFINE_string('id', None, '')
 DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')

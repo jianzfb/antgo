@@ -21,7 +21,8 @@ from .operators import (
   ResizeStepScaling,
   AutoAugmentImage,
   Permute,
-  UnSqueeze)
+  UnSqueeze,
+  ConvertRandomObjJointsAndOffset)
 
 __all__ = [
   'DecodeImage', 
@@ -42,5 +43,6 @@ __all__ = [
   'ResizeStepScaling',
   'AutoAugmentImage',
   'UnSqueeze',
+  'ConvertRandomObjJointsAndOffset',
   'Meta'
 ]

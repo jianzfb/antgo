@@ -28,16 +28,16 @@ class OKS(object):
             if np.sum(gt_joints_vis) == 0:
                 continue
             
-            gt_joints_vis = np.array(gt_joints_vis).reshpae(-1, 1)
+            gt_joints_vis = np.array(gt_joints_vis).reshape(-1, 1)
             x0,y0,x1,y1 = gt_bboxes            
-            joints_2d_dist = np.power(pred_joints2d-gt_joints2d, 2.0)
+            joints_2d_dist = np.power(pred_joints2d[:,:2]-gt_joints2d, 2.0)
             Z = 2.0 * (x1-x0)*(y1-y0) * self.sigma
             
             oks_v = np.sum(np.exp(-joints_2d_dist/Z)*gt_joints_vis)/np.sum(gt_joints_vis)
             oks_list.append(oks_v)
         
-        
         oks_err = float(np.mean(oks_list))
+        print()
         print("======== OKS Err: %f ========" % (oks_err))
 
         error_info = {
