@@ -22,7 +22,9 @@ from .operators import (
   AutoAugmentImage,
   Permute,
   UnSqueeze,
-  ConvertRandomObjJointsAndOffset)
+  ConvertRandomObjJointsAndOffset,
+  ResizeByShort,
+  FixedCrop)
 
 __all__ = [
   'DecodeImage', 
@@ -44,5 +46,7 @@ __all__ = [
   'AutoAugmentImage',
   'UnSqueeze',
   'ConvertRandomObjJointsAndOffset',
+  'ResizeByShort',
+  'FixedCrop',
   'Meta'
 ]

@@ -70,11 +70,11 @@ class Tester(object):
             
             assert(not test_loader_cfg['shuffle'])
             if getattr(self.dataset, 'is_kv', False):
-                self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
+                self.data_loader = build_kv_dataloader(self.dataset, **test_loader_cfg)
             elif isinstance(self.dataset, torch.utils.data.IterableDataset):
                 self.data_loader = build_iter_dataloader(self.dataset, **test_loader_cfg)
             else:
-                self.data_loader = build_kv_dataloader(self.dataset, **test_loader_cfg)
+                self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
 
     def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False):
         # build the model and load checkpoint

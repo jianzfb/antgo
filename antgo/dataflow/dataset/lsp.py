@@ -20,7 +20,7 @@ class LSP(Dataset):
         super(LSP, self).__init__(train_or_test, dir, ext_params)
         # 不区分训练集和测试集，仅用来进行模型正确性测试
         url_address = 'http://image.mltalker.com/lsp_dataset.zip'
-        self.class_num = [
+        self.class_name = [
             'Right ankle',
             'Right knee',
             'Right hip',

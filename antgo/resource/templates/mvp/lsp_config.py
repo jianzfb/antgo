@@ -63,7 +63,7 @@ data=dict(
     ),
     val=dict(
         type='LSP',
-        train_or_test='train',
+        train_or_test='val',
         dir='./lsp_dataset',
         pipeline=[
             dict(type="ConvertRandomObjJointsAndOffset", input_size=(128,128), heatmap_size=(16,16), num_joints=14, with_random=False),
@@ -82,7 +82,7 @@ data=dict(
     ),
     test=dict(
         type='LSP',
-        train_or_test='train',
+        train_or_test='test',
         dir='./lsp_dataset',
         pipeline=[
             dict(type="ConvertRandomObjJointsAndOffset", input_size=(128,128), heatmap_size=(16,16), num_joints=14, with_random=False),

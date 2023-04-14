@@ -490,17 +490,17 @@ class KeepRatio(BaseOperator):
 
         # 获得目标范围
         if gt_bbox.shape[0] != 0 and self.focus_on_objects:
-            min_x = max(np.min(gt_bbox[:,0]), 1)
-            min_y = max(np.min(gt_bbox[:,1]), 1)
-            max_x = min(np.max(gt_bbox[:,2]), width - 1)
-            max_y = min(np.max(gt_bbox[:,3]), height -1 )
-            rwi = max_x - min_x
-            rhi = max_y - min_y
+            min_x = max(np.min(gt_bbox[:,0]), 0)
+            min_y = max(np.min(gt_bbox[:,1]), 0)
+            max_x = min(np.max(gt_bbox[:,2]), width)
+            max_y = min(np.max(gt_bbox[:,3]), height)
+            rwi = max_x - min_x + 20
+            rhi = max_y - min_y + 20
         else:
-            min_x = 1
-            min_y = 1
-            max_x = width - 1
-            max_y = height - 1
+            min_x = 0
+            min_y = 0
+            max_x = width
+            max_y = height
             rwi = max_x - min_x
             rhi = max_y - min_y
 
@@ -509,11 +509,11 @@ class KeepRatio(BaseOperator):
         if cur_ratio < self.aspect_ratio:
             dwi = width
             dhi = int(dwi / self.aspect_ratio)
-            if dhi <= rhi:
-                dhi = rhi + 20
+            if dhi < rhi:
+                dhi = rhi
                 dwi = int(dhi * self.aspect_ratio)
 
-            left = np.random.randint(0, min_x)
+            left = np.random.randint(0, min_x + 1)
             right = np.random.randint(min(max_x, min(width-1, dwi-1)), width)
 
             top = np.random.randint(max(0, max_y - dhi), min_y+1)
@@ -521,11 +521,11 @@ class KeepRatio(BaseOperator):
         else:
             dhi = height
             dwi = int(dhi * self.aspect_ratio)
-            if dwi <= rwi:
-                dwi = rwi + 20
+            if dwi < rwi:
+                dwi = rwi
                 dhi = int(dwi / self.aspect_ratio)
 
-            top = np.random.randint(0, min_y)
+            top = np.random.randint(0, min_y+1)
             bottom = np.random.randint(min(max_y, min(height-1, dhi-1)), height)
 
             left = np.random.randint(max(0, max_x - dwi), min_x+1)
@@ -534,12 +534,12 @@ class KeepRatio(BaseOperator):
         if len(gt_bbox) > 0:
             gt_bbox[:, [0,2]] = gt_bbox[:, [0,2]] - left
             gt_bbox[:, [1,3]] = gt_bbox[:, [1,3]] - top
-        
+
         # 调整joints2d NxCx2
         if 'joints2d' in sample and len(sample['joints2d']) != 0:
             sample['joints2d'][:, :, 0] = sample['joints2d'][:, :, 0] - left
             sample['joints2d'][:, :, 1] = sample['joints2d'][:, :, 1] - top
-            
+
             # 调整jonits_vis NxC
             if 'joints_vis' in sample and len(sample['joints_vis']) != 0:
                 pos_outlie_x = sample['joints2d'][:, :, 0] <= 0
@@ -597,7 +597,7 @@ class KeepRatio(BaseOperator):
             if len(gt_bbox) > 0:
                 gt_bbox[:, [0,2]] = gt_bbox[:, [0,2]] + left_padding
                 gt_bbox[:, [1,3]] = gt_bbox[:, [1,3]] + top_padding
-            
+
             # 调整joints2d NxCx2
             if 'joints2d' in sample and len(sample['joints2d']) > 0:
                 gt_kpts = sample['joints2d']
@@ -631,6 +631,7 @@ class KeepRatio(BaseOperator):
             sample = self._random_crop_or_padding_image(sample)
 
         return sample
+
 
 # FINISH FIX
 class Rotation(BaseOperator):
@@ -2152,22 +2153,25 @@ class RandomScaledCrop(BaseOperator):
         self.interp = interp
 
     def __call__(self, sample, context=None):
-        w = sample['width']
-        h = sample['height']
+        h, w = sample['image'].shape[:2]
         random_scale = np.random.uniform(*self.scale_range)
-        random_size = self.target_size * random_scale
-        scale = random_size / (max(h, w))
-        resize_w = int(round(w * scale))
-        resize_h = int(round(h * scale))
+        resize_w = int(round(w * random_scale))
+        resize_h = int(round(h * random_scale))
 
-        # 截取target_size大小
-        target_crop_w = int(round(w * (self.target_size/(max(h,w)))))
-        target_crop_h = int(round(h * (self.target_size/(max(h,w)))))
+        # 截取target_size大小 (保持同比例)
+        target_crop_w = 0
+        target_crop_h = 0
+        if isinstance(self.target_size, list) or isinstance(self.target_size, tuple):
+            target_crop_w, target_crop_h = self.target_size
+        else:
+            target_crop_w, target_crop_h = self.target_size, self.target_size
+
         offset_x = int(max(0, np.random.uniform(0., max(resize_w - target_crop_w, 1))))
         offset_y = int(max(0, np.random.uniform(0., max(resize_h - target_crop_h, 1))))
 
+        valid = None
         if 'bboxes' in sample and len(sample['bboxes']) > 0:
-            scale_array = np.array([scale, scale] * 2, dtype=np.float32)      
+            scale_array = np.array([random_scale, random_scale] * 2, dtype=np.float32)      
             shift_array = np.array([offset_x, offset_y] * 2, dtype=np.float32)
 
             boxes = sample['bboxes'] * scale_array - shift_array
@@ -2181,16 +2185,23 @@ class RandomScaledCrop(BaseOperator):
             sample['labels'] = sample['labels'][valid]
 
         if 'joints2d' in sample and len(sample['joints2d']) > 0:
-            scale_array = np.array([scale, scale], dtype=np.float32).reshape(1,1,2)              
+            scale_array = np.array([random_scale, random_scale], dtype=np.float32).reshape(1,1,2)              
             shift_array = np.array([offset_x, offset_y], dtype=np.float32).reshape(1,1,2)
             joints2d = sample['joints2d']*scale_array - shift_array
 
+            if valid is not None:
+                # 挑选出有效joints2d (与bboxes对齐)
+                joints2d = joints2d[valid]
+                
             if 'joints_vis' in sample:
                 joints_vis = sample['joints_vis']
                 invalid_p =  joints2d[:,0] < 0 or joints2d[:,0] > target_crop_w or joints2d[:,1] < 0 or joints2d[:,1] > target_crop_h
                 joints_vis[invalid_p] = 0
+                if valid is not None:
+                    # 挑选出有效joints_vis (与bboxes对齐)
+                    joints_vis = joints_vis[valid]
                 sample['joints_vis'] = joints_vis
-            
+
             joints2d[:,:,0] = np.clip(joints2d[:,:,0], 0, target_crop_w)
             joints2d[:,:,1] = np.clip(joints2d[:,:,1], 0, target_crop_h)
             sample['joints2d'] = joints2d
@@ -2221,6 +2232,101 @@ class RandomScaledCrop(BaseOperator):
 
         if 'image_meta' in sample:
             sample['image_meta']['image_shape'] = (target_crop_h, target_crop_w)
+        return sample
+
+
+class FixedCrop(BaseOperator):
+    def __init__(self, target_size, align='center', inputs=None):
+        super().__init__(inputs)
+        self.align = align
+        assert(self.align in ['center', 'lefttop', 'rightbottom'])
+        self.target_size = target_size
+        
+    def __call__(self, sample, context=None):
+        image = sample['image']
+        h,w = image.shape[:2]
+        target_crop_w = 0
+        target_crop_h = 0
+        if isinstance(self.target_size, list) or isinstance(self.target_size, tuple):
+            target_crop_w, target_crop_h = self.target_size
+        else:
+            target_crop_w, target_crop_h = self.target_size, self.target_size
+
+        cx = w/2
+        cy = h/2
+        
+        if self.align == 'lefttop':
+            cx, cy = target_crop_w/2, target_crop_h/2
+        elif self.align == 'rightbottom':
+            cx, cy = w-target_crop_w/2, h-target_crop_h/2
+        
+        offset_x = int(cx - target_crop_w/2)
+        offset_y = int(cy - target_crop_h/2)
+
+        valid = None
+        if 'bboxes' in sample and len(sample['bboxes']) > 0:
+            shift_array = np.array([offset_x, offset_y] * 2, dtype=np.float32)
+
+            boxes = sample['bboxes'] - shift_array
+            boxes[:,0::2] = np.clip(boxes[:,0::2], 0, target_crop_w)
+            boxes[:,1::2] = np.clip(boxes[:,1::2], 0, target_crop_h)
+    
+            # filter boxes with no area
+            area = np.prod(boxes[..., 2:] - boxes[..., :2], axis=1)
+            valid = (area > 1.).nonzero()[0]
+            sample['bboxes'] = boxes[valid]
+            sample['labels'] = sample['labels'][valid]
+
+        if 'joints2d' in sample and len(sample['joints2d']) > 0:
+            shift_array = np.array([offset_x, offset_y], dtype=np.float32).reshape(1,1,2)
+            joints2d = sample['joints2d'] - shift_array
+
+            if valid is not None:
+                # 挑选出有效joints2d (与bboxes对齐)
+                joints2d = joints2d[valid]
+                
+            if 'joints_vis' in sample:
+                joints_vis = sample['joints_vis']
+                invalid_p =  joints2d[:,0] < 0 or joints2d[:,0] > target_crop_w or joints2d[:,1] < 0 or joints2d[:,1] > target_crop_h
+                joints_vis[invalid_p] = 0
+                if valid is not None:
+                    # 挑选出有效joints_vis (与bboxes对齐)
+                    joints_vis = joints_vis[valid]
+                sample['joints_vis'] = joints_vis
+
+            joints2d[:,:,0] = np.clip(joints2d[:,:,0], 0, target_crop_w)
+            joints2d[:,:,1] = np.clip(joints2d[:,:,1], 0, target_crop_h)
+            sample['joints2d'] = joints2d
+
+        canvas = None
+        if len(image.shape) == 3:
+            canvas = np.zeros((target_crop_h, target_crop_w, 3), dtype=image.dtype)
+        else:
+            canvas = np.zeros((target_crop_h, target_crop_w), dtype=image.dtype)
+
+        canvas[:min(target_crop_h, h), :min(target_crop_w, w)] = \
+            image[offset_y:offset_y + target_crop_h, offset_x:offset_x + target_crop_w]
+
+        sample['height'] = target_crop_h
+        sample['width'] = target_crop_w
+        sample['image'] = canvas
+
+        if 'segments' in sample and sample['segments'].size != 0:
+            # 无效区域填充255
+            segments = sample['segments']
+            segments_canvas = np.ones((target_crop_h, target_crop_w), dtype=segments.dtype) * 255
+            segments_canvas[:min(target_crop_h, h), :min(target_crop_w, w)] = \
+                segments[offset_y:offset_y + target_crop_h, offset_x:offset_x + target_crop_w]
+            sample['segments'] = segments_canvas.copy()
+
+        if 'image_meta' in sample:
+            sample['image_meta']['image_shape'] = (target_crop_h, target_crop_w)
+
+        # image = sample['image']
+        # for x0,y0, x1,y1 in sample['bboxes']:
+        #     image = cv2.rectangle(image, (int(x0), int(y0)), (int(x1), int(y1)), (0,0,255), 1)
+        
+        # cv2.imwrite('/root/workspace/handtracking/visalso_dataset/abcd.png', image)
         return sample
 
 
@@ -2438,6 +2544,35 @@ class ResizeRangeScaling(BaseOperator):
         if 'segments' in sample and sample['segments'].size != 0:
             segments = sample['segments']
             segments, _ = resize_long(segments, random_size, cv2.INTER_NEAREST)
+            sample['segments'] = segments
+
+        return sample
+
+
+# FINISH FIX
+class ResizeByShort(BaseOperator):
+    def __init__(self, short_size, inputs=None):
+        super().__init__(inputs=inputs)
+        self.short_size = short_size
+
+    def __call__(self, sample, context=None):
+        im = sample['image']
+        im, scale = resize_short(im, self.short_size)
+        sample['image'] = im
+
+        if 'bboxes' in sample and len(sample['bboxes']) > 0:
+            scale_array = np.array([scale, scale] * 2, dtype=np.float32)      
+            boxes = sample['bboxes'] * scale_array
+            sample['bboxes'] = boxes
+
+        if 'joints2d' in sample and len(sample['joints2d']) > 0:
+            scale_array = np.array([scale, scale], dtype=np.float32).reshape(1,1,2) 
+            joints2d = sample['joints2d'] * scale_array
+            sample['joints2d'] = joints2d            
+
+        if 'segments' in sample and sample['segments'].size != 0:
+            segments = sample['segments']
+            segments, _ = resize_long(segments, self.short_size, cv2.INTER_NEAREST)
             sample['segments'] = segments
 
         return sample

@@ -8,7 +8,8 @@ from .pascal_voc import Pascal2007, Pascal2012
 from .coco2017 import COCO2017
 from .interhand26M import InterHand26M
 from .lsp import LSP
+from .visalso import VisalSO
 from .imagenet import ImageNet
 __all__ = [
-  'Cifar10', 'Cifar100', 'ImageNet', 'Pascal2007', 'Pascal2012', 'COCO2017', 'LSP', 'Dataset'
+  'Cifar10', 'Cifar100', 'ImageNet', 'Pascal2007', 'Pascal2012', 'COCO2017', 'LSP', 'VisalSO', 'Dataset'
 ]
