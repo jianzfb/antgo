@@ -195,7 +195,7 @@ class FcosHead(BaseDenseHead):
              image_meta,
              gt_bboxes_ignore=None):
         target_result, avg_factor = \
-            self.get_targets(bboxes, labels, center_heatmap_pred.shape, image_meta)
+            self.get_targets(bboxes, labels, center_heatmap_pred.shape, image_meta, center_heatmap_pred.device)
 
         center_heatmap_target = target_result['center_heatmap_target']
         reg_targets = target_result['reg_targets']
@@ -227,7 +227,7 @@ class FcosHead(BaseDenseHead):
         coords = torch.stack([shift_x, shift_y], -1) + stride // 2
         return coords
 
-    def get_targets(self, gt_bboxes, gt_labels, feat_shape, image_meta):
+    def get_targets(self, gt_bboxes, gt_labels, feat_shape, image_meta, device):
         """Compute regression and classification targets in multiple images.
 
         Args:
@@ -255,16 +255,15 @@ class FcosHead(BaseDenseHead):
         width_ratio = float(feat_w / img_w)
         height_ratio = float(feat_h / img_h)
 
-        center_heatmap_target = gt_bboxes[-1].new_zeros(
-            [bs, self.num_classes, feat_h, feat_w])
+        center_heatmap_target = torch.zeros([bs, self.num_classes, feat_h, feat_w], dtype=torch.float32, device=device)
         reg_target_list = []
         reg_weight_list = []
         for batch_id in range(bs):
             gt_bbox = gt_bboxes[batch_id]       # gt_bbox shape: Nx4
             if gt_bbox.shape[0] == 0:
                 # 防止无目标样本
-                reg_target_list.append(gt_bboxes[-1].new_zeros([4, feat_h, feat_w]))
-                reg_weight_list.append(gt_bboxes[-1].new_zeros([1, feat_h, feat_w]))
+                reg_target_list.append(torch.zeros([4, feat_h, feat_w], dtype=torch.float32, device=device))
+                reg_weight_list.append(torch.zeros([1, feat_h, feat_w], dtype=torch.float32, device=device))
                 continue
             
             coords = self.coords_fmap(h=feat_h, w=feat_w).to(device=center_heatmap_target.device) #[h*w,2]
@@ -321,7 +320,7 @@ class FcosHead(BaseDenseHead):
                 scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
 
                 radius = gaussian_radius([scale_box_h, scale_box_w], min_overlap=0.3)
-                radius = max(1, int(radius))
+                radius = max(int(1), int(radius))
 
                 ind = gt_label[j]
                 gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius)

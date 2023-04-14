@@ -81,7 +81,7 @@ class EvalHook(Hook):
         'acc', 'top', 'AR@', 'auc', 'precision', 'mAP', 'mDice', 'mIoU',
         'mAcc', 'aAcc'
     ]
-    _default_less_keys = ['loss']
+    _default_less_keys = ['loss', 'err']
 
     def __init__(self,
                  dataloader,

@@ -11,8 +11,8 @@ import numpy as np
 
 __all__ = ['LIP']
 class LIP(Dataset):
-  def __init__(self, train_or_test, dir=None, params=None):
-    super(LIP, self).__init__(train_or_test, dir, params)
+  def __init__(self, train_or_test, dir=None, ext_params=None):
+    super(LIP, self).__init__(train_or_test, dir, ext_params)
     assert (train_or_test in ['train', 'sample', 'val'])
 
     if self.train_or_test == 'sample':

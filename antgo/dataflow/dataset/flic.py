@@ -12,8 +12,8 @@ import numpy as np
 
 __all__ = ['FLIC']
 class FLIC(Dataset):
-  def __init__(self, train_or_test, dir=None, params=None):
-    super(FLIC, self).__init__(train_or_test, dir)
+  def __init__(self, train_or_test, dir=None, ext_params=None):
+    super(FLIC, self).__init__(train_or_test, dir, ext_params)
     assert(train_or_test in ['train', 'test'])
     matr = io.loadmat(os.path.join(dir, 'examples.mat'))
     dataset = matr['examples'][0]

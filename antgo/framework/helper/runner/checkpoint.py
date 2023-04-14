@@ -4,6 +4,7 @@ import os
 import os.path as osp
 import pkgutil
 import re
+from tabnanny import check
 import time
 import warnings
 from collections import OrderedDict
@@ -585,6 +586,8 @@ def load_checkpoint(model,
     # get state_dict from checkpoint
     if 'state_dict' in checkpoint:
         state_dict = checkpoint['state_dict']
+    elif 'model_state' in checkpoint:
+        state_dict = checkpoint['model_state']
     else:
         state_dict = checkpoint
 

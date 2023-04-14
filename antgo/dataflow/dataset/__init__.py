@@ -4,68 +4,12 @@
 # @Author  : jian<jian@mltalker.com>
 from .dataset import Dataset
 from .cifar import Cifar10, Cifar100
+from .pascal_voc import Pascal2007, Pascal2012
+from .coco2017 import COCO2017
+from .interhand26M import InterHand26M
+from .lsp import LSP
+from .visalso import VisalSO
 from .imagenet import ImageNet
 __all__ = [
-  'Cifar10', 'Cifar100', 'ImageNet', 'Dataset'
+  'Cifar10', 'Cifar100', 'ImageNet', 'Pascal2007', 'Pascal2012', 'COCO2017', 'LSP', 'VisalSO', 'Dataset'
 ]
-
-
-# from pkgutil import walk_packages
-# import os
-# import os.path
-# from .simplecsvs import *
-# from .simpleimages import *
-# from .simplevideos import *
-# from .standard import *
-
-
-# class AntDatasetFactory(object):
-#   factory_dataset = {}
-
-#   @staticmethod
-#   def dataset(name, parse_flag=''):
-#     if name is None or name == '':
-#       return AntDatasetFactory.factory_dataset['EmptyDataset']
-
-#     if name in AntDatasetFactory.factory_dataset:
-#       return AntDatasetFactory.factory_dataset[name]
-
-#     for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
-#       if dataset_name.lower() == name.lower():
-#         return dataset_obj
-
-#     if parse_flag == 'csv':
-#       return CSV
-      
-#     if name.lower().startswith('image'):
-#       return SimpleImages
-#     elif name.lower().startswith('video'):
-#       return SimpleVideos
-
-#     return AntDatasetFactory.factory_dataset['EmptyDataset']
-
-#   @staticmethod
-#   def add_custom_dataset(custom_dataset):
-#     for dataset_name, dataset_obj in AntDatasetFactory.factory_dataset.items():
-#       if dataset_obj == custom_dataset:
-#         return
-
-#     AntDatasetFactory.factory_dataset[custom_dataset.__name__] = custom_dataset
-
-# def _global_import(name):
-#   p = __import__(name, globals(), locals(), level=1)
-#   globals().pop(name)
-#   lst = p.__all__ if '__all__' in dir(p) else dir(p)
-#   for k in lst:
-#     # add global varaible
-#     globals()[k] = p.__dict__[k]
-
-#     # register in Dataset Factory
-#     AntDatasetFactory.factory_dataset[k] = p.__dict__[k]
-
-
-# for _, module_name, _ in walk_packages([os.path.dirname(__file__)]):
-#   if not module_name.startswith('_'):
-#     if module_name in ['tfrecordsreader', 'dataset', 'simplecsvs', 'simpleimages', 'standard']:
-#       continue
-#     _global_import(module_name)

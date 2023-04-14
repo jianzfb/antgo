@@ -363,8 +363,6 @@ class Trainer(BaseTrainer):
 
                 dist.barrier()
                 self.runner.load_checkpoint(checkpoint_path)
-                # 删除临时模型文件
-                os.remove(checkpoint_path)
         
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################

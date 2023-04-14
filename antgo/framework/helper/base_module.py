@@ -202,7 +202,7 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         else:
             num_samples = len(data['image'])
             losses = self(**data, **kwargs)
-        
+
         loss, log_vars = self._parse_losses(losses)
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=num_samples)

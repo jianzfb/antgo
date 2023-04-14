@@ -26,7 +26,6 @@ from .optimizer import (Fp16OptimizerHook, GradientCumulativeFp16OptimizerHook,
 from .profiler import ProfilerHook
 from .sampler_seed import DistSamplerSeedHook
 from .sync_buffer import SyncBuffersHook
-from .metrics import COCOCompatibleEval
 from .weight_adjust import Weighter
 
 __all__ = [
