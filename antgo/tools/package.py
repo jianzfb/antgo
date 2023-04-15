@@ -172,14 +172,15 @@ class __SampleDataGenerator(object):
                 # 格式化一条样本
                 sample = json.loads(content)
                 
+                # process
+                self.__process_sample(src_folder, sample, data_cache)
+                
                 # 读取下一条样本数据
                 content = fp.readline()
                 content = content.strip()
                 sample_i += 1
                 if content == '':
                     break
-
-                self.__process_sample(src_folder, sample, data_cache)
     
     def json_mode_produce(self, start_ii, stop_ii, json_file, data_cache, src_folder):
         with open(json_file, 'r', encoding="utf-8") as fp:
