@@ -14,7 +14,7 @@ import time
 import numpy as np
 from collections import defaultdict
 import sys
-
+sys.path.append('/Users/jian/Downloads/workspace/antgo')
 PYTHON_VERSION = sys.version_info[0]
 if PYTHON_VERSION == 2:
   from urllib import urlretrieve
@@ -443,6 +443,10 @@ class COCO2017(Dataset):
     assert(self.train_or_test in ['sample', 'train', 'val', 'test'])
     assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
 
+    self.label_map = {
+      
+    }
+    
     # read sample data
     if self.train_or_test == 'sample':
       self.data_samples, self._image_index = self.load_samples()
@@ -545,155 +549,110 @@ class COCO2017(Dataset):
 
     return ann_file
 
-  def data_pool(self):
-    if self.train_or_test == 'sample':
-      sample_idxs = copy.copy(self.ids)
-      if self.rng:
-        self.rng.shuffle(sample_idxs)
+  def at(self, id):
+    img_obj = self.coco_api.loadImgs(self.img_ids[id])[0]
+    if self.train_or_test == 'test':
+      img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
+      return (img, {})
 
-      for index in sample_idxs:
-        yield self.data_samples[index]
-      return
+    if self.task_type == 'OBJECT-DETECTION' or \
+            self.task_type=='INSTANCE-SEGMENTATION':
+      annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
+      annotation = self.coco_api.loadAnns(annotation_ids)
+      img_annotation = {}
 
-    epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if epoch >= max_epoches:
-        break
-      epoch += 1
+      num_objs = len(annotation)
+      boxes = np.zeros((num_objs, 4), dtype=np.uint16)
+      category_id = np.zeros((num_objs), dtype=np.int32)
+      area = np.zeros((num_objs), dtype=np.float32)
+      segmentation = []
 
-      idxs = copy.deepcopy(self.img_ids)
-      if self.rng:
-        self.rng.shuffle(idxs)
+      for ix, obj in enumerate(annotation):
+        x, y, w, h = obj['bbox']
+        boxes[ix, :] = [x, y, x + w, y + h]
 
-      for img_id in idxs:
-        img_obj = self.coco_api.loadImgs(img_id)[0]
-        if self.train_or_test == 'test':
-          img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
-          yield [img, {}]
-          continue
+        category_id[ix] = obj['category_id']
+        area[ix] = obj['area']
+        segmentation.append(self.coco_api.annToMask(obj))
 
-        if self.task_type == 'OBJECT-DETECTION' or \
-                self.task_type=='INSTANCE-SEGMENTATION':
-          annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
-          annotation = self.coco_api.loadAnns(annotation_ids)
-          img_annotation = {}
+      img_annotation['bboxes'] = boxes
+      img_annotation['labels'] = category_id
+      img_annotation['area'] = area
+      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
+      segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
+      for ix, obj_seg in enumerate(segmentation):
+        obj_id = category_id[ix]
+        segmentation_map[np.where(obj_seg == 1)] = obj_id
 
-          num_objs = len(annotation)
-          boxes = np.zeros((num_objs, 4), dtype=np.uint16)
-          category_id = np.zeros((num_objs), dtype=np.int32)
-          category = []
-          supercategory = []
-          area = np.zeros((num_objs), dtype=np.float32)
-          segmentation = []
+      img_annotation.update({'segments': segmentation_map})
+      img_annotation['image_meta'] = {
+        'image_shape': (img.shape[0], img.shape[1])
+      }
+      
+      return (img, img_annotation)
+    elif self.task_type == 'SEGMENTATION':
+      # stuff, Panoptic
+      assert(self.task_type_subset in ['stuff', 'panoptic'])
+      if self.task_type_subset == 'stuff':
+        img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
+        annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
+        annotation = self.coco_api.loadAnns(annotation_ids)
+        img_annotation = {}
+        num_objs = len(annotation)
+        category_id = np.zeros((num_objs), dtype=np.int32)
 
-          category_id_name = {cc['id']: cc['name'] for cc in self.coco_api.dataset['categories']}
-          category_id_supername = {cc['id']: cc['supercategory'] for cc in self.coco_api.dataset['categories']}
+        segmentation = []
+        for ix, obj in enumerate(annotation):
+          category_id[ix] = obj['category_id']
+          segmentation.append(self.coco_api.annToMask(obj))
 
-          for ix, obj in enumerate(annotation):
-            x, y, w, h = obj['bbox']
-            boxes[ix, :] = [x, y, x + w, y + h]
+        segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
+        for ix, obj_seg in enumerate(segmentation):
+          obj_id = category_id[ix]
+          segmentation_map[np.where(obj_seg == 1)] = obj_id
 
-            category_id[ix] = obj['category_id']
-            category.append(category_id_name[obj['category_id']])
-            supercategory.append(category_id_supername[obj['category_id']])
-            area[ix] = obj['area']
-            segmentation.append(self.coco_api.annToMask(obj))
+        img_annotation['labels'] = category_id
+        img_annotation.update({'segments': segmentation_map})
+        img_annotation['image_meta'] = {
+          'image_shape': (img.shape[0], img.shape[1])
+        }
+        return (img, img_annotation)
+      else:
+        return (None, None)
+    elif self.task_type == 'LANDMARK':
+      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
+      ann_ids = self.coco_kps_api.getAnnIds(imgIds=img_obj['id'])
+      anns = self.coco_kps_api.loadAnns(ann_ids)
 
-          img_annotation['bbox'] = boxes
-          img_annotation['category_id'] = category_id
-          img_annotation['category'] = category
-          img_annotation['supercategory'] = supercategory
-          img_annotation['flipped'] = False
-          img_annotation['area'] = area
-          img_annotation['segmentation'] = segmentation
+      img_annotation = {'keypoints': [], 'segmentation': []}
+      person_bboxs = np.zeros((len(anns), 4))
+      area = np.zeros((len(anns)))
+      for person_index, person_ann in enumerate(anns):
+        keypionts = person_ann['keypoints']
+        segmentation = person_ann['segmentation']
+        area[person_index] = person_ann['area']
 
-          img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
-          segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
-          for ix, obj_seg in enumerate(segmentation):
-            obj_id = category_id[ix]
-            segmentation_map[np.where(obj_seg == 1)] = obj_id
+        xx = keypionts[0::3]
+        yy = keypionts[1::3]
+        visible = keypionts[2::3]
+        obj_kk = np.zeros((len(xx),3))
+        obj_kk[:, 0] = xx
+        obj_kk[:, 1] = yy
+        obj_kk[:, 2] = visible
+        img_annotation['keypoints'].append(obj_kk)
+        img_annotation['segmentation'].append(segmentation)
+        person_bboxs[person_index, :] = person_ann['bbox']
 
-          img_annotation.update({'segmentation_map': segmentation_map, 'file_id': img_obj['file_name']})
-          img_annotation['info'] = (img.shape[0], img.shape[1], img.shape[2])
-          yield [img, img_annotation]
-        elif self.task_type == 'IMAGE_CAPTION':
-          img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
-          ann_ids = self.coco_caps_api.getAnnIds(imgIds=img_obj['id'])
-          anns = self.coco_caps_api.loadAnns(ann_ids)
-          img_annotation = {'caption': [cap['caption'] for cap in anns], 'file_id': img_obj['file_name']}
-          yield [img, img_annotation]
-        elif self.task_type == 'SEGMENTATION':
-          # stuff, Panoptic
-          assert(self.task_type_subset in ['stuff', 'panoptic'])
-          if self.task_type_subset == 'stuff':
-            img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
-            annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
-            annotation = self.coco_api.loadAnns(annotation_ids)
-            img_annotation = {}
-            supercategory = []
-            num_objs = len(annotation)
-            category_id = np.zeros((num_objs), dtype=np.int32)
-            category = []
-            category_id_name = {cc['id']: cc['name'] for cc in self.coco_api.dataset['categories']}
-            category_id_supername = {cc['id']: cc['supercategory'] for cc in self.coco_api.dataset['categories']}
+      img_annotation['bbox'] = person_bboxs
+      img_annotation['area'] = area
+      img_annotation['flipped'] = False
+      img_annotation['file_id'] = img_obj['file_name']
 
-            segmentation = []
-            for ix, obj in enumerate(annotation):
-              category_id[ix] = obj['category_id']
-              category.append(category_id_name[obj['category_id']])
-              supercategory.append(category_id_supername[obj['category_id']])
-              segmentation.append(self.coco_api.annToMask(obj))
+      return (img, img_annotation)
+    else:
+      img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
+      return (img, None)
 
-            segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
-            for ix, obj_seg in enumerate(segmentation):
-              obj_id = category_id[ix]
-              segmentation_map[np.where(obj_seg == 1)] = obj_id
-
-            img_annotation['category_id'] = category_id
-            img_annotation['category'] = category
-            img_annotation['supercategory'] = supercategory
-            img_annotation['flipped'] = False
-            img_annotation['segmentation'] = segmentation
-            img_annotation['segmentation_map'] = segmentation_map
-            img_annotation['file_id'] = img_obj['file_name']
-
-            yield [img, img_annotation]
-          else:
-            yield [None, None]
-        elif self.task_type == 'LANDMARK':
-          img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
-          ann_ids = self.coco_kps_api.getAnnIds(imgIds=img_obj['id'])
-          anns = self.coco_kps_api.loadAnns(ann_ids)
-
-          img_annotation = {'keypoints': [], 'segmentation': []}
-          person_bboxs = np.zeros((len(anns), 4))
-          area = np.zeros((len(anns)))
-          for person_index, person_ann in enumerate(anns):
-            keypionts = person_ann['keypoints']
-            segmentation = person_ann['segmentation']
-            area[person_index] = person_ann['area']
-
-            xx = keypionts[0::3]
-            yy = keypionts[1::3]
-            visible = keypionts[2::3]
-            obj_kk = np.zeros((len(xx),3))
-            obj_kk[:, 0] = xx
-            obj_kk[:, 1] = yy
-            obj_kk[:, 2] = visible
-            img_annotation['keypoints'].append(obj_kk)
-            img_annotation['segmentation'].append(segmentation)
-            person_bboxs[person_index, :] = person_ann['bbox']
-
-          img_annotation['bbox'] = person_bboxs
-          img_annotation['area'] = area
-          img_annotation['flipped'] = False
-          img_annotation['file_id'] = img_obj['file_name']
-
-          yield [img, img_annotation]
-        else:
-          img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
-          yield [img, None]
 
   @property
   def size(self):
@@ -703,3 +662,12 @@ class COCO2017(Dataset):
     assert(self.train_or_test == 'train')
     validation_coco = COCO2017('val', self.dir, self.ext_params)
     return self, validation_coco
+
+
+coco2017 = COCO2017('train', '/Users/jian/Downloads/COCO', ext_params={'task_type': 'OBJECT-DETECTION'})
+label_max = 0
+for i in range(len(coco2017)):
+  data = coco2017.sample(i)
+  if data['labels'].size > 0:
+    label_max = max(label_max, np.max(data['labels']))
+    print(f'label_max {label_max}')

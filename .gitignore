@@ -1,5 +1,6 @@
 .idea/
 .DS_Store
+.vscode/
 **/__pycache__
 **/DS_Store
 *.so
