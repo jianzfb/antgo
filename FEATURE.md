@@ -234,6 +234,96 @@ python3 ./mycls/main.py --exp=mycls --gpu-id=0 --process=train
 python3 ./mycls/main.py --exp=mycls --checkpoint=./output/mycls/output/checkpoint/epoch_xxx.pth --process=export
 ```
 
+## 常用研发工具
+### 转换视频数据到标准训练格式
+```
+antgo tool extract/videos --src=video-folder --tgt=target-folder --frame-rate=15 
+// 如果需要指定抽取后的最长边大小，可以调用
+antgo tool extract/videos --src=video-folder --tgt=target-folder --frame-rate=15 --max-size=512
+```
+### 转换松散数据到标准训练格式
+```
+antgo tool extract/images --src=image-folder --tgt=target-folder
+
+// 如果同时想要指定文件名前缀，后缀，扩展名进行过滤，可以如下，
+antgo tool extract/images --src=image-folder --tgt=target-folder --prefix=prefix --suffix=suffix 
+--ext=ext
+
+// 如果想要指定是否乱序，最大抽取图像数，以及最长边大小，可以调用
+antgo tool extract/images --src=image-folder --tgt=target-folder --shuffle --num=5000 --max-size=512
+```
+### 转换COCO格式数据到标准训练格式
+```
+# --tags用于指定原格式下的类别标签映射到新格式下的类别索引
+antgo tool extract/coco --src=coco-json-path --tgt=target-folder --tags=hand:0
+```
+
+### 转换到实例图数据并重新生成标准训练格式
+```
+antgo tool extract/crop --src=json-path --tgt=target-folder
+```
+
+
+### 从第三方提供的json/txt标注文件中随机采样
+```
+// 用于查看GT格式
+antgo tool extract/samples --src=json-path --num=1 --feedback
+```
+### 从baidu/bing/vcg下载图像/视频
+```
+// --tags 用于指定下载关键词； type:image,keyword:aa/bb 标识下载图像，关键词是aa,bb
+antgo tool download/baidu --tags=type:image,keyword:dog/cat
+antgo tool download/bing --tags=type:image,keyword:dog/cat
+antgo tool download/vcg --tags=type:image,keyword:dog/cat
+```
+
+### 浏览样本数据 (仅支持标准GT格式)
+```
+antgo tool browser/images --src=json-path 
+// 如果想要在浏览数据时，给样本快速打标签（一般用于审核数据时使用）
+// 使用--tags来设置标签
+antgo tool browser/images --src=json-path --tags=valid,invalid --feedback
+
+// 仅web页面显示，并允许在页面输入GT格式文件
+antgo tool browser/images --user-input
+```
+
+### 使用标签过滤样本（仅支持标准GT格式）
+```
+// 使用来自于数据浏览服务获得的样本标签记录，进行过滤
+// --tags 指定需要含有的标签
+// --no-tags 指定不可以包含的标签
+antgo tool filter/tags --src=json-path --tgt=from-browser-json --tags=tags --no-tags=no-tags
+```
+
+### 标注工具集成（仅支持标准GT格式）
+```
+// 转换label-studio标注工具结果到标准GT格式
+// 如果有必要，加入--prefix来将路径加上子目录
+antgo tool label/studio --src=json-path --tgt=target-folder --tags=lefthand:0,righthand:1 --from
+// 将标准GT格式转换到label-studio标注工具结果
+antgo tool label/studio --src=json-path --tgt=target-folder --to
+
+// 合并标注结果
+antgo tool label/merge --src=json-path,json-path --tgt=target-folder --to
+
+// 启动标注服务
+// --type 支持RECT,POLYGON
+// --tags 设置类型标签，例如Car:0,Train:1
+antgo tool label/start --src=json-path --tgt=target-folder --tags=Car:0,Train:1 --type=RECT 
+```
+
+### 打包tfrecord/kv数据（仅支持标准GT格式）
+```
+// tfrecord
+// --src  json文件地址(多文件的话以逗号","隔开)， --tgt 打包后存放地址，--prefix 打包后文件前缀设置，--num 打包后每个文件样本数
+antgo tool package/tfrecord --src=json-path --tgt=target-folder --prefix=xxx --num=50000
+
+// kv
+// --src  json文件地址(多文件的话以逗号","隔开)， --tgt 打包后存放地址，--prefix 打包后文件前缀设置，--num 打包后每个文件样本数
+antgo tool package/kv --src=json-path --tgt=target-folder --prefix=xxx --num=50000
+```
+
 ## 高阶应用——模型迭代自动化流水线
 
 开始进入我们的高级应用，全力解放无意义的码代码。数据驱动模型迭代流水线，

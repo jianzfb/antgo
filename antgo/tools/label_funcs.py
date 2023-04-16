@@ -27,7 +27,7 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
         tgt_folder = './output'
 
     # 如果设置root and exp, 则按照规定规则读取等待标注数据。忽略src_json_file。
-    if root is not None and exp is not None:
+    if root is not None and exp is not None and root != '' and exp != '':
         # 开始标记
         running_flag(os.path.join(root, 'label', exp))
         if file_client_exists(os.path.join(root, 'label', exp, 'data.tar')):
@@ -58,9 +58,6 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     if len(white_users) == 0:
         white_users = None
 
-    if label_type == 'POINT':
-        logging.error(f'Now not support {label_type}')
-        return 
     if label_type is None:
         label_type = ''
 
@@ -202,7 +199,7 @@ def label_start(src_json_file, tgt_folder, tags, label_type, white_users_str=Non
     with open(os.path.join(tgt_folder, 'meta.json'), 'w', encoding="utf-8") as fp:
         json.dump(meta_info, fp)
 
-    if root is not None and exp is not None:
+    if root is not None and exp is not None and root != '' and exp != '':
         # 仅在设置root and exp后，起作用
         # 1. 打包到tfrecord格式
         package_to_tfrecord(
