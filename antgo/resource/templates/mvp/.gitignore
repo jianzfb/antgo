@@ -1,0 +1,17 @@
+.idea/
+.DS_Store
+.vscode/
+**/__pycache__
+**/DS_Store
+*.so
+*.egg
+*.eggs
+*.egg-info
+dist
+build
+example/dump
+test
+dump
+extend
+*.tar
+*.zip

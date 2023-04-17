@@ -1385,19 +1385,6 @@ class CropImage(BaseOperator):
                 crop_trans = np.matmul(crop_trans, base_trans)
                 sample['image_meta']['transform_matrix'] = crop_trans
 
-            # # 测试可视化
-            # for bi in range(len(crop_bbox)):
-            #     x0,y0,x1,y1 = sample['gt_bbox'][bi]
-            #     cls_label = crop_class[bi]
-            #     x0=(int)(x0)
-            #     y0=(int)(y0)
-            #     x1=(int)(x1)
-            #     y1=(int)(y1)
-            #     color_v = (255,0,0)
-            #     if cls_label == 0:
-            #         color_v = (0,0,255)
-            #     cv2.rectangle(im, (x0,y0),(x1,y1), color_v, 4)
-            # cv2.imwrite("./crop_show.png", im)
             return sample
         return sample
 

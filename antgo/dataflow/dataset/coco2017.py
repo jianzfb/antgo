@@ -14,18 +14,13 @@ import time
 import numpy as np
 from collections import defaultdict
 import sys
-sys.path.append('/Users/jian/Downloads/workspace/antgo')
-PYTHON_VERSION = sys.version_info[0]
-if PYTHON_VERSION == 2:
-  from urllib import urlretrieve
-elif PYTHON_VERSION == 3:
-  from urllib.request import urlretrieve
+from urllib.request import urlretrieve
 from antgo.dataflow.dataset.dataset import *
 from antgo.utils import mask as maskUtils
 from antgo.utils.fs import download
 from antgo.utils.fs import maybe_here_match_format
 from antgo.utils import logger
-
+from aligo import Aligo
 __all__ = ['COCO2017']
 
 
@@ -166,7 +161,7 @@ class CocoAPI():
         if i == 0 and len(ids) == 0:
           ids = set(self.catToImgs[catId])
         else:
-          ids &= set(self.catToImgs[catId])
+          ids |= set(self.catToImgs[catId])
     return list(ids)
 
   def loadAnns(self, ids=[]):
@@ -342,94 +337,46 @@ class CocoAPI():
 
 
 class COCO2017(Dataset):
+  METAINFO = {
+        'classes':
+        ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train',
+         'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign',
+         'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep',
+         'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
+         'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard',
+         'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard',
+         'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork',
+         'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange',
+         'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair',
+         'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv',
+         'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave',
+         'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase',
+         'scissors', 'teddy bear', 'hair drier', 'toothbrush'),
+        # palette is a list of color tuples, which is used for visualization.
+        'palette':
+        [(220, 20, 60), (119, 11, 32), (0, 0, 142), (0, 0, 230), (106, 0, 228),
+         (0, 60, 100), (0, 80, 100), (0, 0, 70), (0, 0, 192), (250, 170, 30),
+         (100, 170, 30), (220, 220, 0), (175, 116, 175), (250, 0, 30),
+         (165, 42, 42), (255, 77, 255), (0, 226, 252), (182, 182, 255),
+         (0, 82, 0), (120, 166, 157), (110, 76, 0), (174, 57, 255),
+         (199, 100, 0), (72, 0, 118), (255, 179, 240), (0, 125, 92),
+         (209, 0, 151), (188, 208, 182), (0, 220, 176), (255, 99, 164),
+         (92, 0, 73), (133, 129, 255), (78, 180, 255), (0, 228, 0),
+         (174, 255, 243), (45, 89, 255), (134, 134, 103), (145, 148, 174),
+         (255, 208, 186), (197, 226, 255), (171, 134, 1), (109, 63, 54),
+         (207, 138, 255), (151, 0, 95), (9, 80, 61), (84, 105, 51),
+         (74, 65, 105), (166, 196, 102), (208, 195, 210), (255, 109, 65),
+         (0, 143, 149), (179, 0, 194), (209, 99, 106), (5, 121, 0),
+         (227, 255, 205), (147, 186, 208), (153, 69, 1), (3, 95, 161),
+         (163, 255, 0), (119, 0, 170), (0, 182, 199), (0, 165, 120),
+         (183, 130, 88), (95, 32, 0), (130, 114, 135), (110, 129, 133),
+         (166, 74, 118), (219, 142, 185), (79, 210, 114), (178, 90, 62),
+         (65, 70, 15), (127, 167, 115), (59, 105, 106), (142, 108, 45),
+         (196, 172, 0), (95, 54, 80), (128, 76, 255), (201, 57, 1),
+         (246, 0, 122), (191, 162, 208)]
+  }
+
   def __init__(self, train_or_test, dir=None, ext_params=None):
-    '''
-    'id': 0, 'supercategory': 'person', 'name': 'person'
-    'id': 1, 'supercategory': 'vehicle', 'name': 'bicycle'
-    'id': 2, 'supercategory': 'vehicle', 'name': 'car'
-    'id': 3, 'supercategory': 'vehicle', 'name': 'motorcycle'
-    'id': 4, 'supercategory': 'vehicle', 'name': 'airplane'
-    'id': 5, 'supercategory': 'vehicle', 'name': 'bus'
-    'id': 6, 'supercategory': 'vehicle', 'name': 'train'
-    'id': 7, 'supercategory': 'vehicle', 'name': 'truck'
-    'id': 8, 'supercategory': 'vehicle', 'name': 'boat'
-    'id': 9, 'supercategory': 'outdoor', 'name': 'traffic light'
-    'id': 10, 'supercategory': 'outdoor', 'name': 'fire hydrant'
-    'id': 12, 'supercategory': 'outdoor', 'name': 'stop sign'
-    'id': 13, 'supercategory': 'outdoor', 'name': 'parking meter'
-    'id': 14, 'supercategory': 'outdoor', 'name': 'bench'
-    'id': 15, 'supercategory': 'animal', 'name': 'bird'
-    'id': 16, 'supercategory': 'animal', 'name': 'cat'
-    'id': 17, 'supercategory': 'animal', 'name': 'dog'
-    'id': 18, 'supercategory': 'animal', 'name': 'horse'
-    'id': 19, 'supercategory': 'animal', 'name': 'sheep'
-    'id': 20, 'supercategory': 'animal', 'name': 'cow'
-    'id': 21, 'supercategory': 'animal', 'name': 'elephant'
-    'id': 22, 'supercategory': 'animal', 'name': 'bear'
-    'id': 23, 'supercategory': 'animal', 'name': 'zebra'
-    'id': 24, 'supercategory': 'animal', 'name': 'giraffe'
-    'id': 26, 'supercategory': 'accessory', 'name': 'backpack'
-    'id': 27, 'supercategory': 'accessory', 'name': 'umbrella'
-    'id': 30, 'supercategory': 'accessory', 'name': 'handbag'
-    'id': 31, 'supercategory': 'accessory', 'name': 'tie'
-    'id': 32, 'supercategory': 'accessory', 'name': 'suitcase'
-    'id': 33, 'supercategory': 'sports', 'name': 'frisbee'
-    'id': 34, 'supercategory': 'sports', 'name': 'skis'
-    'id': 35, 'supercategory': 'sports', 'name': 'snowboard'
-    'id': 36, 'supercategory': 'sports', 'name': 'sports ball'
-    'id': 37, 'supercategory': 'sports', 'name': 'kite'
-    'id': 38, 'supercategory': 'sports', 'name': 'baseball bat'
-    'id': 39, 'supercategory': 'sports', 'name': 'baseball glove'
-    'id': 40, 'supercategory': 'sports', 'name': 'skateboard'
-    'id': 41, 'supercategory': 'sports', 'name': 'surfboard'
-    'id': 42, 'supercategory': 'sports', 'name': 'tennis racket'
-    'id': 43, 'supercategory': 'kitchen', 'name': 'bottle'
-    'id': 45, 'supercategory': 'kitchen', 'name': 'wine glass'
-    'id': 46, 'supercategory': 'kitchen', 'name': 'cup'
-    'id': 47, 'supercategory': 'kitchen', 'name': 'fork'
-    'id': 48, 'supercategory': 'kitchen', 'name': 'knife'
-    'id': 49, 'supercategory': 'kitchen', 'name': 'spoon'
-    'id': 50, 'supercategory': 'kitchen', 'name': 'bowl'
-    'id': 51, 'supercategory': 'food', 'name': 'banana'
-    'id': 52, 'supercategory': 'food', 'name': 'apple'
-    'id': 53, 'supercategory': 'food', 'name': 'sandwich'
-    'id': 54, 'supercategory': 'food', 'name': 'orange'
-    'id': 55, 'supercategory': 'food', 'name': 'broccoli'
-    'id': 56, 'supercategory': 'food', 'name': 'carrot'
-    'id': 57, 'supercategory': 'food', 'name': 'hot dog'
-    'id': 58, 'supercategory': 'food', 'name': 'pizza'
-    'id': 59, 'supercategory': 'food', 'name': 'donut'
-    'id': 60, 'supercategory': 'food', 'name': 'cake'
-    'id': 61, 'supercategory': 'furniture', 'name': 'chair'
-    'id': 62, 'supercategory': 'furniture', 'name': 'couch'
-    'id': 63, 'supercategory': 'furniture', 'name': 'potted plant'
-    'id': 64, 'supercategory': 'furniture', 'name': 'bed'
-    'id': 66, 'supercategory': 'furniture', 'name': 'dining table'
-    'id': 69, 'supercategory': 'furniture', 'name': 'toilet'
-    'id': 71, 'supercategory': 'electronic', 'name': 'tv'
-    'id': 72, 'supercategory': 'electronic', 'name': 'laptop'
-    'id': 73, 'supercategory': 'electronic', 'name': 'mouse'
-    'id': 74, 'supercategory': 'electronic', 'name': 'remote'
-    'id': 75, 'supercategory': 'electronic', 'name': 'keyboard'
-    'id': 76, 'supercategory': 'electronic', 'name': 'cell phone'
-    'id': 77, 'supercategory': 'appliance', 'name': 'microwave'
-    'id': 78, 'supercategory': 'appliance', 'name': 'oven'
-    'id': 79, 'supercategory': 'appliance', 'name': 'toaster'
-    'id': 80, 'supercategory': 'appliance', 'name': 'sink'
-    'id': 81, 'supercategory': 'appliance', 'name': 'refrigerator'
-    'id': 83, 'supercategory': 'indoor', 'name': 'book'
-    'id': 84, 'supercategory': 'indoor', 'name': 'clock'
-    'id': 85, 'supercategory': 'indoor', 'name': 'vase'
-    'id': 86, 'supercategory': 'indoor', 'name': 'scissors'
-    'id': 87, 'supercategory': 'indoor', 'name': 'teddy bear'
-    'id': 88, 'supercategory': 'indoor', 'name': 'hair drier'
-    'id': 89, 'supercategory': 'indoor', 'name': 'toothbrush'
-
-    :param train_or_test: train, test or val
-    :param dir:
-    :param ext_params: year, annotation_type, included, excluded, transform
-
-    '''
     super(COCO2017, self).__init__(train_or_test, dir, ext_params)
     self.year = "2017"
     self.dir = dir
@@ -440,17 +387,18 @@ class COCO2017(Dataset):
     self.task_type_subset = getattr(self, 'task_type_subset', 'stuff')
     self.task_test = getattr(self, 'task_test', None)
 
-    assert(self.train_or_test in ['sample', 'train', 'val', 'test'])
+    assert(self.train_or_test in ['train', 'val', 'test'])
     assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
 
-    self.label_map = {
-      
-    }
-    
-    # read sample data
-    if self.train_or_test == 'sample':
-      self.data_samples, self._image_index = self.load_samples()
-      return
+    if not os.path.exists(os.path.join(self.dir , 'annotations')):
+      self.ali = Aligo()  # 第一次使用，会弹出二维码，供扫描登录
+      # 下载数据集
+      self.ali.download_file(file='ali:///dataset/COCO.tar', local_folder=self.dir)
+      assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
+      # 解压
+      os.system(f'cd {self.dir} && tar -xf COCO.tar')
+      # 修改数据目录
+      self.dir = os.path.join(self.dir, 'COCO')
 
     data_type = None
     if self.train_or_test == "train":
@@ -468,9 +416,10 @@ class COCO2017(Dataset):
         self.coco_api = CocoAPI(ann_file)
 
         # parse (for object detector)
-        self.cats = self.coco_api.loadCats(self.coco_api.getCatIds())
-        self.cat_ids = self.coco_api.getCatIds(self.cats)
-        self.img_ids = self.coco_api.getImgIds(self.cat_ids)
+        # self.cats = self.coco_api.loadCats(self.coco_api.getCatIds())
+        self.cat_ids = self.coco_api.getCatIds(catNms=list(self.METAINFO['classes']))
+        self.img_ids = self.coco_api.getImgIds(catIds=self.cat_ids)
+        self.cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)}
       elif self.task_type == "LANDMARK":
         # parse (for object detector)
         ann_file = self.config_ann_file(data_type, self.dir, "Instance")
@@ -506,11 +455,9 @@ class COCO2017(Dataset):
           self.cat_ids = self.coco_api.getCatIds(self.cats)
           self.img_ids = self.coco_api.getImgIds(self.cat_ids)
         else:
-          # ann_file = os.path.join(self.dir, 'annotations', 'panoptic_%s2017.json'%self.train_or_test)
-          # self.coco_api = CocoAPI(ann_file)
-          # self.img_ids = self.coco_api.getImgIds()
-          logger.error('not support')
-          exit(-1)
+          ann_file = os.path.join(self.dir, 'annotations', 'panoptic_%s2017.json'%self.train_or_test)
+          self.coco_api = CocoAPI(ann_file)
+          self.img_ids = self.coco_api.getImgIds()
       else:
         # annotation file
         ann_file = self.config_ann_file(data_type, self.dir, "Instance")
@@ -552,6 +499,7 @@ class COCO2017(Dataset):
   def at(self, id):
     img_obj = self.coco_api.loadImgs(self.img_ids[id])[0]
     if self.train_or_test == 'test':
+      # 对于测试集没有标签
       img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
       return (img, {})
 
@@ -561,98 +509,106 @@ class COCO2017(Dataset):
       annotation = self.coco_api.loadAnns(annotation_ids)
       img_annotation = {}
 
-      num_objs = len(annotation)
-      boxes = np.zeros((num_objs, 4), dtype=np.uint16)
-      category_id = np.zeros((num_objs), dtype=np.int32)
-      area = np.zeros((num_objs), dtype=np.float32)
-      segmentation = []
-
+      boxes = []
+      category_id = []
       for ix, obj in enumerate(annotation):
-        x, y, w, h = obj['bbox']
-        boxes[ix, :] = [x, y, x + w, y + h]
+        x, y, w, h = obj['bbox']        
+        inter_w = max(0, min(x + w, img_obj['width']) - max(x, 0))
+        inter_h = max(0, min(y + h, img_obj['height']) - max(y, 0))
+        if inter_w * inter_h == 0:
+                continue   
+        if obj['area'] <= 0 or w < 1 or h < 1:
+            continue
+        if obj['category_id'] not in self.cat_ids:
+            continue
+        # 目标框
+        boxes.append([x, y, x + w, y + h])
+        # 目标类别
+        category_id.append(self.cat2label[obj['category_id']])
+        # 忽略目标分割
 
-        category_id[ix] = obj['category_id']
-        area[ix] = obj['area']
+      img_annotation['bboxes'] = np.array(boxes)
+      img_annotation['labels'] = np.array(category_id)
+      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
+      img_annotation['image_meta'] = {
+        'image_shape': (img.shape[0], img.shape[1])
+      }
+
+      return (img, img_annotation)
+    elif self.task_type == 'SEGMENTATION':
+      # stuff, Panoptic
+      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
+      annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
+      annotation = self.coco_api.loadAnns(annotation_ids)
+      category_id = np.zeros((len(annotation)), dtype=np.int32)
+      segmentation = []
+      for ix, obj in enumerate(annotation):
+        category_id[ix] = self.cat2label(obj['category_id'])
         segmentation.append(self.coco_api.annToMask(obj))
 
-      img_annotation['bboxes'] = boxes
-      img_annotation['labels'] = category_id
-      img_annotation['area'] = area
-      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
       segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
       for ix, obj_seg in enumerate(segmentation):
         obj_id = category_id[ix]
         segmentation_map[np.where(obj_seg == 1)] = obj_id
 
-      img_annotation.update({'segments': segmentation_map})
-      img_annotation['image_meta'] = {
-        'image_shape': (img.shape[0], img.shape[1])
-      }
-      
-      return (img, img_annotation)
-    elif self.task_type == 'SEGMENTATION':
-      # stuff, Panoptic
-      assert(self.task_type_subset in ['stuff', 'panoptic'])
-      if self.task_type_subset == 'stuff':
-        img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
-        annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
-        annotation = self.coco_api.loadAnns(annotation_ids)
-        img_annotation = {}
-        num_objs = len(annotation)
-        category_id = np.zeros((num_objs), dtype=np.int32)
-
-        segmentation = []
-        for ix, obj in enumerate(annotation):
-          category_id[ix] = obj['category_id']
-          segmentation.append(self.coco_api.annToMask(obj))
-
-        segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
-        for ix, obj_seg in enumerate(segmentation):
-          obj_id = category_id[ix]
-          segmentation_map[np.where(obj_seg == 1)] = obj_id
-
-        img_annotation['labels'] = category_id
-        img_annotation.update({'segments': segmentation_map})
-        img_annotation['image_meta'] = {
+      img_annotation = {
+        'segments': segmentation_map,
+        'image_meta': {
           'image_shape': (img.shape[0], img.shape[1])
         }
-        return (img, img_annotation)
-      else:
-        return (None, None)
+      }
+      return (img, img_annotation)
     elif self.task_type == 'LANDMARK':
       img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
       ann_ids = self.coco_kps_api.getAnnIds(imgIds=img_obj['id'])
       anns = self.coco_kps_api.loadAnns(ann_ids)
 
-      img_annotation = {'keypoints': [], 'segmentation': []}
-      person_bboxs = np.zeros((len(anns), 4))
-      area = np.zeros((len(anns)))
-      for person_index, person_ann in enumerate(anns):
-        keypionts = person_ann['keypoints']
-        segmentation = person_ann['segmentation']
-        area[person_index] = person_ann['area']
+      boxes = []
+      labels = []
+      joints2d = []
+      joints_vis = []
 
-        xx = keypionts[0::3]
-        yy = keypionts[1::3]
-        visible = keypionts[2::3]
-        obj_kk = np.zeros((len(xx),3))
-        obj_kk[:, 0] = xx
-        obj_kk[:, 1] = yy
-        obj_kk[:, 2] = visible
-        img_annotation['keypoints'].append(obj_kk)
-        img_annotation['segmentation'].append(segmentation)
-        person_bboxs[person_index, :] = person_ann['bbox']
+      for person_ann in anns:
+        keypionts = person_ann['keypoints']        
+        person_keypoints_xy = np.zeros((len(keypionts)//3, 2))
+        person_keypoints_xy[:, 0] = keypionts[0::3]
+        person_keypoints_xy[:, 1] = keypionts[1::3]
 
-      img_annotation['bbox'] = person_bboxs
-      img_annotation['area'] = area
-      img_annotation['flipped'] = False
-      img_annotation['file_id'] = img_obj['file_name']
+        keypoints_visible = np.array(keypionts[2::3])
+        position_visible = np.where(keypoints_visible>0)
+        if position_visible[0].size == 0:
+          continue        
+        keypoints_visible[position_visible] = 1
+        person_bbox = [
+          np.min(person_keypoints_xy[position_visible, 0]), 
+          np.min(person_keypoints_xy[position_visible, 1]), 
+          np.max(person_keypoints_xy[position_visible, 0]), 
+          np.max(person_keypoints_xy[position_visible, 1])
+        ]
+        if person_bbox[2] - person_bbox[0] <= 5 or person_bbox[3] - person_bbox[1] <= 5:
+          continue
 
+        joints2d.append(person_keypoints_xy)
+        joints_vis.append(keypoints_visible)
+        boxes.append(person_bbox)    
+        labels.append(0)  # person
+
+      # 空，跳过
+      if len(joints2d) == 0:
+        return (None, None)
+
+      img_annotation = {
+        'joints2d': np.stack(joints2d, 0),
+        'joints_vis': np.stack(joints_vis, 0),
+        'bboxes': np.array(boxes),
+        'labels': np.array(labels),
+        'image_meta': {
+          'image_shape': (img.shape[0], img.shape[1])
+        }
+      }
       return (img, img_annotation)
-    else:
-      img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
-      return (img, None)
 
+    return (None, None)
 
   @property
   def size(self):
@@ -663,11 +619,24 @@ class COCO2017(Dataset):
     validation_coco = COCO2017('val', self.dir, self.ext_params)
     return self, validation_coco
 
+# coco2017 = COCO2017('train', '/root/workspace/dataset/COCO', ext_params={'task_type': 'OBJECT-DETECTION'})
+# label_max = 0
+# for i in range(coco2017.size):
+#   data = coco2017.sample(i)
+#   # if data['labels'].size > 0:
+#   #   label_max = max(label_max, np.max(data['labels']))
+#   #   print(f'label_max {label_max}')
+#   print(i)
 
-coco2017 = COCO2017('train', '/Users/jian/Downloads/COCO', ext_params={'task_type': 'OBJECT-DETECTION'})
-label_max = 0
-for i in range(len(coco2017)):
-  data = coco2017.sample(i)
-  if data['labels'].size > 0:
-    label_max = max(label_max, np.max(data['labels']))
-    print(f'label_max {label_max}')
+#   image = data['image']
+#   for bi in range(len(data['bboxes'])):
+#     x0,y0,x1,y1 = data['bboxes'][bi]
+#     cls_label = data['labels'][bi]
+#     x0=(int)(x0)
+#     y0=(int)(y0)
+#     x1=(int)(x1)
+#     y1=(int)(y1)
+    
+#     color_v = coco2017.METAINFO['palette'][cls_label]
+#     image = cv2.rectangle(image, (x0,y0),(x1,y1), color_v, 4)
+#   cv2.imwrite("./crop_show.png", image)

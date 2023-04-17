@@ -330,6 +330,10 @@ class Reader(object):
             
             pos = self.indexes[self._pos]
             sample = self._dataset.sample(pos)
+            if sample is None:
+                # None，需要直接跳过
+                continue
+
             sample["curr_iter"] = self._curr_iter
             self._pos += 1
 

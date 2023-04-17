@@ -124,6 +124,8 @@ def generate_project_exp_example(template_project_folder, target_folder, exp_nam
         shutil.copy(os.path.join(template_project_folder, 'requirements.txt'), target_folder)
     if not os.path.exists(os.path.join(target_folder, 'README.md')):
         shutil.copy(os.path.join(template_project_folder, 'README.md'), target_folder)
+    if not os.path.exists(os.path.join(target_folder, '.gitignore')):
+        shutil.copy(os.path.join(template_project_folder, '.gitignore'), target_folder)
 
 
 def project_add_action(action_name, args):

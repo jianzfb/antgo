@@ -361,12 +361,16 @@ class Dataset(BaseNode):
 
   def get_ann_info(self, idx=None):
     raise NotImplementedError
-    
+
   def get_cat_ids(self, idx):
     raise NotImplementedError
   
   def sample(self, id):
     image, annotation = self.at(id)
+    if image is None:
+      # None 跳过
+      return None
+    
     if not isinstance(annotation, dict):
       annotation = {'label': annotation}
 
