@@ -9,8 +9,6 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import numpy as np
 import copy
-import cv2
-from antgo.framework.helper.runner.dist_utils import get_dist_info
 from antgo.framework.helper.utils import build_from_cfg
 
 
@@ -267,7 +265,7 @@ class TVReader(torch.utils.data.Dataset):
         if self._fields is not None:
             if self._alias is None:
                 self._alias = copy.deepcopy(self._fields)
-                
+
         self.flag = np.zeros(len(self), dtype=np.uint8)
         if hasattr(self.proxy_dataset, 'flag'):
             self.flag = self.proxy_dataset.flag
@@ -303,6 +301,19 @@ class TVReader(torch.utils.data.Dataset):
         sample = None
         try:
             sample = self.proxy_dataset[idx]
+            if sample is None:
+                fail_count = 0
+                while True:
+                    # 随机选择，找到有效样本
+                    random_i = np.random.randint(0,self.proxy_dataset.size)
+                    sample = self.proxy_dataset.sample(random_i)
+                    if sample is not None:
+                        break
+
+                    fail_count += 1
+                    if fail_count > 10:
+                        logging.warn(f'Fail find correct sample and exceed count {fail_count}.')            
+
             if isinstance(sample, tuple) or isinstance(sample, list):
                 temp = {}
                 for data, name in zip(sample, self._alias):
