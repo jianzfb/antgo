@@ -20,10 +20,10 @@ from antgo.utils import mask as maskUtils
 from antgo.utils.fs import download
 from antgo.utils.fs import maybe_here_match_format
 from antgo.utils import logger
-from aligo import Aligo
+from antgo.framework.helper.fileio.file_client import *
+
+
 __all__ = ['COCO2017']
-
-
 class CocoAPI():
   def __init__(self, annotation_file=None):
     """
@@ -391,14 +391,18 @@ class COCO2017(Dataset):
     assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
 
     if not os.path.exists(os.path.join(self.dir , 'annotations')):
-      self.ali = Aligo()  # 第一次使用，会弹出二维码，供扫描登录
-      # 下载数据集
-      self.ali.download_file(file='ali:///dataset/COCO.tar', local_folder=self.dir)
-      assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
-      # 解压
-      os.system(f'cd {self.dir} && tar -xf COCO.tar')
-      # 修改数据目录
-      self.dir = os.path.join(self.dir, 'COCO')
+      if not os.path.exists(os.path.join(self.dir, 'COCO')):
+        ali = AliBackend()
+        # 下载数据集
+        ali.download('ali:///dataset/COCO.tar', self.dir)
+        assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
+        # 解压
+        os.system(f'cd {self.dir} && tar -xf COCO.tar')
+        # 修改数据目录
+        self.dir = os.path.join(self.dir, 'COCO')
+      else:
+        # 修改数据目录
+        self.dir = os.path.join(self.dir, 'COCO')
 
     data_type = None
     if self.train_or_test == "train":

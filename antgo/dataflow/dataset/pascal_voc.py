@@ -6,25 +6,14 @@ from __future__ import unicode_literals
 
 import os, sys
 import numpy as np
-import random
-import six
-from six.moves import urllib, range
-import copy
-import logging
 import tarfile
 import xml.etree.ElementTree as ET
-import scipy.sparse
-from antgo.utils.fs import download
 from antgo.utils.fs import maybe_here_match_format
-from antgo.utils import logger, get_rng
 from antgo.dataflow.dataset.dataset import *
+from antgo.framework.helper.fileio.file_client import *
+
 
 __all__ = ['Pascal2007', 'Pascal2012']
-
-PASCAL2007_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2007"
-PASCAL2012_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2012"
-
-
 class PascalBase(Dataset):
   def __init__(self, year, image_set, dir=None, ext_params=None):
     super(PascalBase, self).__init__(image_set, dir, ext_params)
@@ -35,14 +24,13 @@ class PascalBase(Dataset):
     self._image_set = image_set
     self._devkit_path = dir
 
-    # read sample data
-    if self.train_or_test == 'sample':
-      self.data_samples, self._image_index = self.load_samples()
-      return
-
     if self._year == '2007':
       if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
-        self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
+        # self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
+        ali = AliBackend()
+        ali.download('ali:///dataset/voc/VOCtrainval_06-Nov-2007.tar', self.dir)
+        ali.download('ali:///dataset/voc/VOCtest_06-Nov-2007.tar', self.dir)
+
       maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
       if maybe_data_path is None:
         # auto untar
@@ -55,8 +43,13 @@ class PascalBase(Dataset):
         tar.close()
     else:
       if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
-        self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
-        self.download(self.dir, ['VOC2012test.tar'], default_url='http://host.robots.ox.ac.uk:8080/eval/downloads/')
+        # self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
+        # self.download(self.dir, ['VOC2012test.tar'], default_url='http://host.robots.ox.ac.uk:8080/eval/downloads/')
+        ali = AliBackend()
+        ali.download('ali:///dataset/voc/VOCtrainval_11-May-2012.tar', self.dir)
+        ali.download('ali:///dataset/voc/VOC2012test.tar', self.dir)
+        ali.download('ali:///dataset/voc/SegmentationClassAug.zip', self.dir)
+        ali.download('ali:///dataset/voc/trainaug.txt', self.dir)
 
       maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
       if maybe_data_path is None:
@@ -75,6 +68,9 @@ class PascalBase(Dataset):
         except:
           print(f'Untar {os.path.join(self.dir, "VOC2012test.tar")} fail')
 
+        # unzip aug class 
+        os.system(f"cd {self.dir} && unzip SegmentationClassAug.zip")
+   
     self._data_path = os.path.join(self.dir,'VOCdevkit', 'VOC' + self._year)
     self._classes = ('background',
                      'aeroplane',
@@ -153,29 +149,18 @@ class PascalBase(Dataset):
 
     self._aug_dataset = []
     self._aug_seg = []
-    if self._year == '2012':
-      train_aug = getattr(self, 'aug', None)
-      task_type = getattr(self, 'task_type', None)
-      if train_aug is not None and task_type == 'SEGMENTATION':
-        if not os.path.exists(os.path.join(self.dir, 'SegmentationClassAug')):
-          os.system(f'cd {self.dir} && wget http://vllab1.ucmerced.edu/~whung/adv-semi-seg/SegmentationClassAug.zip && unzip SegmentationClassAug.zip')
+    if self._year == '2012' and self.train_or_test == 'train':
+      with open(os.path.join(self.dir, 'trainaug.txt'), 'r') as fp:
+        content = fp.readline()
 
-        if not os.path.exists(os.path.join(self.dir, 'trainaug.txt')):
-          os.system(f'cd {self.dir} && wget https://gist.githubusercontent.com/sun11/2dbda6b31acc7c6292d14a872d0c90b7/raw/5f5a5270089239ef2f6b65b1cc55208355b5acca/trainaug.txt')
-  
-        assert(os.path.exists(os.path.join(self.dir, 'SegmentationClassAug')))
-        assert(os.path.exists(os.path.join(self.dir, 'trainaug.txt')))
-        with open(os.path.join(self.dir, 'trainaug.txt'), 'r') as fp:
+        while(content):
+          content = content.strip()
+          if content == "":
+            break
+
+          self._aug_dataset.append(os.path.join(self.dir, 'VOCdevkit/VOC2012/JPEGImages', '%s.jpg'%content))
+          self._aug_seg.append(os.path.join(self.dir, 'SegmentationClassAug', '%s.png'%content))
           content = fp.readline()
-
-          while(content):
-            content = content.strip()
-            if content == "":
-              break
-
-            self._aug_dataset.append(os.path.join(self.dir, 'VOCdevkit/VOC2012/JPEGImages', '%s.jpg'%content))
-            self._aug_seg.append(os.path.join(self.dir, 'SegmentationClassAug', '%s.png'%content))
-            content = fp.readline()
 
   @property
   def size(self):
@@ -183,51 +168,36 @@ class PascalBase(Dataset):
 
   def data_pool(self):
     raise NotImplemented
-  
-  def at(self, id):
-    if self.train_or_test == 'sample':
-      return self.data_samples[id]
 
+  def at(self, id):
     if id >= self._image_index_num:
         image_path = self._aug_dataset[id - self._image_index_num]
         image_seg_path = self._aug_seg[id - self._image_index_num]
-        image = imread(image_path)
-        seg_img = imread(image_seg_path)
-        if len(seg_img.shape) == 3:
-          seg_img = seg_img[:,:,0]
-        return [image, {'segments': seg_img}]
+        image = cv2.imread(image_path)
+        seg_img = cv2.imread(image_seg_path, cv2.IMREAD_GRAYSCALE)
+        return (
+          image, 
+          {
+            'segments': seg_img,
+            'image_meta': {
+              'image_shape': (image.shape[0], image.shape[1])
+            }            
+          }
+        )
 
     index = self._image_index[id]
     gt_roidb = self._load_roidb(index)
-    task_type = getattr(self, 'task_type', None)
-    if task_type is not None:
-      if task_type == 'ACTION_CLASSIFICATION':
-        keep_index = []
-        for obj_index, obj_name in enumerate(gt_roidb['category']):
-          if obj_name == 'person':
-            keep_index.append(obj_index)
+    image = cv2.imread(self.image_path_from_index(index))
+    annos = {
+      'bboxes': gt_roidb['bbox'].astype(np.float32),
+      'labels': gt_roidb['category_id'],
+      'segments': gt_roidb['segments'],
+      'image_meta': {
+        'image_shape': (image.shape[0], image.shape[1])
+      }
+    }
+    return (image, annos)
 
-        if len(keep_index) == 0:
-          return [None, None]
-
-        keep_index = [ki for ki in keep_index if gt_roidb['person_action'][ki] is not None]
-        if len(keep_index) == 0:
-          return [None, None]
-
-        gt_roidb['category_id'] = np.concatenate([gt_roidb['person_action'][ki].reshape((1, -1)) for ki in keep_index])
-        gt_roidb['bbox'] = gt_roidb['bbox'][keep_index, :]
-        gt_roidb['area'] = gt_roidb['area'][keep_index]
-        gt_roidb['difficult'] = [gt_roidb['difficult'][ki] for ki in keep_index]
-
-        gt_roidb.pop('person_action')
-
-    image = imread(self.image_path_from_index(index))
-    gt_roidb['info'] = (image.shape[0], image.shape[1], image.shape[2])
-    gt_roidb['id'] = id
-
-    # [img,groundtruth]
-    return [image, gt_roidb]
-  
   def image_path_from_index(self, index):
     """
     Construct an image path from the image's "index" identifier.
@@ -237,7 +207,7 @@ class PascalBase(Dataset):
     assert os.path.exists(image_path), \
             'Path does not exist: {}'.format(image_path)
     return image_path
-    
+
   def image_path_at(self, i):
     """
     Return the absolute path to image i in the image sequence.
@@ -256,21 +226,14 @@ class PascalBase(Dataset):
     image_set_file = os.path.join(self._data_path, 'ImageSets', 'Main',
                                   self._image_set + '.txt')
 
-    task_type = getattr(self, 'task_type', None)
-    if task_type is not None:
-      if task_type == 'ACTION_CLASSIFICATION':
-        image_set_file = os.path.join(self._data_path, 'ImageSets', 'Action',
-                                  self._image_set + '.txt')
-      elif task_type == 'SEGMENTATION':
-        image_set_file = os.path.join(self._data_path, 'ImageSets', 'Segmentation',
-                                  self._image_set + '.txt')
-
+    image_set_file = \
+      os.path.join(self._data_path, 'ImageSets', 'Segmentation', self._image_set + '.txt')
     assert os.path.exists(image_set_file), \
             'Path Does not Exist: {}'.format(image_set_file)
     with open(image_set_file) as f:
         image_index = [x.strip() for x in f.readlines()]
     return image_index
-    
+
   def _load_pascal_annotation(self, index):
     """
     Load image and bounding boxes info from XML file in the PASCAL VOC
@@ -380,10 +343,12 @@ class Pascal2012(PascalBase):
 
     return self, validation_pascal2012
 
-# p2012 = Pascal2012('train', '/root/workspace/dataset/temp_dataset', ext_params={'task_type': 'SEGMENTATION', 'aug': True})
+# p2012 = Pascal2012('val', '/root/workspace/dataset/temp_dataset')
 # print(f'p2012 size {p2012.size}')
 # for i in range(p2012.size):
 #   result = p2012.sample(i)
+#   # ss = result['segments']
+#   # cv2.imwrite('./1234.png', (ss/20*255).astype(np.uint8))
 #   print(i)
 # value = p2012.sample(0)
 # print(value.keys())

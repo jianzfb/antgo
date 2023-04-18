@@ -5,46 +5,41 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+import sys
 from antgo.dataflow.dataset import *
 import os
 import numpy as np
+import time
+import copy
+import cv2
+from antgo.framework.helper.fileio.file_client import *
+
 
 __all__ = ['LFW']
 
-LFW_URL = 'http://vis-www.cs.umass.edu/lfw/index.html#download'
 class LFW(Dataset):
-  def __init__(self, train_or_test, dir=None, params=None):
-    super(LFW, self).__init__(train_or_test, dir, params)
-    assert(train_or_test in ['train', 'test','sample'])
+  def __init__(self, train_or_test, dir=None, ext_params=None):
+    super(LFW, self).__init__(train_or_test, dir, ext_params)
+    assert(train_or_test in ['train', 'val', 'test'])
+    if not os.path.exists(self.dir):
+      os.makedirs(self.dir)
 
-    # read sample data
-    if self.train_or_test == 'sample':
-      self.data_samples, self.ids = self.load_samples()
-      return
+    if not os.path.exists(os.path.join(self.dir, 'lfw-deepfunneled')):
+      ali = AliBackend()
+      ali.download('ali:///dataset/lfw/lfw-deepfunneled.tgz', self.dir)
+      ali.download('ali:///dataset/lfw/pairsDevTest.txt', self.dir)
+      ali.download('ali:///dataset/lfw/pairsDevTrain.txt', self.dir)
+      ali.download('ali:///dataset/lfw/peopleDevTest.txt', self.dir)
+      ali.download('ali:///dataset/lfw/peopleDevTrain.txt', self.dir)
 
-    self.image_flag = getattr(self, 'image', 'align')
-    # 0.step maybe download
-    if self.image_flag == 'align':
-      if not os.path.exists(os.path.join(self.dir, 'lfw-deepfunneled')):
-        self.download(self.dir,
-                      file_names=[],
-                      default_url='http://vis-www.cs.umass.edu/lfw/lfw-deepfunneled.tgz',
-                      auto_untar=True,
-                      is_gz=True)
-    else:
-      if not os.path.exists(os.path.join(self.dir, 'lfw')):
-        self.download(self.dir,
-                      file_names=[],
-                      default_url='http://vis-www.cs.umass.edu/lfw/lfw.tgz',
-                      auto_untar=True,
-                      is_gz=True)
+      os.system(f'cd {self.dir} && tar -xf lfw-deepfunneled.tgz')
+
+    self.task_type = getattr(self, 'task_type', 'CLASSIFICATION')
+    assert(self.task_type in ['CLASSIFICATION', 'DISTANCE'])
     
     # 1.step data folder (wild or align)
-    if self.image_flag == 'align':
-      self._data_folder = os.path.join(self.dir, 'lfw-deepfunneled')
-    else:
-      self._data_folder = os.path.join(self.dir, 'lfw')
-    
+    self._data_folder = os.path.join(self.dir, 'lfw-deepfunneled')
+
     # 2.step data files
     self._persons_list = []
     self._persons_id_str = []
@@ -55,176 +50,123 @@ class LFW(Dataset):
       for person_image in os.listdir(os.path.join(self._data_folder, person_id_str)):
         self._persons_list.append(os.path.join(self._data_folder, person_id_str, person_image))
         self._persons_id_str.append(person_id_str)
-    
+
     id_set = set(self._persons_id_str)
     self.person_id_map = {}
     for s_i, s in enumerate(id_set):
       self.person_id_map[s] = s_i
-    
+
     for person_id_str in self._persons_id_str:
       person_id = self.person_id_map[person_id_str]
       self._persons_id.append(person_id)
-    
     self.ids = list(range(len(self._persons_list)))
 
     # fixed seed
     self.seed = time.time()
+    self.same_pairs = []
+    self.diff_pairs = []
+    if self.train_or_test == 'train':
+      with open(os.path.join(self.dir, 'pairsDevTrain.txt')) as fp:
+        same_pair_num = fp.readline()
+        same_pair_num = int(same_pair_num.strip())
+        for pair_i in range(same_pair_num):
+          content = fp.readline()
+          person_name, image_a, image_b = content.strip().split('\t')
+          person_a_image = '%s/%s_%04d.jpg'%(person_name, person_name, int(image_a))
+          person_b_image = '%s/%s_%04d.jpg'%(person_name, person_name, int(image_b))
 
-    self.view = int(getattr(self, 'view', 0))
-    self.pairs = []
-    if self.view == 1:
-      if self.train_or_test == 'train':
-        with open(os.path.join(self.dir, 'pairsDevTrain.txt')) as fp:
-          same_pair_num = fp.readline()
-          same_pair_num = int(same_pair_num.strip())
-          for pair_i in range(same_pair_num):
-            content = fp.readline()
-            person_name, image_a, image_b = content.strip().split('\t')
-            person_a_image = '%s/%s_%04d.jpg'%(person_name, person_name, int(image_a))
-            person_b_image = '%s/%s_%04d.jpg'%(person_name, person_name, int(image_b))
+          self.same_pairs.append((person_a_image, person_b_image))
 
-            self.pairs.append((person_a_image, person_b_image))
+        content = fp.readline()
+        while content:
+          content = content.strip()
+          if content == '':
+            break
+          diff_person_a_name, diff_person_a_index, diff_person_b_name, diff_person_b_index = \
+            content.split('\t')
+
+          diff_person_a_image = '%s/%s_%04d.jpg'%(diff_person_a_name, diff_person_a_name, int(diff_person_a_index))
+          diff_person_b_image = '%s/%s_%04d.jpg'%(diff_person_b_name, diff_person_b_name, int(diff_person_b_index))
+          self.diff_pairs.append((diff_person_a_image, diff_person_b_image))
 
           content = fp.readline()
-          while content:
-            content = content.strip()
-            if content == '':
-              break
-            diff_person_a_name, diff_person_a_index, diff_person_b_name, diff_person_b_index = \
-              content.split('\t')
+    elif self.train_or_test == 'test':
+      with open(os.path.join(self.dir, 'pairsDevTest.txt')) as fp:
+        same_pair_num = fp.readline()
+        same_pair_num = int(same_pair_num.strip())
+        for pair_i in range(same_pair_num):
+          content = fp.readline()
+          person_name, image_a, image_b = content.strip().split('\t')
+          person_a_image = '%s/%s_%04d.jpg' % (person_name, person_name, int(image_a))
+          person_b_image = '%s/%s_%04d.jpg' % (person_name, person_name, int(image_b))
 
-            diff_person_a_image = '%s/%s_%04d.jpg'%(diff_person_a_name, diff_person_a_name, int(diff_person_a_index))
-            diff_person_b_image = '%s/%s_%04d.jpg'%(diff_person_b_name, diff_person_b_name, int(diff_person_b_index))
-            self.pairs.append((diff_person_a_image, diff_person_b_image))
+          self.same_pairs.append((person_a_image, person_b_image))
 
-            content = fp.readline()
-      elif self.train_or_test == 'test':
-        with open(os.path.join(self.dir, 'pairsDevTest.txt')) as fp:
-          same_pair_num = fp.readline()
-          same_pair_num = int(same_pair_num.strip())
-          for pair_i in range(same_pair_num):
-            content = fp.readline()
-            person_name, image_a, image_b = content.strip().split('\t')
-            person_a_image = '%s/%s_%04d.jpg' % (person_name, person_name, int(image_a))
-            person_b_image = '%s/%s_%04d.jpg' % (person_name, person_name, int(image_b))
+        content = fp.readline()
+        while content:
+          content = content.strip()
+          if content == '':
+            break
+          diff_person_a_name, diff_person_a_index, diff_person_b_name, diff_person_b_index = \
+            content.split('\t')
 
-            self.pairs.append((person_a_image, person_b_image))
+          diff_person_a_image = '%s/%s_%04d.jpg' % (diff_person_a_name, diff_person_a_name, int(diff_person_a_index))
+          diff_person_b_image = '%s/%s_%04d.jpg' % (diff_person_b_name, diff_person_b_name, int(diff_person_b_index))
+          self.diff_pairs.append((diff_person_a_image, diff_person_b_image))
 
           content = fp.readline()
-          while content:
-            content = content.strip()
-            if content == '':
-              break
-            diff_person_a_name, diff_person_a_index, diff_person_b_name, diff_person_b_index = \
-              content.split('\t')
 
-            diff_person_a_image = '%s/%s_%04d.jpg' % (diff_person_a_name, diff_person_a_name, int(diff_person_a_index))
-            diff_person_b_image = '%s/%s_%04d.jpg' % (diff_person_b_name, diff_person_b_name, int(diff_person_b_index))
-            self.pairs.append((diff_person_a_image, diff_person_b_image))
-
-            content = fp.readline()
-    else:
-      if os.path.exists(os.path.join(self.dir, 'pairs.txt')):
-        pass
-      if os.path.exists(os.path.join(self.dir, 'people.txt')):
-        pass
-    
   @property
   def size(self):
-    if self.view == 0:
+    if self.task_type == 'CLASSIFICATION':
       return len(self.ids)
-    elif self.view == 1:
-      return len(self.pairs)
     else:
-      return 0
-  
-  def data_pool(self):
-    if self.train_or_test == 'sample':
-      sample_idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(sample_idxs)
-
-      for index in sample_idxs:
-        yield self.data_samples[index]
-      return
-
-    epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if epoch >= max_epoches:
-        break
-      epoch += 1
-    
-      if self.view == 0:
-        idxs = copy.deepcopy(self.ids)
-        if self.rng:
-          self.rng.shuffle(idxs)
-
-        for k in idxs:
-          person_file = self._persons_list[k]
-          person_image = imread(person_file)
-          person_id_str = self._persons_id_str[k]
-          person_id = self._persons_id[k]
-
-          yield [person_image, {'category_id': person_id,
-                                'category': person_id_str,
-                                'id': k,
-                                'info': [person_image.shape[0], person_image.shape[1], person_image.shape[2]]}]
-      elif self.view == 1:
-        pair_ids = list(range(len(self.pairs)))
-        if self.rng:
-          self.rng.shuffle(pair_ids)
-        for pair_i in pair_ids:
-          person_a, person_b = self.pairs[pair_i]
-          person_a_name = person_a.split('/')[0]
-          person_b_name = person_b.split('/')[0]
-          person_a_path = os.path.join(self._data_folder, person_a)
-          person_a_image = imread(person_a_path)
-          person_b_path = os.path.join(self._data_folder, person_b)
-          person_b_image = imread(person_b_path)
-
-          data = np.stack([person_a_image, person_b_image],0)
-          yield data, {'a_category': person_a_name,
-                       'a_category_id': self.person_id_map[person_a_name],
-                       'b_category': person_b_name,
-                       'b_category_id': self.person_id_map[person_b_name],
-                       'id': pair_i}
-      else:
-        pass
+      return len(self.pairs)
 
   def at(self, id):
-    if self.train_or_test == 'sample':
-      return self.data_samples[id]
-
-    if self.view == 0:
+    if self.task_type == 'CLASSIFICATION':
       person_file = self._persons_list[id]
-      person_image = imread(person_file)
-      person_id_str = self._persons_id_str[id]
+      person_image = cv2.imread(person_file)
       person_id = self._persons_id[id]
 
-      return person_image, {'category_id': person_id,
-                            'category': person_id_str,
-                            'id': id,
-                            'info': [person_image.shape[0], person_image.shape[1], person_image.shape[2]]}
-    elif self.view == 1:
-      pair_i = id
-      person_a, person_b = self.pairs[pair_i]
-      person_a_name = person_a.split('/')[0]
-      person_b_name = person_b.split('/')[0]
-      person_a_path = os.path.join(self.dir, person_a)
-      person_a_image = imread(person_a_path)
-      person_b_path = os.path.join(self.dir, person_b)
-      person_b_image = imread(person_b_path)
-
-      data = np.stack([person_a_image, person_b_image], 0)
-      return data, {'a_category': person_a_name,
-                   'a_category_id': self.person_id_map[person_a_name],
-                   'b_category': person_b_name,
-                   'b_category_id': self.person_id_map[person_b_name],
-                   'id': pair_i}
+      return person_image, {
+        'label': person_id,
+        'image_meta': {
+          'image_shape': (person_image.shape[0], person_image.shape[1]),
+          'image_file': person_file
+        }
+      }
     else:
-      pass
-  
+      pair_i = id
+      if pair_i < len(self.same_pairs):
+        same_person_a, same_person_b = self.same_pairs[pair_i]
+        same_person_a_path = os.path.join(self.dir, same_person_a)
+        same_person_a_image = cv2.imread(same_person_a_path)
+        same_person_b_path = os.path.join(self.dir, same_person_b)
+        same_person_b_image = cv2.imread(same_person_b_path)
+        data = np.stack([same_person_a_image, same_person_b_image], 0)
+        return data, {
+          'label': 0,
+          'image_meta': {
+            'image_shape': (same_person_a_image.shape[0], same_person_a_image.shape[1]),
+            'image_file': same_person_a_path
+          }
+        }
+      else:
+        diff_person_a, diff_person_b = self.diff_pairs[pair_i]
+        diff_person_a_path = os.path.join(self.dir, diff_person_a)
+        diff_person_a_image = cv2.imread(diff_person_a_path)
+        diff_person_b_path = os.path.join(self.dir, diff_person_b)
+        diff_person_b_image = cv2.imread(diff_person_b_path)
+        data = np.stack([diff_person_a_image, diff_person_b_image], 0)        
+        return data, {
+          'label': 1,
+          'image_meta': {
+            'image_shape': (diff_person_a_image.shape[0], diff_person_a_image.shape[1]),
+            'image_file': diff_person_a_path
+          }
+        }
+
   def split(self, split_params={}, split_method=''):
     assert (self.train_or_test == 'train')
     assert (split_method in ['repeated-holdout', 'bootstrap', 'kfold'])
@@ -245,3 +187,9 @@ class LFW(Dataset):
     val_dataset.ids = val_ids
     
     return train_dataset, val_dataset
+
+# lfw = LFW('train', '/root/workspace/dataset/lfw')
+# num = lfw.size
+# for i in range(num):
+#   data = lfw.sample(i)
+#   print(data.keys())

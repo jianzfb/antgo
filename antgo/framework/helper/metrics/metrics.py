@@ -36,7 +36,8 @@ class COCOWarp(COCO):
 
 @MEASURES.register_module()
 class COCOCompatibleEval(object):
-    def __init__(self, categories=[{'name': 'left', 'id': 1},{'name': 'right', 'id': 2}], without_background=True):
+    def __init__(self, categories, without_background=False):
+        # categories = [{'name': 'left', 'id': 0},{'name': 'right', 'id': 1}]
         self.categories = categories
         for c in self.categories:
             if 'supercategory' not in c:

@@ -48,7 +48,6 @@ data=dict(
         train_or_test='train',
         dir='./visalso_dataset',
         pipeline=[
-            dict(type="Meta"),
             dict(type="ResizeByShort", short_size=256),
             dict(type="RandomScaledCrop", target_size=(256,256)),
             dict(type="Rotation", degree=15),
@@ -74,7 +73,6 @@ data=dict(
         train_or_test='val',
         dir='./visalso_dataset',
         pipeline=[
-            dict(type="Meta"),
             dict(type="ResizeByShort", short_size=256),
             dict(type='FixedCrop', target_size=(256,256), align='center'),
             dict(type='ResizeS', target_dim=[256,256]),
@@ -97,7 +95,6 @@ data=dict(
         train_or_test='test',
         dir='./visalso_dataset',
         pipeline=[
-            dict(type="Meta"),
             dict(type="ResizeByShort", short_size=256),
             dict(type='FixedCrop', target_size=(256,256), align='center'),
             dict(type='ResizeS', target_dim=[256,256]),
@@ -123,7 +120,7 @@ evaluation=dict(
     interval=1, 
     metric=dict(
         type='COCOCompatibleEval', 
-        categories=[{'name': 'left', 'id': 1}, {'name': 'left', 'id': 2}]
+        categories=[{'name': f'{label}', 'id': label} for label in range(4)]
     ), 
     save_best='AP@[ IoU=0.50:0.95 | area= all | maxDets=100 ]',
     rule='greater'
