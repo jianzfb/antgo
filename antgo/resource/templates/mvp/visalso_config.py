@@ -33,8 +33,7 @@ model = dict(
         score_thresh=0.2,
         train_cfg=None,
         test_cfg=dict(topk=100, local_maximum_kernel=3),
-        loss_ch=dict(type='GaussianFocalLoss', loss_weight=1.0),
-        loss_wh=dict(type='L1Loss', loss_weight=1.0)
+        loss_ch=dict(type='GaussianFocalLoss', loss_weight=1.0)
     ),  
 )
 

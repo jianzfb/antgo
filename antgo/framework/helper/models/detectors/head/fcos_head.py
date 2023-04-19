@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import torch
 import torch.nn as nn
 from antgo.framework.helper.cnn import bias_init_with_prob, normal_init
@@ -10,54 +9,23 @@ from ..utils.gaussian_target import (get_local_maximum, get_topk_from_heatmap,
                                      transpose_and_gather_feat)
 from .base_dense_head import BaseDenseHead
 import torch.nn.functional as F
-import numpy as np
-import cv2 
 
 
-def sigmoid_focal_loss(
-    inputs: torch.Tensor,
-    targets: torch.Tensor,
-    alpha: float = -1,
-    gamma: float = 2,
-    reduction: str = "none",
-) -> torch.Tensor:
-    """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+def iou_loss(preds, targets):
+    '''
     Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
-        alpha: (optional) Weighting factor in range (0,1) to balance
-                positive vs negative examples. Default = -1 (no weighting).
-        gamma: Exponent of the modulating factor (1 - p_t) to
-               balance easy vs hard examples.
-        reduction: 'none' | 'mean' | 'sum'
-                 'none': No reduction will be applied to the output.
-                 'mean': The output will be averaged.
-                 'sum': The output will be summed.
-    Returns:
-        Loss tensor with the reduction option applied.
-    """
-    inputs = inputs.float()
-    targets = targets.float()
-    p = torch.sigmoid(inputs)
-    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-    p_t = p * targets + (1 - p) * (1 - targets)
-    loss = ce_loss * ((1 - p_t) ** gamma)
-
-    if alpha >= 0:
-        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
-        loss = alpha_t * loss
-
-    if reduction == "mean":
-        loss = loss.mean()
-    elif reduction == "sum":
-        loss = loss.sum()
-
-    return loss
-
+    preds: [n,4] ltrb
+    targets: [n,4]
+    '''
+    lt = torch.min(preds[:, :2], targets[:, :2])
+    rb = torch.min(preds[:, 2:], targets[:, 2:])
+    wh = (rb + lt).clamp(min=0)
+    overlap = wh[:, 0] * wh[:, 1]  # [n]
+    area1 = (preds[:, 2] + preds[:, 0]) * (preds[:, 3] + preds[:, 1])
+    area2 = (targets[:, 2] + targets[:, 0]) * (targets[:, 3] + targets[:, 1])
+    iou = overlap / (area1 + area2 - overlap)
+    loss = -iou.clamp(min=1e-6).log()
+    return loss.sum()
 
 
 @HEADS.register_module()
@@ -90,7 +58,6 @@ class FcosHead(BaseDenseHead):
                  score_thresh=0.15,
                  loss_ch=dict(
                      type='GaussianFocalLoss', loss_weight=1.0),
-                 loss_wh=dict(type='L1Loss', loss_weight=0.1),
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=None):
@@ -103,35 +70,8 @@ class FcosHead(BaseDenseHead):
         self.feat_channel = feat_channel
         self._build_head()
         self.loss_center_heatmap=build_loss(loss_ch)
-        self.loss_reg = build_loss(loss_wh)
         self.train_cfg = train_cfg
-        self.test_cfg = test_cfg
-        self.register_buffer('center_offset_yx', torch.from_numpy(np.array([
-                [-2,-2],
-                [-2,-1],
-                [-2,0],
-                [-2,1],
-                [-2,2],
-                [-1,-2],
-                [-1,-1],
-                [-1,0],
-                [-1,1],
-                [-1,2],   
-                [0,-2],
-                [0,-1],
-                [0,1],
-                [0,2],
-                [1,-2],
-                [1,-1],
-                [1,0],
-                [1,1],
-                [1,2],
-                [2,-2],
-                [2,-1],
-                [2,0],
-                [2,1],
-                [2,2],                
-            ])).unsqueeze(0).unsqueeze(0)) # 1x24x2        
+        self.test_cfg = test_cfg      
 
     def _build_head(self):
         self.heatmap_head = nn.Sequential(
@@ -192,8 +132,7 @@ class FcosHead(BaseDenseHead):
              reg_pred,
              bboxes,
              labels,
-             image_meta,
-             gt_bboxes_ignore=None):
+             image_meta, gt_bboxes_ignore=None):
         target_result, avg_factor = \
             self.get_targets(bboxes, labels, center_heatmap_pred.shape, image_meta, center_heatmap_pred.device)
 
@@ -201,18 +140,29 @@ class FcosHead(BaseDenseHead):
         reg_targets = target_result['reg_targets']
         reg_weights = target_result['reg_weights']
 
-        loss_center_heatmap = self.loss_center_heatmap(
-            center_heatmap_pred.sigmoid(), center_heatmap_target, avg_factor=avg_factor)
-        loss_reg_v = self.loss_reg(
-            reg_pred,
-            reg_targets,
-            reg_weights,
-            avg_factor=avg_factor*2)
+        loss_center_heatmap = \
+            self.loss_center_heatmap(center_heatmap_pred.sigmoid(), center_heatmap_target, avg_factor=avg_factor)
+
+        batch_size = center_heatmap_pred.shape[0]
+        pred = reg_pred.permute(0, 2, 3, 1)
+        pred = torch.reshape(pred, [batch_size, -1, 4])
+
+        gt = reg_targets.permute(0, 2, 3, 1)
+        gt = torch.reshape(gt, [batch_size, -1, 4])
+
+        loss_reg_offset = []
+        for batch_index in range(batch_size):
+            pred_pos = pred[batch_index][reg_weights[batch_index,0].view(-1).to(torch.bool)]  # [num_pos_b,4]
+            target_pos = gt[batch_index][reg_weights[batch_index,0].view(-1).to(torch.bool)]  # [num_pos_b,4]
+            loss_reg_offset.append(iou_loss(pred_pos, target_pos).view(1))
+
+        num_pos = torch.sum(reg_weights).clamp_(min=1).float()
+        loss_reg_offset = torch.cat(loss_reg_offset, dim=0) / num_pos
 
         # 
         total_loss = dict(
             loss_center_heatmap=loss_center_heatmap,
-            loss_reg=loss_reg_v)
+            loss_reg=loss_reg_offset)
 
         return total_loss
 
@@ -265,7 +215,7 @@ class FcosHead(BaseDenseHead):
                 reg_target_list.append(torch.zeros([4, feat_h, feat_w], dtype=torch.float32, device=device))
                 reg_weight_list.append(torch.zeros([1, feat_h, feat_w], dtype=torch.float32, device=device))
                 continue
-            
+
             coords = self.coords_fmap(h=feat_h, w=feat_w).to(device=center_heatmap_target.device) #[h*w,2]
             x = coords[:, 0]
             y = coords[:, 1]
@@ -278,11 +228,10 @@ class FcosHead(BaseDenseHead):
 
             off_min = torch.min(ltrb_off,dim=-1)[0]     #[h*w,m]
             off_max = torch.max(ltrb_off,dim=-1)[0]     #[h*w,m]
-
             mask_in_gtboxes = off_min>0
-            mask_in_level = (off_max>0)&(off_max<=80)   # 设置最大尺寸和最小尺寸约束
+            mask_in_level = (off_max>-1)&(off_max<=64)   # 设置最大尺寸和最小尺寸约束 (stride=8)
 
-            radiu = 8
+            radiu = 8 * 1.5
             gt_center_x = (gt_bbox[...,0]+gt_bbox[...,2])*width_ratio/2
             gt_center_y = (gt_bbox[...,1]+gt_bbox[...,3])*height_ratio/2
             c_l_off = x[:,None] - gt_center_x[None,:]#[h*w,1]-[1,m]-->[h*w,m]
@@ -306,8 +255,8 @@ class FcosHead(BaseDenseHead):
 
             # reshape
             reg_target = reg_target.reshape(feat_h, feat_w, 4).permute(2,0,1)
-            mask_pos_2 = mask_pos_2.to(torch.float32).reshape(1, feat_h,feat_w)
 
+            mask_pos_2 = mask_pos_2.to(torch.float32).reshape(1, feat_h,feat_w)
             gt_label = gt_labels[batch_id]
             center_x = (gt_bbox[:, [0]] + gt_bbox[:, [2]]) * width_ratio / 2
             center_y = (gt_bbox[:, [1]] + gt_bbox[:, [3]]) * height_ratio / 2
@@ -427,7 +376,7 @@ class FcosHead(BaseDenseHead):
         if 'nms' in self.test_cfg or with_nms:
             det_bboxes, det_labels = \
                 self._bboxes_nms(det_bboxes, det_labels, self.test_cfg)
-        
+
         # only for debug
         # image = cv2.imread(img_meta['image_file'])
         # det_bboxes_numpy = det_bboxes.detach().cpu().numpy()

@@ -1441,25 +1441,22 @@ class Permute(BaseOperator):
 
     def __call__(self, sample, context=None):
         assert 'image' in sample, "image data not found"
-        for k in sample.keys():
-            # hard code
-            if k == 'image':
-                im = sample[k]
-                if self.channel_first:
-                    im = np.swapaxes(im, 1, 2)
-                    im = np.swapaxes(im, 1, 0)
-                if self.to_bgr:
-                    im = im[[2, 1, 0], :, :]
-                sample[k] = im
-                
-            if k == 'segments':
-                label = sample[k]
-                if self.channel_first:
-                    label = np.expand_dims(label, 0)
-                else:
-                    label = np.expand_dims(label, -1)
-                sample[k] = label
+        if 'image' in sample.keys():
+            im = sample["image"]
+            if self.channel_first:
+                im = np.swapaxes(im, 1, 2)
+                im = np.swapaxes(im, 1, 0)
+            if self.to_bgr:
+                im = im[[2, 1, 0], :, :]
+            sample["image"] = im
 
+        if 'segments' in sample.keys():
+            label = sample['segments']
+            if self.channel_first:
+                label = np.expand_dims(label, 0)
+            else:
+                label = np.expand_dims(label, -1)
+            sample['segments'] = label
         return sample
 
 
@@ -2473,6 +2470,7 @@ class ResizeStepScaling(BaseOperator):
             segments = resize(segments, (w, h), cv2.INTER_NEAREST)
             sample['segments'] = segments
 
+        sample['image_meta']['image_shape'] = sample['image'].shape[:2]
         return sample
 
 
@@ -2533,18 +2531,38 @@ class ResizeRangeScaling(BaseOperator):
             segments, _ = resize_long(segments, random_size, cv2.INTER_NEAREST)
             sample['segments'] = segments
 
+        sample['image_meta']['image_shape'] = sample['image'].shape[:2]
         return sample
 
 
 # FINISH FIX
 class ResizeByShort(BaseOperator):
-    def __init__(self, short_size, inputs=None):
+    def __init__(self, short_size, max_size=1024,inputs=None):
         super().__init__(inputs=inputs)
         self.short_size = short_size
+        self.max_size = max_size
+        self.is_range = False
+        if isinstance(self.short_size, list) or isinstance(self.short_size, tuple):
+            self.is_range = True
 
     def __call__(self, sample, context=None):
         im = sample['image']
-        im, scale = resize_short(im, self.short_size)
+        short_size = self.short_size
+        if self.is_range:
+            short_size = np.random.choice(self.short_size)
+        
+        value = min(im.shape[0], im.shape[1])
+        scale = float(short_size) / float(value)
+        newh = im.shape[0] * scale
+        neww = im.shape[1] * scale
+        if max(newh, neww) > self.max_size:
+            scale = self.max_size * 1.0 / max(newh, neww)
+            newh = newh * scale
+            neww = neww * scale
+            short_size = min(newh, neww)
+
+        # 短边resize
+        im, scale = resize_short(im, short_size)
         sample['image'] = im
 
         if 'bboxes' in sample and len(sample['bboxes']) > 0:
@@ -2559,9 +2577,11 @@ class ResizeByShort(BaseOperator):
 
         if 'segments' in sample and sample['segments'].size != 0:
             segments = sample['segments']
-            segments, _ = resize_long(segments, self.short_size, cv2.INTER_NEAREST)
+            segments, _ = resize_short(segments, short_size, cv2.INTER_NEAREST)
             sample['segments'] = segments
 
+        sample['image_meta']['image_shape'] = sample['image'].shape[:2]
+        # vis_2d_boxes_in_image(sample['image'].copy(), sample['bboxes'],sample['labels'], './b.png')
         return sample
 
 
@@ -2576,6 +2596,9 @@ class ResizeByLong(BaseOperator):
     def __init__(self, long_size, inputs=None):
         super(ResizeByLong, self).__init__(inputs=inputs)
         self.long_size = long_size
+        self.is_range = False
+        if isinstance(self.long_size, list) or isinstance(self.long_size, tuple):
+            self.is_range = True
 
     def __call__(self, sample, context=None):
         """
@@ -2592,7 +2615,11 @@ class ResizeByLong(BaseOperator):
                     -shape_before_resize (tuple): 保存resize之前图像的形状(h, w）。
         """
         im = sample['image']
-        im, scale = resize_long(im, self.long_size)
+        long_size = self.long_size
+        if self.is_range:
+            long_size = np.random.choice(self.long_size)
+        
+        im, scale = resize_long(im, long_size)
         sample['image'] = im
                 
         if 'bboxes' in sample and len(sample['bboxes']) > 0:
@@ -2607,7 +2634,8 @@ class ResizeByLong(BaseOperator):
         
         if 'segments' in sample and sample['segments'].size != 0:
             segments = sample['segments']
-            segments, _ = resize_long(segments, self.long_size, cv2.INTER_NEAREST)
+            segments, _ = resize_long(segments, long_size, cv2.INTER_NEAREST)
             sample['segments'] = segments
 
+        sample['image_meta']['image_shape'] = sample['image'].shape[:2]
         return sample

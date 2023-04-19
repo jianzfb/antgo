@@ -6,3 +6,4 @@ from .activelearning import *
 from .adda import *
 from .pose3d import *
 from .segmentation import *
+from .distillation import *
