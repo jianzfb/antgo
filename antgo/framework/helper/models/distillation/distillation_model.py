@@ -48,7 +48,7 @@ class ABF(nn.Module):
 
 @MODELS.register_module()
 class ReviewKD(MultiSteamModule):
-    def __init__(self, teacher: dict, student: dict, train_cfg=None, test_cfg=None, init_cfg=None):
+    def __init__(self, model: dict, train_cfg=None, test_cfg=None, init_cfg=None):
         # 默认使用teacher模型作为最佳模型
         if test_cfg is None:
             test_cfg = dict()
@@ -59,26 +59,26 @@ class ReviewKD(MultiSteamModule):
         )
         super(ReviewKD, self).__init__(
             dict(
-                teacher=build_model(teacher), 
-                student=build_model(student)
+                teacher=build_model(model.teacher), 
+                student=build_model(model.student)
             ),
             train_cfg=train_cfg,
             test_cfg=test_cfg,
         )
         self.freeze("teacher")
 
-        self.student_cfg= train_cfg.get('student')          # [key, key]
-        self.teacher_cfg = train_cfg.get('teacher')         # [key, key]
+        self.student_cfg= train_cfg.get('student')
+        self.teacher_cfg = train_cfg.get('teacher')
 
-        self.student_in_channels = self.student_cfg.get('in_channels', [96, 128, 160])
-        self.student_shapes = self.student_cfg.get('shapes', [4,8,16])    # 224, 3个stage
+        self.student_in_channels = self.student_cfg.get('channels', [96, 128, 160])      # KeyNetF的后三个stage channels
+        self.student_shapes = self.student_cfg.get('shapes', [16,8,4])[::-1]                # KetNetF的后三个stage shape
 
         # resnet50
-        self.teacher_out_channels = self.teacher_cfg.get('out_channels', [512, 1024, 2048])
-        self.teacher_shapes = self.teacher_cfg.get('shapes', [4,8,16])
+        self.teacher_out_channels = self.teacher_cfg.get('channels', [512, 1024, 2048]) # resnet50的后三个stage channels
+        self.teacher_shapes = self.teacher_cfg.get('shapes', [16,8,4])[::-1]                # resnet50的后三个stage shape
 
         # align module
-        self.align_module = train_cfg.get('align_module', 'backbone')
+        self.align_module = train_cfg.get('align', 'backbone')
 
         # 蒸馏损失
         self.distill_loss = build_loss(dict(type='HCL'))

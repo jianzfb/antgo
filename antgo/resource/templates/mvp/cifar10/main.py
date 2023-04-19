@@ -244,13 +244,12 @@ def main():
                 # 更新默认配置
                 default_model_cfg = cfg.model
                 if 'model' in extra_config['model'] and \
-                    'student' in extra_config['model']['model'] and \
                     'teacher' in extra_config['model']['model']:
                     cfg.model = dict(
                         type=extra_config['model']['type'],
                         model=dict(
                             teacher=extra_config['model']['model']['teacher'],
-                            student=extra_config['model']['model']['student']
+                            student=default_model_cfg
                         ),
                         train_cfg=extra_config['model']['train_cfg'] if 'train_cfg' in extra_config['model'] else None,
                         test_cfg=extra_config['model']['test_cfg'] if 'test_cfg' in extra_config['model'] else None,
@@ -261,6 +260,14 @@ def main():
                         cfg.model.model.teacher = default_model_cfg
                     if cfg.model.model.student is None:
                         cfg.model.model.student = default_model_cfg
+                        
+                    if cfg.model.train_cfg is not None:
+                        if 'student' in cfg.model.train_cfg:
+                            align_name = cfg.model.train_cfg.align
+                            if 'channels' in cfg.model.train_cfg.student:
+                                cfg.model.train_cfg.student.channels = cfg.info.get(align_name).channels
+                            if 'shapes' in cfg.model.train_cfg.student:
+                                cfg.model.train_cfg.student.shapes = cfg.info.get(align_name).shapes 
                 else:
                     cfg.model = dict(
                         type=extra_config['model']['type'],

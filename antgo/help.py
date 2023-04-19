@@ -485,7 +485,7 @@ def update_project_config(sub_action_name, args):
             return    
 
         if not os.path.exists(args.config):
-            if args.name not in ['dense', 'detmpl', 'mpl']:
+            if args.name not in ['reviewkd']:
                 logging.error(f'Missing config file, {sub_action_name} couldnt config')
                 get_lock().release()
                 return

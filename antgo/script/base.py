@@ -68,7 +68,7 @@ def prepare_extra_config(task_name, project_info):
 
         # 检查是否有标签数据  
         if len(project_info['dataset']['train']['label']) == 0:
-            logging.error(f"No eough label data.")
+            logging.error(f"No enough label data.")
             return None
 
         # 扩展数据源 (蒸馏学习涉及，标签数据，伪标签数据)
@@ -79,6 +79,26 @@ def prepare_extra_config(task_name, project_info):
         }
 
         # 扩展模型配置/优化器/学习率等
-        extra_config.update( project_info['tool']['distillation']['config'])
+        extra_config.update(project_info['tool']['distillation']['config'])
+        
+        # 更新专家模型配置
+        if len(project_info['expert']) == 0:
+            logging.error("No enough expert model config")
+            return None
+        # 专家模型配置样式
+        # {
+        #     'config': dict(model=dict(), info=dict()),
+        #     'checkpoint': '',
+        # }
+        extra_config['model']['model']['teacher'] = project_info['expert'][0]['config']['model']
+        extra_config['model']['init_cfg'] = {'checkpoint': project_info['expert'][0]['checkpoint']}
+        
+        info =  project_info['expert'][0]['config']['info']
+        if 'channels' in extra_config['model']['train_cfg']['teacher']:
+            align_name = extra_config['model']['train_cfg']['align']
+            extra_config['model']['train_cfg']['teacher']['channels'] = info.get(align_name).get('channels')
+        if 'shapes' in extra_config['model']['train_cfg']['teacher']:
+            align_name = extra_config['model']['train_cfg']['align']
+            extra_config['model']['train_cfg']['teacher']['shapes'] = info.get(align_name).get('shapes')
 
     return extra_config

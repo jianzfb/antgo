@@ -37,6 +37,14 @@ model = dict(
     ),  
 )
 
+# 描述模型基本信息
+info = dict(
+    backbone=dict(
+        channels=[512, 1024, 2048],
+        shapes=[32,16,8]
+    )
+)
+
 # checkpoint配置
 checkpoint_config = dict(interval=1, out_dir='./output/')       
 
