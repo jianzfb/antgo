@@ -39,7 +39,6 @@ class VGGFace(Dataset):
       content = fp.readline()
       content = content.strip()
       while content:
-        
         file_name, x,y,w,h = content.split(',')
         file_name = file_name[1:-1]
         person_id, _ = file_name.split('/')
@@ -54,6 +53,26 @@ class VGGFace(Dataset):
               
         content = fp.readline()
         content = content.strip()
+
+
+    if self.train_or_test != 'train':
+      # 重新设置person_id_map
+      person_id_map = {}
+      with open(os.path.join(self.dir, 'meta', 'bb_landmark', 'loose_bb_train.csv'), 'r') as fp:
+        # skip first line
+        content = fp.readline()
+        # file_name, x,y,w,h
+        content = fp.readline()
+        content = content.strip()
+        while content:
+          file_name, x,y,w,h = content.split(',')
+          file_name = file_name[1:-1]
+          person_id, _ = file_name.split('/')
+          if person_id not in person_id_map:
+            person_id_map[person_id] = len(person_id_map)
+                
+          content = fp.readline()
+          content = content.strip()
 
     print(f'person id num {len(person_id_map)}')
     print(f'sample num {len(self.data_list)}')
@@ -73,7 +92,7 @@ class VGGFace(Dataset):
     y1 = min(h, y1)
     id = info['person_id']
     crop_image = image[y0:y1,x0:x1].copy()
-    return crop_image, id
+    return crop_image, {'label':id, 'image_meta': {'image_shape': crop_image.shape[:2]}}
 
 # vgg = VGGFace('test', '/opt/tiger/handdetJ/dataset/vggface2')
 # size = vgg.size

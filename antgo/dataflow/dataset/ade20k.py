@@ -15,14 +15,13 @@ from antgo.framework.helper.fileio.file_client import *
 
 __all__ = ['ADE20K']
 class ADE20K(Dataset):
-  def __init__(self, train_or_test, dir=None, params=None):
+  def __init__(self, train_or_test, dir=None, ext_params=None):
     if train_or_test != 'train':
       train_or_test = 'val'
 
-    super(ADE20K, self).__init__(train_or_test, dir)
+    super(ADE20K, self).__init__(train_or_test, dir,ext_params=ext_params)
     assert(train_or_test in ['train', 'val', 'test'])
 
-    
     if not os.path.exists(os.path.join(self.dir, 'ADEChallengeData2016')):
       ali = AliBackend()
       ali.download('ali:///dataset/ade20k/ADEChallengeData2016.zip', self.dir)

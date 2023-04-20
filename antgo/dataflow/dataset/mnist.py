@@ -5,7 +5,6 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import sys
-sys.path.append('/root/workspace/antgo')
 import os
 import gzip
 import random
@@ -88,12 +87,12 @@ class Mnist(Dataset):
   Return [image, label],
       image is 28x28 in the range [0,1]
   """
-  def __init__(self, train_or_test, dir=None, params=None):
+  def __init__(self, train_or_test, dir=None, ext_params=None):
     """
     Args:
         train_or_test: string either 'train' or 'test'
     """
-    super(Mnist,self).__init__(train_or_test, dir, params)
+    super(Mnist,self).__init__(train_or_test, dir, ext_params=ext_params)
     self.train_or_test = train_or_test
 
     if self.train_or_test == "train":

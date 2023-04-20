@@ -1460,6 +1460,21 @@ class Permute(BaseOperator):
         return sample
 
 
+class RGB2BGR(BaseOperator):
+    # FINISH CORRET (JIAN)
+    def __init__(self, inputs=None):
+        super(RGB2BGR, self).__init__(inputs=inputs)
+
+    def __call__(self, sample, context=None):
+        assert 'image' in sample, "image data not found"
+        if 'image' in sample.keys():
+            sample["image"] = cv2.cvtColor(sample["image"], cv2.COLOR_BGR2RGB)
+        
+        if 'image_2' in sample.keys():
+            sample["image_2"] = cv2.cvtColor(sample["image_2"], cv2.COLOR_BGR2RGB)
+
+        return sample
+
 # FINISH FIX
 class MixupImage(BaseOperator):
     def __init__(self, prob=0.5, alpha=1.5, beta=1.5, inputs=None):
@@ -1785,18 +1800,14 @@ class ResizeS(BaseOperator):
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
         
+        if 'image_2' in sample:
+            sample['image_2'] = cv2.resize(
+                sample['image_2'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
+
         # vis_2d_boxes_in_image(sample['image'], sample['bboxes'],sample['labels'], './b.png')
         return sample
 
-    def reset(self, target_dim):
-        if type(target_dim) == list or type(target_dim) == tuple:
-            self.target_dim = target_dim                # w,h
-        else:
-            self.target_dim = [target_dim, target_dim]  # w,h
-
-    def get(self):
-        return self.target_dim
-
+    
 # FINSH FIX
 class ColorDistort(BaseOperator):
     """Random color distortion.

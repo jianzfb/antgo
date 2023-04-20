@@ -38,7 +38,7 @@ class Exporter(object):
                 state_dict = OrderedDict(
                     {re.sub(p, r, k): v
                     for k, v in state_dict.items()})
-            model.load_state_dict(state_dict, strict=False)
+            model.load_state_dict(state_dict, strict=True)
 
         # 获得浮点模型的 FLOPS、PARAMS
         model.eval()
