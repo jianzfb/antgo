@@ -5,7 +5,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-
+import sys
 import os
 import numpy as np
 import cv2
@@ -16,75 +16,45 @@ from antgo.framework.helper.fileio.file_client import *
 __all__ = ['ADE20K']
 class ADE20K(Dataset):
   def __init__(self, train_or_test, dir=None, params=None):
+    if train_or_test != 'train':
+      train_or_test = 'val'
+
     super(ADE20K, self).__init__(train_or_test, dir)
     assert(train_or_test in ['train', 'val', 'test'])
 
+    
+    if not os.path.exists(os.path.join(self.dir, 'ADEChallengeData2016')):
+      ali = AliBackend()
+      ali.download('ali:///dataset/ade20k/ADEChallengeData2016.zip', self.dir)
+      os.system(f'cd {self.dir} && unzip ADEChallengeData2016.zip')
+
+    subfolder_name = 'training' if self.train_or_test == 'train' else 'validation'
     self._image_file_list = []
     self._annotation_file_list = []
-    if train_or_test in ['train', 'val']:
-      image_target_path = os.path.join(dir,
-                                       'ADEChallengeData2016',
-                                       'images',
-                                       'training' if train_or_test == 'train' else 'validation')
-      annotation_target_path = os.path.join(dir,
-                                            'ADEChallengeData2016',
-                                            'annotations',
-                                            'training' if train_or_test == 'train' else 'validation')
-      if not os.path.exists(image_target_path):
-        logger.error('ADE dtaset must download from \n http://data.csail.mit.edu/places/ADEchallenge/ADEChallengeData2016.zip')
-        sys.exit(0)
 
-      for file in os.listdir(image_target_path):
-        if file[0] == '.':
-          continue
+    # 读取图片路径 和 分割GT
+    for image_file_name in os.listdir(os.path.join(self.dir, 'ADEChallengeData2016','images', subfolder_name)):
+      pure_name = image_file_name.split('.')[0]
+      anno_file_name = f'{pure_name}.png'
 
-        self._image_file_list.append(os.path.join(image_target_path, file))
-        self._annotation_file_list.append(os.path.join(annotation_target_path, '%s.png'%file.split('.')[0]))
-    else:
-      parse_file = os.path.join(dir, 'release_test', 'list.txt')
-      if not os.path.exists(parse_file):
-        logger.error(
-          'ADE dtaset must download from \n http://data.csail.mit.edu/places/ADEchallenge/release_test.zip')
-        sys.exit(0)
-
-      with open(parse_file) as fp:
-        for file in fp.readlines():
-          if len(file) == 0:
-            continue
-
-          self._image_file_list.append(os.path.join(dir, 'release_test', 'testing', file.replace('\n','')))
-
-    self.ids = list(range(len(self._image_file_list)))
+      self._image_file_list.append(os.path.join(self.dir, 'ADEChallengeData2016','images', subfolder_name, image_file_name))
+      self._annotation_file_list.append(os.path.join(self.dir, 'ADEChallengeData2016','annotations', subfolder_name, anno_file_name))
 
   @property
   def size(self):
-    return len(self.ids)
+    return len(self._image_file_list)
 
   def at(self, id):
-    image_file = self._image_file_list[id]
-    image = cv2.imread(image_file)
+    image = cv2.imread(self._image_file_list[id])
+    segments = cv2.imread(self._annotation_file_list[id], cv2.IMREAD_GRAYSCALE)
 
-    if self.train_or_test in ['train', 'val']:
-      label_file = self._annotation_file_list[id]
-      label = cv2.imread(label_file, cv2.IMREAD_GRAYSCALE)
-
-      return (
+    return (
         image, 
         {
-          'segments':label, 
+          'segments':segments, 
           'image_meta': {
             'image_shape': (image.shape[0], image.shape[1]),
-            'image_file': image_file
-          }
-         }
-      )
-    else:
-      return (
-        image,
-        {
-          'image_meta': {
-            'image_shape': (image.shape[0], image.shape[1]),
-            'image_file': image_file
+            'image_file': self._image_file_list[id]
           }
          }
       )
@@ -95,3 +65,21 @@ class ADE20K(Dataset):
 
     validation_dataet = ADE20K('val', self.dir)
     return self, validation_dataet
+
+
+# vgg = ADE20K('train', '/opt/tiger/handdetJ/dataset/ade20k')
+# size = vgg.size
+# print(f'vgg size {size}')
+# gt_label = 150
+# label_num_map = {}
+# for i in range(size):
+#   data = vgg.sample(i)
+#   # cv2.imwrite('./aabb_image.png', data['image'])
+#   # cv2.imwrite('./aabb_segments.png', ((data['segments']/150)*255).astype(np.uint8))
+#   ll = set(data['segments'].flatten().tolist())
+#   for l in ll:
+#     if l not in label_num_map:
+#       label_num_map[l] = 0
+#     label_num_map[l] += 1
+
+# print(label_num_map)
