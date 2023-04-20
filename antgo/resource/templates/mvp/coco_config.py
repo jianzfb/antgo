@@ -102,8 +102,8 @@ data=dict(
         )
     ),
     test_dataloader=dict(
-        samples_per_gpu=128,
-        workers_per_gpu=2,
+        samples_per_gpu=10,
+        workers_per_gpu=1,
         drop_last=False,
         shuffle=False,
         ignore_stack=['image','bboxes', 'labels', 'image_meta']
