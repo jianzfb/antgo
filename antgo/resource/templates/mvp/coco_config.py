@@ -23,13 +23,13 @@ model = dict(
         depth=50, 
         in_channels=3, 
         out_indices=[3,2,1]),      
-    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=32, num_outs=1),
+    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=32, num_outs=3),
     bbox_head=dict(
-        type='FcosHead',
+        type='FcosHeadML',
         in_channel=32,
         feat_channel=32,
         num_classes=80,
-        down_stride=4,
+        down_stride=[8,16,32],
         score_thresh=0.1,
         train_cfg=None,
         test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.3, max_per_img=10),
@@ -125,7 +125,7 @@ evaluation=dict(
 
 # 导出配置
 export=dict(
-    input_shape_list = [[1,3,256,256]],
+    input_shape_list = [[1,3,800,800]],
     input_name_list=["image"],
     output_name_list=["heatmap", "offset"]
 )
