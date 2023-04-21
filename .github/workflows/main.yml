@@ -37,8 +37,9 @@ jobs:
       # 安装依赖
       - name: Install dependencies
         run: |
-          python3 -m pip install -r requirements.txt  --use-pep517
-          python3 -m pip install setuptools wheel twine
+          pip3 install --upgrade pip setuptools wheel
+          pip3 install -r requirements.txt
+          pip3 install setuptools wheel twine
       
       # 构建和发布
       - name: Build and publish
@@ -46,5 +47,5 @@ jobs:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
-          python setup.py sdist
+          python3 setup.py sdist
           twine upload dist/*
