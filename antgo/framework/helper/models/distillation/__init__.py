@@ -1,5 +1,6 @@
-# from .detection_distiller import DetectionDistiller
+from .distillation_model import ReviewKD
+from .loss import *
 
-# __all__ = [
-#     'DetectionDistiller'
-# ]
+__all__ = [
+    'ReviewKD'
+]

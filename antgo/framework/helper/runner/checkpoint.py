@@ -601,9 +601,9 @@ def load_checkpoint(model,
     state_dict._metadata = metadata
 
     # load state_dict
-    module = model
-    if is_module_wrapper(module):
-        module = module.module    
+    # module = model
+    # if is_module_wrapper(module):
+    #     module = module.module    
     # if getattr(module, "load_state_dict", None) is not None:
     #     result = module.load_state_dict(state_dict)
     #     if result:

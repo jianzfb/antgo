@@ -202,7 +202,7 @@ def build_dataloader(dataset,
     init_fn = partial(
         worker_init_fn, num_workers=num_workers, rank=rank,
         seed=seed) if seed is not None else None
-        
+
     data_loader = DataLoader(
         dataset,
         batch_size=int(batch_size),

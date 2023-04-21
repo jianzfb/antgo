@@ -5,21 +5,33 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+import sys
 from antgo.dataflow.dataset import *
 import os
 import numpy as np
+import cv2
+from antgo.framework.helper.fileio.file_client import *
+
 
 __all__ = ['LIP']
 class LIP(Dataset):
   def __init__(self, train_or_test, dir=None, ext_params=None):
     super(LIP, self).__init__(train_or_test, dir, ext_params)
-    assert (train_or_test in ['train', 'sample', 'val'])
+    assert (train_or_test in ['train', 'val'])
+    if not os.path.exists(self.dir):
+      os.makedirs(self.dir)
+    
+    if not os.path.exists(os.path.join(self.dir, 'train_id.txt')):
+      ali = AliBackend()
+      ali.download('ali:///dataset/lip/TrainVal_images.zip', self.dir)
+      ali.download('ali:///dataset/lip/Testing_images.zip', self.dir)
+      ali.download('ali:///dataset/lip/TrainVal_parsing_annotations.zip', self.dir)
+      ali.download('ali:///dataset/lip/train_id.txt', self.dir)
+      ali.download('ali:///dataset/lip/val_id.txt', self.dir)
 
-    if self.train_or_test == 'sample':
-      self.data_samples, self.ids = self.load_samples()
-      return
+      os.system(f'cd {self.dir} && unzip TrainVal_images.zip && unzip Testing_images.zip && unzip TrainVal_parsing_annotations.zip')
 
-    self.data_list = []
+    self.data_list = []    
     parse_file = os.path.join(self.dir, '%s' % ('train_id.txt' if self.train_or_test == 'train' else 'val_id.txt'))
     image_folder = os.path.join(self.dir, '%s_images' % ('train' if self.train_or_test == 'train' else 'val'))
     label_folder = os.path.join(self.dir, '%s_segmentations' % ('train' if self.train_or_test == 'train' else 'val'))
@@ -27,8 +39,8 @@ class LIP(Dataset):
       content = fp.readline()
       while content:
         content = content.replace('\n', '')
-        self.data_list.append((os.path.join(image_folder, content),
-                               os.path.join(label_folder, content)))
+        self.data_list.append((os.path.join(image_folder, f'{content}.jpg'),
+                               os.path.join(label_folder, f'{content}.png')))
 
         content = fp.readline()
 
@@ -62,89 +74,20 @@ class LIP(Dataset):
   def size(self):
     return len(self.ids)
 
-  def data_pool(self):
-    if self.train_or_test == 'sample':
-      sample_idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(sample_idxs)
-
-      for index in sample_idxs:
-        yield self.data_samples[index]
-      return
-
-    epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if epoch >= max_epoches:
-        break
-      epoch += 1
-
-      # idxs = np.arange(len(self.ids))
-      idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(idxs)
-
-      for k in idxs:
-        image_file, label_file = self.data_list[k]
-        image = imread('%s.jpg' % image_file)
-        label = imread('%s.png' % label_file)
-        if len(label.shape) > 2:
-          label = label[:, :, 0]
-
-        included_cls = getattr(self, 'included', None)
-        if included_cls is not None:
-          included_cls = [int(a) for a in included_cls.split(',')]
-
-        excluded_cls = getattr(self, 'excluded', None)
-        if excluded_cls is not None:
-          excluded_cls = [int(a) for a in excluded_cls.split(',')]
-
-        existed_cls = None
-        if included_cls is not None or excluded_cls is not None:
-          existed_cls = list(set(label.flatten().tolist()))
-          existed_cls.sort()
-
-        valid_objs_num = -1
-        valid_objs_index = []
-        if included_cls is not None:
-          valid_objs_num = len(existed_cls)
-
-          for cls_label in existed_cls:
-            if cls_label not in included_cls:
-              cls_position = np.where(label == cls_label)
-              label[cls_position] = 0
-              valid_objs_num -= 1
-            else:
-              valid_objs_index.append(cls_label)
-
-        if excluded_cls is not None:
-          for cls_label in existed_cls:
-            if cls_label in excluded_cls:
-              cls_position = np.where(label == cls_label)
-              label[cls_position] = 0
-              valid_objs_num -= 1
-            else:
-              valid_objs_index.append(cls_label)
-
-        if valid_objs_num == 0:
-          continue
-
-        # split to channels for every object
-        segmentation_objs = []
-        height, width = image.shape[0:2]
-        for obj_index in valid_objs_index:
-          seg = np.zeros((height, width), dtype=np.uint8)
-          seg[np.where(label == obj_index)] = 1
-
-          segmentation_objs.append(seg)
-
-        yield [image, {'segmentation': segmentation_objs, 'segmentation_map': label, 'id': k}]
-
   def at(self, id):
     image_file, label_file = self.data_list[id]
-    image = imread(image_file)
-    label = imread(label_file)
-    return [image, {'segmentation': label, 'segmentation_map': label, 'id': id}]
+    image = cv2.imread(image_file)
+    label = cv2.imread(label_file, cv2.IMREAD_GRAYSCALE)
+    return (
+      image,
+      {
+        'segments': label,
+        'image_meta': {
+            'image_shape': (image.shape[0], image.shape[1]),
+            'image_file': image_file
+          }   
+      }
+    )
 
   def split(self, split_params={}, split_method='holdout'):
     assert (self.train_or_test == 'train')
@@ -152,3 +95,15 @@ class LIP(Dataset):
     val_dataset = LIP('val', self.dir)
 
     return self, val_dataset
+
+# p2012 = LIP('train', '/root/workspace/dataset/B')
+# print(f'p2012 size {p2012.size}')
+# for i in range(p2012.size):
+#   result = p2012.sample(i)
+#   ss = result['segments']
+#   # cv2.imwrite('./1234.png', (ss/20*255).astype(np.uint8))
+#   print(i)
+# value = p2012.sample(0)
+# print(value.keys())
+# value = p2012.sample(1)
+# print(value)

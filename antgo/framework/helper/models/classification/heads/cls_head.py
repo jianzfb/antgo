@@ -23,22 +23,12 @@ class ClsHead(nn.Module):
 
     def __init__(self,
                  loss=dict(type='CrossEntropyLoss', loss_weight=1.0, class_weight=None),
-                 topk=(1, ),
-                 cal_acc=False,
-                 init_cfg=None):
+                 init_cfg=dict(use_softmax=True)):
         super().__init__()
 
         assert isinstance(loss, dict)
-        assert isinstance(topk, (int, tuple))
-        if isinstance(topk, int):
-            topk = (topk, )
-        for _topk in topk:
-            assert _topk > 0, 'Top-k should be larger than 0'
-        self.topk = topk
-
         self.compute_loss = CrossEntropyLoss(loss_weight=loss['loss_weight'], class_weight=loss['class_weight'])
-        self.compute_accuracy = Accuracy(topk=self.topk)
-        self.cal_acc = cal_acc
+        self.use_softmax = init_cfg.get('use_softmax', True)
 
     def loss(self, cls_score, gt_label, **kwargs):
         num_samples = len(cls_score)
@@ -46,14 +36,6 @@ class ClsHead(nn.Module):
         # compute loss
         loss = self.compute_loss(
             cls_score, gt_label, avg_factor=num_samples, **kwargs)
-        if self.cal_acc:
-            # compute accuracy
-            acc = self.compute_accuracy(cls_score, gt_label)
-            assert len(acc) == len(self.topk)
-            losses['accuracy'] = {
-                f'top-{k}': a
-                for k, a in zip(self.topk, acc)
-            }
         losses['loss'] = loss
         return losses
 
@@ -64,7 +46,7 @@ class ClsHead(nn.Module):
         losses = self.loss(cls_score, gt_label.view(-1), **kwargs)
         return losses
 
-    def simple_test(self, x, softmax=True, post_process=True, **kwargs):
+    def simple_test(self, x):
         """Inference without augmentation.
 
     Args:
@@ -86,7 +68,7 @@ class ClsHead(nn.Module):
         """
         cls_score = self.pre_logits(x)
 
-        if softmax:
+        if self.use_softmax:
             pred = (
                 F.softmax(cls_score, dim=1) if cls_score is not None else None)
         else:
@@ -96,9 +78,4 @@ class ClsHead(nn.Module):
     def pre_logits(self, x):
         if isinstance(x, tuple):
             x = x[-1]
-
-        warnings.warn(
-            'The input of ClsHead should be already logits. '
-            'Please modify the backbone if you want to get pre-logits feature.'
-        )
         return x

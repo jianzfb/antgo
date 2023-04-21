@@ -1054,6 +1054,6 @@ class ImageNet(CustomClsDataset):
         )
 
 
-if __name__ == '__main__':
-    print('hell')
-    pass
+# if __name__ == '__main__':
+#     print('hell')
+#     pass

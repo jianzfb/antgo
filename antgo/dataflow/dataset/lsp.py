@@ -11,6 +11,7 @@ import scipy.io as io
 import os
 import numpy as np
 import cv2
+from antgo.framework.helper.fileio.file_client import *
 
 
 __all__ = ['LSP']
@@ -52,27 +53,38 @@ class LSP(Dataset):
     def at(self, id):
         image_file = os.path.join(self.dir, 'images', 'im%04d.jpg'%(id+1))
         image = cv2.imread(image_file)
-
+        
+        joints2d = np.transpose(self.dataset[:2,:,id], [1,0])
+        visible = 1-self.dataset[2,:,id]
+        visible_pos = np.where(visible == 1)
+        bboxes = np.array([[
+          np.min(joints2d[visible_pos, 0]), 
+          np.min(joints2d[visible_pos, 1]), 
+          np.max(joints2d[visible_pos, 0]), 
+          np.max(joints2d[visible_pos, 1])
+        ]])
         anno = {
-            'joints2d': np.transpose(self.dataset[:2,:,id], [1,0]),
-            'joints_vis': 1-self.dataset[2,:,id]
+            'bboxes': bboxes,
+            'labels': np.zeros((1), dtype=np.int32),
+            'joints2d': np.expand_dims(joints2d, 0),
+            'joints_vis': np.expand_dims(visible, 0)
         }
         return (image, anno)
 
     def split(self, split_params={}, split_method=''):
         raise NotImplementedError
 
-# lsp = LSP('train', '/root/workspace/handtracking/lsp_dataset')
+# lsp = LSP('train', '/root/workspace/dataset/lsp_dataset')
 # for i in range(10):
 #     data = lsp.sample(i)
 #     image = data['image']
 #     joints2d = data['joints2d']
 #     joints_vis = data['joints_vis']
     
-#     for joint_i, (x,y) in enumerate(joints2d):
+#     for joint_i, (x,y) in enumerate(joints2d[0]):
 #         x, y = int(x), int(y)
         
-#         if joints_vis[joint_i]:
+#         if joints_vis[0][joint_i]:
 #             cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
 
 #     cv2.imwrite(f'./aabb/aabb_{i}.png', image)

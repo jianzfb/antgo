@@ -62,9 +62,7 @@ class BaseDetector(BaseModule):
                 :class:`mmdet.datasets.pipelines.Collect`.
             kwargs (keyword arguments): Specific to concrete implementation.
         """
-        batch_input_shape = tuple(image[0].size()[-2:])
-        for img_meta in image_meta:
-            img_meta['batch_input_shape'] = batch_input_shape
+        pass
 
     @abstractmethod
     def simple_test(self, image, image_meta, **kwargs):
@@ -80,11 +78,6 @@ class BaseDetector(BaseModule):
                 augs (multiscale, flip, etc.) and the inner list indicates
                 images in a batch.
         """
-        batch_size = len(image_meta)
-        for img_id in range(batch_size):
-            image_meta[img_id]['batch_input_shape'] = tuple(image.size()[-2:])
-
-        # assert(num_augs == 1)
         return self.simple_test(image, image_meta, **kwargs)
 
     def forward(self, image, image_meta, return_loss=True, **kwargs):

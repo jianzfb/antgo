@@ -204,7 +204,7 @@ class Bottleneck(nn.Module):
 class KetNetF(nn.Module):
     """KetNetF"""
 
-    def __init__(self, architecture, in_channels=1):
+    def __init__(self, architecture, in_channels=1, out_indices=[1,2,3,4]):
         super(KetNetF, self).__init__()
         self.norm_layer = nn.BatchNorm2d
         self.stage_with_dcn=(False, False, False, False, False, False, False, False)
@@ -220,6 +220,7 @@ class KetNetF(nn.Module):
         self.layers = layers[architecture]
         stage_dcn = [None for with_dcn in self.stage_with_dcn]
 
+        self.out_indices = sorted(out_indices)
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=5, stride=2, padding=2, bias=False)
         self.bn1 = self.norm_layer(32, eps=1e-5, momentum=0.1, affine=True)
         self.relu1 = nn.ReLU(inplace=True)
@@ -240,14 +241,27 @@ class KetNetF(nn.Module):
     def forward(self, x):
         x = self.relu1(self.bn1(self.conv1(x)))  # 32 * h/4 * w/4
         x = self.layer1(x)
+        outs = []
+        if 0 in self.out_indices:
+            outs.append(x)
         x32 = self.layer2(x)  # 32 * h/4 * w/4
         x32 = self.layer3(x32)  # 64 * h/4 * w/4
+        if 1 in self.out_indices:
+            outs.append(x32)
         x16 = self.layer4(x32)  # 64 * h/8 * w/8
         x16 = self.layer5(x16)  # 96 * h/8 * w/8
+        if 2 in self.out_indices:
+            outs.append(x16)
+        
         x8 = self.layer6(x16)  # 128 * h/16 * w/16
         x8 = self.layer7(x8)  # 128 * h/16 * w/16
+        if 3 in self.out_indices:
+            outs.append(x8)
+
         x4 = self.layer8(x8)  # 160 * h/32 * w/32
-        return [x32, x16, x8, x4]
+        if 4 in self.out_indices:
+            outs.append(x4)
+        return outs
 
     def stages(self):
         return [self.layer1, self.layer2, self.layer3, self.layer4]

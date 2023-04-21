@@ -36,7 +36,7 @@ class COCOWarp(COCO):
 
 @MEASURES.register_module()
 class COCOCompatibleEval(object):
-    def __init__(self, categories=[{'name': 'left', 'id': 1},{'name': 'right', 'id': 2}], without_background=True):
+    def __init__(self, categories, without_background=True):
         self.categories = categories
         for c in self.categories:
             if 'supercategory' not in c:
@@ -78,8 +78,8 @@ class COCOCompatibleEval(object):
                 bbox_id += 1
 
             images.append({
-                'height': 480,
-                'width': 640,
+                'height': gt['image_meta']['image_shape'][0],
+                'width': gt['image_meta']['image_shape'][1],
                 'id': image_id+1,
                 'file_name': image_file
             })

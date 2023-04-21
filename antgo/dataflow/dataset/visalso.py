@@ -69,7 +69,7 @@ class VisalSO(Dataset):
     def at(self, id):
         image = cv2.imread(self.image_file_list[id])
         bboxes, labels = self.bboxes_list[id]
-        return (image, {'bboxes': bboxes, 'labels': labels})
+        return (image, {'bboxes': bboxes, 'labels': labels, 'image_meta': {'image_shape': (image.shape[0], image.shape[1])}})
     
     def split(self, split_params={}, split_method=''):
         raise NotImplementedError

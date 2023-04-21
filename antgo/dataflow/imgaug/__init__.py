@@ -24,6 +24,7 @@ from .operators import (
   UnSqueeze,
   ConvertRandomObjJointsAndOffset,
   ResizeByShort,
+  RGB2BGR,
   FixedCrop)
 
 __all__ = [
@@ -48,5 +49,6 @@ __all__ = [
   'ConvertRandomObjJointsAndOffset',
   'ResizeByShort',
   'FixedCrop',
+  'RGB2BGR',
   'Meta'
 ]

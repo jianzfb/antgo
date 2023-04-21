@@ -12,6 +12,10 @@ from antgo.framework.helper.runner import get_dist_info
 def _chunk(iterable, chunk_size):
     ret = []
     for record in iterable:
+        if record is None:
+            # 跳过 None，会造成组成的batch中，不满足预先指定的方案
+            continue
+
         ret.append(record)
         if len(ret) == chunk_size:
             yield ret

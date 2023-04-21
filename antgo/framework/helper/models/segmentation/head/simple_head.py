@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from mmcv.cnn import ConvModule
 from antgo.framework.helper.cnn.bricks import *
 from antgo.framework.helper.models.builder import HEADS, MODELS, build_loss
 from antgo.framework.helper.runner import BaseModule

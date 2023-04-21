@@ -5,17 +5,31 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+import sys
 import scipy.io as io
 from antgo.dataflow.dataset import *
 import os
 import numpy as np
+import cv2
+from antgo.framework.helper.fileio.file_client import *
+
 
 __all__ = ['FLIC']
 class FLIC(Dataset):
   def __init__(self, train_or_test, dir=None, ext_params=None):
     super(FLIC, self).__init__(train_or_test, dir, ext_params)
-    assert(train_or_test in ['train', 'test'])
-    matr = io.loadmat(os.path.join(dir, 'examples.mat'))
+    
+    if not os.path.exists(os.path.join(self.dir, 'examples.mat')):
+      if not os.path.exists(os.path.join(self.dir, 'FLIC-full')):
+        ali = AliBackend()
+        ali.download('ali:///dataset/FLIC-full.zip', self.dir)
+        os.system(f'cd {self.dir} && unzip FLIC-full.zip')
+        self.dir = os.path.join(self.dir, 'FLIC-full')
+      else:
+        self.dir = os.path.join(self.dir, 'FLIC-full')
+
+    assert(train_or_test in ['train', 'val'])
+    matr = io.loadmat(os.path.join(self.dir, 'examples.mat'))
     dataset = matr['examples'][0]
 
     self.ids = []
@@ -47,7 +61,7 @@ class FLIC(Dataset):
         self.torso.append(data[6])
 
         count += 1
-      elif train_or_test == 'test' and data[8][0][0]:
+      elif train_or_test == 'val' and data[8][0][0]:
         # add test set
         self.ids.append(count)
         self.files.append(data[3][0])
@@ -61,32 +75,45 @@ class FLIC(Dataset):
   def size(self):
     return len(self.ids)
 
-  def data_pool(self):
-    epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if epoch >= max_epoches:
-        break
-      epoch += 1
-
-      # idxs = np.arange(len(self.ids))
-      idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(idxs)
-
-      for k in idxs:
-        img = imread(os.path.join(self.dir, 'images', self.files[k]))
-        yield img, {'coords': self.coords[k][:,self.valid_coords],
-                    'coords_name': self.coords_name,
-                    'id': k,
-                    'torso': self.torso[k]}
-
   def at(self, id):
-    img = imread(os.path.join(self.dir, 'images', self.files[id]))
-    return img, {'coords': self.coords[id][:,self.valid_coords],
-                 'coords_name': self.coords_name,
-                'id': id,
-                'torso': self.torso[id]}
+    img = cv2.imread(os.path.join(self.dir, 'images', self.files[id]))
+    joints2d = np.transpose(self.coords[id][:,self.valid_coords], (1,0))
+    bboxes = np.array([[
+      np.min(joints2d[:, 0]), 
+      np.min(joints2d[:, 1]), 
+      np.max(joints2d[:, 0]), 
+      np.max(joints2d[:, 1])
+    ]])
+    return (
+      img, 
+      {
+        'joints2d': np.expand_dims(joints2d, 0),
+        'joints_vis': np.ones((1, len(joints2d))),
+        'bboxes': bboxes, 
+        'labels': np.ones((1), dtype=np.int32),
+        'image_meta': {
+          'image_shape': (img.shape[0], img.shape[1])
+        }        
+      }
+    )
 
   def split(self, split_params={}, split_method=''):
     raise NotImplementedError
+
+# p2012 = FLIC('val', '/root/workspace/dataset/A')
+# print(f'p2012 size {p2012.size}')
+# for i in range(p2012.size):
+#   data = p2012.sample(i)
+#   # ss = result['segments']
+#   image = data['image']
+#   joints2d = data['joints2d']
+#   for joint_i, (x,y) in enumerate(joints2d[0]):
+#       x, y = int(x), int(y)
+#       cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
+#   cv2.imwrite('./1234.png', image.astype(np.uint8))
+
+#   print(i)
+# value = p2012.sample(0)
+# print(value.keys())
+# value = p2012.sample(1)
+# print(value)

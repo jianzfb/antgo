@@ -65,16 +65,11 @@ class CifarBase(Dataset):
       image is 32x32x3 in the range [0,255]
   """
   def __init__(self, train_or_test, dir=None, params=None, cifar_classnum=10):
-    assert train_or_test in ['train', 'test', 'sample']
     assert cifar_classnum == 10 or cifar_classnum == 100
     super(CifarBase,self).__init__(train_or_test,dir)
     self.train_or_test = train_or_test
     self.cifar_classnum = cifar_classnum
     self.dir = dir
-
-    if self.train_or_test == 'sample':
-      self.data_samples, self.ids = self.load_samples()
-      return
 
     if not os.path.exists(self.dir):
       os.makedirs(self.dir)
@@ -120,38 +115,7 @@ class CifarBase(Dataset):
     return {'label': self.label[idx]}
   
   def at(self, id):
-    if self.train_or_test == 'sample':
-      return self.data_samples[id]
     return self.image[id], self.label[id]
-  
-  def data_pool(self):
-    if self.train_or_test == 'sample':
-      sample_idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(sample_idxs)
-
-      for index in sample_idxs:
-        yield self.data_samples[index]
-      return
-
-    self.epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if self.epoch >= max_epoches:
-        break
-      self.epoch += 1
-
-      ids = copy.copy(self.ids)
-      if self.rng:
-        self.rng.shuffle(ids)
-
-      # filter by ids
-      filter_ids = getattr(self, 'filter', None)
-      if filter_ids is not None:
-        ids = [i for i in ids if i in filter_ids]
-
-      for id in ids:
-          yield [copy.deepcopy(self.image[id]), self.label[id]]
 
 
 class Cifar10(CifarBase):

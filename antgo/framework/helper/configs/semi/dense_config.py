@@ -8,6 +8,13 @@ lr_config = dict(
     min_lr=1e-5,
 )
 
+# 日志配置
+log_config = dict(
+    interval=1,    
+    hooks=[
+        dict(type='TextLoggerHook'),
+    ])
+
 # 模型配置
 # model 字段根据具体模型进行设置
 model = dict(

@@ -69,9 +69,9 @@ class DenseTeacher(MultiSteamModule):
 
         return {"loss_heatmap": loss_heatmap}
 
-    def forward_train(self, images, image_meta, **kwargs):
+    def forward_train(self, image, image_meta, **kwargs):
         label_images, unlabel_weak_strong_images = \
-            torch.split(images, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
+            torch.split(image, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
         label_metas = image_meta[:self.label_batch_size]
 
         unlabel_weak_images=torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
@@ -152,8 +152,8 @@ class DenseTeacher(MultiSteamModule):
 
         return losses
     
-    def simple_test(self, images, image_meta, rescale=True, **kwargs):
-        return self.teacher(images, image_meta, rescale, **kwargs)
+    def simple_test(self, image, image_meta, rescale=True, **kwargs):
+        return self.teacher(image, image_meta, rescale, **kwargs)
 
     def _load_from_state_dict(
         self,

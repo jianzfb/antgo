@@ -9,7 +9,8 @@ from antgo.framework.helper.runner.builder import *
 from antgo.framework.helper.models.builder import *
 from thop import profile
 import json
-
+from collections import OrderedDict
+import re
 
 class Exporter(object):
     def __init__(self, cfg, work_dir):
@@ -19,7 +20,7 @@ class Exporter(object):
             self.cfg = cfg
         self.work_dir = work_dir
 
-    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model'):
+    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', revise_keys=[]):
         model = None
         if model_builder is not None:
             model = model_builder()
@@ -29,7 +30,15 @@ class Exporter(object):
         # 加载checkpoint
         if checkpoint is not None:
             ckpt = torch.load(checkpoint, map_location='cpu')
-            model.load_state_dict(ckpt['state_dict'], strict=True)
+            state_dict = ckpt
+            if 'state_dict' in ckpt:
+                state_dict = ckpt['state_dict']
+
+            for p, r in revise_keys:
+                state_dict = OrderedDict(
+                    {re.sub(p, r, k): v
+                    for k, v in state_dict.items()})
+            model.load_state_dict(state_dict, strict=True)
 
         # 获得浮点模型的 FLOPS、PARAMS
         model.eval()

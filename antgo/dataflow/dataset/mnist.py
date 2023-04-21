@@ -4,13 +4,12 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-
+import sys
 import os
 import gzip
 import random
 import numpy as np
-from ...utils import logger
-from .dataset import Dataset
+from antgo.dataflow.dataset.dataset import *
 import time
 import copy
 
@@ -88,28 +87,19 @@ class Mnist(Dataset):
   Return [image, label],
       image is 28x28 in the range [0,1]
   """
-  def __init__(self, train_or_test, dir=None, params=None):
+  def __init__(self, train_or_test, dir=None, ext_params=None):
     """
     Args:
         train_or_test: string either 'train' or 'test'
     """
-    super(Mnist,self).__init__(train_or_test, dir, params)
-    assert(train_or_test != 'val')
+    super(Mnist,self).__init__(train_or_test, dir, ext_params=ext_params)
     self.train_or_test = train_or_test
-
-    # read sample data
-    if self.train_or_test == 'sample':
-      self.data_samples, self.ids = self.load_samples()
-      return
-
-    # fixed seed
-    self.seed = time.time()
 
     if self.train_or_test == "train":
       self.download(self.dir, file_names=['train-images-idx3-ubyte.gz'], default_url=MINIST_URL)
       self.train_images = extract_images(os.path.join(self.dir, 'train-images-idx3-ubyte.gz'))
 
-      self.download(self.dir, file_names=['train-labels-idx1-ubyte.gz'])
+      self.download(self.dir, file_names=['train-labels-idx1-ubyte.gz'], default_url=MINIST_URL)
       self.train_labels = extract_labels(os.path.join(self.dir, 'train-labels-idx1-ubyte.gz'))
       self.train = DataSet(self.train_images, self.train_labels)
 
@@ -118,7 +108,7 @@ class Mnist(Dataset):
       self.download(self.dir, file_names=['t10k-images-idx3-ubyte.gz'], default_url=MINIST_URL)
       test_images = extract_images(os.path.join(self.dir,'t10k-images-idx3-ubyte.gz'))
 
-      self.download(self.dir, file_names=['t10k-labels-idx1-ubyte.gz'])
+      self.download(self.dir, file_names=['t10k-labels-idx1-ubyte.gz'], default_url=MINIST_URL)
       test_labels = extract_labels(os.path.join(self.dir, 't10k-labels-idx1-ubyte.gz'))
       self.test = DataSet(test_images, test_labels)
 
@@ -135,58 +125,22 @@ class Mnist(Dataset):
     return len(self.ids)
 
   def at(self, id):
-    if self.train_or_test == 'sample':
-      return self.data_samples[id]
-
     if self.train_or_test == 'train':
       img = self.train.images[id].reshape((28, 28,1))
       img = np.concatenate([img,img,img],-1)
       img = img.astype(np.uint8)
       label = self.train.labels[id]
 
-      return img, {'id': id, 'category_id': label}
+      return img, label
     else:
       img = self.test.images[id].reshape((28, 28,1))
       img = np.concatenate([img, img, img], -1)
       img = img.astype(np.uint8)
       label = self.test.labels[id]
 
-      return img, {'id': id, 'category_id': label}
+      return img, label
 
-  def data_pool(self):
-    if self.train_or_test == 'sample':
-      sample_idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(sample_idxs)
-
-      for index in sample_idxs:
-        yield self.data_samples[index]
-      return
-
-    ds = None
-    if self.train_or_test == 'train':
-      ds = self.train
-    else:
-      ds = self.test
-
-    self.epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if self.epoch >= max_epoches:
-        break
-      self.epoch += 1
-
-      ids = copy.copy(self.ids)
-      if self.rng:
-        self.rng.shuffle(ids)
-
-      # filter by ids
-      filter_ids = getattr(self, 'filter', None)
-      if filter_ids is not None:
-        ids = [i for i in ids if i in filter_ids]
-
-      for id in ids:
-        img = ds.images[id].reshape((28, 28, 1))
-        label = ds.labels[id]
-
-        yield img, {'id': id, 'category_id': label}
+# mnist = Mnist('val', "/root/workspace/dataset/temp_dataset")
+# for i in range(mnist.size):
+#   data = mnist.sample(i)
+#   print(i)

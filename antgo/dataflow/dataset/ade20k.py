@@ -5,115 +5,58 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-from antgo.dataflow.dataset import *
+import sys
 import os
 import numpy as np
+import cv2
+from antgo.dataflow.dataset import *
+from antgo.framework.helper.fileio.file_client import *
+
 
 __all__ = ['ADE20K']
 class ADE20K(Dataset):
-  def __init__(self, train_or_test, dir=None, params=None):
-    super(ADE20K, self).__init__(train_or_test, dir)
+  def __init__(self, train_or_test, dir=None, ext_params=None):
+    if train_or_test != 'train':
+      train_or_test = 'val'
 
-    assert(train_or_test in ['sample', 'train', 'val', 'test'])
-    if train_or_test == 'sample':
-      self.data_samples, self.ids = self.load_samples()
-      return
+    super(ADE20K, self).__init__(train_or_test, dir,ext_params=ext_params)
+    assert(train_or_test in ['train', 'val', 'test'])
 
+    if not os.path.exists(os.path.join(self.dir, 'ADEChallengeData2016')):
+      ali = AliBackend()
+      ali.download('ali:///dataset/ade20k/ADEChallengeData2016.zip', self.dir)
+      os.system(f'cd {self.dir} && unzip ADEChallengeData2016.zip')
+
+    subfolder_name = 'training' if self.train_or_test == 'train' else 'validation'
     self._image_file_list = []
     self._annotation_file_list = []
-    if train_or_test in ['train', 'val']:
-      image_target_path = os.path.join(dir,
-                                       'ADEChallengeData2016',
-                                       'images',
-                                       'training' if train_or_test == 'train' else 'validation')
-      annotation_target_path = os.path.join(dir,
-                                            'ADEChallengeData2016',
-                                            'annotations',
-                                            'training' if train_or_test == 'train' else 'validation')
-      if not os.path.exists(image_target_path):
-        logger.error('ADE dtaset must download from \n http://data.csail.mit.edu/places/ADEchallenge/ADEChallengeData2016.zip')
-        sys.exit(0)
 
-      for file in os.listdir(image_target_path):
-        if file[0] == '.':
-          continue
+    # 读取图片路径 和 分割GT
+    for image_file_name in os.listdir(os.path.join(self.dir, 'ADEChallengeData2016','images', subfolder_name)):
+      pure_name = image_file_name.split('.')[0]
+      anno_file_name = f'{pure_name}.png'
 
-        self._image_file_list.append(os.path.join(image_target_path, file))
-        self._annotation_file_list.append(os.path.join(annotation_target_path, '%s.png'%file.split('.')[0]))
-    else:
-      parse_file = os.path.join(dir, 'release_test', 'list.txt')
-      if not os.path.exists(parse_file):
-        logger.error(
-          'ADE dtaset must download from \n http://data.csail.mit.edu/places/ADEchallenge/release_test.zip')
-        sys.exit(0)
-
-      with open(parse_file) as fp:
-        for file in fp.readlines():
-          if len(file) == 0:
-            continue
-
-          self._image_file_list.append(os.path.join(dir, 'release_test', 'testing', file.replace('\n','')))
-
-    self.ids = list(range(len(self._image_file_list)))
+      self._image_file_list.append(os.path.join(self.dir, 'ADEChallengeData2016','images', subfolder_name, image_file_name))
+      self._annotation_file_list.append(os.path.join(self.dir, 'ADEChallengeData2016','annotations', subfolder_name, anno_file_name))
 
   @property
   def size(self):
-    return len(self.ids)
-
-  def data_pool(self):
-    if self.train_or_test == 'sample':
-      sample_idxs = copy.copy(self.ids)
-      if self.rng:
-        self.rng.shuffle(sample_idxs)
-
-      for index in sample_idxs:
-        yield self.data_samples[index]
-
-      return
-
-    epoch = 0
-    while True:
-      max_epoches = self.epochs if self.epochs is not None else 1
-      if epoch >= max_epoches:
-        break
-      epoch += 1
-
-      idxs = copy.deepcopy(self.ids)
-      if self.rng:
-        self.rng.shuffle(idxs)
-
-      for k in idxs:
-        image_file = self._image_file_list[k]
-        image = imread(image_file)
-
-        if self.train_or_test in ['train', 'val']:
-          label_file = self._annotation_file_list[k]
-          label = imread(label_file)
-
-          if len(label.shape) == 3:
-            label = label[:,:,0]
-
-          yield [image, {'segmentation_map': label, 'file_id': image_file.split('/')[-1]}]
-        else:
-          yield [image, {'file_id': image_file.split('/')[-1]}]
+    return len(self._image_file_list)
 
   def at(self, id):
-    if self.train_or_test == 'sample':
-      return self.data_samples[id]
+    image = cv2.imread(self._image_file_list[id])
+    segments = cv2.imread(self._annotation_file_list[id], cv2.IMREAD_GRAYSCALE)
 
-    image_file = self._image_file_list[id]
-    image = imread(image_file)
-
-    if self.train_or_test in ['train', 'val']:
-      label_file = self._annotation_file_list[id]
-      label = imread(label_file)
-
-      if len(label.shape) == 3:
-        label = label[:, :, 0]
-
-      return [image, {'segmentation_map':label, 'file_id': image_file.split('/')[-1]}]
-    else:
-      return [image, {'file_id': image_file.split('/')[-1]}]
+    return (
+        image, 
+        {
+          'segments':segments, 
+          'image_meta': {
+            'image_shape': (image.shape[0], image.shape[1]),
+            'image_file': self._image_file_list[id]
+          }
+         }
+      )
 
   def split(self, split_params={}, split_method='holdout'):
     assert(self.train_or_test == 'train')
@@ -121,3 +64,21 @@ class ADE20K(Dataset):
 
     validation_dataet = ADE20K('val', self.dir)
     return self, validation_dataet
+
+
+# vgg = ADE20K('train', '/opt/tiger/handdetJ/dataset/ade20k')
+# size = vgg.size
+# print(f'vgg size {size}')
+# gt_label = 150
+# label_num_map = {}
+# for i in range(size):
+#   data = vgg.sample(i)
+#   # cv2.imwrite('./aabb_image.png', data['image'])
+#   # cv2.imwrite('./aabb_segments.png', ((data['segments']/150)*255).astype(np.uint8))
+#   ll = set(data['segments'].flatten().tolist())
+#   for l in ll:
+#     if l not in label_num_map:
+#       label_num_map[l] = 0
+#     label_num_map[l] += 1
+
+# print(label_num_map)
