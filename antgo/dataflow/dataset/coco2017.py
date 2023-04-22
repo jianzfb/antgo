@@ -394,7 +394,7 @@ class COCO2017(Dataset):
       if not os.path.exists(os.path.join(self.dir, 'COCO')):
         ali = AliBackend()
         # 下载数据集
-        ali.download('ali:///dataset/COCO.tar', self.dir)
+        ali.download('ali:///dataset/coco/COCO.tar', self.dir)
         assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
         # 解压
         os.system(f'cd {self.dir} && tar -xf COCO.tar')

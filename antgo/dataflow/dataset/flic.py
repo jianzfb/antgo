@@ -22,7 +22,7 @@ class FLIC(Dataset):
     if not os.path.exists(os.path.join(self.dir, 'examples.mat')):
       if not os.path.exists(os.path.join(self.dir, 'FLIC-full')):
         ali = AliBackend()
-        ali.download('ali:///dataset/FLIC-full.zip', self.dir)
+        ali.download('ali:///dataset/flic/FLIC-full.zip', self.dir)
         os.system(f'cd {self.dir} && unzip FLIC-full.zip')
         self.dir = os.path.join(self.dir, 'FLIC-full')
       else:

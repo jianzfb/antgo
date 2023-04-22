@@ -16,7 +16,7 @@ python3 ./cifar10/main.py --exp=cifar10 --gpu-id=0 --process=train
 python3 ./cifar10/main.py --exp=cifar10 --checkpoint=./output/cifar10/output/checkpoint/epoch_1500.pth --process=export
 ```
 
-## 2D关键点任务实验
+## 关键点任务实验
 
 ```
 # 第一步 创建mvp代码
@@ -32,25 +32,37 @@ python3 ./lsp/main.py --exp=lsp --gpu-id=0 --process=train
 python3 ./lsp/main.py --exp=lsp --checkpoint=./output/lsp/output/checkpoint/epoch_60.pth --process=export
 ```
 
-## 2D检测任务实验
+## COCO检测任务实验
 
 ```
+# 数据准备
+# 推荐直接使用本框架共享常规数据集（基于阿里云盘提供支持）
+# 运行如下命令后，将在控制台显示阿里云盘授权二维码，授权后，对应数据集将分享至开发者的阿里云盘内
+# 在模型训练时，自动从阿里云盘下载对应数据。
+antgo share data --name=coco
+
 # 第一步 创建mvp代码
-antgo create mvp --name=visalso
+antgo create mvp --name=coco
 
 # 第二步 开始训练（使用GPU 0）
-python3 ./visalso/main.py --exp=visalso --gpu-id=0 --process=train
+python3 ./coco/main.py --exp=coco --gpu-id=0 --process=train
 
 # 第三步 查看训练日志
-# 在./output/visalso/output/checkpoint下你将获得checkpoint epoch_60.pth
+# 在./output/coco/output/checkpoint下你将获得checkpoint epoch_60.pth
 
 # 第四步 导出onnx模型
-python3 ./visalso/main.py --exp=visalso --checkpoint=./output/visalso/output/checkpoint/epoch_60.pth --process=export
+python3 ./coco/main.py --exp=coco --checkpoint=./output/coco/output/checkpoint/epoch_60.pth --process=export
 ```
 
-## 分割任务实验
+## VOC分割任务实验
 
 ```
+# 数据准备
+# 推荐直接使用本框架共享常规数据集（基于阿里云盘提供支持）
+# 运行如下命令后，将在控制台显示阿里云盘授权二维码，授权后，对应数据集将分享至开发者的阿里云盘内
+# 在模型训练时，自动从阿里云盘下载对应数据。
+antgo share data --name=voc
+
 # 第一步 创建mvp代码
 antgo create mvp --name=pascal_voc
 

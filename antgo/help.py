@@ -123,7 +123,14 @@ def generate_project_exp_example(template_project_folder, target_folder, exp_nam
     if not os.path.exists(os.path.join(target_folder, 'requirements.txt')):
         shutil.copy(os.path.join(template_project_folder, 'requirements.txt'), target_folder)
     if not os.path.exists(os.path.join(target_folder, 'README.md')):
-        shutil.copy(os.path.join(template_project_folder, 'README.md'), target_folder)
+        # 修改readme信息
+        with open( os.path.join(template_project_folder, 'README.md'), 'r') as fp:
+            content = fp.read()
+            content = content.replace('cifar10', exp_name)
+
+        with open( os.path.join(target_folder, 'README.md'), 'w') as fp:
+            fp.write(content)
+
     if not os.path.exists(os.path.join(target_folder, '.gitignore')):
         shutil.copy(os.path.join(template_project_folder, '.gitignore'), target_folder)
 
