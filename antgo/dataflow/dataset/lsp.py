@@ -45,7 +45,7 @@ class LSP(Dataset):
             ali = AliBackend()
             ali.download('ali:///dataset/lsp/lsp_dataset.zip', os.path.join(self.dir, 'lsp'))
             # ali.download('ali:///dataset/lsp/lspet_dataset.zip', os.path.join(self.dir, 'lspet'))
-            ali.download('ali:///dataset/lsp/hr-lspet.zip', os.path.join(self.dir))   # 这是lspet的高精集合
+            ali.download('ali:///dataset/lsp/hr-lspet.zip', self.dir)   # 这是lspet的高精集合
             
             os.system(f'cd {os.path.join(self.dir, "lsp")} && unzip lsp_dataset.zip')
             # os.system(f'cd {os.path.join(self.dir, "lspet")} && unzip lspet_dataset.zip')            
