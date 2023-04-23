@@ -34,7 +34,7 @@ class SegMIOU(object):
         miou_val = float(np.nanmean(iou))
 
         print()
-        print("======== MIOU Err: %f ========" % (miou_val))
+        print("======== MIOU Acc: %f ========" % (miou_val))
         error_info = {
             'miou': miou_val
         }

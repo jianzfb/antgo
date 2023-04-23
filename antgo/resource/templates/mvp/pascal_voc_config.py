@@ -1,5 +1,5 @@
 # 优化器配置
-optimizer = dict(type='SGD', lr=0.05,  weight_decay=5e-4, momentum=0.01, nesterov=True)
+optimizer = dict(type='SGD', lr=0.05,  weight_decay=5e-4, momentum=0.9, nesterov=True)
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
@@ -10,7 +10,7 @@ lr_config = dict(
 
 # 日志配置
 log_config = dict(
-    interval=50,    
+    interval=10,    
     hooks=[
         dict(type='TextLoggerHook'),
     ])
@@ -57,8 +57,9 @@ data=dict(
         dir='./pascal2012_dataset',
         ext_params=dict(task_type='SEGMENTATION', aug=True),
         pipeline=[
-            dict(type="Meta"),
+            dict(type='Rotation'),
             dict(type='ResizeS', target_dim=(256,256)),
+            dict(type='RandomFlipImage', swap_ids=[], swap_labels=[]),
             dict(type='ToTensor', keys=['image']),
             dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
             dict(type='UnSqueeze', axis=0, keys=['segments'])
@@ -79,7 +80,6 @@ data=dict(
         dir='./pascal2012_dataset',
         ext_params=dict(task_type='SEGMENTATION', aug=True),
         pipeline=[
-            dict(type="Meta"),
             dict(type='ResizeS', target_dim=(256,256)),
             dict(type='ToTensor', keys=['image']),
             dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
@@ -101,7 +101,6 @@ data=dict(
         dir='./pascal2012_dataset',
         ext_params=dict(task_type='SEGMENTATION', aug=True),
         pipeline=[
-            dict(type="Meta"),
             dict(type='ResizeS', target_dim=(256,256)),
             dict(type='ToTensor', keys=['image']),
             dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
@@ -129,4 +128,4 @@ export=dict(
     output_name_list=["heatmap"]
 )
 
-max_epochs = 60
+max_epochs = 600

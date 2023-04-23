@@ -160,6 +160,13 @@ class FcosHeadML(BaseDenseHead):
 
         loss_reg_offset_avg = []
         loss_center_heatmap_avg = []
+
+        pred_reg_offset_multi_levels = []
+        gt_reg_offset_multi_levels = []
+        mask_multi_levels = []
+
+        batch_size = center_heatmap_preds[0].shape[0]
+
         for level_i, (center_heatmap_pred, reg_pred) in enumerate(zip(center_heatmap_preds, reg_preds)):
             target_result, avg_factor = \
                 self.get_targets(bboxes, labels, center_heatmap_pred.shape, image_meta, self.down_stride[level_i], center_heatmap_pred.device)
@@ -172,21 +179,28 @@ class FcosHeadML(BaseDenseHead):
                 self.loss_center_heatmap(center_heatmap_pred.sigmoid(), center_heatmap_target, avg_factor=avg_factor)
             loss_center_heatmap_avg.append(loss_center_heatmap.view(1))
             
-            batch_size = center_heatmap_pred.shape[0]
             pred = reg_pred.permute(0, 2, 3, 1)
             pred = torch.reshape(pred, [batch_size, -1, 4])
+            pred_reg_offset_multi_levels.append(pred)
 
             gt = reg_targets.permute(0, 2, 3, 1)
             gt = torch.reshape(gt, [batch_size, -1, 4])
+            gt_reg_offset_multi_levels.append(gt)
+            mask_multi_levels.append(reg_weights.view(batch_size, -1))
 
-            for batch_index in range(batch_size):
-                pred_pos = pred[batch_index][reg_weights[batch_index,0].view(-1).to(torch.bool)]  # [num_pos_b,4]
-                target_pos = gt[batch_index][reg_weights[batch_index,0].view(-1).to(torch.bool)]  # [num_pos_b,4]
-                if pred_pos.shape[0] > 0:
-                    loss_reg_offset_avg.append(iou_loss(pred_pos, target_pos).view(1) / float(pred_pos.shape[0]))
+        loss_center_heatmap_avg = torch.mean(torch.cat(loss_center_heatmap_avg))
+
+        loss_reg_offset_avg = []
+        pred_reg_offset_multi_levels = torch.cat(pred_reg_offset_multi_levels, dim=1)
+        gt_reg_offset_multi_levels = torch.cat(gt_reg_offset_multi_levels, dim=1)
+        mask_multi_levels = torch.cat(mask_multi_levels, dim=1)
+
+        for batch_index in range(batch_size):
+            pred_pos = pred_reg_offset_multi_levels[batch_index][mask_multi_levels[batch_index].to(torch.bool)]#[num_pos_b,4]
+            target_pos=gt_reg_offset_multi_levels[batch_index][mask_multi_levels[batch_index].to(torch.bool)]#[num_pos_b,4]
+            loss_reg_offset_avg.append(iou_loss(pred_pos,target_pos).view(1))
 
         loss_reg_offset_avg = torch.mean(torch.cat(loss_reg_offset_avg))
-        loss_center_heatmap_avg = torch.mean(torch.cat(loss_center_heatmap_avg))
         total_loss = dict(
             loss_center_heatmap=loss_center_heatmap_avg,
             loss_reg=loss_reg_offset_avg)
@@ -485,4 +499,3 @@ class FcosHeadML(BaseDenseHead):
             bboxes = bboxes[remained_index]
             labels = labels[remained_index]
         return bboxes, labels
-

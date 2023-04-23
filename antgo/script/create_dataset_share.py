@@ -102,6 +102,24 @@ def main():
         fp.write(result)
     print('finish vgg-face2')
 
+    # 9.step lsp
+    file_obj = ali.get_folder_by_path('/dataset/lsp')
+    file_obj = ali.get_file_list(file_obj.file_id)
+    result = ali.share_files_by_aligo(file_obj)
+
+    with open(os.path.join(shared_data_info_folder, 'lsp.txt'), 'w') as fp:
+        fp.write(result)
+    print('finish lsp')
+
+    # 10.step mpii
+    file_obj = ali.get_folder_by_path('/dataset/mpii')
+    file_obj = ali.get_file_list(file_obj.file_id)
+    result = ali.share_files_by_aligo(file_obj)
+
+    with open(os.path.join(shared_data_info_folder, 'mpii.txt'), 'w') as fp:
+        fp.write(result)
+    print('finsh mpii')
+
 
 if __name__ == '__main__':
   main()

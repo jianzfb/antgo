@@ -963,7 +963,7 @@ class RandomFlipImage(BaseOperator):
             raise ImageError("{}: image is not 3-dimensional.".format(self))
         height, width, _ = im.shape
         if np.random.uniform(0, 1) < self.prob:
-            im = im[:, ::-1, :]
+            im = im[:, ::-1, :].copy()
             if 'bboxes' in sample.keys() and sample['bboxes'].shape[0] > 0:
                 gt_bbox = sample['bboxes']
                 oldx1 = gt_bbox[:, 0].copy()
@@ -1004,7 +1004,7 @@ class RandomFlipImage(BaseOperator):
                 sample['joints2d'] = gt_keypoints.copy()
 
             if 'segments' in sample and sample['segments'].size > 0:
-                sample['segments'] = sample['segments'][:, ::-1]
+                sample['segments'] = sample['segments'][:, ::-1].copy()
 
             if 'image_meta' in sample:
                 sample['image_meta']['flipped'] = True

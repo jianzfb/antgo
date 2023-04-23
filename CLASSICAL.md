@@ -16,9 +16,15 @@ python3 ./cifar10/main.py --exp=cifar10 --gpu-id=0 --process=train
 python3 ./cifar10/main.py --exp=cifar10 --checkpoint=./output/cifar10/output/checkpoint/epoch_1500.pth --process=export
 ```
 
-## 关键点任务实验
+## LSP关键点任务实验
 
 ```
+# 数据准备
+# 推荐直接使用本框架共享常规数据集（基于阿里云盘提供支持）
+# 运行如下命令后，将在控制台显示阿里云盘授权二维码，授权后，对应数据集将分享至开发者的阿里云盘内
+# 在模型训练时，自动从阿里云盘下载对应数据。
+antgo share data --name=lsp
+
 # 第一步 创建mvp代码
 antgo create mvp --name=lsp
 

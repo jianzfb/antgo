@@ -46,7 +46,7 @@ class ClsHead(nn.Module):
         losses = self.loss(cls_score, gt_label.view(-1), **kwargs)
         return losses
 
-    def simple_test(self, x):
+    def simple_test(self, x, **kwargs):
         """Inference without augmentation.
 
     Args:
