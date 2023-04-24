@@ -13,7 +13,7 @@ lr_config = dict(
 
 # 日志配置
 log_config = dict(
-    interval=1,    
+    interval=50, 
     hooks=[
         dict(type='TextLoggerHook'),
     ])

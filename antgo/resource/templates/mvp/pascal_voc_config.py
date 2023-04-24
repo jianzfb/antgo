@@ -6,6 +6,9 @@ optimizer_config = dict(grad_clip=None)
 lr_config = dict(
     policy='CosineAnnealing',
     min_lr=1e-5,
+    warmup_by_epoch=False,
+    warmup_iters=2000,
+    warmup='linear'    
 )
 
 # 日志配置
@@ -14,13 +17,6 @@ log_config = dict(
     hooks=[
         dict(type='TextLoggerHook'),
     ])
-
-# 自定义HOOKS
-custom_hooks = [
-    dict(
-        type='EMAHook'
-    )
-]
 
 # 模型配置
 model = dict(
