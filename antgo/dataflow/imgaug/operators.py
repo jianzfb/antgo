@@ -1820,8 +1820,6 @@ class ColorDistort(BaseOperator):
             in [lower, upper, probability] format.
         brightness (list): brightness settings.
             in [lower, upper, probability] format.
-        random_apply (bool): whether to apply in random (yolov7) or fixed (SSD)
-            order.
         random_channel (bool): whether to swap channels randomly
     """
 
@@ -1830,14 +1828,12 @@ class ColorDistort(BaseOperator):
                  saturation=[0.5, 1.5, 0.5],
                  contrast=[0.5, 1.5, 0.5],
                  brightness=[0.5, 1.5, 0.5],
-                 random_apply=True,
                  random_channel=False, inputs=None):
         super(ColorDistort, self).__init__(inputs=inputs)
         self.hue = hue
         self.saturation = saturation
         self.contrast = contrast
         self.brightness = brightness
-        self.random_apply = random_apply
         self.random_channel = random_channel
 
     def apply_hue(self, img):
@@ -1849,7 +1845,7 @@ class ColorDistort(BaseOperator):
         img[..., 0] += random.uniform(low, high)
         img[..., 0][img[..., 0] > 360] -= 360
         img[..., 0][img[..., 0] < 0] += 360
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     def apply_saturation(self, img):
         low, high, prob = self.saturation
@@ -1858,7 +1854,7 @@ class ColorDistort(BaseOperator):
         delta = np.random.uniform(low, high)
         img = img.astype(np.float32)
         img[..., 1] *= delta
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
         
     def apply_contrast(self, img):
         low, high, prob = self.contrast
@@ -1868,7 +1864,7 @@ class ColorDistort(BaseOperator):
 
         img = img.astype(np.float32)
         img *= delta
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     def apply_brightness(self, img):
         low, high, prob = self.brightness
@@ -1878,7 +1874,7 @@ class ColorDistort(BaseOperator):
 
         img = img.astype(np.float32)
         img += delta
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     def __call__(self, sample, context=None):
         img = sample['image']
