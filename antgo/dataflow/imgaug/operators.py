@@ -355,6 +355,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         image = sample['image']
 
         joints2d = sample['joints2d']
+        joints_vis = sample['joints_vis']
         if joints2d.size == 0:
             image_h, image_w = image.shape[:2]
             
@@ -389,6 +390,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             obj_num = joints2d.shape[0]
             obj_i = np.random.randint(0, obj_num)
             joints2d = joints2d[obj_i]
+            joints_vis = joints_vis[obj_i]
             
             if 'bboxes' in sample and len(sample['bboxes']) > 0:
                 bbox = sample['bboxes'][obj_i]
@@ -401,7 +403,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             else:
                 x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
                 bbox = [x1, y1, x2, y2]
-        
+
         # 动态扩展bbox
         bbox = self.extend_bbox(bbox, image.shape[:2])
         xmin, ymin, xmax, ymax = bbox
@@ -435,13 +437,11 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         # 转换监督目标
         target, offset_x, offset_y, target_weight = \
             self._target_generator(joints2d, self.num_joints, self._feat_stride)
-
-        # 关节点可见性
-        if 'joints_vis' in sample:
-            joints_vis = sample['joints_vis']
-        else:
-            joints_vis = np.ones((self.num_joints), dtype=np.float32)
-
+        
+        # 修正bbox
+        x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
+        bbox = [x1, y1, x2, y2]        
+        
         # for joint_i, (x,y) in enumerate(joints2d):
         #     x, y = int(x), int(y)
         #     if joints_vis[joint_i]:

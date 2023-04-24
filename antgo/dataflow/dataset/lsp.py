@@ -13,7 +13,6 @@ import numpy as np
 import cv2
 from antgo.framework.helper.fileio.file_client import *
 
-
 __all__ = ['LSP']
 
 class LSP(Dataset):
@@ -96,10 +95,10 @@ class LSP(Dataset):
           np.max(joints2d[visible_pos, 1])
         ]])
         anno = {
-            'bboxes': bboxes,
+            'bboxes': bboxes.astype(np.float32),
             'labels': np.zeros((1), dtype=np.int32),
-            'joints2d': np.expand_dims(joints2d, 0),
-            'joints_vis': np.expand_dims(visible, 0)
+            'joints2d': np.expand_dims(joints2d, 0).astype(np.float32),
+            'joints_vis': np.expand_dims(visible, 0).astype(np.int32)
         }
         return (image, anno)
 
@@ -107,17 +106,21 @@ class LSP(Dataset):
         raise NotImplementedError
 
 # lsp = LSP('test', '/root/workspace/dataset/lsp')
+# crjo = ConvertRandomObjJointsAndOffset(input_size=(128,128), heatmap_size=(16,16), num_joints=14)
+
 # for i in range(lsp.size):
 #     data = lsp.sample(i)
+#     data = crjo(data)
+    
 #     image = data['image']
 #     joints2d = data['joints2d']
 #     joints_vis = data['joints_vis']
     
-#     for joint_i, (x,y) in enumerate(joints2d[0]):
-#         x, y = int(x), int(y)
+#     # for joint_i, (x,y) in enumerate(joints2d[0]):
+#     #     x, y = int(x), int(y)
         
-#         if joints_vis[0][joint_i]:
-#             cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
+#     #     if joints_vis[0][joint_i]:
+#     #         cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
 
-#     cv2.imwrite(f'./aabb_{i}.png', image)
+#     # cv2.imwrite(f'./aabb_{i}.png', image)
 #     print(i)

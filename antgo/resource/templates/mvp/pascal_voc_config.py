@@ -59,7 +59,7 @@ data=dict(
         pipeline=[
             dict(type='Rotation'),
             dict(type='ResizeS', target_dim=(256,256)),
-            dict(type='RandomFlipImage', swap_ids=[], swap_labels=[]),
+            dict(type='ColorDistort'),
             dict(type='ToTensor', keys=['image']),
             dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
             dict(type='UnSqueeze', axis=0, keys=['segments'])

@@ -6,6 +6,9 @@ optimizer_config = dict(grad_clip=dict(max_norm=20))
 lr_config = dict(
     policy='CosineAnnealing',
     min_lr=1e-5,
+    warmup_by_epoch=False,
+    warmup_iters=2000,
+    warmup='linear'
 )
 
 # 日志配置

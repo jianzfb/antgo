@@ -1,5 +1,5 @@
 # 优化器配置
-optimizer = dict(type='SGD', lr=0.05,  weight_decay=5e-4, momentum=0.01, nesterov=True)
+optimizer = dict(type='SGD', lr=0.05,  weight_decay=5e-4, momentum=0.9, nesterov=True)
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
@@ -10,7 +10,7 @@ lr_config = dict(
 
 # 日志配置
 log_config = dict(
-    interval=50,    
+    interval=5,    
     hooks=[
         dict(type='TextLoggerHook'),
     ])
@@ -64,7 +64,7 @@ data=dict(
         )
     ),
     train_dataloader=dict(
-        samples_per_gpu=128, 
+        samples_per_gpu=32, 
         workers_per_gpu=2,
         drop_last=True,
         shuffle=True,
@@ -84,7 +84,7 @@ data=dict(
     ),
     val_dataloader=dict(
         samples_per_gpu=128, 
-        workers_per_gpu=2,
+        workers_per_gpu=1,
         drop_last=False,
         shuffle=False,
     ),
@@ -103,7 +103,7 @@ data=dict(
     ),
     test_dataloader=dict(
         samples_per_gpu=128, 
-        workers_per_gpu=2,
+        workers_per_gpu=1,
         drop_last=False,
         shuffle=False,
     )
@@ -119,4 +119,4 @@ export=dict(
     output_name_list=["heatmap", "offset"]
 )
 
-max_epochs = 60
+max_epochs = 600

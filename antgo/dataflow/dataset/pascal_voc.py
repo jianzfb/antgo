@@ -344,11 +344,17 @@ class Pascal2012(PascalBase):
     return self, validation_pascal2012
 
 # p2012 = Pascal2012('val', '/root/workspace/dataset/temp_dataset')
+# rfi = RandomFlipImage()
 # print(f'p2012 size {p2012.size}')
 # for i in range(p2012.size):
 #   result = p2012.sample(i)
-#   # ss = result['segments']
-#   # cv2.imwrite('./1234.png', (ss/20*255).astype(np.uint8))
+#   result = rfi(result)
+#   segments  = result['segments']
+#   image = result['image']
+#   canvas = np.zeros((image.shape[0], image.shape[1]+image.shape[1]), dtype=np.uint8)
+#   canvas[:,:image.shape[1]] = image[:,:,0]
+#   canvas[:,image.shape[1]:] = (segments/20*255).astype(np.uint8)
+#   cv2.imwrite('./1234.png', canvas.astype(np.uint8))
 #   print(i)
 # value = p2012.sample(0)
 # print(value.keys())

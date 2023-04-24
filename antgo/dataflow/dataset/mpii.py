@@ -20,23 +20,24 @@ class MPII(Dataset):
     def __init__(self, train_or_test, dir=None, ext_params=None):
         super(MPII, self).__init__(train_or_test, dir, ext_params)
         self.class_name = [
-            'r ankle',
-            'r knee',
-            'r hip',
-            'l hip',
-            'l knee',
-            'l ankle',
+            'rankl',
+            'rknee',
+            'rhip',
+            'lhip',
+            'lknee',
+            'lankl',
             'pelvis',
             'thorax',
-            'upper neck',
-            'head top',
-            'r wrist',
-            'r wrist',
-            'r shoulder',
-            'l shoulder',
-            'l elbow',
-            'l wrist'
-        ]
+            'upper_neck',
+            'head',
+            'rwri',
+            'relb',
+            'rsho',
+            'lsho',
+            'lelb',
+            'lwri'
+        ]    
+        
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
         if not os.path.exists(os.path.join(self.dir, 'images')):
