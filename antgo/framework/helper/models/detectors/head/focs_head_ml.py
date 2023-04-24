@@ -1,3 +1,4 @@
+from pydoc import stripid
 import torch
 import torch.nn as nn
 from antgo.framework.helper.cnn import bias_init_with_prob, normal_init
@@ -180,7 +181,7 @@ class FcosHeadML(BaseDenseHead):
             loss_center_heatmap_avg.append(loss_center_heatmap.view(1))
             
             pred = reg_pred.permute(0, 2, 3, 1)
-            pred = torch.reshape(pred, [batch_size, -1, 4])
+            pred = torch.reshape(pred, [batch_size, -1, 4]) * self.down_stride[level_i]
             pred_reg_offset_multi_levels.append(pred)
 
             gt = reg_targets.permute(0, 2, 3, 1)
@@ -468,10 +469,10 @@ class FcosHeadML(BaseDenseHead):
         batch_scores, batch_index, batch_topk_labels = batch_dets
 
         ltrb_off = transpose_and_gather_feat(reg_pred, batch_index)     # BxHxWx4
-        tl_x = (topk_xs * stride +  stride // 2 - ltrb_off[..., 0])
-        tl_y = (topk_ys * stride +  stride // 2 - ltrb_off[..., 1])
-        br_x = (topk_xs * stride +  stride // 2 + ltrb_off[..., 2])
-        br_y = (topk_ys * stride +  stride // 2 + ltrb_off[..., 3])
+        tl_x = (topk_xs * stride +  stride // 2 - ltrb_off[..., 0] * stride)
+        tl_y = (topk_ys * stride +  stride // 2 - ltrb_off[..., 1] * stride)
+        br_x = (topk_xs * stride +  stride // 2 + ltrb_off[..., 2] * stride)
+        br_y = (topk_ys * stride +  stride // 2 + ltrb_off[..., 3] * stride)
 
         batch_bboxes = torch.stack([tl_x, tl_y, br_x, br_y], dim=2)
         batch_bboxes = torch.cat((batch_bboxes, batch_scores[..., None]),

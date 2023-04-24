@@ -23,16 +23,16 @@ model = dict(
         depth=50, 
         in_channels=3, 
         out_indices=[3,2,1]),      
-    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=32, num_outs=3),
+    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=256, num_outs=3),
     bbox_head=dict(
         type='FcosHeadML',
-        in_channel=32,
-        feat_channel=32,
+        in_channel=256,
+        feat_channel=256,
         num_classes=80,
         down_stride=[8,16,32],
-        score_thresh=0.1,
+        score_thresh=0.05,
         train_cfg=None,
-        test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.3, max_per_img=10),
+        test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.6, max_per_img=50),
         loss_ch=dict(type='GaussianFocalLoss', loss_weight=1.0)
     ),  
 )

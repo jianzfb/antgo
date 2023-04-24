@@ -19,7 +19,24 @@ __all__ = ['MPII']
 class MPII(Dataset):
     def __init__(self, train_or_test, dir=None, ext_params=None):
         super(MPII, self).__init__(train_or_test, dir, ext_params)
-        # 0 - r ankle, 1 - r knee, 2 - r hip, 3 - l hip, 4 - l knee, 5 - l ankle, 6 - pelvis, 7 - thorax, 8 - upper neck, 9 - head top, 10 - r wrist, 10 - r wrist, 12 - r shoulder, 13 - l shoulder, 14 - l elbow, 15 - l wrist
+        self.class_name = [
+            'r ankle',
+            'r knee',
+            'r hip',
+            'l hip',
+            'l knee',
+            'l ankle',
+            'pelvis',
+            'thorax',
+            'upper neck',
+            'head top',
+            'r wrist',
+            'r wrist',
+            'r shoulder',
+            'l shoulder',
+            'l elbow',
+            'l wrist'
+        ]
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
         if not os.path.exists(os.path.join(self.dir, 'images')):
@@ -32,7 +49,7 @@ class MPII(Dataset):
 
         matlab_mpii = io.loadmat(os.path.join(self.dir, 'mpii_human_pose_v1_u12_1' ,'mpii_human_pose_v1_u12_1.mat'), struct_as_record=False)['RELEASE'][0, 0]
         num_images = matlab_mpii.__dict__['annolist'][0].shape[0]
-        
+
         self.info = []
         for img_idx in range(num_images):
             # Initialize empty placeholder        
@@ -40,15 +57,23 @@ class MPII(Dataset):
             train_test_mpii = matlab_mpii.__dict__['img_train'][0, img_idx].flatten()[0]
             person_id = matlab_mpii.__dict__['single_person'][img_idx][0].flatten()
 
-            if self.train_or_test == 'train' and train_test_mpii != 1:
-                continue
-            if self.train_or_test == 'test' and train_test_mpii != 0:
-                continue 
-            
             # Load the individual image. Throw an exception if image corresponding to filename not available.
             img_name = annotation_mpii.__dict__['image'][0, 0].__dict__['name'][0]
             img_path = os.path.join(self.dir, 'images', img_name)
-            
+
+            if self.train_or_test == 'train':
+                if train_test_mpii != 1:
+                    continue
+
+            if self.train_or_test == 'test':
+                if train_test_mpii == 0:
+                    self.info.append({
+                        'image_name': img_path,
+                        'anno':{}
+                    })
+                else:
+                    continue   
+
             # Iterate over persons
             joints2d = []
             joints_vis = []
@@ -90,7 +115,7 @@ class MPII(Dataset):
                 except KeyError:
                     # Person 'x' could not have annotated joints, hence move to person 'y'
                     continue
-            
+
             if len(joints2d) == 0:
                 continue
 
@@ -104,7 +129,7 @@ class MPII(Dataset):
                 'image_name': img_path,
                 'anno': anno
             })
-            
+
     @property
     def size(self):
         return len(self.info)
@@ -116,7 +141,7 @@ class MPII(Dataset):
     def split(self, split_params={}, split_method=''):
         raise NotImplementedError
 
-# mpii = MPII('test', '/root/workspace/dataset/mpii')
+# mpii = MPII('train', '/root/workspace/dataset/mpii')
 # for i in range(1, mpii.size):
 #     data = mpii.sample(i)
 #     image = data['image']
