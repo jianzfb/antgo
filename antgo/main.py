@@ -87,7 +87,7 @@ DEFINE_indicator("ignore-incomplete", True, "")
 DEFINE_nn_args()
 
 action_level_1 = ['train', 'eval', 'export', 'config', 'submitter', 'server', 'activelearning']
-action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share']
 
 
 def main():
@@ -654,6 +654,10 @@ def main():
       get_action(sub_action_name, args)
     elif action_name == 'update':
       update_project_config(sub_action_name, args)
+    elif action_name == 'share':
+      if sub_action_name == 'data':
+        tools.share_data_func(args)
+
 
 if __name__ == '__main__':
   main()

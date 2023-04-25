@@ -39,7 +39,7 @@ data=dict(
     train=dict( 
         type="Cifar10",
         train_or_test='train',
-        dir='./dataset',
+        dir='./cifar10-dataset',
         pipeline=[    
             dict(type='INumpyToPIL', keys=['image'], mode='RGB'),
             dict(type='RandomHorizontalFlip', keys=['image']),
@@ -58,7 +58,7 @@ data=dict(
     val=dict(
         type="Cifar10",
         train_or_test='test',
-        dir='./dataset',
+        dir='./cifar10-dataset',
         pipeline=[    
             dict(type='INumpyToPIL', keys=['image'], mode='RGB'),                  
             dict(type='ToTensor', keys=['image']),
@@ -75,7 +75,7 @@ data=dict(
     test=dict(
         type="Cifar10",
         train_or_test='test',
-        dir='./dataset',
+        dir='./cifar10-dataset',
         pipeline=[    
             dict(type='INumpyToPIL', keys=['image'], mode='RGB'),                  
             dict(type='ToTensor', keys=['image']),

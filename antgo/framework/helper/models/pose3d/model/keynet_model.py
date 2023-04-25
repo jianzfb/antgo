@@ -125,10 +125,14 @@ class KeypointNet(BaseModule):
         return preds, maxvals
 
     def forward_test(self, image, **kwargs):
+        image_h, image_w = image.shape[2:]
         output = self.backbone(image)   # x32,x16,x8,x4
-        output = self.head(output)      # uv_heatmap, uv_off, depth, d_off, out_dof
+        output = self.head(output)      # uv_heatmap, uv_off
   
         uv_heatmap, uv_off = output
+        # convert to probability
+        uv_heatmap = torch.sigmoid(uv_heatmap)
+        heatmap_h, heatmap_w = uv_heatmap.shape[2:]
         joint_num = uv_heatmap.shape[1]
         offset_x, offset_y = uv_off[:, :joint_num, :, :], uv_off[:, joint_num:, :, :]
         preds = uv_heatmap.detach().cpu().numpy()
@@ -136,7 +140,7 @@ class KeypointNet(BaseModule):
         offset_y = offset_y.detach().cpu().numpy()
 
         preds, score = self.get_max_pred_batch(preds, offset_x, offset_y)
-        pred_gt_hm = np.concatenate([preds, score], axis=2)
+        pred_gt_hm = np.concatenate([preds * (image_h/heatmap_h), score], axis=2)
         results = {
             'pred_joints2d': [sample_joint2d for sample_joint2d in pred_gt_hm],
         }
@@ -144,6 +148,6 @@ class KeypointNet(BaseModule):
 
     def onnx_export(self, image):
         output = self.backbone(image)   # x32,x16,x8,x4
-        output = self.head(output)      # uv_heatmap, uv_off, depth, d_off, out_dof
+        output = self.head(output)      # uv_heatmap, uv_off
   
         return output

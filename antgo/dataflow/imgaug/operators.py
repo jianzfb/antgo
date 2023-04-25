@@ -355,6 +355,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         image = sample['image']
 
         joints2d = sample['joints2d']
+        joints_vis = sample['joints_vis']
         if joints2d.size == 0:
             image_h, image_w = image.shape[:2]
             
@@ -389,6 +390,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             obj_num = joints2d.shape[0]
             obj_i = np.random.randint(0, obj_num)
             joints2d = joints2d[obj_i]
+            joints_vis = joints_vis[obj_i]
             
             if 'bboxes' in sample and len(sample['bboxes']) > 0:
                 bbox = sample['bboxes'][obj_i]
@@ -401,7 +403,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             else:
                 x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
                 bbox = [x1, y1, x2, y2]
-        
+
         # 动态扩展bbox
         bbox = self.extend_bbox(bbox, image.shape[:2])
         xmin, ymin, xmax, ymax = bbox
@@ -435,13 +437,11 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         # 转换监督目标
         target, offset_x, offset_y, target_weight = \
             self._target_generator(joints2d, self.num_joints, self._feat_stride)
-
-        # 关节点可见性
-        if 'joints_vis' in sample:
-            joints_vis = sample['joints_vis']
-        else:
-            joints_vis = np.ones((self.num_joints), dtype=np.float32)
-
+        
+        # 修正bbox
+        x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
+        bbox = [x1, y1, x2, y2]        
+        
         # for joint_i, (x,y) in enumerate(joints2d):
         #     x, y = int(x), int(y)
         #     if joints_vis[joint_i]:
@@ -963,7 +963,7 @@ class RandomFlipImage(BaseOperator):
             raise ImageError("{}: image is not 3-dimensional.".format(self))
         height, width, _ = im.shape
         if np.random.uniform(0, 1) < self.prob:
-            im = im[:, ::-1, :]
+            im = im[:, ::-1, :].copy()
             if 'bboxes' in sample.keys() and sample['bboxes'].shape[0] > 0:
                 gt_bbox = sample['bboxes']
                 oldx1 = gt_bbox[:, 0].copy()
@@ -1004,7 +1004,7 @@ class RandomFlipImage(BaseOperator):
                 sample['joints2d'] = gt_keypoints.copy()
 
             if 'segments' in sample and sample['segments'].size > 0:
-                sample['segments'] = sample['segments'][:, ::-1]
+                sample['segments'] = sample['segments'][:, ::-1].copy()
 
             if 'image_meta' in sample:
                 sample['image_meta']['flipped'] = True
@@ -1820,8 +1820,6 @@ class ColorDistort(BaseOperator):
             in [lower, upper, probability] format.
         brightness (list): brightness settings.
             in [lower, upper, probability] format.
-        random_apply (bool): whether to apply in random (yolov7) or fixed (SSD)
-            order.
         random_channel (bool): whether to swap channels randomly
     """
 
@@ -1830,14 +1828,12 @@ class ColorDistort(BaseOperator):
                  saturation=[0.5, 1.5, 0.5],
                  contrast=[0.5, 1.5, 0.5],
                  brightness=[0.5, 1.5, 0.5],
-                 random_apply=True,
                  random_channel=False, inputs=None):
         super(ColorDistort, self).__init__(inputs=inputs)
         self.hue = hue
         self.saturation = saturation
         self.contrast = contrast
         self.brightness = brightness
-        self.random_apply = random_apply
         self.random_channel = random_channel
 
     def apply_hue(self, img):
@@ -1849,7 +1845,7 @@ class ColorDistort(BaseOperator):
         img[..., 0] += random.uniform(low, high)
         img[..., 0][img[..., 0] > 360] -= 360
         img[..., 0][img[..., 0] < 0] += 360
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     def apply_saturation(self, img):
         low, high, prob = self.saturation
@@ -1858,7 +1854,7 @@ class ColorDistort(BaseOperator):
         delta = np.random.uniform(low, high)
         img = img.astype(np.float32)
         img[..., 1] *= delta
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
         
     def apply_contrast(self, img):
         low, high, prob = self.contrast
@@ -1868,7 +1864,7 @@ class ColorDistort(BaseOperator):
 
         img = img.astype(np.float32)
         img *= delta
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     def apply_brightness(self, img):
         low, high, prob = self.brightness
@@ -1878,7 +1874,7 @@ class ColorDistort(BaseOperator):
 
         img = img.astype(np.float32)
         img += delta
-        return img
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     def __call__(self, sample, context=None):
         img = sample['image']
