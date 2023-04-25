@@ -122,7 +122,7 @@ evaluation=dict(
         categories=[{'name': f'{label}', 'id': label} for label in range(80)],
         without_background=False
     ), 
-    save_best='AP@[ IoU=0.50 | area= all | maxDets=100 ]',
+    save_best='AP@[ IoU=0.50:0.95 | area= all | maxDets=100 ]',
     rule='greater'
 )
 
