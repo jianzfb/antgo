@@ -133,7 +133,8 @@ class TFDataset(torch.utils.data.IterableDataset):
 
     """
     def __init__(self,
-                 data_path_list: typing.List[str],
+                 data_path_list: typing.Optional[typing.List[str]]=None,
+                 data_folder: typing.Optional[str] = None,
                  ratios: typing.Union[typing.List[float], None]=None,
                  description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
                  shuffle_queue_size: typing.Optional[int] = 1024,
@@ -148,6 +149,19 @@ class TFDataset(torch.utils.data.IterableDataset):
                  auto_ext_info=[]) -> None:
         super().__init__()
         self.data_path_list = data_path_list
+        if self.data_path_list is None:
+            if data_folder is None:
+                # 不允许data_path_list和data_folder同时不设置
+                logging.error('Must set data_path_list or data_folder')
+                return
+            else:
+                # 遍历文件夹，发现所有tfrecord数据
+                self.data_path_list = []
+                for tfrecord_file in os.listdir(data_folder):
+                    if tfrecord_file.endswith('tfrecord'):
+                        tfrecord_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['tfrecord'])
+                        self.data_path_list.append(f'{folder}/{tfrecord_file}')
+
         self.index_path_list = []
         for i in range(len(self.data_path_list)):
             tfrecord_file = self.data_path_list[i]
