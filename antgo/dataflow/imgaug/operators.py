@@ -1900,11 +1900,6 @@ class ResizeS(BaseOperator):
         if 'image_2' in sample:
             sample['image_2'] = cv2.resize(
                 sample['image_2'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
-
-        person_ids = sample['labels'] == 0
-        sample['bboxes'] = sample['bboxes'][person_ids]
-        sample['labels'] = sample['labels'][person_ids]
-        vis_2d_boxes_in_image(sample['image'], sample['bboxes'],sample['labels'], './b.png')
         return sample
 
     
