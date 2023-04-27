@@ -288,22 +288,29 @@ class FcosHeadML(BaseDenseHead):
             areas[~mask_pos] = 99999999
             areas_min_ind=torch.min(areas,dim=-1)[1]    #[h*w]
 
-            reg_target = ltrb_off[torch.zeros_like(areas,dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1),1)]#[h*w,4]
+            reg_target = ltrb_off[
+                torch.zeros_like(areas,dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1),1)]   #[h*w,4]
             reg_target = torch.reshape(reg_target,(-1,4))       #[h*w,4]
             mask_pos_2 = mask_pos.long().sum(dim=-1)            #[h*w]
             mask_pos_2 = mask_pos_2 >= 1
             
-            reg_target[~(mask_pos_2.to(torch.bool))] = 0
-
             # reshape
+            reg_target[~(mask_pos_2.to(torch.bool))] = 0            
             reg_target = reg_target.reshape(feat_h, feat_w, 4).permute(2,0,1)
 
             mask_pos_2 = mask_pos_2.to(torch.float32).reshape(1, feat_h,feat_w)
             gt_label = gt_labels[batch_id]
+
+            # # 测试不使用高斯 (类别需要+1，0作为背景类)
+            # gt_label = torch.broadcast_tensors(gt_label[None, :], areas.long())[0]  # [h*w,m]        
+            # cls_targets = gt_label[
+            #     torch.zeros_like(areas, dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1), 1)]     # [h*w,1]
+            # cls_targets = torch.reshape(cls_targets, (-1, 1))  # [h*w,1]
+
+            # 基于高斯构建目标
             center_x = (gt_bbox[:, [0]] + gt_bbox[:, [2]]) * width_ratio / 2
             center_y = (gt_bbox[:, [1]] + gt_bbox[:, [3]]) * height_ratio / 2
-            gt_centers = torch.cat((center_x, center_y), dim=1)
-
+            gt_centers = torch.cat((center_x, center_y), dim=1)            
             for j, ct in enumerate(gt_centers):
                 ctx_int, cty_int = ct.int()
                 if mask_pos[cty_int*feat_w+ctx_int, j] == 0:
@@ -311,8 +318,8 @@ class FcosHeadML(BaseDenseHead):
                 scale_box_h = (gt_bbox[j][3] - gt_bbox[j][1]) * height_ratio
                 scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
 
-                radius = gaussian_radius([scale_box_h, scale_box_w], min_overlap=0.3)
-                radius = max(int(1), int(radius))
+                radius = gaussian_radius([scale_box_h, scale_box_w], min_overlap=0.6)
+                radius = max(int(2), int(radius))
 
                 ind = gt_label[j]
                 gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius)

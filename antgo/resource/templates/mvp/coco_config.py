@@ -26,7 +26,7 @@ model = dict(
         depth=50, 
         in_channels=3, 
         out_indices=[3,2,1]),      
-    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=256, num_outs=3),
+    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=256, num_outs=3, upsample_cfg=dict(mode='bilinear', scale_factor=2.0)),
     bbox_head=dict(
         type='FcosHeadML',
         in_channel=256,
