@@ -638,13 +638,17 @@ class Rotation(BaseOperator):
     """
     Rotate the image with bounding box
     """
-    def __init__(self, degree=30, border_value=[0, 0, 0], label_border_value=255,inputs=None):
+    def __init__(self, degree=30, border_value=[0, 0, 0], label_border_value=255, prob=0.5, inputs=None):
         super(Rotation, self).__init__(inputs=inputs)
         self._degree = degree
         self._border_value = border_value
         self._label_border_value = label_border_value
+        self.prob = prob
 
     def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            return sample
+
         im = sample['image']
         height, width = im.shape[:2]
         cx, cy = width // 2, height // 2
@@ -1230,9 +1234,9 @@ class RandomDistort(BaseOperator):
 
 
 # FINISH FIX(?)
-class CropImage(BaseOperator):
+class RandomCropImageV2(BaseOperator):
     # 已经完成验证
-    def __init__(self, prob=0.5, batch_sampler=[[1, 50, 0.3, 1.0, 0.5, 2.0, 0.3, 1.0]], satisfy_all=False, avoid_no_bbox=True, inputs=None):
+    def __init__(self, batch_sampler=[[1, 50, 0.3, 1.0, 0.5, 2.0, 0.3, 1.0]], satisfy_all=False, avoid_no_bbox=True, prob=0.5, inputs=None):
         """
         Args:
             batch_sampler (list): Multiple sets of different
@@ -1251,7 +1255,7 @@ class CropImage(BaseOperator):
             avoid_no_bbox (bool): whether to to avoid the
                                   situation where the box does not appear.
         """
-        super(CropImage, self).__init__(inputs=inputs)
+        super(RandomCropImageV2, self).__init__(inputs=inputs)
         self.batch_sampler = batch_sampler
         self.satisfy_all = satisfy_all
         self.avoid_no_bbox = avoid_no_bbox
@@ -1319,9 +1323,6 @@ class CropImage(BaseOperator):
         gt_bbox = sample['bboxes']
         gt_class = sample['labels']
         im_height, im_width = im.shape[:2]
-        # gt_score = None
-        # if 'gt_score' in sample:
-        #     gt_score = sample['gt_score']
 
         sampled_bbox = []
         for sampler in self.batch_sampler:
@@ -1386,6 +1387,100 @@ class CropImage(BaseOperator):
                 sample['image_meta']['transform_matrix'] = crop_trans
 
             return sample
+        return sample
+
+
+class RandomCropImageV1(BaseOperator):
+    def __init__(self, size, padding, fill, prob=0.5, inputs=None):
+        super(RandomCropImageV1, self).__init__(inputs=inputs)
+        self.size = size    # height, width
+        self.padding = padding if isinstance(padding, tuple) else (padding, padding, padding, padding)
+        self.fill = fill
+        self.prob = prob
+    
+    def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            return sample
+        image = sample['image']
+
+        # 添加padding
+        padding_top = self.padding[0]
+        padding_left = self.padding[2]
+        image = cv2.copyMakeBorder(
+            image, self.padding[0], self.padding[1], self.padding[2], self.padding[2], cv2.BORDER_CONSTANT, value=self.fill)
+        if 'segments' in sample and sample['segments'].size != 0:
+            # 无效位置填充255
+            sample['segments'] = cv2.copyMakeBorder(
+                sample['segments'], self.padding[0], self.padding[1], self.padding[2], self.padding[2], cv2.BORDER_CONSTANT, value=255)
+
+        height, width = image.shape[:2]
+        if width < self.size[1]:
+            image = cv2.copyMakeBorder(
+                image, 0, 0, self.size[1]-width, 0, cv2.BORDER_CONSTANT, value=self.fill)
+            padding_left += (self.size[1]-width)
+            if 'segments' in sample and sample['segments'].size != 0:
+                # 无效位置填充255
+                sample['segments'] = cv2.copyMakeBorder(
+                    sample['segments'], 0, 0, self.size[1]-width, 0, cv2.BORDER_CONSTANT, value=255)
+
+        if height < self.size[0]:
+            image = cv2.copyMakeBorder(
+                image, self.size[0]-height, 0, 0, 0, cv2.BORDER_CONSTANT, value=self.fill)
+            padding_top += (self.size[0]-height)
+            if 'segments' in sample and sample['segments'].size != 0:
+                # 无效位置填充255
+                sample['segments'] = cv2.copyMakeBorder(
+                    sample['segments'], self.size[0]-height, 0, 0, 0, cv2.BORDER_CONSTANT, value=255)
+
+        height, width = image.shape[:2]
+
+        xmin = np.random.randint(0, width-self.size[1] if width > self.size[1] else 1)
+        ymin = np.random.randint(0, height-self.size[0] if height > self.size[0] else 1)
+        crop_image = image[ymin:ymin+self.size[0], xmin:xmin+self.size[1]].copy()
+        sample['image'] = crop_image
+        if 'segments' in sample and sample['segments'].size != 0:
+            crop_segments = sample['segments'][ymin:ymin+self.size[0], xmin:xmin+self.size[1]].copy()
+            sample['segments'] = crop_segments
+
+        x_offset = padding_top - xmin
+        y_offset = padding_left - ymin
+        valid = None
+        if 'bboxes' in sample:
+            # Nx4
+            boxes = sample['bboxes'] - np.array([[x_offset, y_offset, x_offset, y_offset]])
+
+            boxes[:,0::2] = np.clip(boxes[:,0::2], 0, self.size[1])
+            boxes[:,1::2] = np.clip(boxes[:,1::2], 0, self.size[0])
+    
+            # filter boxes with no area
+            area = np.prod(boxes[..., 2:] - boxes[..., :2], axis=1)
+            valid = (area > 1.).nonzero()[0]
+            sample['bboxes'] = boxes[valid]
+            sample['labels'] = sample['labels'][valid]            
+
+        if 'joints2d' in sample:
+            # NxJOINT_NUMx2
+            joints2d = sample['joints2d'] - np.array([[[x_offset, y_offset]]])
+
+            if valid is not None:
+                # 挑选出有效joints2d (与bboxes对齐)
+                joints2d = joints2d[valid]
+
+            joints_vis = sample['joints_vis']
+            invalid_p =  joints2d[:,0] < 0 or joints2d[:,0] > self.size[1] or joints2d[:,1] < 0 or joints2d[:,1] > self.size[0]
+            joints_vis[invalid_p] = 0
+            if valid is not None:
+                # 挑选出有效joints_vis (与bboxes对齐)
+                joints_vis = joints_vis[valid]
+            sample['joints_vis'] = joints_vis
+
+            joints2d[:,:,0] = np.clip(joints2d[:,:,0], 0, self.size[1])
+            joints2d[:,:,1] = np.clip(joints2d[:,:,1], 0, self.size[0])
+            sample['joints2d'] = joints2d
+
+        if 'image_meta' in sample:
+            sample['image_meta']['image_shape'] = (crop_image.shape[0], crop_image.shape[1])
+
         return sample
 
 
@@ -1754,6 +1849,8 @@ class ResizeS(BaseOperator):
     def __call__(self, sample, context=None):
         w = sample['image'].shape[1]
         h = sample['image'].shape[0]
+        if w == self.target_dim[0] and h == self.target_dim[1]:
+            return sample
 
         if self.interp == "RANDOM":
             interp = random.choice(list(self.interp_dict.keys()))
@@ -1804,7 +1901,10 @@ class ResizeS(BaseOperator):
             sample['image_2'] = cv2.resize(
                 sample['image_2'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
 
-        # vis_2d_boxes_in_image(sample['image'], sample['bboxes'],sample['labels'], './b.png')
+        person_ids = sample['labels'] == 0
+        sample['bboxes'] = sample['bboxes'][person_ids]
+        sample['labels'] = sample['labels'][person_ids]
+        vis_2d_boxes_in_image(sample['image'], sample['bboxes'],sample['labels'], './b.png')
         return sample
 
     
