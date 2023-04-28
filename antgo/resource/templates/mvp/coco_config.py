@@ -51,9 +51,9 @@ data=dict(
         dir='./coco_dataset',
         ext_params={'task_type': 'OBJECT-DETECTION'},
         pipeline=[
-            dict(type="Rotation", degree=15),
+            dict(type="Rotation", degree=30),
             dict(type='ResizeByShort', short_size=800, max_size=1333),
-            dict(type='ColorDistort', hue=[-5,5,0.3], saturation=[0.8,1.2,0.3], contrast=[0.8,1.2,0.3], brightness=[0.8,1.2,0.3]),
+            dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.7,1.3,0.5]),
             dict(type='RandomFlipImage', swap_labels=[]),
             dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
             dict(type='Permute', to_bgr=False, channel_first=True)
