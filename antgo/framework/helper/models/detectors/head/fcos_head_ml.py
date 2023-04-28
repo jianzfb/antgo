@@ -28,6 +28,30 @@ def iou_loss(preds, targets):
     loss = -iou.clamp(min=1e-6).log()
     return loss.sum()
 
+def giou_loss(preds, targets):
+    '''
+    Args:
+    preds: [n,4] ltrb
+    targets: [n,4]
+    '''
+    lt_min = torch.min(preds[:, :2], targets[:, :2])
+    rb_min = torch.min(preds[:, 2:], targets[:, 2:])
+    wh_min = (rb_min + lt_min).clamp(min=0)
+    overlap = wh_min[:, 0] * wh_min[:, 1]  # [n]
+    area1 = (preds[:, 2] + preds[:, 0]) * (preds[:, 3] + preds[:, 1])
+    area2 = (targets[:, 2] + targets[:, 0]) * (targets[:, 3] + targets[:, 1])
+    union = (area1 + area2 - overlap)
+    iou = overlap / union
+
+    lt_max = torch.max(preds[:, :2], targets[:, :2])
+    rb_max = torch.max(preds[:, 2:], targets[:, 2:])
+    wh_max = (rb_max + lt_max).clamp(0)
+    G_area = wh_max[:, 0] * wh_max[:, 1]  # [n]
+
+    giou = iou - (G_area - union) / G_area.clamp(1e-10)
+    loss = 1. - giou
+    return loss.sum()
+
 
 @HEADS.register_module()
 class FcosHeadML(BaseDenseHead):
@@ -81,6 +105,8 @@ class FcosHeadML(BaseDenseHead):
         self.feat_channel = feat_channel
         self._build_head()
         self.loss_center_heatmap=build_loss(loss_ch)
+        
+        self.loss_reg_func = iou_loss if loss_rg.type == 'IouLoss' else giou_loss
         self.loss_reg_weight = loss_rg.loss_weight
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg      
@@ -202,7 +228,7 @@ class FcosHeadML(BaseDenseHead):
         for batch_index in range(batch_size):
             pred_pos = pred_reg_offset_multi_levels[batch_index][mask_multi_levels[batch_index].to(torch.bool)]#[num_pos_b,4]
             target_pos=gt_reg_offset_multi_levels[batch_index][mask_multi_levels[batch_index].to(torch.bool)]#[num_pos_b,4]
-            loss_reg_offset_avg.append(iou_loss(pred_pos,target_pos).view(1))
+            loss_reg_offset_avg.append(self.loss_reg_func(pred_pos,target_pos).view(1))
 
         loss_reg_offset_avg = torch.mean(torch.cat(loss_reg_offset_avg))
         total_loss = dict(
