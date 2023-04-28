@@ -1,4 +1,3 @@
-from pydoc import stripid
 import torch
 import torch.nn as nn
 from antgo.framework.helper.cnn import bias_init_with_prob, normal_init
@@ -106,8 +105,8 @@ class FcosHeadML(BaseDenseHead):
         self._build_head()
         self.loss_center_heatmap=build_loss(loss_ch)
         
-        self.loss_reg_func = iou_loss if loss_rg.type == 'IouLoss' else giou_loss
-        self.loss_reg_weight = loss_rg.loss_weight
+        self.loss_reg_func = iou_loss if loss_rg.get('type') == 'IouLoss' else giou_loss
+        self.loss_reg_weight = loss_rg.get('loss_weight')
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg      
 
