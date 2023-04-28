@@ -58,7 +58,9 @@ class FcosHeadML(BaseDenseHead):
                  rescale=1.0,
                  score_thresh=0.15,
                  loss_ch=dict(
-                     type='GaussianFocalLoss', loss_weight=1.0),
+                    type='GaussianFocalLoss', loss_weight=1.0),
+                 loss_rg=dict(
+                    type='IouLoss', loss_weight=0.2),
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=None):
@@ -79,6 +81,7 @@ class FcosHeadML(BaseDenseHead):
         self.feat_channel = feat_channel
         self._build_head()
         self.loss_center_heatmap=build_loss(loss_ch)
+        self.loss_reg_weight = loss_rg.loss_weight
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg      
 
@@ -204,7 +207,7 @@ class FcosHeadML(BaseDenseHead):
         loss_reg_offset_avg = torch.mean(torch.cat(loss_reg_offset_avg))
         total_loss = dict(
             loss_center_heatmap=loss_center_heatmap_avg,
-            loss_reg=loss_reg_offset_avg)
+            loss_reg=loss_reg_offset_avg * self.loss_reg_weight)
 
         return total_loss
 
@@ -273,7 +276,7 @@ class FcosHeadML(BaseDenseHead):
             off_max = torch.max(ltrb_off,dim=-1)[0]     #[h*w,m]
             mask_in_gtboxes = off_min>0
             mask_in_level = \
-                (off_max>self.limit_range[stride][0])&(off_max<=self.limit_range[stride][1])   # 设置最大尺寸和最小尺寸约束 (stride=8)
+                (off_max>self.limit_range[stride][0])&(off_max<=self.limit_range[stride][1])   # 设置最大尺寸和最小尺寸约束
 
             radiu = stride * 1.5
             gt_center_x = (gt_bbox[...,0]+gt_bbox[...,2])/2
@@ -295,7 +298,7 @@ class FcosHeadML(BaseDenseHead):
             reg_target = torch.reshape(reg_target,(-1,4))       #[h*w,4]
             mask_pos_2 = mask_pos.long().sum(dim=-1)            #[h*w]
             mask_pos_2 = mask_pos_2 >= 1
-            
+
             gt_label = gt_labels[batch_id]  # m
 
             # 测试不使用高斯
@@ -308,12 +311,12 @@ class FcosHeadML(BaseDenseHead):
             cls_targets = torch.permute(cls_targets, (1,0))
             cls_targets = torch.reshape(cls_targets, (-1, feat_h, feat_w))
             center_heatmap_target[batch_id] = cls_targets
-            
+
             # reshape
             reg_target[~(mask_pos_2.to(torch.bool))] = 0            
             reg_target = reg_target.reshape(feat_h, feat_w, 4).permute(2,0,1)
             mask_pos_2 = mask_pos_2.to(torch.float32).reshape(1, feat_h,feat_w)
-                        
+
             # # 基于高斯构建目标
             # center_x = (gt_bbox[:, [0]] + gt_bbox[:, [2]]) * width_ratio / 2
             # center_y = (gt_bbox[:, [1]] + gt_bbox[:, [3]]) * height_ratio / 2
