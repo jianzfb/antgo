@@ -1,4 +1,3 @@
-from pydoc import stripid
 import torch
 import torch.nn as nn
 from antgo.framework.helper.cnn import bias_init_with_prob, normal_init
@@ -28,6 +27,30 @@ def iou_loss(preds, targets):
     loss = -iou.clamp(min=1e-6).log()
     return loss.sum()
 
+def giou_loss(preds, targets):
+    '''
+    Args:
+    preds: [n,4] ltrb
+    targets: [n,4]
+    '''
+    lt_min = torch.min(preds[:, :2], targets[:, :2])
+    rb_min = torch.min(preds[:, 2:], targets[:, 2:])
+    wh_min = (rb_min + lt_min).clamp(min=0)
+    overlap = wh_min[:, 0] * wh_min[:, 1]  # [n]
+    area1 = (preds[:, 2] + preds[:, 0]) * (preds[:, 3] + preds[:, 1])
+    area2 = (targets[:, 2] + targets[:, 0]) * (targets[:, 3] + targets[:, 1])
+    union = (area1 + area2 - overlap)
+    iou = overlap / union
+
+    lt_max = torch.max(preds[:, :2], targets[:, :2])
+    rb_max = torch.max(preds[:, 2:], targets[:, 2:])
+    wh_max = (rb_max + lt_max).clamp(0)
+    G_area = wh_max[:, 0] * wh_max[:, 1]  # [n]
+
+    giou = iou - (G_area - union) / G_area.clamp(1e-10)
+    loss = 1. - giou
+    return loss.sum()
+
 
 @HEADS.register_module()
 class FcosHeadML(BaseDenseHead):
@@ -50,35 +73,37 @@ class FcosHeadML(BaseDenseHead):
             Default: None
     """
 
-    def __init__(self,
-                 in_channel,
-                 feat_channel,
-                 num_classes,
-                 down_stride=[8,16],
-                 rescale=1.0,
-                 score_thresh=0.15,
-                 loss_ch=dict(
-                     type='GaussianFocalLoss', loss_weight=1.0),
-                 train_cfg=None,
-                 test_cfg=None,
-                 init_cfg=None):
+    def __init__(
+        self,
+        in_channel,
+        feat_channel,
+        num_classes,
+        down_stride=[8,16],
+        rescale=1.0,
+        score_thresh=0.15,
+        loss_ch=dict(
+            type='GaussianFocalLoss', loss_weight=1.0),
+        loss_rg=dict(
+            type='IouLoss', loss_weight=0.2),
+        train_cfg=dict(
+            limit_range={8:[-1, 64], 16: [64,128], 32: [128,256], 64: [256,512],128: [512, 999999]}),
+        test_cfg=None,
+        init_cfg=dict(
+            type='Xavier', layer='Conv2d', distribution='uniform')):
         super(FcosHeadML, self).__init__(init_cfg)
         self.num_classes = num_classes
         self.rescale_x, self.rescale_y = rescale if type(rescale) == list or type(rescale) == tuple else (rescale, rescale)
         self.score_thresh = score_thresh
         self.down_stride = down_stride
-        self.limit_range = {
-            8: [-1, 64],
-            16: [64,128],
-            32: [128,256],
-            64: [256,512],
-            128: [512, 999999]
-        }
+        self.limit_range = train_cfg.get('limit_range')
 
         self.in_channel = in_channel  
         self.feat_channel = feat_channel
         self._build_head()
         self.loss_center_heatmap=build_loss(loss_ch)
+        
+        self.loss_reg_func = iou_loss if loss_rg.get('type') == 'IouLoss' else giou_loss
+        self.loss_reg_weight = loss_rg.get('loss_weight')
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg      
 
@@ -87,8 +112,9 @@ class FcosHeadML(BaseDenseHead):
         self.reg_head_list = nn.ModuleList()
         for _ in self.down_stride:
             self.heatmap_head_list.append(
-                    nn.Sequential(
+                nn.Sequential(
                     nn.Conv2d(self.in_channel, self.feat_channel, kernel_size=3, stride=1, padding=1),
+                    nn.BatchNorm2d(self.feat_channel),
                     nn.ReLU(inplace=True),
                     nn.Conv2d(self.feat_channel, self.num_classes, kernel_size=1, bias=True)
                 )
@@ -199,12 +225,12 @@ class FcosHeadML(BaseDenseHead):
         for batch_index in range(batch_size):
             pred_pos = pred_reg_offset_multi_levels[batch_index][mask_multi_levels[batch_index].to(torch.bool)]#[num_pos_b,4]
             target_pos=gt_reg_offset_multi_levels[batch_index][mask_multi_levels[batch_index].to(torch.bool)]#[num_pos_b,4]
-            loss_reg_offset_avg.append(iou_loss(pred_pos,target_pos).view(1))
+            loss_reg_offset_avg.append(self.loss_reg_func(pred_pos,target_pos).view(1))
 
         loss_reg_offset_avg = torch.mean(torch.cat(loss_reg_offset_avg))
         total_loss = dict(
             loss_center_heatmap=loss_center_heatmap_avg,
-            loss_reg=loss_reg_offset_avg)
+            loss_reg=loss_reg_offset_avg * self.loss_reg_weight)
 
         return total_loss
 
@@ -239,19 +265,21 @@ class FcosHeadML(BaseDenseHead):
                - wh_offset_target_weight (Tensor): weights of wh and offset \
                    predict, shape (B, 2, H, W).
         """
-        img_h = image_meta[0]['image_shape'][0]
-        img_w = image_meta[0]['image_shape'][1]
+
         bs, _, feat_h, feat_w = feat_shape
 
-        width_ratio = float(feat_w / img_w)
-        height_ratio = float(feat_h / img_h)
+        # img_h = image_meta[0]['image_shape'][0]
+        # img_w = image_meta[0]['image_shape'][1]
+        # width_ratio = float(feat_w / img_w)
+        # height_ratio = float(feat_h / img_h)
 
         center_heatmap_target = torch.zeros([bs, self.num_classes, feat_h, feat_w], dtype=torch.float32, device=device)
         reg_target_list = []
         reg_weight_list = []
         for batch_id in range(bs):
             gt_bbox = gt_bboxes[batch_id]       # gt_bbox shape: Nx4
-            if gt_bbox.shape[0] == 0:
+            num_gt_bbox = gt_bbox.shape[0]
+            if num_gt_bbox == 0:
                 # 防止无目标样本
                 reg_target_list.append(torch.zeros([4, feat_h, feat_w], dtype=torch.float32, device=device))
                 reg_weight_list.append(torch.zeros([1, feat_h, feat_w], dtype=torch.float32, device=device))
@@ -271,7 +299,7 @@ class FcosHeadML(BaseDenseHead):
             off_max = torch.max(ltrb_off,dim=-1)[0]     #[h*w,m]
             mask_in_gtboxes = off_min>0
             mask_in_level = \
-                (off_max>self.limit_range[stride][0])&(off_max<=self.limit_range[stride][1])   # 设置最大尺寸和最小尺寸约束 (stride=8)
+                (off_max>self.limit_range[stride][0])&(off_max<=self.limit_range[stride][1])   # 设置最大尺寸和最小尺寸约束
 
             radiu = stride * 1.5
             gt_center_x = (gt_bbox[...,0]+gt_bbox[...,2])/2
@@ -288,34 +316,46 @@ class FcosHeadML(BaseDenseHead):
             areas[~mask_pos] = 99999999
             areas_min_ind=torch.min(areas,dim=-1)[1]    #[h*w]
 
-            reg_target = ltrb_off[torch.zeros_like(areas,dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1),1)]#[h*w,4]
+            reg_target = ltrb_off[
+                torch.zeros_like(areas,dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1),1)]   #[h*w,4]
             reg_target = torch.reshape(reg_target,(-1,4))       #[h*w,4]
             mask_pos_2 = mask_pos.long().sum(dim=-1)            #[h*w]
             mask_pos_2 = mask_pos_2 >= 1
-            
-            reg_target[~(mask_pos_2.to(torch.bool))] = 0
+
+            gt_label = gt_labels[batch_id]  # m
+
+            # 测试不使用高斯
+            gt_label = torch.broadcast_tensors(gt_label[None, :], areas.long())[0]  # [h*w,m]            
+            cls_targets = gt_label[
+                torch.zeros_like(areas,dtype=torch.bool).scatter_(-1, areas_min_ind.unsqueeze(dim=-1), 1)
+            ]
+            cls_targets = F.one_hot(cls_targets, num_classes=self.num_classes)
+            cls_targets[~(mask_pos_2.to(torch.bool))] = 0            
+            cls_targets = torch.permute(cls_targets, (1,0))
+            cls_targets = torch.reshape(cls_targets, (-1, feat_h, feat_w))
+            center_heatmap_target[batch_id] = cls_targets
 
             # reshape
+            reg_target[~(mask_pos_2.to(torch.bool))] = 0            
             reg_target = reg_target.reshape(feat_h, feat_w, 4).permute(2,0,1)
-
             mask_pos_2 = mask_pos_2.to(torch.float32).reshape(1, feat_h,feat_w)
-            gt_label = gt_labels[batch_id]
-            center_x = (gt_bbox[:, [0]] + gt_bbox[:, [2]]) * width_ratio / 2
-            center_y = (gt_bbox[:, [1]] + gt_bbox[:, [3]]) * height_ratio / 2
-            gt_centers = torch.cat((center_x, center_y), dim=1)
 
-            for j, ct in enumerate(gt_centers):
-                ctx_int, cty_int = ct.int()
-                if mask_pos[cty_int*feat_w+ctx_int, j] == 0:
-                    continue
-                scale_box_h = (gt_bbox[j][3] - gt_bbox[j][1]) * height_ratio
-                scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
+            # # 基于高斯构建目标
+            # center_x = (gt_bbox[:, [0]] + gt_bbox[:, [2]]) * width_ratio / 2
+            # center_y = (gt_bbox[:, [1]] + gt_bbox[:, [3]]) * height_ratio / 2
+            # gt_centers = torch.cat((center_x, center_y), dim=1)            
+            # for j, ct in enumerate(gt_centers):
+            #     ctx_int, cty_int = ct.int()
+            #     if mask_pos[cty_int*feat_w+ctx_int, j] == 0:
+            #         continue
+            #     scale_box_h = (gt_bbox[j][3] - gt_bbox[j][1]) * height_ratio
+            #     scale_box_w = (gt_bbox[j][2] - gt_bbox[j][0]) * width_ratio
 
-                radius = gaussian_radius([scale_box_h, scale_box_w], min_overlap=0.3)
-                radius = max(int(1), int(radius))
+            #     radius = gaussian_radius([scale_box_h, scale_box_w], min_overlap=0.6)
+            #     radius = max(int(2), int(radius))
 
-                ind = gt_label[j]
-                gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius)
+            #     ind = gt_label[j]
+            #     gen_gaussian_target(center_heatmap_target[batch_id, ind], [ctx_int, cty_int], radius)
 
             reg_target_list.append(reg_target)
             reg_weight_list.append(mask_pos_2)

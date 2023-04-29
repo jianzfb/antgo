@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import torch
 
 from antgo.framework.helper.models.detectors.core.bbox import bbox_overlaps

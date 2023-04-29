@@ -237,6 +237,28 @@ class KetNetF(nn.Module):
         self.block.exp = 6
         self.layer7 = self.make_layer(self.block, 128, self.layers[6], stride=1, dcn=stage_dcn[6])
         self.layer8 = self.make_layer(self.block, 160, self.layers[7], stride=2, dcn=stage_dcn[7])
+        self.init_weights()
+
+    def init_weights(self):
+        """Initialize weights of the head."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0.0001)
+                nn.init.constant_(m.running_mean, 0)
+            elif isinstance(m, nn.BatchNorm1d):
+                nn.init.constant_(m.weight, 1)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0.0001)
+                nn.init.constant_(m.running_mean, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         x = self.relu1(self.bn1(self.conv1(x)))  # 32 * h/4 * w/4

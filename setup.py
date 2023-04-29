@@ -48,7 +48,7 @@ def read_requirements(filename):
 
 
 setup(name='antgo',
-      version='0.1.3',
+      version='0.1.4',
       description='machine learning experiment platform',
       __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',

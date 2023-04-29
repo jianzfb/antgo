@@ -1,3 +1,4 @@
+import enum
 from antgo.framework.helper.models.builder import DETECTORS
 from ..single_stage import SingleStageDetector, to_image_list
 import torch
@@ -49,6 +50,15 @@ class TTFNet(SingleStageDetector):
     def onnx_export(self, image):
         feat = self.extract_feat(image)
         local_cls, local_reg = self.bbox_head(feat)
-        local_cls = torch.sigmoid(local_cls)
-        local_cls = F.max_pool2d(local_cls, 3, stride=1, padding=(3 - 1) // 2)
-        return local_cls, local_reg
+        
+        if isinstance(local_cls, list):
+            for level_i, level_local_cls in enumerate(local_cls):
+                level_local_cls = torch.sigmoid(level_local_cls)
+                level_local_cls = F.max_pool2d(level_local_cls, 3, stride=1, padding=(3 - 1) // 2)
+                local_cls[level_i] = level_local_cls
+            
+            return local_cls, local_reg
+        else:
+            local_cls = torch.sigmoid(local_cls)
+            local_cls = F.max_pool2d(local_cls, 3, stride=1, padding=(3 - 1) // 2)
+            return local_cls, local_reg

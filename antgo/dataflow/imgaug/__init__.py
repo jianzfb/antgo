@@ -11,7 +11,8 @@ from .operators import (
   KeepRatio, 
   ColorDistort,
   RandomErasingImage,
-  CropImage,
+  RandomCropImageV1,
+  RandomCropImageV2,
   MixupImage,
   CutmixImage,
   Meta,
@@ -25,7 +26,8 @@ from .operators import (
   ConvertRandomObjJointsAndOffset,
   ResizeByShort,
   RGB2BGR,
-  FixedCrop)
+  FixedCrop,
+  CorrectBoxes)
 
 __all__ = [
   'DecodeImage', 
@@ -36,7 +38,8 @@ __all__ = [
   'KeepRatio', 
   'ColorDistort',
   'RandomErasingImage',
-  'CropImage',
+  'RandomCropImageV1',
+  'RandomCropImageV2',
   'Permute',
   'MixupImage',
   'CutmixImage',
@@ -50,5 +53,6 @@ __all__ = [
   'ResizeByShort',
   'FixedCrop',
   'RGB2BGR',
+  'CorrectBoxes',
   'Meta'
 ]

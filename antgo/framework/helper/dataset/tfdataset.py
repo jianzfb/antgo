@@ -1,3 +1,4 @@
+from email.utils import localtime
 import logging
 import sys
 import numpy as np
@@ -10,6 +11,7 @@ from tfrecord import iterator_utils
 from antgo.framework.helper.dataset.builder import DATASETS
 import copy
 from antgo.dataflow.datasetio import *
+from antgo.framework.helper.fileio.file_client import *
 import threading
 import json
 from pprint import pprint
@@ -133,7 +135,7 @@ class TFDataset(torch.utils.data.IterableDataset):
 
     """
     def __init__(self,
-                 data_path_list: typing.List[str],
+                 data_folder,
                  ratios: typing.Union[typing.List[float], None]=None,
                  description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
                  shuffle_queue_size: typing.Optional[int] = 1024,
@@ -147,7 +149,44 @@ class TFDataset(torch.utils.data.IterableDataset):
                  sample_num_equalizer=True,
                  auto_ext_info=[]) -> None:
         super().__init__()
-        self.data_path_list = data_path_list
+        if data_folder is None:
+            # 不允许data_path_list和data_folder同时不设置
+            logging.error('Must set data_folder')
+            return
+
+        # 自动下载指定数据(仅在首次运行时，进行下载)
+        if ':///' in data_folder:
+            terms = data_folder.split('/')
+            dataset_name = terms[-1]
+            if terms[-1] == '*' or terms[-1] == '':
+                dataset_name = terms[-2]
+
+            # 远程存储，自动下载
+            local_temp_folder = f'./temp_{dataset_name}'
+            if not os.path.exists(local_temp_folder):
+                # 创建临时目录
+                os.makedirs(local_temp_folder)
+
+                # 下载
+                file_client_get(data_folder, local_temp_folder)
+
+        # 替换为本地路径
+        if ':///' in data_folder:
+            terms = data_folder.split('/')
+            dataset_name = terms[-1]
+            if terms[-1] == '*' or terms[-1] == '':
+                dataset_name = terms[-2]
+
+            # 使用本地地址替换
+            data_folder = f'./temp_{dataset_name}'
+
+        # 遍历文件夹，发现所有tfrecord数据
+        self.data_path_list = []
+        for tfrecord_file in os.listdir(data_folder):
+            if tfrecord_file.endswith('tfrecord'):
+                tfrecord_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['tfrecord'])
+                self.data_path_list.append(f'{data_folder}/{tfrecord_file}')
+
         self.index_path_list = []
         for i in range(len(self.data_path_list)):
             tfrecord_file = self.data_path_list[i]
@@ -369,7 +408,10 @@ class TFDataset(torch.utils.data.IterableDataset):
                 if self.raw_description[k] == 'numpy':
                     dtype = numpy_dtype_map[sample[f'__{k}_type'][0]]
                     shape = tuple(sample[f'__{k}_shape'])
-                    new_sample[k] = np.frombuffer(bytearray(sample[k].tobytes()), dtype=dtype).reshape(shape).copy()
+                    if isinstance(sample[k], bytes):
+                        new_sample[k] = np.frombuffer(bytearray(sample[k]), dtype=dtype).reshape(shape).copy()
+                    else:
+                        new_sample[k] = np.frombuffer(bytearray(sample[k].tobytes()), dtype=dtype).reshape(shape).copy()
                 elif self.raw_description[k] == 'str':
                     new_sample[k] = sample[k].tobytes().decode('utf-8')
                 elif self.raw_description[k] == 'dict':

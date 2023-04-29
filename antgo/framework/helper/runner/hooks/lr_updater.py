@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import numbers
 from math import cos, pi
 from .hook import HOOKS, Hook
