@@ -1040,36 +1040,30 @@ class FileClient:
 
 def file_client_get(remote_path, local_path):
     status = FileClient.infer_client(uri=remote_path).download(remote_path, local_path)
-    time.sleep(1)
     return status
 
 
 def file_client_put(remote_path, local_path, is_exist=False):
     status = FileClient.infer_client(uri=remote_path).upload(remote_path, local_path, is_exist)
-    time.sleep(1)
     return status
 
 
 def file_client_ls(remote_folder):
     result = FileClient.infer_client(uri=remote_folder).ls(remote_folder)
-    time.sleep(1)
     return result
 
 
 def file_client_mkdir(remote_path, p=False):
     status = FileClient.infer_client(uri=remote_path).mkdir(remote_path, p)
-    time.sleep(1)
     return status
 
 
 def file_client_rm(remote_path):
     status = FileClient.infer_client(uri=remote_path).remove(remote_path)
-    time.sleep(1)
     return status
 
 
 def file_client_exists(remote_path):
     status = FileClient.infer_client(uri=remote_path).exists(remote_path)
-    time.sleep(1)
     return status
 

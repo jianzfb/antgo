@@ -26,7 +26,8 @@ from .operators import (
   ConvertRandomObjJointsAndOffset,
   ResizeByShort,
   RGB2BGR,
-  FixedCrop)
+  FixedCrop,
+  CorrectBoxes)
 
 __all__ = [
   'DecodeImage', 
@@ -52,5 +53,6 @@ __all__ = [
   'ResizeByShort',
   'FixedCrop',
   'RGB2BGR',
+  'CorrectBoxes',
   'Meta'
 ]

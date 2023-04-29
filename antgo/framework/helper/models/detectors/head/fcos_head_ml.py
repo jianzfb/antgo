@@ -73,33 +73,29 @@ class FcosHeadML(BaseDenseHead):
             Default: None
     """
 
-    def __init__(self,
-                 in_channel,
-                 feat_channel,
-                 num_classes,
-                 down_stride=[8,16],
-                 rescale=1.0,
-                 score_thresh=0.15,
-                 loss_ch=dict(
-                    type='GaussianFocalLoss', loss_weight=1.0),
-                 loss_rg=dict(
-                    type='IouLoss', loss_weight=0.2),
-                 train_cfg=None,
-                 test_cfg=None,
-                 init_cfg=dict(
-                     type='Xavier', layer='Conv2d', distribution='uniform')):
+    def __init__(
+        self,
+        in_channel,
+        feat_channel,
+        num_classes,
+        down_stride=[8,16],
+        rescale=1.0,
+        score_thresh=0.15,
+        loss_ch=dict(
+            type='GaussianFocalLoss', loss_weight=1.0),
+        loss_rg=dict(
+            type='IouLoss', loss_weight=0.2),
+        train_cfg=dict(
+            limit_range={8:[-1, 64], 16: [64,128], 32: [128,256], 64: [256,512],128: [512, 999999]}),
+        test_cfg=None,
+        init_cfg=dict(
+            type='Xavier', layer='Conv2d', distribution='uniform')):
         super(FcosHeadML, self).__init__(init_cfg)
         self.num_classes = num_classes
         self.rescale_x, self.rescale_y = rescale if type(rescale) == list or type(rescale) == tuple else (rescale, rescale)
         self.score_thresh = score_thresh
         self.down_stride = down_stride
-        self.limit_range = {
-            8: [-1, 64],
-            16: [64,128],
-            32: [128,256],
-            64: [256,512],
-            128: [512, 999999]
-        }
+        self.limit_range = train_cfg.get('limit_range')
 
         self.in_channel = in_channel  
         self.feat_channel = feat_channel
