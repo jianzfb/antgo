@@ -501,12 +501,15 @@ class TFDataset(torch.utils.data.IterableDataset):
         if worker_info is not None:
             shard = worker_info.id, worker_info.num_workers
             np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
-            remain_sample_num = int(self.num_samples - real_num_samples)
             if worker_info.num_workers != 1:
-                if worker_info.id != worker_info.num_workers - 1:
-                    remain_sample_num = remain_sample_num // worker_info.num_workers
-                else:
-                    remain_sample_num = (remain_sample_num // worker_info.num_workers) + (remain_sample_num - remain_sample_num // worker_info.num_workers * worker_info.num_workers)
+                expect_target_num = \
+                    self.num_samples * (worker_info.id+1) // worker_info.num_workers - \
+                    self.num_samples * (worker_info.id) // worker_info.num_workers
+
+                real_target_num = real_num_samples * (worker_info.id+1) // worker_info.num_workers - \
+                    real_num_samples * (worker_info.id) // worker_info.num_workers
+
+                remain_sample_num = expect_target_num - real_target_num
 
             # debug
             pprint(f'Rank {self.rank} thread {worker_info.id} face remain sample_num {remain_sample_num}')
