@@ -28,8 +28,6 @@ class FPN(BaseModule):
             - 'on_input': Last feat map of neck inputs (i.e. backbone feature).
             - 'on_lateral': Last feature map after lateral convs.
             - 'on_output': The last output feature map after fpn convs.
-        relu_before_extra_convs (bool): Whether to apply relu before the extra
-            conv. Default: False.
         no_norm_on_lateral (bool): Whether to apply norm on lateral.
             Default: False.
         conv_cfg (dict): Config dict for convolution layer. Default: None.
@@ -61,6 +59,7 @@ class FPN(BaseModule):
                  num_outs,
                  start_level=0,
                  end_level=-1,
+                 add_extra_convs=False,
                  no_norm_on_lateral=False,
                  conv_cfg=None,
                  norm_cfg=None,
@@ -76,6 +75,14 @@ class FPN(BaseModule):
         self.num_outs = num_outs
         self.no_norm_on_lateral = no_norm_on_lateral
         self.upsample_cfg = upsample_cfg.copy()
+
+        self.add_extra_convs = add_extra_convs
+        assert isinstance(add_extra_convs, (str, bool))
+        if isinstance(add_extra_convs, str):
+            # Extra_convs_source choices: 'on_input', 'on_lateral', 'on_output'
+            assert add_extra_convs in ('on_input', 'on_lateral', 'on_output')
+        elif add_extra_convs:  # True
+            self.add_extra_convs = 'on_input'
 
         if end_level == -1 or end_level == self.num_ins - 1:
             self.backbone_end_level = self.num_ins
@@ -110,7 +117,27 @@ class FPN(BaseModule):
                 self.fpn_convs.append(fpn_conv)
 
             self.lateral_convs.append(l_conv)
-            
+        
+        # add extra conv layers
+        extra_levels = self.num_outs - self.backbone_end_level + self.start_level
+        if self.add_extra_convs and extra_levels >= 1:
+            for i in range(extra_levels):
+                if i == 0 and self.add_extra_convs == 'on_input':
+                    in_channels = self.in_channels[self.backbone_end_level - 1]
+                else:
+                    in_channels = out_channels
+                extra_fpn_conv = ConvModule(
+                    in_channels,
+                    out_channels,
+                    3,
+                    stride=2,
+                    padding=1,
+                    conv_cfg=conv_cfg,
+                    norm_cfg=norm_cfg,
+                    act_cfg=act_cfg,
+                    inplace=False)
+                self.fpn_convs.append(extra_fpn_conv)
+
     def forward(self, inputs):
         """Forward function."""
         assert len(inputs) == len(self.in_channels)
@@ -136,8 +163,29 @@ class FPN(BaseModule):
                     laterals[i], size=prev_shape, **self.upsample_cfg)
 
         # build outputs
-        # from original levels
+        # part1: from original levels
         outs = [
-            self.fpn_convs[i](laterals[i]) for i in range(len(self.fpn_convs))
+            self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels)
         ]
+        
+        # part2: add extra levels
+        if self.num_outs > len(outs):
+            # use max pool to get more levels on top of outputs
+            # (e.g., Faster R-CNN, Mask R-CNN)
+            if not self.add_extra_convs:
+                for i in range(self.num_outs - used_backbone_levels):
+                    outs.append(F.max_pool2d(outs[-1], 1, stride=2))
+            # add conv layers on top of original feature maps (RetinaNet)
+            else:
+                if self.add_extra_convs == 'on_input':
+                    extra_source = inputs[self.backbone_end_level - 1]
+                elif self.add_extra_convs == 'on_lateral':
+                    extra_source = laterals[-1]
+                elif self.add_extra_convs == 'on_output':
+                    extra_source = outs[-1]
+                else:
+                    raise NotImplementedError
+                outs.append(self.fpn_convs[used_backbone_levels](extra_source))
+                for i in range(used_backbone_levels + 1, self.num_outs):
+                    outs.append(self.fpn_convs[i](outs[-1]))
         return tuple(outs)
