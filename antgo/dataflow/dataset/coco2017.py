@@ -17,9 +17,7 @@ import sys
 from urllib.request import urlretrieve
 from antgo.dataflow.dataset.dataset import *
 from antgo.utils import mask as maskUtils
-from antgo.utils.fs import download
 from antgo.utils.fs import maybe_here_match_format
-from antgo.utils import logger
 from antgo.framework.helper.fileio.file_client import *
 
 
@@ -392,12 +390,20 @@ class COCO2017(Dataset):
 
     if not os.path.exists(os.path.join(self.dir , 'annotations')):
       if not os.path.exists(os.path.join(self.dir, 'COCO')):
-        ali = AliBackend()
-        # 下载数据集
-        ali.download('ali:///dataset/coco/COCO.tar', self.dir)
-        assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
-        # 解压
-        os.system(f'cd {self.dir} && tar -xf COCO.tar')
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+          ali = AliBackend()
+          # 下载数据集
+          ali.download('ali:///dataset/coco/COCO.tar', self.dir)
+          assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
+          # 解压
+          os.system(f'cd {self.dir} && tar -xf COCO.tar')
+        else:
+          while True:
+            # 等待直到存在指定文件
+            time.sleep(5)
+            if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+              break
+
         # 修改数据目录
         self.dir = os.path.join(self.dir, 'COCO')
       else:

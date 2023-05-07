@@ -7,11 +7,11 @@ from __future__ import unicode_literals
 import os, sys
 import numpy as np
 import tarfile
+import time
 import xml.etree.ElementTree as ET
 from antgo.utils.fs import maybe_here_match_format
 from antgo.dataflow.dataset.dataset import *
 from antgo.framework.helper.fileio.file_client import *
-# from antgo.dataflow.imgaug.operators import *
 
 
 __all__ = ['Pascal2007', 'Pascal2012']
@@ -28,50 +28,66 @@ class PascalBase(Dataset):
     if self._year == '2007':
       if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
         # self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
-        ali = AliBackend()
-        ali.download('ali:///dataset/voc/VOCtrainval_06-Nov-2007.tar', self.dir)
-        ali.download('ali:///dataset/voc/VOCtest_06-Nov-2007.tar', self.dir)
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+          ali = AliBackend()
+          ali.download('ali:///dataset/voc/VOCtrainval_06-Nov-2007.tar', self.dir)
+          ali.download('ali:///dataset/voc/VOCtest_06-Nov-2007.tar', self.dir)
 
-      maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
-      if maybe_data_path is None:
-        # auto untar
-        tar = tarfile.open(os.path.join(self.dir,'VOCtrainval_06-Nov-2007.tar'), 'r')
-        tar.extractall(self.dir)
-        tar.close()
+          maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
+          if maybe_data_path is None:
+            # auto untar
+            tar = tarfile.open(os.path.join(self.dir,'VOCtrainval_06-Nov-2007.tar'), 'r')
+            tar.extractall(self.dir)
+            tar.close()
 
-        tar = tarfile.open(os.path.join(self.dir, 'VOCtest_06-Nov-2007.tar'), 'r')
-        tar.extractall(self.dir)
-        tar.close()
+            tar = tarfile.open(os.path.join(self.dir, 'VOCtest_06-Nov-2007.tar'), 'r')
+            tar.extractall(self.dir)
+            tar.close()
+
+          os.system('touch FINISH_DATASET_DOWNLOAD')
+        else:
+          while True:
+            # 等待直到存在指定文件
+            time.sleep(5)
+            if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+              break
     else:
       if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
         # self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
         # self.download(self.dir, ['VOC2012test.tar'], default_url='http://host.robots.ox.ac.uk:8080/eval/downloads/')
-        ali = AliBackend()
-        ali.download('ali:///dataset/voc/VOCtrainval_11-May-2012.tar', self.dir)
-        ali.download('ali:///dataset/voc/VOC2012test.tar', self.dir)
-        ali.download('ali:///dataset/voc/SegmentationClassAug.zip', self.dir)
-        ali.download('ali:///dataset/voc/trainaug.txt', self.dir)
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+          ali = AliBackend()
+          ali.download('ali:///dataset/voc/VOCtrainval_11-May-2012.tar', self.dir)
+          ali.download('ali:///dataset/voc/VOC2012test.tar', self.dir)
+          ali.download('ali:///dataset/voc/SegmentationClassAug.zip', self.dir)
+          ali.download('ali:///dataset/voc/trainaug.txt', self.dir)
+          maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
+          if maybe_data_path is None:
+            # auto untar
+            try:
+              tar = tarfile.open(os.path.join(self.dir, 'VOCtrainval_11-May-2012.tar'), 'r')
+              tar.extractall(self.dir)
+              tar.close()
+            except:
+              print(f'Untar {os.path.join(self.dir, "VOCtrainval_11-May-2012.tar")} fail')
 
-      maybe_data_path = maybe_here_match_format(self._devkit_path, 'VOC' + self._year)
-      if maybe_data_path is None:
-        # auto untar
-        try:
-          tar = tarfile.open(os.path.join(self.dir, 'VOCtrainval_11-May-2012.tar'), 'r')
-          tar.extractall(self.dir)
-          tar.close()
-        except:
-          print(f'Untar {os.path.join(self.dir, "VOCtrainval_11-May-2012.tar")} fail')
+            try:
+              tar = tarfile.open(os.path.join(self.dir, 'VOC2012test.tar'), 'r')
+              tar.extractall(self.dir)
+              tar.close()
+            except:
+              print(f'Untar {os.path.join(self.dir, "VOC2012test.tar")} fail')
 
-        try:
-          tar = tarfile.open(os.path.join(self.dir, 'VOC2012test.tar'), 'r')
-          tar.extractall(self.dir)
-          tar.close()
-        except:
-          print(f'Untar {os.path.join(self.dir, "VOC2012test.tar")} fail')
+            # unzip aug class 
+            os.system(f"cd {self.dir} && unzip SegmentationClassAug.zip")
+            os.system('touch FINISH_DATASET_DOWNLOAD')
+        else:
+            while True:
+              # 等待直到存在指定文件
+              time.sleep(5)
+              if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+                break
 
-        # unzip aug class 
-        os.system(f"cd {self.dir} && unzip SegmentationClassAug.zip")
-   
     self._data_path = os.path.join(self.dir,'VOCdevkit', 'VOC' + self._year)
     self._classes = ('background',
                      'aeroplane',

@@ -11,6 +11,7 @@ import scipy.io as io
 import os
 import numpy as np
 import cv2
+import time
 from antgo.framework.helper.fileio.file_client import *
 
 
@@ -38,15 +39,24 @@ class MPII(Dataset):
             'lwri'
         ]    
         
-        if not os.path.exists(self.dir):
-            os.makedirs(self.dir)
         if not os.path.exists(os.path.join(self.dir, 'images')):
-            ali = AliBackend()
-            ali.download('ali:///dataset/mpii/mpii_human_pose_v1.tar.gz', self.dir)
-            ali.download('ali:///dataset/mpii/mpii_human_pose_v1_u12_1.tar.gz', self.dir)   # 这是lspet的高精集合
-            
-            os.system(f'cd {self.dir} && unzip mpii_human_pose_v1.tar.gz')
-            os.system(f'cd {self.dir} && unzip mpii_human_pose_v1_u12_1.tar.gz')
+            if not os.path.exists(self.dir):
+                os.makedirs(self.dir)
+
+            if os.environ.get('LOCAL_RANK', 0) == 0:
+                ali = AliBackend()
+                ali.download('ali:///dataset/mpii/mpii_human_pose_v1.tar.gz', self.dir)
+                ali.download('ali:///dataset/mpii/mpii_human_pose_v1_u12_1.tar.gz', self.dir)   # 这是lspet的高精集合
+
+                os.system(f'cd {self.dir} && unzip mpii_human_pose_v1.tar.gz')
+                os.system(f'cd {self.dir} && unzip mpii_human_pose_v1_u12_1.tar.gz')
+                os.system('touch FINISH_DATASET_DOWNLOAD')
+            else:
+                while True:
+                    # 等待直到存在指定文件
+                    time.sleep(5)
+                    if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+                        break
 
         matlab_mpii = io.loadmat(os.path.join(self.dir, 'mpii_human_pose_v1_u12_1' ,'mpii_human_pose_v1_u12_1.mat'), struct_as_record=False)['RELEASE'][0, 0]
         num_images = matlab_mpii.__dict__['annolist'][0].shape[0]

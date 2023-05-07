@@ -11,6 +11,7 @@ from antgo.dataflow.dataset import *
 import os
 import numpy as np
 import cv2
+import time
 from antgo.framework.helper.fileio.file_client import *
 
 
@@ -21,9 +22,18 @@ class FLIC(Dataset):
     
     if not os.path.exists(os.path.join(self.dir, 'examples.mat')):
       if not os.path.exists(os.path.join(self.dir, 'FLIC-full')):
-        ali = AliBackend()
-        ali.download('ali:///dataset/flic/FLIC-full.zip', self.dir)
-        os.system(f'cd {self.dir} && unzip FLIC-full.zip')
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+          ali = AliBackend()
+          ali.download('ali:///dataset/flic/FLIC-full.zip', self.dir)
+          os.system(f'cd {self.dir} && unzip FLIC-full.zip')
+          os.system('touch FINISH_DATASET_DOWNLOAD')
+        else:
+          while True:
+            # 等待直到存在指定文件
+            time.sleep(5)
+            if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+              break
+
         self.dir = os.path.join(self.dir, 'FLIC-full')
       else:
         self.dir = os.path.join(self.dir, 'FLIC-full')

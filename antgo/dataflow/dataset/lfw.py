@@ -21,20 +21,29 @@ class LFW(Dataset):
   def __init__(self, train_or_test, dir=None, ext_params=None):
     super(LFW, self).__init__(train_or_test, dir, ext_params)
     assert(train_or_test in ['train', 'val', 'test'])
-    if not os.path.exists(self.dir):
-      os.makedirs(self.dir)
 
     if not os.path.exists(os.path.join(self.dir, 'lfw-deepfunneled')):
-      ali = AliBackend()
-      ali.download('ali:///dataset/lfw/lfw-deepfunneled.tgz', self.dir)
-      ali.download('ali:///dataset/lfw/pairsDevTest.txt', self.dir)
-      ali.download('ali:///dataset/lfw/pairsDevTrain.txt', self.dir)
-      ali.download('ali:///dataset/lfw/peopleDevTest.txt', self.dir)
-      ali.download('ali:///dataset/lfw/peopleDevTrain.txt', self.dir)
-      ali.download('ali:///dataset/lfw/pairs.txt', self.dir)
-      ali.download('ali:///dataset/lfw/people.txt', self.dir)
+      if not os.path.exists(self.dir):
+        os.makedirs(self.dir)
 
-      os.system(f'cd {self.dir} && tar -xf lfw-deepfunneled.tgz')
+      if os.environ.get('LOCAL_RANK', 0) == 0:
+        ali = AliBackend()
+        ali.download('ali:///dataset/lfw/lfw-deepfunneled.tgz', self.dir)
+        ali.download('ali:///dataset/lfw/pairsDevTest.txt', self.dir)
+        ali.download('ali:///dataset/lfw/pairsDevTrain.txt', self.dir)
+        ali.download('ali:///dataset/lfw/peopleDevTest.txt', self.dir)
+        ali.download('ali:///dataset/lfw/peopleDevTrain.txt', self.dir)
+        ali.download('ali:///dataset/lfw/pairs.txt', self.dir)
+        ali.download('ali:///dataset/lfw/people.txt', self.dir)
+
+        os.system(f'cd {self.dir} && tar -xf lfw-deepfunneled.tgz')
+        os.system('touch FINISH_DATASET_DOWNLOAD')
+      else:
+        while True:
+          # 等待直到存在指定文件
+          time.sleep(5)
+          if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+            break
 
     self.purpose = getattr(self, 'purpose', 'development')
     assert(self.purpose in ['development', 'benchmark'])

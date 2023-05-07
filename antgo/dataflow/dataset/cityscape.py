@@ -6,12 +6,12 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import sys
-sys.path.append('/root/workspace/antgo')
 import os
 import numpy as np
 from antgo.dataflow.dataset import *
 from antgo.framework.helper.fileio.file_client import *
 import cv2
+import time
 
 
 __all__ = ['Cityscape']
@@ -20,9 +20,17 @@ class Cityscape(Dataset):
         super(Cityscape, self).__init__(train_or_test, dir, ext_params=ext_params)
         assert(train_or_test in ['train', 'val', 'test'])
         if not os.path.exists(os.path.join(self.dir, 'cityscapes')):
+          if os.environ.get('LOCAL_RANK', 0) == 0:        
             ali = AliBackend()
             ali.download('ali:///dataset/cityscapes/cityscapes.tar', self.dir)
             os.system(f'cd {self.dir} && tar -xf cityscapes.tar')
+            os.system('touch FINISH_DATASET_DOWNLOAD')
+        else:
+            while True:
+                # 等待直到存在指定文件
+                time.sleep(5)
+                if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+                    break
 
         self._image_file_list = []
         self._annotation_file_list = []

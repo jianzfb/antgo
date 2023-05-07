@@ -86,7 +86,16 @@ class CifarBase(Dataset):
 
     data_url = CIFAR_10_URL if cifar_classnum == 10 else CIFAR_100_URL
     if not os.path.exists(os.path.join(self.dir, cifar_foldername)):
-      self.download(self.dir, default_url=data_url, auto_untar=True, is_gz=True)
+      if os.environ.get('LOCAL_RANK', 0) == 0:
+        self.download(self.dir, default_url=data_url, auto_untar=True, is_gz=True)
+        os.system('touch FINISH_DATASET_DOWNLOAD')      
+      else:
+        while True:
+          # 等待直到存在指定文件
+          time.sleep(5)
+          if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+            break
+
     fnames = get_filenames(self.dir, self.cifar_classnum)
     if self.train_or_test == 'train':
       self.fs = fnames[:-1]

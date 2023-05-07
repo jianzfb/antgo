@@ -9,6 +9,7 @@ import sys
 import os
 import numpy as np
 import cv2
+import time
 from antgo.dataflow.dataset import *
 from antgo.framework.helper.fileio.file_client import *
 
@@ -23,9 +24,17 @@ class ADE20K(Dataset):
     assert(train_or_test in ['train', 'val', 'test'])
 
     if not os.path.exists(os.path.join(self.dir, 'ADEChallengeData2016')):
-      ali = AliBackend()
-      ali.download('ali:///dataset/ade20k/ADEChallengeData2016.zip', self.dir)
-      os.system(f'cd {self.dir} && unzip ADEChallengeData2016.zip')
+      if os.environ.get('LOCAL_RANK', 0) == 0:
+        ali = AliBackend()
+        ali.download('ali:///dataset/ade20k/ADEChallengeData2016.zip', self.dir)
+        os.system(f'cd {self.dir} && unzip ADEChallengeData2016.zip')
+        os.system('touch FINISH_DATASET_DOWNLOAD')
+      else:
+        while True:
+          # 等待直到存在指定文件
+          time.sleep(5)
+          if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+            break
 
     subfolder_name = 'training' if self.train_or_test == 'train' else 'validation'
     self._image_file_list = []

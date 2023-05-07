@@ -10,6 +10,7 @@ from antgo.dataflow.dataset import *
 import os
 import numpy as np
 import cv2
+import time
 from antgo.framework.helper.fileio.file_client import *
 
 
@@ -18,18 +19,27 @@ class LIP(Dataset):
   def __init__(self, train_or_test, dir=None, ext_params=None):
     super(LIP, self).__init__(train_or_test, dir, ext_params)
     assert (train_or_test in ['train', 'val'])
-    if not os.path.exists(self.dir):
-      os.makedirs(self.dir)
-    
-    if not os.path.exists(os.path.join(self.dir, 'train_id.txt')):
-      ali = AliBackend()
-      ali.download('ali:///dataset/lip/TrainVal_images.zip', self.dir)
-      ali.download('ali:///dataset/lip/Testing_images.zip', self.dir)
-      ali.download('ali:///dataset/lip/TrainVal_parsing_annotations.zip', self.dir)
-      ali.download('ali:///dataset/lip/train_id.txt', self.dir)
-      ali.download('ali:///dataset/lip/val_id.txt', self.dir)
 
-      os.system(f'cd {self.dir} && unzip TrainVal_images.zip && unzip Testing_images.zip && unzip TrainVal_parsing_annotations.zip')
+    if not os.path.exists(os.path.join(self.dir, 'train_id.txt')):
+      if not os.path.exists(self.dir):
+        os.makedirs(self.dir)
+
+      if os.environ.get('LOCAL_RANK', 0) == 0:
+        ali = AliBackend()
+        ali.download('ali:///dataset/lip/TrainVal_images.zip', self.dir)
+        ali.download('ali:///dataset/lip/Testing_images.zip', self.dir)
+        ali.download('ali:///dataset/lip/TrainVal_parsing_annotations.zip', self.dir)
+        ali.download('ali:///dataset/lip/train_id.txt', self.dir)
+        ali.download('ali:///dataset/lip/val_id.txt', self.dir)
+
+        os.system(f'cd {self.dir} && unzip TrainVal_images.zip && unzip Testing_images.zip && unzip TrainVal_parsing_annotations.zip')
+        os.system('touch FINISH_DATASET_DOWNLOAD')
+      else:
+        while True:
+          # 等待直到存在指定文件
+          time.sleep(5)
+          if os.path.exists('FINISH_DATASET_DOWNLOAD'):
+            break
 
     self.data_list = []    
     parse_file = os.path.join(self.dir, '%s' % ('train_id.txt' if self.train_or_test == 'train' else 'val_id.txt'))
