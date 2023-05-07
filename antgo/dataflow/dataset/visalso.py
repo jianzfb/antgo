@@ -11,6 +11,7 @@ import scipy.io as io
 import os
 import numpy as np
 import cv2
+import time
 
 __all__ = ['VisalSO']
 
@@ -19,19 +20,33 @@ class VisalSO(Dataset):
         super().__init__(train_or_test, dir, ext_params)
         # 不区分训练集和测试集，仅用来进行模型正确性测试        
         url_address = 'http://visal.cs.cityu.edu.hk/static/downloads/SmallObjectDataset.zip'
-        
+
         self.class_name = [
             'fish',
             'fly',
             'honeybee',
             'seagull'
         ]
-        if not os.path.exists(self.dir):
-            os.makedirs(self.dir)
-        
-        if not os.path.exists(os.path.join(self.dir, 'Small Object dataset')):
-            os.system(f'cd {self.dir} && wget {url_address} && unzip SmallObjectDataset.zip')
-        
+
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+            if not os.path.exists(os.path.join(self.dir, 'Small Object dataset')):
+                # 数据集不存在，需要重新下载，并创建标记
+                if not os.path.exists(self.dir):
+                    os.makedirs(self.dir)
+    
+                os.system(f'cd {self.dir} && wget {url_address} && unzip SmallObjectDataset.zip')
+                os.system('touch DATASET_IS_READY')
+            else:
+                # 数据集存在，创建标记
+                if not os.path.exists('DATASET_IS_READY'):
+                    os.system('touch DATASET_IS_READY')
+        else:
+            while True:
+                # 等待直到存在指定文件
+                if os.path.exists('DATASET_IS_READY'):
+                    break
+                time.sleep(5)
+
         self.image_file_list = []
         self.bboxes_list = []
         for ci, cn in enumerate(self.class_name):

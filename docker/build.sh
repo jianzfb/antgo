@@ -1,5 +1,37 @@
+#!/bin/sh
+
 # download dependent files
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+if [ ! -f "./Miniconda3-py38_23.3.1-0-Linux-x86_64.sh" ];then
+    wget https://repo.anaconda.com/miniconda/Miniconda3-py38_23.3.1-0-Linux-x86_64.sh
+fi
+
+if [ ! -f "./android-ndk-r20b-linux-x86_64.zip" ];then
+    wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
+fi
+if [ ! -d "./android-ndk-r20b" ];then
+    unzip android-ndk-r20b-linux-x86_64.zip
+fi
+
+# download vscode-server
+if [ "$1" = "with-vscode-server" ]; then
+    if [ ! -d "./code-server-4.0.2-linux-amd64" ];then
+        if [ ! -f "./code-server-4.0.2-linux-amd64.tar.gz" ];then
+            wget https://github.com/coder/code-server/releases/download/v4.0.2/code-server-4.0.2-linux-amd64.tar.gz
+        fi
+        tar -xf code-server-4.0.2-linux-amd64.tar.gz
+    fi
+
+    # 自动修改Dockerfile
+    python3 docker/auto_inject.py --with-vscode-server
+fi
+
 # build docker
 sudo docker build -t antgo-env -f docker/Dockerfile ./
-rm Miniconda3-latest-Linux-x86_64.sh
+
+# example: run docker
+# sudo apt-get install nvidia-container-runtime
+# sudo systemctl restart docker
+# 1. 交互式启动容器
+# sudo docker run -it --rm --name myenv --gpus all antgo-env /bin/bash
+# 2. vscode-server服务
+# sudo docker run --rm -d -p 8080:8080 -e PASSWORD=123 --name mycodeserver --gpus all antgo-env /opt/code-server --host 0.0.0.0 --auth password

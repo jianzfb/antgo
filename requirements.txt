@@ -27,8 +27,6 @@ thop
 torch
 torchvision
 imagesize
-multipart
-fastapi
 tfrecord
 GitPython
 protobuf==3.20.0
@@ -37,3 +35,7 @@ onnx
 onnxruntime
 pandas
 aligo
+python-multipart
+fastapi
+uvicorn
+httpx

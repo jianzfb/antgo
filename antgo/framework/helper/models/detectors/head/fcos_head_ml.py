@@ -113,7 +113,7 @@ class FcosHeadML(BaseDenseHead):
         for _ in self.down_stride:
             self.heatmap_head_list.append(
                 nn.Sequential(
-                    nn.Conv2d(self.in_channel, self.feat_channel, kernel_size=3, stride=1, padding=1),
+                    nn.Conv2d(self.in_channel, self.feat_channel, kernel_size=3, stride=1, padding=1, bias=False),
                     nn.BatchNorm2d(self.feat_channel),
                     nn.ReLU(inplace=True),
                     nn.Conv2d(self.feat_channel, self.num_classes, kernel_size=1, bias=True)

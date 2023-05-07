@@ -11,7 +11,6 @@ import threading
 import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
-# pylint: disable=import-outside-toplevel
 
 
 class _APIWrapper:
@@ -34,7 +33,11 @@ class _APIWrapper:
             entity = x
         else:
             index = self._index
-            input_selection, _ = index[0]
+            if len(index) == 2:
+                input_selection, _ = index
+            else:
+                input_selection = index
+
             if type(input_selection) == str:
                 input_selection = [input_selection]
 
@@ -90,7 +93,6 @@ async def _decode_content(req):
     from multipart.multipart import parse_options_header
     content_type_header = req.headers.get('Content-Type')
     content_type, _ = parse_options_header(content_type_header)
-
     if content_type in {b'multipart/form-data'}:
         return await req.form()
     if content_type.startswith(b'image/'):
@@ -113,44 +115,6 @@ class ServeMixin:
 
         Returns:
             _type_: the app that bind to
-
-        Examples:
-
-        >>> from fastapi import FastAPI
-        >>> from fastapi.testclient import TestClient
-        >>> app = FastAPI()
-
-        >>> with api() as api:
-        ...     app1 = (
-        ...         api.map(lambda x: x+' -> 1')
-        ...            .map(lambda x: x+' => 1')
-        ...            .serve('/app1', app)
-        ...     )
-
-        >>> with api['x']() as api:
-        ...     app2 = (
-        ...         api.runas_op['x', 'x_plus_1'](func=lambda x: x+' -> 2')
-        ...            .runas_op['x_plus_1', 'y'](func=lambda x: x+' => 2')
-        ...            .select['y']()
-        ...            .serve('/app2', app)
-        ...     )
-
-        >>> with api() as api:
-        ...     app2 = (
-        ...         api.parse_json()
-        ...            .runas_op['x', 'x_plus_1'](func=lambda x: x+' -> 3')
-        ...            .runas_op['x_plus_1', 'y'](func=lambda x: x+' => 3')
-        ...            .select['y']()
-        ...            .serve('/app3', app)
-        ...     )
-
-        >>> client = TestClient(app)
-        >>> client.post('/app1', '1').text
-        '"1 -> 1 => 1"'
-        >>> client.post('/app2', '2').text
-        '{"y":"2 -> 2 => 2"}'
-        >>> client.post('/app3', '{"x": "3"}').text
-        '{"y":"3 -> 3 => 3"}'
         """
         if app is None:
             from fastapi import FastAPI, Request
@@ -172,67 +136,6 @@ class ServeMixin:
             return rsp.get()
 
         return app
-
-    def as_function(self):
-        """
-        Make the DataFrame as callable function
-
-        Returns:
-            _type_: a callable function
-
-        Examples:
-
-        >>> with api() as api:
-        ...     func1 = (
-        ...         api.map(lambda x: x+' -> 1')
-        ...            .map(lambda x: x+' => 1')
-        ...            .as_function()
-        ...     )
-
-        >>> with api['x']() as api:
-        ...     func2 = (
-        ...         api.runas_op['x', 'x_plus_1'](func=lambda x: x+' -> 2')
-        ...            .runas_op['x_plus_1', 'y'](func=lambda x: x+' => 2')
-        ...            .select['y']()
-        ...            .as_raw()
-        ...            .as_function()
-        ...     )
-
-        >>> with api() as api:
-        ...     func3 = (
-        ...         api.parse_json()
-        ...            .runas_op['x', 'x_plus_1'](func=lambda x: x+' -> 3')
-        ...            .runas_op['x_plus_1', 'y'](func=lambda x: x+' => 3')
-        ...            .select['y']()
-        ...            .as_json()
-        ...            .as_function()
-        ...     )
-
-        >>> func1('1')
-        '1 -> 1 => 1'
-        >>> func2('2')
-        '2 -> 2 => 2'
-        >>> func3('{"x": "3"}')
-        '{"y": "3 -> 3 => 3"}'
-        """
-
-        api = _APIWrapper.tls.place_holder
-
-        as_function_self = self
-        pipeline = _PipeWrapper(self._iterable, api)
-
-        class _Wrapper:
-            def __init__(self):
-                self.dag_info = as_function_self.compile_dag()
-                self.__name__ = self.__class__.__name__
-
-            def __call__(self, req):
-                rsp = pipeline.execute(req)
-                if rsp.is_empty():
-                    return rsp.get()
-                return rsp.get()
-
-        return _Wrapper()
 
     @classmethod
     def api(cls, index=None):

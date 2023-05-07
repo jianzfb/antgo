@@ -12,7 +12,6 @@ from typing import Dict, Any, Optional, Set, Union, List
 
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.hparam import dynamic_dispatch, param_scope
-# pylint: disable=protected-access
 
 
 class DataFrameMixin:
@@ -89,6 +88,7 @@ class DataFrameMixin:
                     return Entity(
                         **{col: getattr(entity, col)
                            for col in index})
+
                 return entity
 
             return self.map(inner)

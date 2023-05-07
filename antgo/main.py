@@ -15,7 +15,6 @@ from antgo.command import *
 from antgo.framework.helper.tools.util import *
 from antgo.help import *
 from antgo import config
-from antgo import version
 from jinja2 import Environment, FileSystemLoader
 import json
 from antgo import tools

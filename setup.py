@@ -2,9 +2,11 @@ from setuptools import setup
 from setuptools import dist
 from setuptools import find_packages
 from distutils.extension import Extension
+from antgo import __version__
 from os import path as os_path
 import os
 import shutil
+
 
 this_directory = os_path.abspath(os_path.dirname(__file__))
 dist.Distribution().fetch_build_eggs(['numpy'])
@@ -46,9 +48,8 @@ def read_requirements(filename):
     return [line.strip() for line in read_file(filename).splitlines()
             if not line.startswith('#')]
 
-
 setup(name='antgo',
-      version='0.1.5',
+      version=str(__version__),
       description='machine learning experiment platform',
       __short_description__='machine learning experiment platform',
       url='https://github.com/jianzfb/antgo',

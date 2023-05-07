@@ -37,16 +37,14 @@ class DemoMixin:
     api = _APIWrapper.tls.place_holder
     pipeline = _PipeWrapper(self._iterable, api)
 
-    input_selection, output_selection = api._index[0]
-    if type(input_selection) == str:
-      input_selection = [input_selection]
-
-    for ui_type in input:
+    input_selection = [cc['data'] for cc in input]
+    input_selection_types = [cc['type'] for cc in input]
+    for ui_type in input_selection_types:
       assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select'])
-
-    if type(output_selection) == str:
-      output_selection = [output_selection]
-    for ui_type in output:
+    
+    output_selection = [cc['data'] for cc in output]
+    output_selection_types = [cc['type'] for cc in output]
+    for ui_type in output_selection_types:
       assert (ui_type in ['image', 'video', 'text', 'number'])
 
     input_config = default_config
@@ -88,7 +86,7 @@ class DemoMixin:
       nonlocal pipeline
       req = await _decode_content(req)
       req = json.loads(req['query'])
-      for i, b in enumerate(input):
+      for i, b in enumerate(input_selection_types):
         if b in ['image', 'video', 'file']:
           req[i] = os.path.join(dump_folder, req[i])
         if b == 'checkbox':
@@ -101,7 +99,7 @@ class DemoMixin:
       rsp_value = rsp.get()
       output_info = {}
       for i, b in enumerate(output_selection):
-        if output[i] in ['image', 'video', 'file']:
+        if output_selection_types[i] in ['image', 'video', 'file']:
           value = rsp_value.__dict__[b]
           if type(value) == str:
             shutil.copyfile(value, os.path.join(static_folder, 'image'))
@@ -124,13 +122,13 @@ class DemoMixin:
             value = f'image/{file_name}'
 
           output_info[b] = {
-            'type': output[i],
+            'type': output_selection_types[i],
             'name': b,
             'value': value
           }
         else:
           output_info[b] = {
-            'type': output[i],
+            'type': output_selection_types[i],
             'name': b,
             'value': rsp_value.__dict__[b]
           }
@@ -179,7 +177,7 @@ class DemoMixin:
     @app.get('/antgo/api/demo/query_config/')
     async def query_config():
       input_info = []
-      for k, v, config in zip(input_selection, input, input_config):
+      for k, v, config in zip(input_selection, input_selection_types, input_config):
         info = {
           'type': v,
           'name': k,
@@ -206,7 +204,6 @@ class DemoMixin:
 
     # static resource
     app.mount("/", StaticFiles(directory=static_folder), name="static")
-
     return app
 
   @classmethod

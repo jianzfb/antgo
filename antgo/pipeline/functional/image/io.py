@@ -54,6 +54,16 @@ def image_download(image_url):
   image = cv2.imdecode(np.frombuffer(pic.content, np.uint8), cv2.IMREAD_COLOR)  
   return image
   
+@register
+def serialize_numpy(*args):
+  serialize_result = []
+  for v in args:
+    if isinstance(v, np.ndarray):
+      serialize_result.append(v.tolist())
+    else:
+      serialize_result.append(v)
+
+  return tuple(serialize_result)
 
 @register
 class image_save(object):

@@ -163,12 +163,25 @@ class TFDataset(torch.utils.data.IterableDataset):
 
             # 远程存储，自动下载
             local_temp_folder = f'./temp_{dataset_name}'
-            if not os.path.exists(local_temp_folder):
-                # 创建临时目录
-                os.makedirs(local_temp_folder)
+            if os.environ.get('LOCAL_RANK', 0) == 0:
+                if not os.path.exists(local_temp_folder):
+                    # 数据集不存在，需要重新下载，并创建标记
+                    # 创建临时目录
+                    os.makedirs(local_temp_folder)
 
-                # 下载
-                file_client_get(data_folder, local_temp_folder)
+                    # 下载
+                    file_client_get(data_folder, local_temp_folder)
+                    os.system('touch DATASET_IS_READY')
+                else:
+                    # 数据集存在，创建标记
+                    if not os.path.exists('DATASET_IS_READY'):
+                        os.system('touch DATASET_IS_READY')                    
+            else:
+                while True:
+                    # 等待直到存在指定文件
+                    if os.path.exists('DATASET_IS_READY'):
+                        break
+                    time.sleep(5)
 
         # 替换为本地路径
         if ':///' in data_folder:
