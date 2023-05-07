@@ -26,9 +26,9 @@ class PascalBase(Dataset):
     self._devkit_path = dir
 
     if self._year == '2007':
-      if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
-        # self.download(self.dir, ['VOCtrainval_06-Nov-2007.tar', 'VOCtest_06-Nov-2007.tar'], default_url=PASCAL2007_URL)
-        if os.environ.get('LOCAL_RANK', 0) == 0:
+      if os.environ.get('LOCAL_RANK', 0) == 0:
+        if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
+          # 数据集不存在，需要重新下载，并创建标记
           ali = AliBackend()
           ali.download('ali:///dataset/voc/VOCtrainval_06-Nov-2007.tar', self.dir)
           ali.download('ali:///dataset/voc/VOCtest_06-Nov-2007.tar', self.dir)
@@ -44,18 +44,21 @@ class PascalBase(Dataset):
             tar.extractall(self.dir)
             tar.close()
 
-          os.system('touch FINISH_DATASET_DOWNLOAD')
+          os.system('touch DATASET_IS_READY')
         else:
-          while True:
-            # 等待直到存在指定文件
-            time.sleep(5)
-            if os.path.exists('FINISH_DATASET_DOWNLOAD'):
-              break
+          # 数据集存在，创建标记
+          if not os.path.exists('DATASET_IS_READY'):
+            os.system('touch DATASET_IS_READY')
+      else:
+        while True:
+          # 等待直到存在指定文件
+          if os.path.exists('DATASET_IS_READY'):
+            break
+          time.sleep(5)
     else:
-      if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
-        # self.download(self.dir, ['VOCtrainval_11-May-2012.tar'], default_url=PASCAL2012_URL)
-        # self.download(self.dir, ['VOC2012test.tar'], default_url='http://host.robots.ox.ac.uk:8080/eval/downloads/')
-        if os.environ.get('LOCAL_RANK', 0) == 0:
+      if os.environ.get('LOCAL_RANK', 0) == 0:
+        if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
+          # 数据集不存在，需要重新下载，并创建标记
           ali = AliBackend()
           ali.download('ali:///dataset/voc/VOCtrainval_11-May-2012.tar', self.dir)
           ali.download('ali:///dataset/voc/VOC2012test.tar', self.dir)
@@ -80,13 +83,17 @@ class PascalBase(Dataset):
 
             # unzip aug class 
             os.system(f"cd {self.dir} && unzip SegmentationClassAug.zip")
-            os.system('touch FINISH_DATASET_DOWNLOAD')
+          os.system('touch DATASET_IS_READY')
         else:
-            while True:
-              # 等待直到存在指定文件
-              time.sleep(5)
-              if os.path.exists('FINISH_DATASET_DOWNLOAD'):
-                break
+          # 数据集存在，创建标记
+          if not os.path.exists('DATASET_IS_READY'):
+            os.system('touch DATASET_IS_READY')
+      else:
+          while True:
+            # 等待直到存在指定文件
+            if os.path.exists('DATASET_IS_READY'):
+              break
+            time.sleep(5)
 
     self._data_path = os.path.join(self.dir,'VOCdevkit', 'VOC' + self._year)
     self._classes = ('background',

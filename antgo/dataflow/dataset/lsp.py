@@ -36,11 +36,12 @@ class LSP(Dataset):
             'Head top'
         ]
 
-        if not os.path.exists(os.path.join(self.dir, 'lsp','joints.mat')):
-            if not os.path.exists(self.dir):
-                os.makedirs(self.dir)
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+            if not os.path.exists(os.path.join(self.dir, 'lsp','joints.mat')):
+                # 数据集不存在，需要重新下载，并创建标记
+                if not os.path.exists(self.dir):
+                    os.makedirs(self.dir)
 
-            if os.environ.get('LOCAL_RANK', 0) == 0:
                 os.makedirs(os.path.join(self.dir, 'lsp'), exist_ok=True)
                 os.makedirs(os.path.join(self.dir, 'lspet', 'images'), exist_ok=True)
 
@@ -52,13 +53,17 @@ class LSP(Dataset):
                 os.system(f'cd {os.path.join(self.dir, "lsp")} && unzip lsp_dataset.zip')
                 # os.system(f'cd {os.path.join(self.dir, "lspet")} && unzip lspet_dataset.zip')            
                 os.system(f'cd {self.dir} && unzip hr-lspet.zip && mv hr-lspet/*.png lspet/images && mv hr-lspet/* lspet/')
-                os.system('touch FINISH_DATASET_DOWNLOAD')
+                os.system('touch DATASET_IS_READY')
             else:
-                while True:
-                    # 等待直到存在指定文件
-                    time.sleep(5)
-                    if os.path.exists('FINISH_DATASET_DOWNLOAD'):
-                        break
+                # 数据集存在，创建标记
+                if not os.path.exists('DATASET_IS_READY'):
+                    os.system('touch DATASET_IS_READY')
+        else:
+            while True:
+                # 等待直到存在指定文件
+                if os.path.exists('DATASET_IS_READY'):
+                    break
+                time.sleep(5)
 
         self.dataset = []
         # lsp (1000 train + 1000 test)

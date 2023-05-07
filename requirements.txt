@@ -38,3 +38,4 @@ aligo
 python-multipart
 fastapi
 uvicorn
+httpx

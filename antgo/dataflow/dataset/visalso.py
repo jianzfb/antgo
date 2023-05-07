@@ -28,19 +28,24 @@ class VisalSO(Dataset):
             'seagull'
         ]
 
-        if not os.path.exists(os.path.join(self.dir, 'Small Object dataset')):
-            if not os.path.exists(self.dir):
-                os.makedirs(self.dir)
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+            if not os.path.exists(os.path.join(self.dir, 'Small Object dataset')):
+                # 数据集不存在，需要重新下载，并创建标记
+                if not os.path.exists(self.dir):
+                    os.makedirs(self.dir)
     
-            if os.environ.get('LOCAL_RANK', 0) == 0:
                 os.system(f'cd {self.dir} && wget {url_address} && unzip SmallObjectDataset.zip')
-                os.system('touch FINISH_DATASET_DOWNLOAD')
+                os.system('touch DATASET_IS_READY')
             else:
-                while True:
-                    # 等待直到存在指定文件
-                    time.sleep(5)
-                    if os.path.exists('FINISH_DATASET_DOWNLOAD'):
-                        break
+                # 数据集存在，创建标记
+                if not os.path.exists('DATASET_IS_READY'):
+                    os.system('touch DATASET_IS_READY')
+        else:
+            while True:
+                # 等待直到存在指定文件
+                if os.path.exists('DATASET_IS_READY'):
+                    break
+                time.sleep(5)
 
         self.image_file_list = []
         self.bboxes_list = []

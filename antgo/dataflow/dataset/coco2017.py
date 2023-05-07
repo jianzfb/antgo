@@ -389,26 +389,28 @@ class COCO2017(Dataset):
     assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
 
     if not os.path.exists(os.path.join(self.dir , 'annotations')):
-      if not os.path.exists(os.path.join(self.dir, 'COCO')):
-        if os.environ.get('LOCAL_RANK', 0) == 0:
+      if os.environ.get('LOCAL_RANK', 0) == 0:
+        if not os.path.exists(os.path.join(self.dir, 'COCO')):
+          # 数据集不存在，需要重新下载，并创建标记
           ali = AliBackend()
-          # 下载数据集
           ali.download('ali:///dataset/coco/COCO.tar', self.dir)
           assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
           # 解压
           os.system(f'cd {self.dir} && tar -xf COCO.tar')
+          os.system('touch DATASET_IS_READY')
         else:
-          while True:
-            # 等待直到存在指定文件
-            time.sleep(5)
-            if os.path.exists('FINISH_DATASET_DOWNLOAD'):
-              break
-
-        # 修改数据目录
-        self.dir = os.path.join(self.dir, 'COCO')
+          # 数据集存在，创建标记
+          if not os.path.exists('DATASET_IS_READY'):
+            os.system('touch DATASET_IS_READY')
       else:
-        # 修改数据目录
-        self.dir = os.path.join(self.dir, 'COCO')
+        while True:
+          # 等待直到存在指定文件
+          if os.path.exists('DATASET_IS_READY'):
+            break
+          time.sleep(5)
+
+      # 修改数据目录
+      self.dir = os.path.join(self.dir, 'COCO')
 
     data_type = None
     if self.train_or_test == "train":
