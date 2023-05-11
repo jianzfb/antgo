@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import numpy as np
+import onnx
 
 # python3 convert.py --i xx.onnx --outnode --innode --quantize --gpu --cpu --npu --o name --image-folder --data-folder
 
@@ -26,13 +27,14 @@ def main():
         print(f'Dont exist onnx model file {args.i}')
         return -1
 
-    model_innode_list = []
-    if args.innode != '':
-        model_innode = args.innode.split(',')
-    
+    xmodel = onnx.load(args.i)
+    xgraph = xmodel.graph
+    output_num = len(xgraph.output)
     model_outnode_list = []
-    if args.outnode != '':
-        model_outnode_list = args.outnode.split(',')
+    for output_i in range(output_num):
+        output_name = xgraph.output[output_i].name
+        model_outnode_list.append(output_name)
+    
     if args.quantize:
         # 检查校准数据是否存在
         if not os.path.exists(args.data_folder):

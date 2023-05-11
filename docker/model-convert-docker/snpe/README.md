@@ -4,5 +4,5 @@
 docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i=xxx.onnx --o=yyy
 
 # 量化模型转换任务
-docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i=xxx.onnx --o=yyy --data-folder=data_folder 
+docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i=xxx.onnx --o=yyy --quantize --data-folder=data_folder 
 ```

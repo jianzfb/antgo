@@ -3,7 +3,6 @@ import tensorrt as trt
 import sys
 import argparse
 import os
-import cv2
 import shutil
 
 def main():

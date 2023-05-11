@@ -22,7 +22,6 @@ feed_dicts so that this script can be used as the argument for
 the --data-loader-script command-line parameter.
 """
 import numpy as np
-import cv2
 import os
 # INPUT_SHAPE = (1, 1, 2, 2)
 
