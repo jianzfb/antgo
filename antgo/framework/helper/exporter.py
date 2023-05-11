@@ -109,11 +109,16 @@ class Exporter(object):
                         count += 1
 
                     # 开始转模型
-                    os.system(f'cd {self.work_dir} && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o={prefix} --image-folder=calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                    os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                    os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --image-folder=calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                    os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} && rm -rf /tmp/onnx/')
                 else:
                     # fp16
-                    os.system(f'cd {self.work_dir} && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o={prefix} --device={target_device} --mean-values={mean_values} --std-values={std_values}')
-                pass
+                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                    os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                    os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                    os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} && rm -rf /tmp/onnx/')
             elif target_engine == 'snpe':
                 if self.cfg.deploy.quantize:
                     # 生成校准数据
@@ -134,10 +139,16 @@ class Exporter(object):
                         count += 1
 
                     # npu
-                    os.system(f'cd {self.work_dir} && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o={prefix} --data-folder=calibration-images')
+                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                    os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')
+                    os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                    os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} && rm -rf /tmp/onnx/')
                 else:
                     # other 
-                    os.system(f'cd {self.work_dir} && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o={prefix}')
+                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                    os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')                    
+                    os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                    os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} && rm -rf /tmp/onnx/')
             elif target_engine == 'tensorrt':
                 if self.cfg.deploy.quantize:
                     # 生成校准数据
@@ -158,10 +169,19 @@ class Exporter(object):
                         count += 1
 
                     # int8
-                    os.system(f'cd {self.work_dir} && docker run -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o={prefix} --quantize --data-folder=calibration-images')
+                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                    os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/tensorrt && cp {onnx_file_path} /tmp/onnx/')                    
+                    os.system(f'cd /tmp/onnx/ && docker run -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix} --quantize --data-folder=calibration-images')
+                    os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} && rm -rf /tmp/onnx/')
                 else:
                     # fp16
-                    os.system(f'cd {self.work_dir} && docker run -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o={prefix}')
+                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                    os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/tensorrt && cp {onnx_file_path} /tmp/onnx/')                      
+                    os.system(f'cd /tmp/onnx/ && docker run -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix}')
+                    os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} && rm -rf /tmp/onnx/')
             elif target_engine == 'tnn':
                 print('Only use tnn for mobile gpu deploy')
-                os.system(f'cd {self.work_dir} && docker run -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o={prefix}')
+                onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/tnn && cp {onnx_file_path} /tmp/onnx/')                 
+                os.system(f'cd /tmp/onnx/ && docker run -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+                os.system(f'cp -r /tmp/onnx/tnn/* {self.work_dir} && rm -rf /tmp/onnx/')
