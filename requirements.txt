@@ -39,3 +39,4 @@ python-multipart
 fastapi
 uvicorn
 httpx
+portalocker
