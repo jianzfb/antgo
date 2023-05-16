@@ -69,8 +69,7 @@ def get_common_flags():
     if config.DEBUG:
         COMMON_FLAGS.add_string('-g')
     COMMON_FLAGS.add_definition('USING_CBLAS', config.USING_CBLAS)
-    INC_PATHS.extend(['./cpp/include', '../3rdparty/dlpack/include',
-                      '../3rdparty/tvm_packed_func'])
+    INC_PATHS.extend(['./cpp/include'])
     for path in INC_PATHS:
         p = os.path.join(ENV_PATH, path)
         if p:
@@ -81,8 +80,7 @@ def get_common_flags():
 
 def get_build_flag_cpu():
     COMMON_FLAGS = get_common_flags()
-    CFLAGS = Flags('-std=c++11').add_definition('USING_CUDA', 0).\
-        add_definition('USING_HIP', 0).add_definition('USING_OPENMP', config.USING_OPENMP).\
+    CFLAGS = Flags('-std=c++11').add_definition('USING_CUDA', 0).add_definition('USING_OPENMP', config.USING_OPENMP).\
         add_string(COMMON_FLAGS)
     if not OS_IS_WINDOWS:
         CFLAGS.add_string('-fPIC')
@@ -117,25 +115,9 @@ def get_build_flag_cuda():
     return config.NVCC, CU_FLAGS, CU_LDFLAGS
 
 
-def get_build_flag_hip():
-    COMMON_FLAGS = get_common_flags()
-    HIP_FLAGS = Flags('-std=c++11 -Wno-deprecated-gpu-targets -Wno-deprecated-declarations -dc \
-    --expt-extended-lambda').\
-        add_definition('USING_CUDA', 0).\
-        add_definition('USING_HIP', 1).\
-        add_string(COMMON_FLAGS)
-    if not OS_IS_WINDOWS:
-        HIP_FLAGS.add_string('--compiler-options "-fPIC"')
-    HIP_LDFLAGS = Flags('-shared -Wno-deprecated-gpu-targets')
-    if config.USING_CBLAS:
-        HIP_LDFLAGS.add_string('-lhipblas')
-    return config.HIPCC, HIP_FLAGS, HIP_LDFLAGS
-
-
 BUILD_FLAGS = dict(
     cpu=get_build_flag_cpu,
     cuda=get_build_flag_cuda,
-    hip=get_build_flag_hip,
 )
 
 
