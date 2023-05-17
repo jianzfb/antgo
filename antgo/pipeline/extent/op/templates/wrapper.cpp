@@ -5,8 +5,6 @@
  *
  * WARNING! All changes made in this file will be lost!
  */
-// #include "mobula_op.h"
-// using namespace mobula;
 # include "defines.h"
 #include "${inc_fname}"
 

@@ -28,6 +28,21 @@ struct CArray {
   T &operator[](int i) const { return data[i]; }
 };
 
+template <typename T>
+struct CTensor {
+  size_t dim_num;
+  size_t* dims;
+  T* data;
+
+  T &operator[](int i) { return data[i]; }
+  T &operator[](int i) const { return data[i]; }
+};
+
+typedef CTensor<float> CFTensor;
+typedef CTensor<int> CITensor;
+typedef CTensor<unsigned char> CUCTensor;
+
+
 template <typename F, typename T>
 inline void mobula_map(F func, const T *data, const int n,
                                      const int stride = 1, T *out = nullptr) {

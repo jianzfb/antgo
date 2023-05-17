@@ -441,8 +441,8 @@ class OpLoader:
             if map_data.get('version') > antgo.__version__:
                 portalocker.unlock(build_info_fs)
                 raise Exception(
-                    """Unsupported higher version %s of wrapper file (Current MobulaOP ver: %s) :-(.
-Please update MobulaOP.""" % (map_data.get('version'), antgo.__version__))
+                    """Unsupported higher version %s of wrapper file (Current AntgoOP ver: %s) :-(.
+Please update AntgoOP.""" % (map_data.get('version'), antgo.__version__))
             build_id = map_data.get('build_id', 0)
             is_old_version = map_data.get(
                 'version') < antgo.__version__

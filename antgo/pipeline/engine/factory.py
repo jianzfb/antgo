@@ -1,4 +1,5 @@
 # -*- coding: UTF-8 -*-
+# -*- coding: UTF-8 -*-
 # @Time    : 2022/9/12 14:44
 # @File    : factory.py
 # @Author  : jian<jian@mltalker.com>
@@ -9,7 +10,6 @@ import os
 import threading
 from typing import Any, Dict, List, Tuple
 
-# from antgo.pipeline.functional.mixins.dataframe import DataFrame
 from .execution.base_execution import *
 from antgo.pipeline.hparam.hyperparameter import *
 from antgo.pipeline.engine.operator_registry import *

@@ -5,6 +5,7 @@ __all__ = ['AntgoFunc', 'bind']
 import ctypes
 import hashlib
 import warnings
+import numpy as np
 from . import glue
 from .internal.dtype import DType, CStruct, TemplateType, UnknownCType
 from .building.build_utils import config
@@ -62,9 +63,13 @@ class CFuncTensor:
 
 
 class CStructArg:
-    def __init__(self, var):
+    def __init__(self, var, ptype):
         self.var = var
+        self.ptype = ptype
 
+    @property
+    def is_const(self):
+        return self.ptype.is_const
 
 def _wait_to_read(var):
     if hasattr(var, 'wait_to_read'):
@@ -87,8 +92,13 @@ def _get_raw_pointer(arg, const_vars, mutable_vars):
                 mutable_vars.append((arg.var, v))
         return p
     if isinstance(arg, CStructArg):
-        const_vars.append(arg.var)
-        return ctypes.byref(const_vars[-1])
+        if arg.is_const:
+            const_vars.append(arg.var)
+            return ctypes.byref(const_vars[-1])
+        else:
+            mutable_vars.append((arg.var.val, arg.var))
+            return ctypes.byref(mutable_vars[-1][-1])
+
     return arg
 
 
@@ -153,14 +163,25 @@ class CFuncDef:
         mutable_vars = []
         raw_pointers = _get_raw_pointers(arg_datas, const_vars, mutable_vars)
         if self.func_kind == CFuncDef.KERNEL:
-            out = func(dev_id, *raw_pointers)
+            func(dev_id, *raw_pointers)
         elif self.func_kind == CFuncDef.FUNC:
-            out = func(*raw_pointers)
+            func(*raw_pointers)
         else:
             raise TypeError(
                 'Unsupported func kind: {}'.format(self.func_kind))
+        
+        # 仅通过C函数参数标记，来区分是否导出对应参数
+        out = []
         for target, value in mutable_vars:
-            target[:] = value
+            if isinstance(value, np.ndarray):
+                # for CFuncTensor
+                target[:] = value
+                out.append(target)
+            else:
+                # for CStructArg
+                target = np.ctypeslib.as_array(value.data, shape=[value.dims[i] for i in range(value.dim_num)])
+                out.append(target)
+
         return out
 
 
@@ -217,9 +238,9 @@ class AntgoFunc:
                         var_dev_id = None
                         ctype = ctypes.POINTER(ptype.cstruct)
                         try:
-                            data = CStructArg(ptype.constructor(var))
+                            data = CStructArg(ptype.constructor(var), ptype)
                         except TypeError:
-                            data = CStructArg(ptype.constructor(*var))
+                            data = CStructArg(ptype.constructor(*var), ptype)
                     else:
                         # The type of `var` is Tensor.
                         data, var_dev_id, ctype = self._get_tensor_info(

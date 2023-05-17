@@ -31,8 +31,8 @@ def _register_glue_real(glue_name, types_name):
                 DTYPE_TO_GLUE[module] = glue
             except ImportError:
                 pass
-            assert hasattr(glue.OpGen, '__call__')
-            assert hasattr(glue.OpGen, 'register')
+            # assert hasattr(glue.OpGen, '__call__')
+            # assert hasattr(glue.OpGen, 'register')
             if hasattr(glue, 'Tensor'):
                 value = glue.Tensor
                 assert isinstance(value, type) and issubclass(
