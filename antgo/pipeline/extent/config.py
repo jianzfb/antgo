@@ -9,7 +9,7 @@ class DefaultConfig:
     MAX_BUILDING_WORKER_NUM = 8
 
     DEBUG = False
-    USING_OPENMP = True
+    USING_OPENMP = False
     USING_CBLAS = False
     HOST_NUM_THREADS = 0  # 0 : auto
     USING_HIGH_LEVEL_WARNINGS = False

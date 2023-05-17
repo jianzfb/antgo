@@ -162,25 +162,27 @@ class CFuncDef:
         const_vars = []
         mutable_vars = []
         raw_pointers = _get_raw_pointers(arg_datas, const_vars, mutable_vars)
+        res = None
         if self.func_kind == CFuncDef.KERNEL:
-            func(dev_id, *raw_pointers)
+            res = func(dev_id, *raw_pointers)
         elif self.func_kind == CFuncDef.FUNC:
-            func(*raw_pointers)
+            res = func(*raw_pointers)
         else:
             raise TypeError(
                 'Unsupported func kind: {}'.format(self.func_kind))
         
-        # 仅通过C函数参数标记，来区分是否导出对应参数
-        out = []
+        out = [] if res is None else [res]
         for target, value in mutable_vars:
             if isinstance(value, np.ndarray):
                 # for CFuncTensor
                 target[:] = value
-                out.append(target)
+                if res is None:
+                    out.append(target)
             else:
                 # for CStructArg
-                target = np.ctypeslib.as_array(value.data, shape=[value.dims[i] for i in range(value.dim_num)])
-                out.append(target)
+                target = np.ctypeslib.as_array(value.data, shape=[value.dims[i] for i in range(value.dim_size)])
+                if res is None:
+                    out.append(target)
 
         return out
 

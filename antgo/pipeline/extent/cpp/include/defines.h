@@ -19,23 +19,117 @@
 #include "./context.h"
 
 namespace mobula {
-
-template <typename T>
-struct CArray {
-  size_t size;
-  T *data;
-  T &operator[](int i) { return data[i]; }
-  T &operator[](int i) const { return data[i]; }
-};
-
 template <typename T>
 struct CTensor {
-  size_t dim_num;
+  size_t dim_size;
   size_t* dims;
   T* data;
+  bool is_assign_inner;
 
   T &operator[](int i) { return data[i]; }
   T &operator[](int i) const { return data[i]; }
+
+  void destroy(){
+    // dim
+    if(is_assign_inner){
+      delete[] this->dims;
+    }
+
+    // data
+    if(is_assign_inner){
+      delete[] this->data;
+    }
+  }
+
+  void create1d(size_t dim_0){
+    this->dim_size = 1;
+
+    // dim
+    if(is_assign_inner){
+      delete[] this->dims;
+    }    
+    this->dims = new size_t[1];
+    this->dims[0] = dim_0;
+
+    // data
+    if(is_assign_inner){
+      delete[] this->data;
+    }
+    this->data = new T[dim_0];
+    is_assign_inner = true;
+  }
+
+  void create2d(size_t dim_0, size_t dim_1){
+    this->dim_size = 2;
+
+    // dim
+    if(is_assign_inner){
+      delete[] this->dims;
+    }    
+    this->dims = new size_t[2];
+    this->dims[0] = dim_0; this->dims[1] = dim_1; 
+
+    // data
+    if(is_assign_inner){
+      delete[] this->data;
+    }
+    this->data = new T[dim_0*dim_1];
+    is_assign_inner = true;
+  }
+
+  void create3d(size_t dim_0, size_t dim_1, size_t dim_2){
+    this->dim_size = 3;
+    // dim
+    if(is_assign_inner){
+      delete[] this->dims;
+    }
+    this->dims = new size_t[3];
+    this->dims[0] = dim_0; this->dims[1] = dim_1; this->dims[2] = dim_2; 
+
+    // data
+    if(is_assign_inner){
+      delete[] this->data;
+    }
+    this->data = new T[dim_0*dim_1*dim_2];
+    is_assign_inner = true;
+  }
+
+  void create4d(size_t dim_0, size_t dim_1, size_t dim_2, size_t dim_3){
+    this->dim_size = 4;
+
+    // dim
+    if(is_assign_inner){
+      delete[] this->dims;
+    }
+    this->dims = new size_t[4];
+    this->dims[0] = dim_0; this->dims[1] = dim_1; this->dims[2] = dim_2; this->dims[3] = dim_3; 
+
+    // data
+    if(is_assign_inner){
+      delete[] this->data;
+    }
+    this->data = new T[dim_0*dim_1*dim_2*dim_3];
+    is_assign_inner = true;
+  }  
+
+  void create5d(size_t dim_0, size_t dim_1, size_t dim_2, size_t dim_3, size_t dim_4){
+    this->dim_size = 5;
+
+    // dim
+    if(is_assign_inner){
+      delete[] this->dims;
+    }
+    this->dims = new size_t[5];
+    this->dims[0] = dim_0; this->dims[1] = dim_1; this->dims[2] = dim_2; this->dims[3] = dim_3; this->dims[4] = dim_4; 
+
+    // data
+    if(is_assign_inner){
+      delete[] this->data;
+    }
+    this->data = new T[dim_0*dim_1*dim_2*dim_3*dim_4];
+    is_assign_inner = true;
+  }
+
 };
 
 typedef CTensor<float> CFTensor;

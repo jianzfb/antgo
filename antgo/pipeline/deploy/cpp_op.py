@@ -16,11 +16,16 @@ class CppOp(object):
         input_data.extend(list(args))
 
         # 输出数据部分(仅用于占位)
-        output_data = [np.empty((1), dtype=np.float32)]
+        type_map = {
+            'CFTensor': np.float32,
+            'CITensor': np.int32,
+            'CUCTensor': np.uint8
+        }
+        output_data = [np.empty((1), type_map[self.func.func.arg_types[i].cname.replace('*', '')]) for i in self.func.wait_to_write_list]
 
         # 拼接函数参数
         func_args = input_data + output_data
-        
+    
         # 运行
         output_data = self.func(*func_args)
 
