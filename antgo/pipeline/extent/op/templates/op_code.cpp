@@ -1,39 +1,36 @@
-#include "${node_name}.cpp"
+#include "${op_name}_op_warp.h"
 #include "defines.h"
+#include "${inc_fname}"
 #include "eagleeye/basic/DataConvert.h"
 
 namespace eagleeye{
 namespace dataflow{
-${node_name}::${node_name}(){}
-${node_name}::~${node_name}(){}
+${op_name}::${op_name}(){}
+${op_name}::~${op_name}(){}
 
-int ${node_name}::init(std::map<std::string, std::vector<float>> params){
+int ${op_name}::init(std::map<std::string, std::vector<float>> params){
     // ignore
     return 0;
 }
 
-int ${node_name}::runOnCpu(const std::vector<Tensor>& input){
+int ${op_name}::runOnCpu(const std::vector<Tensor>& input){
 
-    // inputt
-    // CFTensor* a = convert_cftensor_tensor(input[0]);
-    // CFTensor* b = new CFTensor();
+    // input
     ${args_convert}
 
     // run
     ${return_statement} ${func_name}(${args_inst});
 
-    // output
-    // m_outputs[0] = convert_cftensor_tensor(b)
-    ${assign_output}
+    // convert output
+    ${output_covert}
 
-    // clear
-    // a->destroy();
+    // release resource
     ${args_clear}
 
     return 0;
 }
 
-int ${node_name}::runOnGpu(const std::vector<Tensor>& input){
+int ${op_name}::runOnGpu(const std::vector<Tensor>& input){
     return -1;
 }
 } // namespace dataflow
