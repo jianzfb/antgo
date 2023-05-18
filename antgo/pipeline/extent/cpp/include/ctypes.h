@@ -1,7 +1,7 @@
-#ifndef MOBULA_INCLUDE_CTYPES_H_
-#define MOBULA_INCLUDE_CTYPES_H_
+#ifndef EAGLEEYE_INCLUDE_CTYPES_H_
+#define EAGLEEYE_INCLUDE_CTYPES_H_
 
-namespace mobula {
+namespace eagleeye {
 
 typedef wchar_t wchar;
 typedef char byte;
@@ -16,6 +16,6 @@ typedef char* char_p;
 typedef wchar_t* wchar_p;
 typedef void* void_p;
 
-}  // namespace mobula
+}  // namespace eagleeye
 
-#endif  // MOBULA_INCLUDE_CTYPES_H_
+#endif  // EAGLEEYE_INCLUDE_CTYPES_H_

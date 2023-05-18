@@ -78,7 +78,7 @@ def _get_func_head_reg(name):
     return re.compile(r'^\s*{}\s*(.*)'.format(name))
 
 
-MOBULA_KERNEL_REG = _get_func_head_reg('MOBULA_(KERNEL|FUNC)')
+MOBULA_KERNEL_REG = _get_func_head_reg('EAGLEEYE_(KERNEL|FUNC)')
 
 FUNC_REG = re.compile(
     r'^\s*(.*?)\s*\((.*?)\)(?:.*?)*')

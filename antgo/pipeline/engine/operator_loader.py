@@ -128,7 +128,7 @@ class OperatorLoader:
             FileExistsError
                 Cannot find operators.
         """
-        print(function)
+
         for factory in [self.load_operator_from_internal,
                         self.load_operator_from_registry,
                         self.load_operator_from_remote,

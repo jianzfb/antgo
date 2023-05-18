@@ -1,5 +1,5 @@
-#ifndef MOBULA_INCLUDE_DEFINES_H_
-#define MOBULA_INCLUDE_DEFINES_H_
+#ifndef EAGLEEYE_INCLUDE_DEFINES_H_
+#define EAGLEEYE_INCLUDE_DEFINES_H_
 
 #include <array>
 #include <cassert>
@@ -18,7 +18,7 @@
 #include "./ctypes.h"
 #include "./context.h"
 
-namespace mobula {
+namespace eagleeye {
 template <typename T>
 struct CTensor {
   size_t dim_size;
@@ -177,6 +177,6 @@ T MAX_FUNC(const T &a, const T &b) {
   return a > b ? a : b;
 }
 
-}  // namespace mobula
+}  // namespace eagleeye
 
-#endif  // MOBULA_INCLUDE_DEFINES_H_
+#endif  // EAGLEEYE_INCLUDE_DEFINES_H_

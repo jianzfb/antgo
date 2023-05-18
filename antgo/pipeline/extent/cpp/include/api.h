@@ -1,10 +1,10 @@
-#ifndef MOBULA_INCLUDE_API_H_
-#define MOBULA_INCLUDE_API_H_
+#ifndef EAGLEEYE_INCLUDE_API_H_
+#define EAGLEEYE_INCLUDE_API_H_
 
 #ifdef _WIN32
-#define MOBULA_DLL __declspec(dllexport)
+#define EAGLEEYE_API __declspec(dllexport)
 #else
-#define MOBULA_DLL
+#define EAGLEEYE_API
 #endif
 
 #endif  // MOBULA_INCLUDE_API_H_

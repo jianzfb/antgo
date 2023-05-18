@@ -1,3 +1,3 @@
 #include "defines.h"
 
-namespace mobula {}
+namespace eagleeye {}

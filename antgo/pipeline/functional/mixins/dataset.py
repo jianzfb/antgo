@@ -32,6 +32,10 @@ class DatasetMixin:
         return cls(files)
 
     @classmethod
+    def placeholder(cls, *args):
+        return cls(list(args))
+
+    @classmethod
     def read_json(cls, json_path: Union[str, Path], encoding: str = 'utf-8'):
         import json
 

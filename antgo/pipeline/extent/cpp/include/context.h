@@ -1,11 +1,11 @@
-#ifndef MOBULA_INCLUDE_CONTEXT_CONTEXT_H_
-#define MOBULA_INCLUDE_CONTEXT_CONTEXT_H_
+#ifndef EAGLEEYE_INCLUDE_CONTEXT_CONTEXT_H_
+#define EAGLEEYE_INCLUDE_CONTEXT_CONTEXT_H_
 
 #include <cstring>
 
 #include "./api.h"
 
-#define MOBULA_FUNC
+#define EAGLEEYE_FUNC
 // #if USING_HIP || USING_CUDA
 // #include "./hip_ctx.h"
 // #else
@@ -13,7 +13,7 @@
 // #endif  // USING_CUDA
 
 // extern "C" {
-// MOBULA_DLL void set_device(const int device_id);
+// EAGLEEYE_API void set_device(const int device_id);
 // }
 
-#endif  // MOBULA_INCLUDE_CONTEXT_CONTEXT_H_
+#endif  // EAGLEEYE_INCLUDE_CONTEXT_CONTEXT_H_

@@ -64,16 +64,6 @@ def _web():
 web = dynamic_dispatch(_web)
 
 
-def _dummy_input():
-  """
-  Create a dummy input.
-  """
-  return _api().__enter__()
-
-
-dummy_input = dynamic_dispatch(_dummy_input)
-
-
 def _dc(iterable):
   """
   Return a DataCollection.
@@ -88,3 +78,10 @@ def _dc(iterable):
 
 
 dc = dynamic_dispatch(_dc)
+
+
+def _placeholder(*arg):
+  index = param_scope()._index
+  return DataFrame.placeholder(*arg).map(lambda x: Entity(**{index: x}))
+
+placeholder = dynamic_dispatch(_placeholder)

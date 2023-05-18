@@ -1,8 +1,8 @@
 #include <iostream>
 #include "defines.h"
 
-using namespace mobula;
-MOBULA_FUNC void preprocess_func(
+using namespace eagleeye;
+EAGLEEYE_FUNC void preprocess_func(
     const CFTensor* meanv, 
     const CFTensor* stdv, 
     const CITensor* permute, 
