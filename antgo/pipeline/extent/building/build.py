@@ -134,6 +134,8 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
 
     buildin_path = os.path.join(
         config.BUILD_PATH, 'build', 'buildin', ctx_name)
+    os.makedirs(buildin_path, exist_ok=True)
+
     buildin_o = []
     buildin_cpp = []
     for src in ['defines.cpp']:
@@ -145,7 +147,7 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
     for fname in buildin_o:
         if not os.path.exists(fname):
             with build_context():
-                source_to_o(build_path, zip(
+                source_to_o('.', zip(
                     buildin_cpp, buildin_o), compiler, cflags)
     flags += (buildin_o, )
-    source_to_so(build_path, srcs, target_name, *flags)
+    source_to_so('.', srcs, target_name, *flags)

@@ -213,7 +213,6 @@ class CPPInfo:
 def _build_lib(cpp_fname, code_buffer, ctx, target_name):
     # the virtual dirname of the source code
     cpp_path, cpp_basename = os.path.split(cpp_fname)
-    build_path = get_virtual_dirname(cpp_path)
     create_time = time.strftime('%a %Y-%m-%d %H:%M:%S (%z)', time.localtime())
     git_hash = get_git_hash()
     extra_code = gen_code('./templates/wrapper.cpp')(
@@ -223,7 +222,7 @@ def _build_lib(cpp_fname, code_buffer, ctx, target_name):
         inc_fname=os.path.abspath(cpp_fname),
         code=code_buffer)
 
-    build_path_ctx = os.path.join(build_path, 'build', ctx)
+    build_path_ctx = os.path.join(os.path.dirname(target_name),ctx)
     makedirs(build_path_ctx, exist_ok=True)
 
     # build so
@@ -234,6 +233,7 @@ def _build_lib(cpp_fname, code_buffer, ctx, target_name):
 
     # build lib
     srcs = [cpp_wrapper_fname]
+    build_path = os.path.dirname(os.path.dirname(target_name))
     source_to_so_ctx(build_path, srcs, target_name, ctx)
 
 
@@ -420,7 +420,7 @@ class OpLoader:
             '''
             cpp_path, cpp_basename = os.path.split(cpp_fname)
             cpp_path = get_virtual_dirname(cpp_path)
-            build_path = os.path.join(cpp_path, 'build')
+            build_path = os.path.join(os.curdir, '.temp', 'op', cpp_path.split('/')[-1], 'build')
 
             use_template = bool(cfunc.template_list)
             makedirs(build_path, exist_ok=True)
@@ -454,8 +454,7 @@ Please update AntgoOP.""" % (map_data.get('version'), antgo.__version__))
                 template_functions = map_data.get(
                     TEMPLATE_FUNCTION_NAME, dict())
 
-            so_prefix = os.path.join(
-                cpp_path, 'build', os.path.splitext(cpp_basename)[0])
+            so_prefix = os.path.join(build_path, os.path.splitext(cpp_basename)[0])
             # The filename of build target
             dll_fname_format = '{prefix}_{ctx}'.format(
                 prefix=so_prefix, ctx=ctx) + '_{build_id}.so'

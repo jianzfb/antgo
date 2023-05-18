@@ -3,7 +3,7 @@ from .utils import with_metaclass
 
 class DefaultConfig:
     TARGET = 'antgo_op'
-    BUILD_PATH = './'
+    BUILD_PATH = './.temp/'
     BUILD_IN_LOCAL_PATH = True
     SHOW_BUILDING_COMMAND = False
     MAX_BUILDING_WORKER_NUM = 8

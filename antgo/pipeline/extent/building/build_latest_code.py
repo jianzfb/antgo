@@ -42,6 +42,11 @@ def _write_hash_file(fname, data):
 
 def _read_graph_file(fname):
     global GRAPH_FILE_BUFFER
+
+    dirname = os.path.join('.temp', 'cache', os.path.basename(fname).split('.')[0])
+    os.makedirs(dirname, exist_ok=True)
+    fname = os.path.join(dirname, fname)
+
     data = GRAPH_FILE_BUFFER.get(fname, None)
     if data is not None:
         return data
@@ -69,7 +74,9 @@ def file_is_changed(fname):
         return False
     fname = os.path.abspath(fname)
     new_hash = get_file_hash(fname)
-    dirname = get_virtual_dirname(os.path.dirname(fname))
+    # dirname = get_virtual_dirname(os.path.dirname(fname))
+    dirname = os.path.join('.temp', 'cache', os.path.basename(fname).split('.')[0])
+    os.makedirs(dirname, exist_ok=True)
     hash_fname = os.path.join(dirname, HASH_FILENAME)
 
     def _get_file_old_hash(fname):
