@@ -75,7 +75,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         'CFTensor': 'convert_cftensor_tensor',
         'CITensor': 'convert_citensor_tensor',
         'CUCTensor':'convert_cuctensor_tensor'
-    }    
+    }
     
     new_map = {
         'CFTensor': 'new_cftensor',
