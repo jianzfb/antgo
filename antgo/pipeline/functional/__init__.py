@@ -13,6 +13,9 @@ from antgo.pipeline.hparam import HyperParameter as State
 
 from antgo.pipeline.hparam import param_scope
 from antgo.pipeline.hparam import dynamic_dispatch
+from antgo.pipeline.functional.common.config import *
+import numpy as np
+
 read_camera = DataCollection.read_camera
 read_video = DataCollection.read_video
 
@@ -82,6 +85,60 @@ dc = dynamic_dispatch(_dc)
 
 def _placeholder(*arg):
   index = param_scope()._index
-  return DataFrame.placeholder(*arg).map(lambda x: Entity(**{index: x}))
+
+  # 
+  if isinstance(index, tuple):
+    for ii,xx in zip(index, arg):
+      
+      data_type = -1
+      if xx.dtype == np.float32:
+        data_type = 6
+      elif xx.dtype == np.int32:
+        data_type = 4
+      elif xx.dtype == np.uint8:
+        data_type = 1
+
+      if data_type < 0:
+        print('placeholder type abnormal.')
+      
+      add_op_info(
+        f'PlaceholderOp_{pos_i}', 
+        (None, (ii,)), 
+        (), 
+        {
+          'memory_type': 2,     # CPU_BUFFER
+          'data_format': 1000,  # AUTO
+          'data_type': data_type,        # EAGLEEYE_UCHAR, EAGLEEYE_FLOAT
+          'shape': list(xx.shape),  # 
+        }
+      )
+
+    return DataFrame.placeholder(*arg).map(lambda x: Entity(**{ii: xx for ii, xx in zip(index, x) }))
+  else:
+    for ii, xx in zip([index], arg):
+      data_type = -1
+      if xx.dtype == np.float32:
+        data_type = 6
+      elif xx.dtype == np.int32:
+        data_type = 4
+      elif xx.dtype == np.uint8:
+        data_type = 1
+
+      if data_type < 0:
+        print('placeholder type abnormal.')
+      
+      add_op_info(
+        f'PlaceholderOp', 
+        (None, (ii,)), 
+        (), 
+        {
+          'memory_type': 2,               # CPU_BUFFER
+          'data_format': 1000,            # AUTO
+          'data_type': data_type,         # EAGLEEYE_UCHAR, EAGLEEYE_FLOAT
+          'shape': list(xx.shape),        # 
+        }
+      )
+
+    return DataFrame.placeholder(*arg).map(lambda x: Entity(**{index: x }))
 
 placeholder = dynamic_dispatch(_placeholder)

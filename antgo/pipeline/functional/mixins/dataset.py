@@ -33,6 +33,29 @@ class DatasetMixin:
 
     @classmethod
     def placeholder(cls, *args):
+        signal_set = [
+            'EAGLEEYE_SIGNAL_RGB_IMAGE',
+            'EAGLEEYE_SIGNAL_BGR_IMAGE',
+            'EAGLEEYE_SIGNAL_RGBA_IMAGE',
+            'EAGLEEYE_SIGNAL_BGRA_IMAGE',
+            'EAGLEEYE_SIGNAL_GRAY_IMAGE',
+            'EAGLEEYE_SIGNAL_MASK',
+            'EAGLEEYE_SIGNAL_DET',
+            'EAGLEEYE_SIGNAL_DET_EXT',
+            'EAGLEEYE_SIGNAL_TRACKING',
+            'EAGLEEYE_SIGNAL_POS_2D',
+            'EAGLEEYE_SIGNAL_POS_3D',
+            'EAGLEEYE_SIGNAL_LANDMARK',
+            'EAGLEEYE_SIGNAL_CLS',
+            'EAGLEEYE_SIGNAL_STATE',
+            'EAGLEEYE_SIGNAL_SWITCH',
+            'EAGLEEYE_SIGNAL_RECT',
+            'EAGLEEYE_SIGNAL_LINE',
+            'EAGLEEYE_SIGNAL_POINT'
+        ]
+        for arg in args:
+            if isinstance(arg, tuple):
+                assert (arg[-1] in signal_set)
         return cls(list(args))
 
     @classmethod

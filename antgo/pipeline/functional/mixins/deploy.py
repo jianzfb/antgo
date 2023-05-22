@@ -150,17 +150,19 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         fp.write(eagleeye_warp_cpp_code_content)
 
     info = {
+        'type': op_name,
         'input': input_ctx,
         'output': output_ctx,
-        'args': None,
+        'args': {},
         'include': os.path.join('extent','include', f'{op_name}_op_warp.h')
     }
     return info
 
 
-def convert_args_eagleeye_op_args(op_args):
+def convert_args_eagleeye_op_args(op_args, op_kwargs):
+    # ignore op_args
     converted_op_args = {}
-    for arg_name, arg_info in op_args.items():
+    for arg_name, arg_info in op_kwargs.items():
         if isinstance(arg_info, np.ndarray):
             # numpy
             converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
@@ -173,13 +175,16 @@ def convert_args_eagleeye_op_args(op_args):
     return converted_op_args
 
 
-def android_package_build(output_folder, eagleeye_path, project_info):
-    graph_config = get_graph_info()
-    
+def package_build(output_folder, eagleeye_path, project_config, platform):    
+    # 获得eagleeye核心算子集合
     core_op_set = load_eagleeye_op_set(eagleeye_path)
+
+    # 获得计算图配置信息
+    graph_config = get_graph_info()['op']
 
     # 准备算子函数代码
     deploy_graph_info = {}
+    op_name_count = {}
     for graph_op_info in graph_config:
         op_name = graph_op_info['op_name']
         op_index = graph_op_info['op_index']
@@ -187,13 +192,28 @@ def android_package_build(output_folder, eagleeye_path, project_info):
         op_kwargs = graph_op_info['op_kwargs']
 
         input_ctx, output_ctx = op_index
+        if not isinstance(input_ctx, tuple):
+            input_ctx = (input_ctx,)
+        if not isinstance(output_ctx, tuple):
+            output_ctx = (output_ctx,)
+
         if op_name.startswith('deploy'):
             # 需要独立编译
             # 1.step 生成eagleeye算子封装
-            op_info = auto_generate_eagleeye_op(op_name[7:], op_index, op_args, op_kwargs, output_folder)
-            deploy_graph_info[op_name[7:]] = op_info
+            op_name = op_name[7:]
+            if op_name not in op_name_count:
+                op_name_count[op_name] = 0
+            op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+            op_name_count[op_name] += 1
+
+            op_info = auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder)
+            deploy_graph_info[op_name] = op_info
         elif op_name.startswith('eagleeye'):
             # eagleeye核心算子 (op级别算子)
+            if op_name not in op_name_count:
+                op_name_count[op_name] = 0
+            op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+            op_name_count[op_name] += 1
 
             if op_name.endswith('_op'):
                 op_name = op_name.capitalize()                
@@ -205,14 +225,20 @@ def android_package_build(output_folder, eagleeye_path, project_info):
                 return False
 
             # op_args， 包含scalar, numpy, list类型，转换成std::vector<float>类型
-            deploy_graph_info[op_name] = {
+            deploy_graph_info[op_unique_name] = {
+                'type': op_name,
                 'input': input_ctx,
                 'output': output_ctx,
-                'args': convert_args_eagleeye_op_args(op_args),
+                'args': convert_args_eagleeye_op_args(op_args, op_kwargs),
                 'include': core_op_set[op_name]['include']
             }
         else:
             # eagleey核心算子 （op级别算子）
+            if op_name not in op_name_count:
+                op_name_count[op_name] = 0
+            op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+            op_name_count[op_name] += 1
+
             if op_name.endswith('_op'):
                 op_name = op_name.capitalize()                     
                 op_name = op_name.replace('_op', 'Op')
@@ -223,25 +249,83 @@ def android_package_build(output_folder, eagleeye_path, project_info):
                 return False
 
             # op_args， 包含scalar, numpy, list类型，转换成std::vector<float>类型
-            deploy_graph_info[op_name] = {
+            deploy_graph_info[op_unique_name] = {
+                'type': op_name,
                 'input': input_ctx,
                 'output': output_ctx,
-                'args': convert_args_eagleeye_op_args(op_args),
+                'args': convert_args_eagleeye_op_args(op_args, op_kwargs),
                 'include': core_op_set[op_name]['include']
             }
 
     # 准备插件文件代码
     # 包括任务管线建立, nano算子图，任务输入信号设置，任务输出信号设置
-    
-    # 更新CMakeLists.txt
-    
+    t = [v['include'] for v in deploy_graph_info.values()]
+    include_list = ''
+    for f in t:
+        include_list += f'#include "{f}"\n'
+
+    op_graph_code = ''
+    deploy_output_data_name_inv_link = {}
+    for deploy_op_name, deploy_op_info in deploy_graph_info.items():
+        op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add("{deploy_op_name}", {deploy_op_info["type"]}(), EagleeyeRuntime(EAGLEEYE_CPU));\n'
+
+        deploy_op_args = deploy_op_info['args']
+        arg_code = ''
+        for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
+            if arg_code == '':
+                arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+            else:
+                arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+        args_init_code = '{'+arg_code+'}'
+        op_graph_code += f'{deploy_op_name}->init({args_init_code});\n'
+
+        print(deploy_op_info['output'])
+        for data_i, data_name in enumerate(deploy_op_info['output']):
+            deploy_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
+
+    for deploy_op_name, deploy_op_info in deploy_graph_info.items():
+        if deploy_op_info['input'] is not None:
+            for input_data_i, input_data_name in enumerate(deploy_op_info['input']):
+                if input_data_name is not None:
+                    from_op_name, from_op_out_i = deploy_output_data_name_inv_link[input_data_name]
+                    op_graph_code += f'op_graph->bind("{from_op_name}", {from_op_out_i}, "{deploy_op_name}", {input_data_i});\n'
+
+    op_graph_code += 'op_graph->init();'
+
+    eagleeye_plugin_code_content = \
+        gen_code('./templates/plugin_code.cpp')(            
+            project=project_config['name'],
+            version=project_config['version'],
+            signature=project_config.get('signature', 'xxx'),
+            include_list=include_list,
+            in_port='{'+','.join([str(i) for i in range(len(project_config['input']))]) + '}',
+            in_signal='{'+','.join(['"'+info[-1]+'"' for info in project_config['input']])+'}',
+            out_port='{'+','.join([str(i) for i in range(len(project_config['output']))]) + '}',
+            out_signal='{'+','.join(['"'+info[-1]+'"' for info in project_config['output']])+'}',
+            graph_in_ops='{'+','.join(['"'+deploy_output_data_name_inv_link[info[0]][0]+'"' for info in project_config['input']])+'}',
+            graph_out_ops='{'+','.join(['"'+deploy_output_data_name_inv_link[info[0]][0]+'"' for info in project_config['output']])+'}',
+            op_graph=op_graph_code
+        )
+
+    with open(os.path.join(output_folder, f'{project_config["name"]}_plugin.cpp'), 'w') as fp:
+        fp.write(eagleeye_plugin_code_content)
+
     # 编译插件工程
+    shell_code_content = gen_code('./templates/android_build.sh')(
+        project=project_config['name'],
+        ANDROID_NDK_HOME=os.environ['ANDROID_NDK_HOME']
+    )
+    with open(os.path.join(output_folder, 'android_build.sh'), 'w') as fp:
+        fp.write(shell_code_content)
 
-    print('sdf')
+    shell_code_content = gen_code('./templates/linux_build.sh')(
+        project=project_config['name']
+    )
+    with open(os.path.join(output_folder, 'linux_build.sh'), 'w') as fp:
+        fp.write(shell_code_content)
 
-
-def linux_package_build(output_folder):
-    pass
+    os.system(f'cd {output_folder} && bash {platform}_build.sh')
 
 
 NANO_OP_REG = re.compile('^class\s*\w*\s*:')
@@ -267,13 +351,10 @@ class DeployMixin:
     def build(self, 
               platform='android/arm64-v8a',
               output_folder='./deploy', 
-              project_name='demo', 
-              project_version='1.0.0.0', 
-              project_git=None,
               eagleeye_path='./eagleeye/install',
-              ):
+              project_config=None):
         system_platform, abi_platform = platform.split('/')
-        
+
         # 创建工程
         os.makedirs(output_folder, exist_ok=True)  
         # if project_git is not None:
@@ -285,14 +366,9 @@ class DeployMixin:
 
         # 编译        
         # 1.step 基于不同平台对CPP算子编译，并生成静态库
-        if system_platform == 'android':
-            android_package_build(output_folder, eagleeye_path, project_info={})
-        elif system_platform == 'linux':
-            linux_package_build(output_folder, eagleeye_path, project_info={})
-        else:
-            return False
+        package_build(
+            output_folder, 
+            eagleeye_path, 
+            project_config=project_config, platform=system_platform)
 
-        # 2.step 编译eagleeye 插件库，并关联上面的静态库
-
-        # print(graph_config)
         return True

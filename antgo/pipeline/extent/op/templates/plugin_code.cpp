@@ -121,16 +121,15 @@ for(size_t i=0; i<in_port_list.size(); ++i){
     }
 
     std::string placeholer_i_name = formatString("placeholder_%d", i);
-    ${project}->add(placeholder, placeholer_i_name.c_str());
+    ${project}->add(input_node, placeholer_i_name.c_str());
 }
 
 // 2.step build your algorithm node
 NNNode* nnnode = new NNNode();
-// dataflow::Node* aa = new dataflow::ResizeOp(); aa->init();
-// nnnode->addGraphOp(aa);
-// nnnode->bindGraphOp(aa,0,bb,0);
-// nnnode->initGraph();
+dataflow::Graph* op_graph = nnnode->getOpGraph();
 ${op_graph}
+
+nnnode->analyze(${graph_in_ops}, ${graph_out_ops});
 
 std::vector<int> out_port_list = std::vector<int>{${out_port}};
 std::vector<std::string> out_signal_list = std::vector<std::string>{${out_signal}};
@@ -141,11 +140,10 @@ for(size_t i=0; i<out_port_list.size(); ++i){
 // 3.step add all node to pipeline
 // 3.1.step add data source node
 // 3.2.step add your algorithm node
-$(project)->add(nnnode, "nnnode");
+${project}->add(nnnode, "nnnode");
 
 // 4.step link all node in pipeline
-${project}->bind("placeholder", 0, "nnnode", 0);
-for(size_t i=0; i<nnnode->getGraphInNum(); ++i){
+for(size_t i=0; i<nnnode->getOpGraphIn(); ++i){
     std::string placeholer_i_name = formatString("placeholder_%d", i);
     ${project}->bind(placeholer_i_name.c_str(), i, "nnnode", i);
 }
