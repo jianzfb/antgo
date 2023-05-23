@@ -29,6 +29,7 @@ class CppOp(object):
 
         # 输出数据(仅用于占位)
         type_map = {
+            'CDTensor': np.float64,
             'CFTensor': np.float32,
             'CITensor': np.int32,
             'CUCTensor': np.uint8

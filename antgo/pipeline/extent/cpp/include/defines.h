@@ -132,6 +132,7 @@ struct CTensor {
 
 };
 
+typedef CTensor<double> CDTensor;
 typedef CTensor<float> CFTensor;
 typedef CTensor<int> CITensor;
 typedef CTensor<unsigned char> CUCTensor;

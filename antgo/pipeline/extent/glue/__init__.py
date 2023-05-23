@@ -25,6 +25,14 @@ class CUCTensor(ctypes.Structure):
 
     _fields_ = [("dim_size", ctypes.c_size_t), ("dims", ctypes.POINTER(ctypes.c_size_t)), ("data", ctypes.POINTER(ctypes.c_ubyte)),  ('is_assign_inner', ctypes.c_bool)]
 
+class CDTensor(ctypes.Structure):
+    def __init__(self, data):
+        self.val = data
+        super().__init__(ctypes.c_size_t(len(data.shape)), ctypes.cast((ctypes.c_size_t * len(data.shape))(*data.shape), ctypes.POINTER(ctypes.c_size_t)), ctypes.cast(data.ctypes.data, ctypes.POINTER(ctypes.c_double)), False)
+
+    _fields_ = [("dim_size", ctypes.c_size_t), ("dims", ctypes.POINTER(ctypes.c_size_t)), ("data", ctypes.POINTER(ctypes.c_double)), ('is_assign_inner', ctypes.c_bool)]
+
+common.register_cstruct('CDTensor', CDTensor)
 common.register_cstruct('CFTensor', CFTensor)
 common.register_cstruct('CITensor', CITensor)
 common.register_cstruct('CUCTensor', CUCTensor)

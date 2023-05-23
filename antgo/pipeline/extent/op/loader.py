@@ -520,12 +520,17 @@ Please update AntgoOP.""" % (map_data.get('version'), antgo.__version__))
                 _add_function(func_map,
                               func_idcode, template_functions[func_idcode][1], cpp_info, dll_fname)
 
+        # 算子/函数
         self.func = func_map[idcode].func
         self.cpp_info = func_map[idcode].cpp_info
         self.idcode_hash = get_idcode_hash(idcode)
 
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
+
+    def clear(self, data):
+        # 资源销毁函数
+        getattr(self.cpp_info.dll, f'destroy_{str(data._obj.__class__.__name__).lower()}')(data)
 
     def get_async_func(self, glue_mod):
         async_name = getattr(glue_mod, 'async_name', None)

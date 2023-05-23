@@ -70,20 +70,23 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
     convert_map_1 = {
         'CFTensor': 'convert_tensor_cftensor',
         'CITensor': 'convert_tensor_citensor',
-        'CUCTensor':'convert_tensor_cuctensor'
+        'CUCTensor':'convert_tensor_cuctensor',
+        'CDTensor': 'convert_tensor_cdtensor',
     }
     # 从C*Tensor到Tensor转换
     convert_map_2 = {
         'CFTensor': 'convert_cftensor_tensor',
         'CITensor': 'convert_citensor_tensor',
-        'CUCTensor':'convert_cuctensor_tensor'
+        'CUCTensor':'convert_cuctensor_tensor',
+        'CDTensor': 'convert_cdtensor_tensor',
     }
     
     # 创建C*Tensor    
     new_map = {
         'CFTensor': 'new_cftensor',
         'CITensor': 'new_citensor',
-        'CUCTensor':'new_cuctensor'
+        'CUCTensor':'new_cuctensor',
+        'CDTensor': 'new_cdtensor',
     }
     
     # 初始化C*Tensor

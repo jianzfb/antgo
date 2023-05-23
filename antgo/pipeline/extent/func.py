@@ -181,6 +181,14 @@ class CFuncDef:
             else:
                 # for CStructArg
                 target = np.ctypeslib.as_array(value.data, shape=[value.dims[i] for i in range(value.dim_size)])
+                # 自动释放
+                if value.data != mutable_vars[0][1].data:
+                    # clone 
+                    target = target.copy()
+
+                    # c函数内部创建，需要销毁内存
+                    func.clear(ctypes.byref(value))
+
                 if res is None:
                     out.append(target)
 
