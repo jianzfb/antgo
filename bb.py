@@ -33,8 +33,8 @@ mean, std, channel permute, need NCHW
 
 # 构建计算流图并编译
 placeholder['image'](np.ones((384,512,3), dtype=np.uint8)). \
-    resize_op['image', 'resized_image'](size=(512,384)). \
-    deploy.preprocess_func['resized_image', 'preprocessed_image'](meanv=np.array([128,128,128], dtype=np.float32), stdv=np.array([128,128,128], dtype=np.float32), permute=np.array([2,0,1], dtype=np.int32), needed_expand_batch_dim=True, needed_chw=True). \
+    resize_op['image', 'resized_image'](out_size=(512,384)). \
+    deploy.preprocess_func['resized_image', 'preprocessed_image'](meanv=np.array([0.5,0.5,0.5], dtype=np.float32), stdv=np.array([1,1,1], dtype=np.float32), permute=np.array([2,0,1], dtype=np.int32), needed_expand_batch_dim=True). \
     build(
         platform='android/arm64-v8a', 
         eagleeye_path='/workspace/eagleeye/install',
@@ -42,9 +42,7 @@ placeholder['image'](np.ones((384,512,3), dtype=np.uint8)). \
             'input': [('image', 'EAGLEEYE_SIGNAL_RGB_IMAGE')],
             'output': [('preprocessed_image', 'EAGLEEYE_SIGNAL_RGB_IMAGE')],
             'name': 'demo',
-            'version': '1.0.0.0',
             'git': ''
         }
     )
 
-print('sdf')

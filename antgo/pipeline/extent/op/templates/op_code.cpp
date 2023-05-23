@@ -1,6 +1,6 @@
-#include "${op_name}_op_warp.h"
+#include "${inc_fname1}"
 #include "defines.h"
-#include "${inc_fname}"
+#include "${inc_fname2}"
 #include "eagleeye/basic/DataConvert.h"
 
 namespace eagleeye{
@@ -15,17 +15,17 @@ int ${op_name}::init(std::map<std::string, std::vector<float>> params){
 
 int ${op_name}::runOnCpu(const std::vector<Tensor>& input){
 
-    // input
-    ${args_convert}
+// input
+${args_convert}
 
-    // run
-    ${return_statement} ${func_name}(${args_inst});
+// run
+${return_statement} ${func_name}(${args_inst});
 
-    // convert output
-    ${output_covert}
+// convert output
+${output_covert}
 
-    // release resource
-    ${args_clear}
+// release resource
+${args_clear}
 
     return 0;
 }

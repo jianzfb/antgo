@@ -102,7 +102,7 @@ def _placeholder(*arg):
         print('placeholder type abnormal.')
       
       add_op_info(
-        f'PlaceholderOp_{pos_i}', 
+        'placeholder_op', 
         (None, (ii,)), 
         (), 
         {
@@ -128,7 +128,7 @@ def _placeholder(*arg):
         print('placeholder type abnormal.')
       
       add_op_info(
-        f'PlaceholderOp', 
+        'placeholder_op', 
         (None, (ii,)), 
         (), 
         {

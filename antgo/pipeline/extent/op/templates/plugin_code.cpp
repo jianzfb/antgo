@@ -5,9 +5,10 @@
 #include "eagleeye/processnode/Placeholder.h"
 ${include_list}
 #include "${project}_plugin.h"
-
+#include "eagleeye/processnode/NNNode.h"
 
 namespace eagleeye{
+using namespace dataflow;
 
 /**
  * @brief register pipeline plugin

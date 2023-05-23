@@ -27,7 +27,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
     # 创建header文件
     eagleeye_warp_h_code_content = \
         gen_code('./templates/op_code.h')(            
-            op_name=f'{op_name.capitalize()}',
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
             input_num=len(input_ctx),
             output_num=len(output_ctx)
         )
@@ -103,14 +103,14 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
             arg_type = arg_type.cname.replace('*','')
             args_convert += f'{arg_type}*{arg_name}={convert_map_1[arg_type]}(input[{input_p}]);\n'
             
-            args_clear += f'{arg_name}.destroy();\n'
+            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
         elif flag.startswith('output'):
             arg_type = arg_type.cname.replace('*','')
             args_convert += f'{arg_type}*{arg_name}={new_map[arg_type]}();\n'
             
             output_p = int(flag[7:])
-            output_covert += f'output[{output_p}]={convert_map_2[arg_type]}({arg_name});\n'
-            args_clear += f'{arg_name}.destroy();\n'
+            output_covert += f'm_outputs[{output_p}]={convert_map_2[arg_type]}({arg_name});\n'
+            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
         else:
             if isinstance(arg_value, np.ndarray):
                 assert(arg_value.dtype == np.float32 or arg_value.dtype == np.int32 or arg_value.dtype == np.uint8)
@@ -120,7 +120,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
                 arg_type = arg_type.cname.replace('*','')
                 args_convert += f'{arg_type}*{arg_name}={init_map[arg_value.dtype.str]}({data_value_str}, {data_shape_str});\n'
                 
-                args_clear += f'{arg_name}.destroy();\n'
+                args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
             else:
                 arg_type = arg_type.cname.replace('const', '')
                 args_convert += f'{arg_type} {arg_name}={str(arg_value).lower()};\n'
@@ -134,9 +134,10 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
     
     eagleeye_warp_cpp_code_content = \
         gen_code('./templates/op_code.cpp')(
-            op_name=f'{op_name.capitalize()}',
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
             func_name=op_name,
-            inc_fname=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
+            inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
+            inc_fname2=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
             args_convert=args_convert,
             args_inst=args_inst,
             return_statement='',
@@ -150,11 +151,12 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         fp.write(eagleeye_warp_cpp_code_content)
 
     info = {
-        'type': op_name,
+        'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
         'args': {},
-        'include': os.path.join('extent','include', f'{op_name}_op_warp.h')
+        'include': os.path.join('extent','include', f'{op_name}_op_warp.h'),
+        'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp')
     }
     return info
 
@@ -173,6 +175,45 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
             # scalar
             converted_op_args[arg_name] = [float(arg_info)]
     return converted_op_args
+
+
+def update_cmakelist(output_folder, project_name, src_op_warp_list):
+    info = []
+    is_found_include_directories_insert = False
+    is_start_add_src_code = False
+
+    src_op_warp_flag = [0 for _ in range(len(src_op_warp_list))]
+    for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
+        if is_start_add_src_code and not line.strip().endswith(')'):
+            for src_op_warp_file_i, src_op_warp_file in enumerate(src_op_warp_list):
+                if src_op_warp_file == line.strip():
+                    src_op_warp_flag[src_op_warp_file_i] = 1
+                    break
+        if is_start_add_src_code and line.strip().endswith(')'):
+            for src_op_warp_file_i, src_op_warp_file_flag in enumerate(src_op_warp_flag):
+                if src_op_warp_file_flag == 0:
+                    info.append(f'{src_op_warp_list[src_op_warp_file_i]}\n')
+
+            is_start_add_src_code = False
+
+        if f'set({project_name}_SRC' in line:
+            is_start_add_src_code = True
+
+        if line.startswith('include_directories') and not is_found_include_directories_insert:
+            extent_cpp_include_folder = os.path.dirname(os.path.realpath(__file__))
+            extent_cpp_include_folder = os.path.dirname(extent_cpp_include_folder)
+            extent_cpp_include_folder = os.path.dirname(extent_cpp_include_folder)
+            extent_cpp_include_folder = os.path.join(extent_cpp_include_folder, 'extent','cpp','include')
+            if extent_cpp_include_folder not in line:
+                info.append(f'include_directories({extent_cpp_include_folder})\n')
+
+            is_found_include_directories_insert = True
+
+        info.append(line)
+    
+    with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
+        for line in info:
+            fp.write(line)
 
 
 def package_build(output_folder, eagleeye_path, project_config, platform):    
@@ -207,7 +248,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
             op_name_count[op_name] += 1
 
             op_info = auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder)
-            deploy_graph_info[op_name] = op_info
+            deploy_graph_info[op_unique_name] = op_info
         elif op_name.startswith('eagleeye'):
             # eagleeye核心算子 (op级别算子)
             if op_name not in op_name_count:
@@ -278,7 +319,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
                 arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
         args_init_code = '{'+arg_code+'}'
-        op_graph_code += f'{deploy_op_name}->init({args_init_code});\n'
+        op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
 
         print(deploy_op_info['output'])
         for data_i, data_name in enumerate(deploy_op_info['output']):
@@ -291,12 +332,12 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
                     from_op_name, from_op_out_i = deploy_output_data_name_inv_link[input_data_name]
                     op_graph_code += f'op_graph->bind("{from_op_name}", {from_op_out_i}, "{deploy_op_name}", {input_data_i});\n'
 
-    op_graph_code += 'op_graph->init();'
+    op_graph_code += 'op_graph->init(NULL);'
 
     eagleeye_plugin_code_content = \
         gen_code('./templates/plugin_code.cpp')(            
             project=project_config['name'],
-            version=project_config['version'],
+            version=project_config.get('version', '1.0.0.0'),
             signature=project_config.get('signature', 'xxx'),
             include_list=include_list,
             in_port='{'+','.join([str(i) for i in range(len(project_config['input']))]) + '}',
@@ -310,6 +351,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
 
     with open(os.path.join(output_folder, f'{project_config["name"]}_plugin.cpp'), 'w') as fp:
         fp.write(eagleeye_plugin_code_content)
+
+    # 更新CMakeLists.txt
+    update_cmakelist(output_folder, project_config["name"], [s['src'] for s in deploy_graph_info.values() if 'src' in s])
 
     # 编译插件工程
     shell_code_content = gen_code('./templates/android_build.sh')(
@@ -356,13 +400,13 @@ class DeployMixin:
         system_platform, abi_platform = platform.split('/')
 
         # 创建工程
-        os.makedirs(output_folder, exist_ok=True)  
-        # if project_git is not None:
-        #     pass
-        # else:
-        #     os.system(f'cd {output_folder} && eagleeye-cli project --project={project_name} --version={project_version} --signature=xxxxx --build_type=Release --abi={abi_platform} --eagleeye={eagleeye_path}')
-        # # 
-        # output_folder = os.path.join(output_folder, project_name)
+        os.makedirs(output_folder, exist_ok=True)
+        if not os.path.exists(os.path.join(output_folder, f'{project_config["name"]}_plugin')):
+            if project_config.get('git', None) is not None and project_config['git'] != '':
+                pass
+            else:
+                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform} --eagleeye={eagleeye_path}')
+        output_folder = os.path.join(output_folder, f'{project_config["name"]}_plugin')
 
         # 编译        
         # 1.step 基于不同平台对CPP算子编译，并生成静态库
