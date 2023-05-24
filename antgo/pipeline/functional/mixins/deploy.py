@@ -12,6 +12,8 @@ from antgo.pipeline.functional.common.config import *
 from antgo.pipeline import extent
 from antgo.pipeline.extent.glue.common import *
 from antgo.pipeline.extent.op.loader import *
+import onnx
+import onnxruntime
 import re
 
 
@@ -51,7 +53,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
     for i, (var_name, var_type) in enumerate(zip(func.func.arg_names, func.func.arg_types)):
         if op_kwargs.get(var_name, None) is not None and var_type.is_const:
             func_args[i] = ('param', var_name, var_type, op_kwargs.get(var_name))
-    
+
     # 函数输入部分
     input_i = 0
     for i, (var_name, var_type) in enumerate(zip(func.func.arg_names, func.func.arg_types)):
@@ -219,6 +221,70 @@ def update_cmakelist(output_folder, project_name, src_op_warp_list):
             fp.write(line)
 
 
+tensortype_map = {
+    'tensor(float)': 6
+}
+def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder):
+    # 1.step 转换模型格式文件
+
+    # 2.step 参数转换及代码生成
+    platform_engine = op_kwargs.get('engine', 'tensorrt')
+    input_ctx, output_ctx = op_index
+    if not isinstance(input_ctx, tuple):
+        input_ctx = (input_ctx,)
+    if not isinstance(output_ctx, tuple):
+        output_ctx = (output_ctx,)
+
+    template_args = f'<{len(input_ctx)},{len(output_ctx)}>'
+
+    # 解析onnx模型获得输入、输出信息
+    onnx_session = onnxruntime.InferenceSession(op_kwargs['onnx_path'], providers=['CPUExecutionProvider'])
+    mode_name = os.path.basename(op_kwargs['onnx_path']).split('.')[0]
+    device = op_kwargs.get('device', 'GPU')
+    input_names = []
+    input_shapes = []
+    input_types = []
+    output_names = []
+    output_shapes = []
+    output_types = []
+    model_folder = '/data/local/tmp/'       # 考虑将转好的模型放置的位置
+    writable_path = '/data/local/tmp/'      # 考虑到 设备可写权限位置(android)
+    num_threads = 2
+    for input_tensor in onnx_session.get_inputs():
+        input_names.append(input_tensor.name)
+        input_shapes.append(input_tensor.shape)
+        input_types.append(tensortype_map[input_tensor.type])
+
+    for output_tensor in onnx_session.get_outputs():
+        output_names.append(output_tensor.name)
+        output_shapes.append(output_tensor.shape)
+        output_types.append(tensortype_map[output_tensor.type])
+
+    # string args, vector args, other args
+    op_args = (
+        {
+            'model_name': [model_name],
+            'device': [device],
+            'input_names': input_names,
+            'output_names': output_names,
+            'model_folder': [model_folder],
+            'writable_path': [writable_path]
+        },
+        {
+            'input_shapes': ['{'+','.join(str(m) for m in n)+'}' for n in input_shapes],
+            'output_shapes': ['{'+','.join(str(m) for m in n)+'}' for n in output_shapes]
+        },
+        {
+            'input_types': input_types,
+            'output_types': output_types,
+            'num_threads': [num_threads]
+        }
+    )
+
+    include_path = f'eagleeye/engine/{platform_engine.lower()}_op.hpp'
+    return f'{platform_engine.capitalize()}Op', template_args, op_args, include_path
+
+
 def package_build(output_folder, eagleeye_path, project_config, platform):    
     # 获得eagleeye核心算子集合
     core_op_set = load_eagleeye_op_set(eagleeye_path)
@@ -292,6 +358,21 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
                 print(f'eagleeye core op set include {core_op_set.keys()}')
                 return False
 
+            if op_name.startswith('inference_onnx_op'):
+                # 算子转换为平台预测引擎算子
+                engine_op_name, template_args, op_args, include_path = \
+                    convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder)
+
+                deploy_graph_info[op_unique_name] = {
+                    'type': engine_op_name,
+                    'template': template_args,
+                    'input': input_ctx,
+                    'output': output_ctx,
+                    'args': op_args,
+                    'include': include_path
+                }
+                continue
+
             # op_args， 包含scalar, numpy, list类型，转换成std::vector<float>类型
             deploy_graph_info[op_unique_name] = {
                 'type': op_name,
@@ -311,18 +392,25 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
     op_graph_code = ''
     deploy_output_data_name_inv_link = {}
     for deploy_op_name, deploy_op_info in deploy_graph_info.items():
-        op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add("{deploy_op_name}", {deploy_op_info["type"]}(), EagleeyeRuntime(EAGLEEYE_CPU));\n'
+        if 'template' in deploy_op_info:
+            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add("{deploy_op_name}", {deploy_op_info["type"]}{deploy_op_info["template"]}(), EagleeyeRuntime(EAGLEEYE_CPU));\n'
+        else:
+            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add("{deploy_op_name}", {deploy_op_info["type"]}(), EagleeyeRuntime(EAGLEEYE_CPU));\n'
 
-        deploy_op_args = deploy_op_info['args']
-        arg_code = ''
-        for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
-            if arg_code == '':
-                arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
-            else:
-                arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+        deploy_op_args_tuple = deploy_op_info['args']
+        if isinstance(deploy_op_args_tuple, dict):
+            deploy_op_args_tuple = (deploy_op_args_tuple,)
 
-        args_init_code = '{'+arg_code+'}'
-        op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
+        for deploy_op_args in deploy_op_args_tuple:
+            arg_code = ''
+            for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+            args_init_code = '{'+arg_code+'}'
+            op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
 
         print(deploy_op_info['output'])
         for data_i, data_name in enumerate(deploy_op_info['output']):
