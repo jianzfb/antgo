@@ -40,7 +40,7 @@ RUN cp -a /etc/apt/sources.list /etc/apt/sources.list.bak && \
     sed -i "s@http://.*security.ubuntu.com@http://repo.huaweicloud.com@g" /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y vim curl git && \
-    apt-get install -y make gcc g++ libz-dev android-tools-adb && \
+    apt-get install -y make gcc g++ libz-dev android-tools-adb zip && \
     apt-get clean && \
     mv /etc/apt/sources.list.bak /etc/apt/sources.list
 

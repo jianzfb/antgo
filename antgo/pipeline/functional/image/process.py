@@ -21,9 +21,9 @@ class resize_op(object):
         'AREA': cv2.INTER_AREA,
         'LANCZOS4': cv2.INTER_LANCZOS4
     }
-    def __init__(self, size, interp='LINEAR') -> None:
-        self.resize_w = size[0]
-        self.resize_h = size[1]
+    def __init__(self, out_size, interp='LINEAR') -> None:
+        self.resize_w = out_size[0]
+        self.resize_h = out_size[1]
         self.interp = interp
 
     def __call__(self, image):

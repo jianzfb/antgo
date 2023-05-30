@@ -12,14 +12,9 @@ import subprocess
 from pathlib import Path
 from typing import Any, List, Dict, Union
 
-# import pkg_resources
-# from pkg_resources import DistributionNotFound
 from antgo.pipeline.operators import Operator
 from antgo.pipeline.operators.nop import NOPOperator
-# from towhee.operators.concat_operator import ConcatOperator
 from antgo.pipeline.engine import *
-# from towhee.hub.file_manager import FileManager
-# from towhee.hparam import param_scope
 
 from antgo.pipeline.hparam import param_scope
 
@@ -85,6 +80,19 @@ class OperatorLoader:
 
         return self.instance_operator(op, arg, kws) if op is not None else None
 
+    def load_operator_from_deploy(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
+        module, fname = function.split('/')
+        if module != 'deploy':
+            return None
+
+        op = getattr(importlib.import_module('antgo.pipeline.deploy.cpp_op'), 'CppOp', None)
+        if op is None:
+            return None
+        kws.update({
+            'func_op_name': fname.replace('-', '_')
+        })
+        return self.instance_operator(op, arg, kws) if op is not None else None
+
     def load_operator_from_packages(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         try:
             module, fname = function.split('/')
@@ -124,7 +132,8 @@ class OperatorLoader:
         for factory in [self.load_operator_from_internal,
                         self.load_operator_from_registry,
                         self.load_operator_from_remote,
-                        self.load_operator_from_packages]:
+                        self.load_operator_from_packages,
+                        self.load_operator_from_deploy]:
             op = factory(function, arg, kws, tag)
             if op is not None:
                 return op

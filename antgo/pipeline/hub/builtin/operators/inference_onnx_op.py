@@ -21,19 +21,44 @@ import os
 
 @register
 class inference_onnx_op(object):
-    def __init__(self, onnx_path, input_fields, device_id=-1):
+    def __init__(self, onnx_path, input_fields, device_id=-1, **kwargs):
         self.sess = ort.InferenceSession(onnx_path)
         if device_id >= 0:
             self.sess.set_providers(['CUDAExecutionProvider'], [{'device_id': device_id}])
         self.input_fields = input_fields
+        self.mean_val = kwargs.get('mean', None)   # 均值
+        self.std_val = kwargs.get('std', None)     # 方差
+        self.rgb2bgr = kwargs.get('rgb2bgr', False)
 
     def __call__(self, *args):        
         input_map = {}
         for field, data in zip(self.input_fields, args):
+            if self.mean_val is not None:
+                if len(data.shape) == 4:
+                    # NxHxWx3
+                    if self.rgb2bgr:
+                        data = data[:,:,:,::-1]
+                    data = data - np.reshape(np.array(self.mean_val), (1,1,1,3))
+                    data = data / np.reshape(np.array(self.std_val), (1,1,1,3))
+
+                    # Nx3xHxW
+                    data = np.transpose(data, (0,3,1,2))
+                else:
+                    # HxWx3
+                    if self.rgb2bgr:
+                        data = data[:,:,::-1]
+                    data = data - np.reshape(np.array(self.mean_val), (1,1,3))
+                    data = data / np.reshape(np.array(self.std_val), (1,1,3))
+
+                    # -> 1xHxWx3
+                    data = np.expand_dims(data, 0)
+                    # -> 1x3xHxW
+                    data = np.transpose(data, (0,3,1,2))
+
             if data.dtype != np.float32:
                 data = data.astype(np.float32)
             input_map[field] = data
-            
+
         output = self.sess.run(None, input_map)
         if isinstance(output, list) or isinstance(output, tuple):
             return tuple(output)

@@ -18,6 +18,7 @@ from .dataframe import DataFrameMixin
 from .show import ShowMixin
 from .serve import ServeMixin
 from .demo import DemoMixin
+from .deploy import DeployMixin
 
 class DCMixins(
   DagMixin,
@@ -32,7 +33,8 @@ class DCMixins(
   DataFrameMixin,
   ShowMixin,
   ServeMixin,
-  DemoMixin):
+  DemoMixin,
+  DeployMixin):
 
   def __init__(self) -> None:  # pylint: disable=useless-super-delegation
     super().__init__()
