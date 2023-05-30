@@ -15,6 +15,84 @@ from antgo.pipeline.extent.op.loader import *
 import onnx
 import onnxruntime
 import re
+import shutil
+
+def snpe_import_config(output_folder, project_name, platform, abi, device='GPU'):
+    # load snpe lib
+    # step1: 下载snpe库, 并解压到固定为止
+    if not os.path.exists('/3rd/'):
+        os.makedirs('/3rd/')
+    if not os.path.exists('/3rd/snpe-2.9.0.4462'):
+        os.system(f'cd /3rd/ && wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip && unzip snpe-2.9.0.4462.zip')
+    snpe_path = '/3rd/snpe-2.9.0.4462'
+
+    # step2: 推送依赖库到包位置
+    os.makedirs(os.path.join(output_folder, '3rd', abi), exist_ok=True)
+    shutil.copyfile(os.path.join(f'{snpe_path}/lib/aarch64-android-clang8.0', 'libSNPE.so'), os.path.join(output_folder, '3rd', abi, 'libSNPE.so'))
+
+    # step3: 生成cmake代码片段
+    snpe_cmake_code_snippet = ''
+    snpe_cmake_code_snippet += f'set(SNPE_LIB_DIR {snpe_path}/lib/aarch64-android-clang8.0)\n'
+    snpe_cmake_code_snippet += f'set(SNPE_INCLUDE_DIR {snpe_path}/include/zdl)\n'
+    snpe_cmake_code_snippet += 'include_directories(${SNPE_INCLUDE_DIR})\n'
+    snpe_cmake_code_snippet += 'add_library(libSNPE SHARED IMPORTED)\n'
+    snpe_cmake_code_snippet += 'set_target_properties(libSNPE PROPERTIES IMPORTED_LOCATION ${SNPE_LIB_DIR}/libSNPE.so)\n'
+    snpe_cmake_code_snippet += f'target_link_libraries({project_name} libSNPE)\n'
+
+    code_line_list = []
+    for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
+        if len(code_line_list) > 0 and code_line_list[-1].strip() == '# model engine' and line == '\n':
+            code_line_list.append(snpe_cmake_code_snippet)
+
+        code_line_list.append(line)
+
+    with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
+        for line in code_line_list:
+            fp.write(line)
+
+
+def rknn_import_config(output_folder, project_name, platform, abi, device='rk3588'):
+    # step1: 下载rknn库，并解压到固定为止
+    if not os.path.exists('/3rd/'):
+        os.makedirs('/3rd/')
+    if not os.path.exists('/3rd/rknpu2'):
+        os.system(f'cd /3rd/ && git clone https://github.com/rockchip-linux/rknpu2.git')
+    rknn_path = '/3rd/rknpu2'
+
+    rknn_runtime_folder = os.path.join(rknn_path, 'runtime')
+    assert(os.path.exists(os.path.join(rknn_runtime_folder, device.upper())))
+    device_rknn_runtime_folder = os.path.join(rknn_runtime_folder, device.upper())
+    assert(os.path.exists(os.path.join(device_rknn_runtime_folder, platform.capitalize())))
+    RKNN_API_PATH = os.path.join(device_rknn_runtime_folder, platform.capitalize(), 'librknn_api')
+    # device_rknn_so_folder = os.path.join(device_rknn_runtime_folder, platform.capitalize(), 'librknn_api', abi)
+    # device_rknn_include_folder = os.path.join(device_rknn_runtime_folder, platform.capitalize(), 'librknn_api', 'include')
+
+    # step2: 推送依赖库到包为止
+    os.makedirs(os.path.join(output_folder, '3rd', abi), exist_ok=True)
+    shutil.copyfile(os.path.join(RKNN_API_PATH, abi, 'librknnrt.so'), os.path.join(output_folder, '3rd', abi, 'librknnrt.so'))
+
+    # step3: 生成cmake代码片段
+    rknn_cmake_code_snippet = f'set(RKNN_API_PATH {RKNN_API_PATH})\n'
+    rknn_cmake_code_snippet += f'include_directories({RKNN_API_PATH}/include)\n'
+    rknn_cmake_code_snippet += f'set(RKNN_RT_LIB {RKNN_API_PATH}/{abi}/librknnrt.so)\n'
+    rknn_cmake_code_snippet += 'add_library(librknnrt SHARED IMPORTED)\n'
+    rknn_cmake_code_snippet += 'set_target_properties(librknnrt PROPERTIES IMPORTED_LOCATION ${RKNN_RT_LIB})\n'
+    rknn_cmake_code_snippet += f'target_link_libraries({project_name} librknnrt)\n'
+
+    code_line_list = []
+    for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
+        if len(code_line_list) > 0 and code_line_list[-1].strip() == '# model engine' and line == '\n':
+            code_line_list.append(rknn_cmake_code_snippet)
+
+        code_line_list.append(line)
+
+    with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
+        for line in code_line_list:
+            fp.write(line)
+
+
+def tensorrt_import_config():
+    pass
 
 
 def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder):
@@ -179,6 +257,8 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
         else:
             # scalar
             converted_op_args[arg_name] = [float(arg_info)]
+
+    converted_op_args['c++_type'] = 'std::map<std::string, std::vector<float>>'
     return converted_op_args
 
 
@@ -224,11 +304,34 @@ def update_cmakelist(output_folder, project_name, src_op_warp_list):
 tensortype_map = {
     'tensor(float)': 6
 }
-def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder):
+
+
+def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder, platform, abi, project_name):
+    # 0.step 参数
+    platform_engine = op_kwargs.get('engine', 'tensorrt')   # 在平台，使用什么模型引擎
+    platform_engine_args = op_kwargs.get('engine_args', {}) # 在平台，使用什么模型引擎参数
+    platform_device = platform_engine_args.get('device', 'CPU')        # 在平台，使用什么设备
+
     # 1.step 转换模型格式文件
+    # TODO, 临时
+    platform_model_path = platform_engine_args.get('model', None)
+    if platform_model_path is None:
+        # 转换模型
+        pass
+
+    # 将平台关联模型放入输出目录中
+    if os.path.exists(platform_model_path):
+        os.makedirs(os.path.join(output_folder, 'model'), exist_ok=True)
+        shutil.copyfile(platform_model_path, os.path.join(output_folder, 'model', os.path.basename(platform_model_path)))
 
     # 2.step 参数转换及代码生成
-    platform_engine = op_kwargs.get('engine', 'tensorrt')
+    config_func_map = {
+        'snpe': snpe_import_config,
+        'rknn': rknn_import_config,
+        'tensorrt': tensorrt_import_config
+    }
+    config_func_map[platform_engine](output_folder, project_name, platform, abi, platform_device)
+
     input_ctx, output_ctx = op_index
     if not isinstance(input_ctx, tuple):
         input_ctx = (input_ctx,)
@@ -240,52 +343,95 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     # 解析onnx模型获得输入、输出信息
     onnx_session = onnxruntime.InferenceSession(op_kwargs['onnx_path'], providers=['CPUExecutionProvider'])
     mode_name = os.path.basename(op_kwargs['onnx_path']).split('.')[0]
-    device = op_kwargs.get('device', 'GPU')
     input_names = []
     input_shapes = []
     input_types = []
     output_names = []
     output_shapes = []
     output_types = []
-    model_folder = '/data/local/tmp/'       # 考虑将转好的模型放置的位置
-    writable_path = '/data/local/tmp/'      # 考虑到 设备可写权限位置(android)
+    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else f'{os.environ["HOME"]}/{project_name}/.model'     # 考虑将转好的模型放置的位置
+    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else f'{os.environ["HOME"]}/{project_name}/.tmp'        # 考虑到 设备可写权限位置(android)
+
+    # 更新run.sh（添加推模型到设备端）
+    run_shell_code_list = []
+    is_found_model_push_line = False
+    is_found_model_platform_folder = False
+    for line in open(os.path.join(output_folder, 'run.sh')):
+        if line.startswith(f'adb push {platform_model_path}'):
+            # 替换
+            line = f'adb push {platform_model_path} {model_folder}\n'
+            is_found_model_push_line = True
+
+        if f'mkdir -p {model_folder};' in line:
+            is_found_model_platform_folder = True
+
+        if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_platform_folder:
+            # 插入
+            run_shell_code_list.append(f'adb shell "if [ ! -d {model_folder} ]; then mkdir -p {model_folder}; fi;"\n')
+
+        if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
+            # 插入
+            run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
+        
+
+        run_shell_code_list.append(line)
+
+    with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
+        for line in run_shell_code_list:
+            fp.write(line)
+
     num_threads = 2
     for input_tensor in onnx_session.get_inputs():
         input_names.append(input_tensor.name)
         input_shapes.append(input_tensor.shape)
         input_types.append(tensortype_map[input_tensor.type])
 
+    alias_output_names = []
     for output_tensor in onnx_session.get_outputs():
-        output_names.append(output_tensor.name)
+        if 'alias_output_names' in platform_engine_args:
+            output_names.append(platform_engine_args['alias_output_names'][output_tensor.name])
+            alias_output_names.append(output_tensor.name)
+        else:
+            output_names.append(output_tensor.name)
         output_shapes.append(output_tensor.shape)
         output_types.append(tensortype_map[output_tensor.type])
 
     # string args, vector args, other args
+    model_name = '.'.join(platform_model_path.split("/")[-1].split('.')[:-1])
     op_args = (
         {
-            'model_name': [model_name],
-            'device': [device],
-            'input_names': input_names,
-            'output_names': output_names,
-            'model_folder': [model_folder],
-            'writable_path': [writable_path]
+            'model_name': [f'"{model_name}"'],
+            'device': [f'"{platform_device}"'],
+            'input_names': [f'"{c}"' for c in input_names],
+            'output_names': [f'"{c}"' for c in output_names],
+            'alias_output_names': [f'"{c}"' for c in alias_output_names],
+            'model_folder': [f'"{model_folder}"'],
+            'writable_path': [f'"{writable_path}"'],
+            'c++_type': 'std::map<std::string, std::vector<std::string>>'
         },
         {
             'input_shapes': ['{'+','.join(str(m) for m in n)+'}' for n in input_shapes],
-            'output_shapes': ['{'+','.join(str(m) for m in n)+'}' for n in output_shapes]
+            'output_shapes': ['{'+','.join(str(m) for m in n)+'}' for n in output_shapes],
+            'c++_type': 'std::map<std::string, std::vector<std::vector<float>>>'
         },
         {
             'input_types': input_types,
             'output_types': output_types,
-            'num_threads': [num_threads]
+            'num_threads': [num_threads],
+            'c++_type': 'std::map<std::string, std::vector<float>>'
         }
     )
 
-    include_path = f'eagleeye/engine/{platform_engine.lower()}_op.hpp'
+    if op_kwargs.get('mean', None) is not None:
+        op_args[-1]['mean'] = ['{'+','.join(str(m) for m in op_kwargs['mean'])+'}']
+        op_args[-1]['std'] = ['{'+','.join(str(m) for m in op_kwargs['std'])+'}']
+        op_args[-1]['rgb2bgr'] = ['{1}'] if op_kwargs.get('rgb2bgr', False) else ['{0}']
+
+    include_path = f'eagleeye/engine/nano/op/{platform_engine.lower()}_op.hpp'
     return f'{platform_engine.capitalize()}Op', template_args, op_args, include_path
 
 
-def package_build(output_folder, eagleeye_path, project_config, platform):    
+def package_build(output_folder, eagleeye_path, project_config, platform, abi=None):    
     # 获得eagleeye核心算子集合
     core_op_set = load_eagleeye_op_set(eagleeye_path)
 
@@ -349,19 +495,10 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
             op_unique_name = f'{op_name}_{op_name_count[op_name]}'
             op_name_count[op_name] += 1
 
-            if op_name.endswith('_op'):
-                op_name = op_name.capitalize()                     
-                op_name = op_name.replace('_op', 'Op')
-
-            if op_name not in core_op_set:
-                print(f'{op_name} not support')
-                print(f'eagleeye core op set include {core_op_set.keys()}')
-                return False
-
             if op_name.startswith('inference_onnx_op'):
                 # 算子转换为平台预测引擎算子
                 engine_op_name, template_args, op_args, include_path = \
-                    convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder)
+                    convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder, platform, abi, project_name=project_config['name'])
 
                 deploy_graph_info[op_unique_name] = {
                     'type': engine_op_name,
@@ -372,6 +509,17 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
                     'include': include_path
                 }
                 continue
+            
+            # 转换统一格式
+            if op_name.endswith('_op'):
+                op_name = op_name.capitalize()                     
+                op_name = op_name.replace('_op', 'Op')
+
+            # 检查是否在核心集中
+            if op_name not in core_op_set:
+                print(f'{op_name} not support')
+                print(f'eagleeye core op set include {core_op_set.keys()}')
+                return False
 
             # op_args， 包含scalar, numpy, list类型，转换成std::vector<float>类型
             deploy_graph_info[op_unique_name] = {
@@ -404,13 +552,15 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
         for deploy_op_args in deploy_op_args_tuple:
             arg_code = ''
             for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
-                if arg_code == '':
-                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
-                else:
-                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                if deploy_arg_name != 'c++_type':
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-            args_init_code = '{'+arg_code+'}'
-            op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
+            if arg_code != '':
+                args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
+                op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
 
         print(deploy_op_info['output'])
         for data_i, data_name in enumerate(deploy_op_info['output']):
@@ -442,6 +592,11 @@ def package_build(output_folder, eagleeye_path, project_config, platform):
 
     with open(os.path.join(output_folder, f'{project_config["name"]}_plugin.cpp'), 'w') as fp:
         fp.write(eagleeye_plugin_code_content)
+
+    # 准备额外依赖库（libc++_shared.so）
+    if platform.lower() == 'android':
+        ndk_path = os.environ['ANDROID_NDK_HOME']
+        shutil.copy(os.path.join(ndk_path, "sources/cxx-stl/llvm-libc++/libs", abi, 'libc++_shared.so'), os.path.join(output_folder, '3rd', abi, 'libc++_shared.so'))
 
     # 更新CMakeLists.txt
     update_cmakelist(output_folder, project_config["name"], [s['src'] for s in deploy_graph_info.values() if 'src' in s])
@@ -482,28 +637,43 @@ def load_eagleeye_op_set(eagleeye_path):
     return op_set
 
 
+def prepare_eagleeye_environment(system_platform, abi_platform):
+    print('Check eagleeye environment')
+    os.makedirs('/3rd/', exist_ok=True)
+    if not os.path.exists(os.path.join('/3rd/', 'eagleeye')) or len(os.listdir(os.path.join('/3rd/', 'eagleeye'))) == 0:
+        print('Download eagleeye git')
+        os.system('cd /3rd/ && git clone https://github.com/jianzfb/eagleeye.git && cd eagleeye/scripts pip3 install -r requirements.txt && python3 setup.py install')
+
+    eagleeye_path = '/3rd/eagleeye/install'
+    if not os.path.exists(eagleeye_path):
+        print('Compile eagleeye core')
+        os.system(f'cd /3rd/eagleeye && bash {system_platform.lower()}_build.sh')
+
+    return eagleeye_path
+
+
 class DeployMixin:
-    def build(self, 
-              platform='android/arm64-v8a',
-              output_folder='./deploy', 
-              eagleeye_path='./eagleeye/install',
-              project_config=None):
+    def build(self, platform='android/arm64-v8a', output_folder='./deploy', project_config=None):
+        # android/arm64-v8a, linux/x86-64
+        assert(platform in ['android/arm64-v8a', 'linux/x86-64'])
         system_platform, abi_platform = platform.split('/')
+
+        # 准备eagleeye集成环境
+        eagleeye_path = prepare_eagleeye_environment(system_platform, abi_platform)
 
         # 创建工程
         os.makedirs(output_folder, exist_ok=True)
         if not os.path.exists(os.path.join(output_folder, f'{project_config["name"]}_plugin')):
             if project_config.get('git', None) is not None and project_config['git'] != '':
-                pass
+                os.system(f'cd {output_folder} && git clone {project_config["git"]}')
             else:
                 os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform} --eagleeye={eagleeye_path}')
         output_folder = os.path.join(output_folder, f'{project_config["name"]}_plugin')
 
-        # 编译        
-        # 1.step 基于不同平台对CPP算子编译，并生成静态库
+        # 打包并编译
         package_build(
             output_folder, 
             eagleeye_path, 
-            project_config=project_config, platform=system_platform)
+            project_config=project_config, platform=system_platform, abi=abi_platform)
 
         return True

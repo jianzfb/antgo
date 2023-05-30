@@ -45,7 +45,7 @@ def _read_graph_file(fname):
 
     dirname = os.path.join('.temp', 'cache', os.path.basename(fname).split('.')[0])
     os.makedirs(dirname, exist_ok=True)
-    fname = os.path.join(dirname, fname)
+    fname = os.path.join(dirname, os.path.basename(fname))
 
     data = GRAPH_FILE_BUFFER.get(fname, None)
     if data is not None:
