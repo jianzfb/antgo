@@ -1,5 +1,5 @@
 numpy>=1.15.1
 protobuf>=3.11.3
-onnx==1.9.0
+onnx==1.13.0
 Pillow; python_version<"3.6"
 Pillow==8.3.2; python_version>="3.6"
