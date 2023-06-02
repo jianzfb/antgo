@@ -1,12 +1,12 @@
 # 容器镜像构建主机需要连通公网
 
 # 基础容器镜像, https://github.com/NVIDIA/nvidia-docker/wiki/CUDA
-# 
+#
 # https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
 # require Docker Engine >= 17.05
 #
 # builder stage
-FROM nvidia/cuda:12.1.0-runtime-ubuntu18.04
+FROM nvidia/cuda:12.1.0-devel-ubuntu18.04
 
 # 基础容器镜像的默认用户已经是 root
 # USER root
@@ -25,6 +25,7 @@ RUN mkdir /android-ndk-r20b
 COPY android-ndk-r20b /android-ndk-r20b
 
 # 拷贝vscode-server到基础容器镜像中的 /opt/
+COPY code-server-4.0.2-linux-amd64  /opt/
 # COPY code-server-4.0.2-linux-amd64  /opt/
 
 # https://conda.io/projects/conda/en/latest/user-guide/install/linux.html#installing-on-linux
@@ -36,13 +37,13 @@ RUN cd /tmp/antgo && apt-get update -y && apt-get install -y gcc && /miniconda3/
 
 # 安装工具（依然使用华为开源镜像站）
 RUN cp -a /etc/apt/sources.list /etc/apt/sources.list.bak && \
-    sed -i "s@http://.*archive.ubuntu.com@http://repo.huaweicloud.com@g" /etc/apt/sources.list && \
-    sed -i "s@http://.*security.ubuntu.com@http://repo.huaweicloud.com@g" /etc/apt/sources.list && \
-    apt-get update && \
-    apt-get install -y vim curl git && \
-    apt-get install -y make gcc g++ libz-dev android-tools-adb zip && \
-    apt-get clean && \
-    mv /etc/apt/sources.list.bak /etc/apt/sources.list
+sed -i "s@http://.*archive.ubuntu.com@http://repo.huaweicloud.com@g" /etc/apt/sources.list && \
+sed -i "s@http://.*security.ubuntu.com@http://repo.huaweicloud.com@g" /etc/apt/sources.list && \
+apt-get update && \
+apt-get install -y vim curl git && \
+apt-get install -y make gcc g++ libz-dev android-tools-adb zip && \
+apt-get clean && \
+mv /etc/apt/sources.list.bak /etc/apt/sources.list
 
 # 设置容器镜像预置环境变量
 # 请务必设置 PYTHONUNBUFFERED=1, 以免日志丢失

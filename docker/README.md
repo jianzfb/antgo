@@ -25,7 +25,7 @@ sudo docker run -it --rm --name myantgoenv --gpus all antgo-env /bin/bash
 ### 创建vscode-server服务
 在线IDE环境
 ```
-sudo docker run --rm -d -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --name myantgoide --gpus all antgo-env /opt/code-server --host 0.0.0.0 --auth password
+sudo docker run --rm -d -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all antgo-env /opt/code-server --host 0.0.0.0 --auth password
 ```
 
 > 备注

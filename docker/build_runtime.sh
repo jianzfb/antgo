@@ -5,10 +5,10 @@ if [ ! -f "./Miniconda3-py38_23.3.1-0-Linux-x86_64.sh" ];then
     wget https://repo.anaconda.com/miniconda/Miniconda3-py38_23.3.1-0-Linux-x86_64.sh
 fi
 
-if [ ! -f "./android-ndk-r20b-linux-x86_64.zip" ];then
-    wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
-fi
 if [ ! -d "./android-ndk-r20b" ];then
+    if [ ! -f "./android-ndk-r20b-linux-x86_64.zip" ];then
+        wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
+    fi
     unzip android-ndk-r20b-linux-x86_64.zip
 fi
 
@@ -24,6 +24,9 @@ if [ "$1" = "with-vscode-server" ]; then
     # 自动修改Dockerfile
     python3 docker/auto_inject.py --with-vscode-server
 fi
+
+# 自动修改Dockerfile
+python3 docker/auto_inject.py --with-runtime
 
 # build docker
 sudo docker build -t antgo-env -f docker/Dockerfile ./
