@@ -12,20 +12,20 @@
 
 
 ```
-sudo bash docker/build.sh with-vscode-server
+sudo bash docker/build_dev.sh with-vscode-server
 ```
 
 ## 创建容器
 ### 创建运行环境容器
 可以直接以命令行方式，运行相关实验
 ```
-sudo docker run -it --rm --name myantgoenv --gpus all antgo-env /bin/bash
+sudo docker run -it --rm --name antgoenv --gpus all antgo-env-dev /bin/bash
 ```
 
 ### 创建vscode-server服务
 在线IDE环境
 ```
-sudo docker run --rm -d -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all antgo-env /opt/code-server --host 0.0.0.0 --auth password
+sudo docker run --rm -d --name antgoenvide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
 ```
 
 > 备注

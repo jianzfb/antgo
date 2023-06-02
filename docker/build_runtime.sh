@@ -35,6 +35,6 @@ sudo docker build -t antgo-env -f docker/Dockerfile ./
 # sudo apt-get install nvidia-container-runtime
 # sudo systemctl restart docker
 # 1. 交互式启动容器
-# sudo docker run -it --rm --name myenv --gpus all antgo-env /bin/bash
+# sudo docker run -it --rm --name antgoenv --gpus all antgo-env-dev /bin/bash
 # 2. vscode-server服务
-# sudo docker run --rm -d -p 8080:8080 -e PASSWORD=123 --name mycodeserver --gpus all antgo-env /opt/code-server --host 0.0.0.0 --auth password
+# sudo docker run --rm -d --name antgoenvide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password

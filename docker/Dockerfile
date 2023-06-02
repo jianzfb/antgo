@@ -6,7 +6,7 @@
 # require Docker Engine >= 17.05
 #
 # builder stage
-FROM nvidia/cuda:12.1.0-devel-ubuntu18.04
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
 
 # 基础容器镜像的默认用户已经是 root
 # USER root
@@ -25,7 +25,6 @@ RUN mkdir /android-ndk-r20b
 COPY android-ndk-r20b /android-ndk-r20b
 
 # 拷贝vscode-server到基础容器镜像中的 /opt/
-COPY code-server-4.0.2-linux-amd64  /opt/
 # COPY code-server-4.0.2-linux-amd64  /opt/
 
 # https://conda.io/projects/conda/en/latest/user-guide/install/linux.html#installing-on-linux

@@ -368,8 +368,83 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     # TODO, 临时
     platform_model_path = platform_engine_args.get('model', None)
     if platform_model_path is None and platform == 'android':
+        onnx_file_path = op_kwargs.get('onnx_path')
         # TODO,支持自动转换模型
-        pass
+        if platform_engine == 'snpe':
+            if platform_engine_args.get('quantize', False):
+                # 转量化模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')
+                # 确保存在校正数据集
+                assert(os.path.exists(platform_engine_args.get('calibration-images')))
+                shutil.copytree(platform_engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
+
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/snpe/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+            else:
+                # 转浮点模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')
+
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/snpe/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+        elif platform_engine == 'rknn':
+            if platform_engine_args.get('quantize', False):
+                # 转量化模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                # 确保存在校正数据集
+                assert(os.path.exists(platform_engine_args.get('calibration-images')))
+                shutil.copytree(platform_engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
+
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
+                std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/rknn/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+            else:
+                # 转浮点模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
+                std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/rknn/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+                
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+        elif platform_engine == 'tnn':
+            print('TODO support tnn')
+            pass
 
     if platform_model_path is None and platform == 'linux':
         platform_model_path = op_kwargs.get('onnx_path')
@@ -723,13 +798,14 @@ class DeployMixin:
             if project_config.get('git', None) is not None and project_config['git'] != '':
                 os.system(f'cd {output_folder} && git clone {project_config["git"]}')
             else:
-                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize()} --eagleeye={eagleeye_path}')
+                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
         output_folder = os.path.join(output_folder, f'{project_config["name"]}_plugin')
 
-        # 打包并编译
+        # 编译
         package_build(
             output_folder, 
             eagleeye_path, 
             project_config=project_config, platform=system_platform, abi=abi_platform)
 
         return True
+
