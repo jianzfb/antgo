@@ -8,7 +8,7 @@ echo "start compile X86-64"
 mkdir -p build
 cd build
 
-cmake -DCMAKE_BUILD_TYPE=Release -DX86-64=X86-64 ..
+cmake -DCMAKE_BUILD_TYPE=Release -DX86_ABI=X86-64 ..
 make
 cd ../
 

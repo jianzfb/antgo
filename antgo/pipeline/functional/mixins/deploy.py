@@ -91,8 +91,60 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
             fp.write(line)
 
 
-def tensorrt_import_config():
-    pass
+def tensorrt_import_config(output_folder, project_name, platform, abi, device=''):
+    # step1: 下载tensorrt库，并解压到固定为止
+    if not os.path.exists('/3rd/'):
+        os.makedirs('/3rd/')    
+    
+    # tensorrt 仅支持linux
+    assert(platform.lower() == 'linux')
+
+    # 涉及cudnn, tensorrt, cuda库
+    # 下载 cudnn cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz https://developer.nvidia.com/rdp/cudnn-archive
+    # 下载 tensorrt TensorRT-8.6.1.6 https://developer.nvidia.com/nvidia-tensorrt-8x-download
+    if not os.path.exists('/3rd/cudnn-linux-x86_64-8.8.0.121_cuda12-archive'):
+        print('download cudnn')
+        os.system(f'cd /3rd/ && wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+    if not os.path.exists('/3rd/TensorRT-8.6.1.6'):
+        print('download tensorrt')
+        os.system(f'cd /3rd/ && wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+
+    cudnn_path = '/3rd/cudnn-linux-x86_64-8.8.0.121_cuda12-archive'
+    tensorrt_path = '/3rd/TensorRT-8.6.1.6'
+
+    # step2: 推送依赖库到包为止
+    os.makedirs(os.path.join(output_folder, '3rd', abi), exist_ok=True)
+
+    # step3: 生成cmake代码片段
+    tensorrt_cmake_code_snippet = f'set(TensorRT_DIR {tensorrt_path})\n'
+    tensorrt_cmake_code_snippet += 'set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)\n'
+    tensorrt_cmake_code_snippet += 'find_package(TensorRT REQUIRED)\n'
+    tensorrt_cmake_code_snippet += 'find_package(CUDA REQUIRED)\n'
+    tensorrt_cmake_code_snippet += f'target_include_directories({project_name} '+'PUBLIC ${CUDA_INCLUDE_DIRS} ${TensorRT_INCLUDE_DIRS})\n'
+    tensorrt_cmake_code_snippet += f'target_link_libraries({project_name} '+'${CUDA_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${TensorRT_LIBRARIES})\n'
+
+    code_line_list = []
+    for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
+        if len(code_line_list) > 0 and code_line_list[-1].strip() == '# model engine' and line == '\n':
+            code_line_list.append(tensorrt_cmake_code_snippet)
+
+        code_line_list.append(line)
+
+    with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
+        for line in code_line_list:
+            fp.write(line)
+
+    # step4: 更新run.sh片段
+    code_line_list = []
+    for line in open(os.path.join(output_folder, 'run.sh')):
+        if 'export LD_LIBRARY_PATH=' in line:
+            aa,bb,cc = line.split(';')
+            bb = f'export LD_LIBRARY_PATH=.:{cudnn_path}/lib:{tensorrt_path}/lib'
+            line = f'{aa}; {bb}; {cc}'
+        code_line_list.append(line)
+    with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
+        for line in code_line_list:
+            fp.write(line)
 
 
 def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder):
@@ -315,9 +367,87 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     # 1.step 转换模型格式文件
     # TODO, 临时
     platform_model_path = platform_engine_args.get('model', None)
-    if platform_model_path is None:
-        # 转换模型
-        pass
+    if platform_model_path is None and platform == 'android':
+        onnx_file_path = op_kwargs.get('onnx_path')
+        # TODO,支持自动转换模型
+        if platform_engine == 'snpe':
+            if platform_engine_args.get('quantize', False):
+                # 转量化模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')
+                # 确保存在校正数据集
+                assert(os.path.exists(platform_engine_args.get('calibration-images')))
+                shutil.copytree(platform_engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
+
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/snpe/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+            else:
+                # 转浮点模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')
+
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/snpe/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+        elif platform_engine == 'rknn':
+            if platform_engine_args.get('quantize', False):
+                # 转量化模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                # 确保存在校正数据集
+                assert(os.path.exists(platform_engine_args.get('calibration-images')))
+                shutil.copytree(platform_engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
+
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
+                std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/rknn/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+            else:
+                # 转浮点模型
+                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
+                std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
+                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/rknn/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+                
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+        elif platform_engine == 'tnn':
+            print('TODO support tnn')
+            pass
+
+    if platform_model_path is None and platform == 'linux':
+        platform_model_path = op_kwargs.get('onnx_path')
 
     # 将平台关联模型放入输出目录中
     if os.path.exists(platform_model_path):
@@ -349,36 +479,37 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     output_names = []
     output_shapes = []
     output_types = []
-    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else f'{os.environ["HOME"]}/{project_name}/.model'     # 考虑将转好的模型放置的位置
-    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else f'{os.environ["HOME"]}/{project_name}/.tmp'        # 考虑到 设备可写权限位置(android)
+    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])     # 考虑将转好的模型放置的位置
+    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])        # 考虑到 设备可写权限位置(android)
 
-    # 更新run.sh（添加推模型到设备端）
-    run_shell_code_list = []
-    is_found_model_push_line = False
-    is_found_model_platform_folder = False
-    for line in open(os.path.join(output_folder, 'run.sh')):
-        if line.startswith(f'adb push {platform_model_path}'):
-            # 替换
-            line = f'adb push {platform_model_path} {model_folder}\n'
-            is_found_model_push_line = True
+    # 更新run.sh（仅设备端运行时需要添加推送模型代码）
+    if platform.lower() == 'android':
+        run_shell_code_list = []
+        is_found_model_push_line = False
+        is_found_model_platform_folder = False
+        for line in open(os.path.join(output_folder, 'run.sh')):
+            if line.startswith(f'adb push {platform_model_path}'):
+                # 替换
+                line = f'adb push {platform_model_path} {model_folder}\n'
+                is_found_model_push_line = True
 
-        if f'mkdir -p {model_folder};' in line:
-            is_found_model_platform_folder = True
+            if f'mkdir -p {model_folder};' in line:
+                is_found_model_platform_folder = True
 
-        if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_platform_folder:
-            # 插入
-            run_shell_code_list.append(f'adb shell "if [ ! -d {model_folder} ]; then mkdir -p {model_folder}; fi;"\n')
+            if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_platform_folder:
+                # 插入
+                run_shell_code_list.append(f'adb shell "if [ ! -d {model_folder} ]; then mkdir -p {model_folder}; fi;"\n')
 
-        if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
-            # 插入
-            run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
-        
+            if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
+                # 插入
+                run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
+            
 
-        run_shell_code_list.append(line)
+            run_shell_code_list.append(line)
 
-    with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
-        for line in run_shell_code_list:
-            fp.write(line)
+        with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
+            for line in run_shell_code_list:
+                fp.write(line)
 
     num_threads = 2
     for input_tensor in onnx_session.get_inputs():
@@ -667,13 +798,14 @@ class DeployMixin:
             if project_config.get('git', None) is not None and project_config['git'] != '':
                 os.system(f'cd {output_folder} && git clone {project_config["git"]}')
             else:
-                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform} --eagleeye={eagleeye_path}')
+                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
         output_folder = os.path.join(output_folder, f'{project_config["name"]}_plugin')
 
-        # 打包并编译
+        # 编译
         package_build(
             output_folder, 
             eagleeye_path, 
             project_config=project_config, platform=system_platform, abi=abi_platform)
 
         return True
+
