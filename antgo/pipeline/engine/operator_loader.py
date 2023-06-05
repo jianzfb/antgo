@@ -8,6 +8,7 @@ from __future__ import print_function
 
 import importlib
 import sys
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, List, Dict, Union
@@ -93,6 +94,30 @@ class OperatorLoader:
         })
         return self.instance_operator(op, arg, kws) if op is not None else None
 
+    def load_operator_from_eagleeye(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
+        module, fname = function.split('/')
+        if module != 'eagleeye':
+            return None
+
+        os.makedirs('.3rd', exist_ok=True)
+        if not os.path.exists(os.path.join('.3rd', 'eagleeye_py')):
+            if not os.path.exists(os.path.join('.3rd', 'eagleeye')):
+                os.system('cd .3rd/ && git clone https://github.com/jianzfb/eagleeye.git')
+                        
+            if 'darwin' in sys.platform:
+                os.system('cd .3rd/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye_py')
+            else:
+                os.system('cd .3rd/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye_py')
+
+        op = getattr(importlib.import_module('antgo.pipeline.eagleeye.core_op'), 'CoreOp', None)
+        if op is None:
+            return None
+        kws.update({
+            'func_op_name': fname.replace('-', '_')
+        })
+        return self.instance_operator(op, arg, kws) if op is not None else None
+
+
     def load_operator_from_packages(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         try:
             module, fname = function.split('/')
@@ -133,7 +158,8 @@ class OperatorLoader:
                         self.load_operator_from_registry,
                         self.load_operator_from_remote,
                         self.load_operator_from_packages,
-                        self.load_operator_from_deploy]:
+                        self.load_operator_from_deploy,
+                        self.load_operator_from_eagleeye]:
             op = factory(function, arg, kws, tag)
             if op is not None:
                 return op
