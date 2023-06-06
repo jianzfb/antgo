@@ -2,7 +2,9 @@ import os
 import sys
 import copy
 from typing import Any
-sys.path.append('.3rd/eagleeye_py/libs/X86-64')
+sys.path.append('.3rd/eagleeye-py/libs/X86-64')
+
+
 import eagleeye
 import numpy as np
 

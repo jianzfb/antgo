@@ -100,14 +100,22 @@ class OperatorLoader:
             return None
 
         os.makedirs('.3rd', exist_ok=True)
-        if not os.path.exists(os.path.join('.3rd', 'eagleeye_py')):
+        if not os.path.exists(os.path.join('.3rd', 'eagleeye-py')):
             if not os.path.exists(os.path.join('.3rd', 'eagleeye')):
                 os.system('cd .3rd/ && git clone https://github.com/jianzfb/eagleeye.git')
                         
             if 'darwin' in sys.platform:
-                os.system('cd .3rd/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye_py')
+                os.system('cd .3rd/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye-py')
             else:
-                os.system('cd .3rd/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye_py')
+                first_comiple = False
+                if not os.path.exists(os.path.join('.3rd', 'eagleeye-py')):
+                    first_comiple = True
+                os.system('cd .3rd/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye-py')
+                if first_comiple:
+                    # 增加搜索.so路径
+                    cur_abs_path = os.path.abspath(os.curdir)
+                    so_abs_path = os.path.join(cur_abs_path, ".3rd/eagleeye-py/libs/X86-64")
+                    os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
 
         op = getattr(importlib.import_module('antgo.pipeline.eagleeye.core_op'), 'CoreOp', None)
         if op is None:
