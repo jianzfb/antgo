@@ -16,15 +16,17 @@ import onnx
 import onnxruntime
 import re
 import shutil
+import subprocess
+
 
 def snpe_import_config(output_folder, project_name, platform, abi, device='GPU'):
     # load snpe lib
     # step1: 下载snpe库, 并解压到固定为止
-    if not os.path.exists('/3rd/'):
-        os.makedirs('/3rd/')
-    if not os.path.exists('/3rd/snpe-2.9.0.4462'):
-        os.system(f'cd /3rd/ && wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip && unzip snpe-2.9.0.4462.zip')
-    snpe_path = '/3rd/snpe-2.9.0.4462'
+    root_folder = os.path.abspath('.3rd/')
+    os.makedirs(root_folder, exist_ok=True)
+    if not os.path.exists(os.path.join(root_folder, 'snpe-2.9.0.4462')):
+        os.system(f'cd .3rd/ && wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip && unzip snpe-2.9.0.4462.zip')
+    snpe_path = os.path.join(root_folder, 'snpe-2.9.0.4462')
 
     # step2: 推送依赖库到包位置
     os.makedirs(os.path.join(output_folder, '3rd', abi), exist_ok=True)
@@ -53,11 +55,11 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
 
 def rknn_import_config(output_folder, project_name, platform, abi, device='rk3588'):
     # step1: 下载rknn库，并解压到固定为止
-    if not os.path.exists('/3rd/'):
-        os.makedirs('/3rd/')
-    if not os.path.exists('/3rd/rknpu2'):
-        os.system(f'cd /3rd/ && git clone https://github.com/rockchip-linux/rknpu2.git')
-    rknn_path = '/3rd/rknpu2'
+    root_folder = os.path.abspath('.3rd/')
+    os.makedirs(root_folder, exist_ok=True)
+    if not os.path.exists(os.path.join(root_folder, 'rknpu2')):
+        os.system(f'cd .3rd/ && git clone https://github.com/rockchip-linux/rknpu2.git')
+    rknn_path = os.path.join(root_folder, 'rknpu2')
 
     rknn_runtime_folder = os.path.join(rknn_path, 'runtime')
     assert(os.path.exists(os.path.join(rknn_runtime_folder, device.upper())))
@@ -93,8 +95,8 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
 
 def tensorrt_import_config(output_folder, project_name, platform, abi, device=''):
     # step1: 下载tensorrt库，并解压到固定为止
-    if not os.path.exists('/3rd/'):
-        os.makedirs('/3rd/')    
+    root_folder = os.path.abspath('.3rd/')
+    os.makedirs(root_folder, exist_ok=True)
     
     # tensorrt 仅支持linux
     assert(platform.lower() == 'linux')
@@ -102,15 +104,15 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     # 涉及cudnn, tensorrt, cuda库
     # 下载 cudnn cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz https://developer.nvidia.com/rdp/cudnn-archive
     # 下载 tensorrt TensorRT-8.6.1.6 https://developer.nvidia.com/nvidia-tensorrt-8x-download
-    if not os.path.exists('/3rd/cudnn-linux-x86_64-8.8.0.121_cuda12-archive'):
+    if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')):
         print('download cudnn')
-        os.system(f'cd /3rd/ && wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
-    if not os.path.exists('/3rd/TensorRT-8.6.1.6'):
+        os.system(f'cd .3rd/ && wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+    if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6')):
         print('download tensorrt')
-        os.system(f'cd /3rd/ && wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+        os.system(f'cd .3rd/ && wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
 
-    cudnn_path = '/3rd/cudnn-linux-x86_64-8.8.0.121_cuda12-archive'
-    tensorrt_path = '/3rd/TensorRT-8.6.1.6'
+    cudnn_path = os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')
+    tensorrt_path = os.path.join(root_folder, 'TensorRT-8.6.1.6')
 
     # step2: 推送依赖库到包为止
     os.makedirs(os.path.join(output_folder, '3rd', abi), exist_ok=True)
@@ -578,6 +580,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         op_args = graph_op_info['op_args']
         op_kwargs = graph_op_info['op_kwargs']
 
+        print(f'op_name {op_name}')
         input_ctx, output_ctx = op_index
         if not isinstance(input_ctx, tuple):
             input_ctx = (input_ctx,)
@@ -597,6 +600,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             deploy_graph_info[op_unique_name] = op_info
         elif op_name.startswith('eagleeye'):
             # eagleeye核心算子 (op级别算子)
+            op_name = op_name[9:]
             if op_name not in op_name_count:
                 op_name_count[op_name] = 0
             op_unique_name = f'{op_name}_{op_name_count[op_name]}'
@@ -717,7 +721,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             out_port='{'+','.join([str(i) for i in range(len(project_config['output']))]) + '}',
             out_signal='{'+','.join(['"'+info[-1]+'"' for info in project_config['output']])+'}',
             graph_in_ops='{'+','.join(['"'+deploy_output_data_name_inv_link[info[0]][0]+'"' for info in project_config['input']])+'}',
-            graph_out_ops='{'+','.join(['"'+deploy_output_data_name_inv_link[info[0]][0]+'"' for info in project_config['output']])+'}',
+            graph_out_ops='{'+','.join(['{"'+deploy_output_data_name_inv_link[info[0]][0]+'",'+str(deploy_output_data_name_inv_link[info[0]][1])+'}' for info in project_config['output']])+'}',
             op_graph=op_graph_code
         )
 
@@ -770,16 +774,21 @@ def load_eagleeye_op_set(eagleeye_path):
 
 def prepare_eagleeye_environment(system_platform, abi_platform):
     print('Check eagleeye environment')
-    os.makedirs('/3rd/', exist_ok=True)
-    if not os.path.exists(os.path.join('/3rd/', 'eagleeye')) or len(os.listdir(os.path.join('/3rd/', 'eagleeye'))) == 0:
+    os.makedirs('.3rd/', exist_ok=True)
+    if not os.path.exists(os.path.join('.3rd/', 'eagleeye')) or len(os.listdir(os.path.join('.3rd/', 'eagleeye'))) == 0:
         print('Download eagleeye git')
-        os.system('cd /3rd/ && git clone https://github.com/jianzfb/eagleeye.git && cd eagleeye/scripts pip3 install -r requirements.txt && python3 setup.py install')
+        os.system('cd .3rd/ && git clone https://github.com/jianzfb/eagleeye.git')
 
-    eagleeye_path = '/3rd/eagleeye/install'
+    p = subprocess.Popen("pip3 show eagleeye", shell=True, encoding="utf-8", stdout=subprocess.PIPE)
+    if p.stdout.read() == '':
+        print('Install eagleeye scafold')
+        os.system('cd .3rd/eagleeye/scripts && pip3 install -r requirements.txt && python3 setup.py install')
+
+    eagleeye_path = '.3rd/eagleeye/install'
     if not os.path.exists(eagleeye_path):
-        print('Compile eagleeye core')
-        os.system(f'cd /3rd/eagleeye && bash {system_platform.lower()}_build.sh')
-
+        print('Compile eagleeye core sdk')
+        os.system(f'cd .3rd/eagleeye && bash {system_platform.lower()}_build.sh')
+    eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path
 
 

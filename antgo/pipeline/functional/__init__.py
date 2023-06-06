@@ -93,6 +93,8 @@ def _placeholder(*arg):
       data_type = -1
       if xx.dtype == np.float32:
         data_type = 6
+      elif xx.dtype == np.float64:
+        data_type = 7
       elif xx.dtype == np.int32:
         data_type = 4
       elif xx.dtype == np.uint8:
