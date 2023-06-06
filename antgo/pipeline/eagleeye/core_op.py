@@ -45,4 +45,4 @@ class CoreOp(object):
             input_tensors.append(tensor)
 
         output_tensors = eagleeye.execute(self.func_op_name, self.func_op_name,self.param_1, self.param_2,self.param_3, input_tensors)
-        return output_tensors
+        return output_tensors if len(output_tensors) > 1 else output_tensors[0]
