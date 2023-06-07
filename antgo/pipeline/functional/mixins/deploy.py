@@ -728,6 +728,30 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     with open(os.path.join(output_folder, f'{project_config["name"]}_plugin.cpp'), 'w') as fp:
         fp.write(eagleeye_plugin_code_content)
 
+    # 准备插件demo文件
+    os.makedirs(os.path.join(output_folder, 'data'), exist_ok=True)
+
+    plugin_input_size_list = []
+    plugin_input_type_list = []
+    for info_i, info in enumerate(project_config['input']):
+        for graph_op_info in graph_config:
+            if graph_op_info['op_index'][-1][0] == info[0]:
+                plugin_input_size_list.append(graph_op_info['op_kwargs']['shape'])
+                plugin_input_type_list.append(graph_op_info['op_kwargs']['data_type'])
+
+    plugin_input_size_list = ['{'+','.join([str(v) for v in shape])+'}' for shape in plugin_input_size_list]
+    plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
+    demo_code_content = gen_code(f'./templates/demo_code.cpp')(
+        project=project_config["name"],
+        input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
+        input_size_list='{'+','.join(plugin_input_size_list)+'}',
+        input_type_list='{'+plugin_input_type_list+'}',
+        output_name_list='{'+','.join(['"nnnode"' for _ in range(len(project_config['output']))])+'}',
+        output_port_list='{'+','.join([f"{i}" for i in range(len(project_config['output']))])+'}'
+    )
+    with open(os.path.join(output_folder, f'{project_config["name"]}_demo.cpp'), 'w') as fp:
+        fp.write(demo_code_content)
+
     # 准备额外依赖库（libc++_shared.so）
     if platform.lower() == 'android':
         ndk_path = os.environ['ANDROID_NDK_HOME']
@@ -736,7 +760,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     # 更新CMakeLists.txt
     update_cmakelist(output_folder, project_config["name"], [s['src'] for s in deploy_graph_info.values() if 'src' in s])
 
-    # 编译插件工程
+    # 更新插件工程编译脚本
     shell_code_content = gen_code('./templates/android_build.sh')(
         project=project_config['name'],
         ANDROID_NDK_HOME=os.environ['ANDROID_NDK_HOME']
@@ -749,6 +773,14 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     )
     with open(os.path.join(output_folder, 'linux_build.sh'), 'w') as fp:
         fp.write(shell_code_content)
+
+    # 保存项目配置信息
+    project_config.update({
+        'graph': graph_config,
+        'platform': platform
+    })
+    with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
+        json.dump(project_config, fp)
 
     os.system(f'cd {output_folder} && bash {platform}_build.sh')
 

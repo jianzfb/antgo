@@ -105,12 +105,12 @@ class OperatorLoader:
                 os.system('cd .3rd/ && git clone https://github.com/jianzfb/eagleeye.git')
                         
             if 'darwin' in sys.platform:
-                os.system('cd .3rd/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye-py')
+                os.system('cd .3rd/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && mv install ../eagleeye-py')
             else:
                 first_comiple = False
                 if not os.path.exists(os.path.join('.3rd', 'eagleeye-py')):
                     first_comiple = True
-                os.system('cd .3rd/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && cp -r install ../eagleeye-py')
+                os.system('cd .3rd/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && mv install ../eagleeye-py')
                 if first_comiple:
                     # 增加搜索.so路径
                     cur_abs_path = os.path.abspath(os.curdir)
