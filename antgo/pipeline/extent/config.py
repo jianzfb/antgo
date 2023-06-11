@@ -11,6 +11,9 @@ class DefaultConfig:
     DEBUG = False
     USING_OPENMP = False
     USING_CBLAS = False
+    USING_OPENCV = False
+    USING_EIGEN = False
+    USING_EAGLEEYE = False
     HOST_NUM_THREADS = 0  # 0 : auto
     USING_HIGH_LEVEL_WARNINGS = False
     USING_OPTIMIZATION = True

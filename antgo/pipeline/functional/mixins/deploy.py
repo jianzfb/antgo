@@ -12,20 +12,22 @@ from antgo.pipeline.functional.common.config import *
 from antgo.pipeline import extent
 from antgo.pipeline.extent.glue.common import *
 from antgo.pipeline.extent.op.loader import *
+from antgo.pipeline.extent.building.build_utils import *
 import onnx
 import onnxruntime
 import re
 import shutil
 import subprocess
 
+ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
 
 def snpe_import_config(output_folder, project_name, platform, abi, device='GPU'):
     # load snpe lib
     # step1: 下载snpe库, 并解压到固定为止
-    root_folder = os.path.abspath('.3rd/')
+    root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder, 'snpe-2.9.0.4462')):
-        os.system(f'cd .3rd/ && wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip && unzip snpe-2.9.0.4462.zip')
+        os.system(f'cd {root_folder} && wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip && unzip snpe-2.9.0.4462.zip')
     snpe_path = os.path.join(root_folder, 'snpe-2.9.0.4462')
 
     # step2: 推送依赖库到包位置
@@ -55,10 +57,10 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
 
 def rknn_import_config(output_folder, project_name, platform, abi, device='rk3588'):
     # step1: 下载rknn库，并解压到固定为止
-    root_folder = os.path.abspath('.3rd/')
+    root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder, 'rknpu2')):
-        os.system(f'cd .3rd/ && git clone https://github.com/rockchip-linux/rknpu2.git')
+        os.system(f'cd {root_folder} && git clone https://github.com/rockchip-linux/rknpu2.git')
     rknn_path = os.path.join(root_folder, 'rknpu2')
 
     rknn_runtime_folder = os.path.join(rknn_path, 'runtime')
@@ -95,7 +97,7 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
 
 def tensorrt_import_config(output_folder, project_name, platform, abi, device=''):
     # step1: 下载tensorrt库，并解压到固定为止
-    root_folder = os.path.abspath('.3rd/')
+    root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     
     # tensorrt 仅支持linux
@@ -106,10 +108,10 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     # 下载 tensorrt TensorRT-8.6.1.6 https://developer.nvidia.com/nvidia-tensorrt-8x-download
     if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')):
         print('download cudnn')
-        os.system(f'cd .3rd/ && wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+        os.system(f'cd {root_folder} && wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
     if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6')):
         print('download tensorrt')
-        os.system(f'cd .3rd/ && wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+        os.system(f'cd {root_folder} && wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
 
     cudnn_path = os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')
     tensorrt_path = os.path.join(root_folder, 'TensorRT-8.6.1.6')
@@ -806,20 +808,20 @@ def load_eagleeye_op_set(eagleeye_path):
 
 def prepare_eagleeye_environment(system_platform, abi_platform):
     print('Check eagleeye environment')
-    os.makedirs('.3rd/', exist_ok=True)
-    if not os.path.exists(os.path.join('.3rd/', 'eagleeye')) or len(os.listdir(os.path.join('.3rd/', 'eagleeye'))) == 0:
+    os.makedirs(ANTGO_DEPEND_ROOT, exist_ok=True)
+    if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')) or len(os.listdir(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye'))) == 0:
         print('Download eagleeye git')
-        os.system('cd .3rd/ && git clone https://github.com/jianzfb/eagleeye.git')
+        os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
 
     p = subprocess.Popen("pip3 show eagleeye", shell=True, encoding="utf-8", stdout=subprocess.PIPE)
     if p.stdout.read() == '':
         print('Install eagleeye scafold')
-        os.system('cd .3rd/eagleeye/scripts && pip3 install -r requirements.txt && python3 setup.py install')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye/scripts && pip3 install -r requirements.txt && python3 setup.py install')
 
-    eagleeye_path = '.3rd/eagleeye/install'
+    eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_platform}-install'
     if not os.path.exists(eagleeye_path):
         print('Compile eagleeye core sdk')
-        os.system(f'cd .3rd/eagleeye && bash {system_platform.lower()}_build.sh')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash {system_platform.lower()}_build.sh && mv install {system_platform}-install')
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path
 
@@ -839,7 +841,10 @@ class DeployMixin:
             if project_config.get('git', None) is not None and project_config['git'] != '':
                 os.system(f'cd {output_folder} && git clone {project_config["git"]}')
             else:
-                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
+                opencv_path = ''
+                if config.USING_OPENCV:
+                    opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path} --opencv={opencv_path}')
         output_folder = os.path.join(output_folder, f'{project_config["name"]}_plugin')
 
         # 编译

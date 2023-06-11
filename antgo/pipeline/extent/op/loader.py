@@ -11,12 +11,14 @@ import portalocker
 from ..internal.edict import edict
 from ..func import CFuncDef, bind, get_func_idcode, get_idcode_hash
 from ..building.build import source_to_so_ctx, get_virtual_dirname, build_context, file_is_changed, ENV_PATH
+from ..building.build_utils import *
 from ..utils import get_git_hash, makedirs
 from ..internal.dtype import DType, CStruct, TemplateType, CTYPENAME2CTYPE
 from ..glue.common import CSTRUCT_CONSTRUCTOR
 from ..glue.backend import get_glue_modules
 from .gen_code import get_gen_rel_code
 import antgo
+
 
 gen_code = get_gen_rel_code(os.path.dirname(__file__))
 
@@ -79,6 +81,7 @@ def _get_func_head_reg(name):
 
 
 MOBULA_KERNEL_REG = _get_func_head_reg('EAGLEEYE_(KERNEL|FUNC)')
+DEPEND_3RD_REG = _get_func_head_reg('#include')
 
 FUNC_REG = re.compile(
     r'^\s*(.*?)\s*\((.*?)\)(?:.*?)*')
@@ -548,6 +551,19 @@ def _get_functions_from_cpp(cpp_fname):
     cpp_info = CPPInfo(cpp_fname=cpp_fname)
     function_args = cpp_info.function_args
     for line in open(cpp_fname):
+        # 检查第三方依赖
+        match_include = DEPEND_3RD_REG.search(line)
+        if match_include is not None:
+            if 'opencv' in match_include.groups()[0]:
+                config.USING_OPENCV = True
+
+            if 'Eigen' in match_include.groups()[0]:
+                config.USING_EIGEN = True
+
+            if 'eagleeye' in match_include.groups()[0]:
+                config.USING_EAGLEEYE = True
+
+        # 检查函数定义信息
         if not func_started:
             current_template_list = _get_template_decl(line)
             if current_template_list is not None:
