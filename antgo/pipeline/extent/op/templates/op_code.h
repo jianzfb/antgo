@@ -7,7 +7,7 @@
 
 namespace eagleeye{
 namespace dataflow{
-class ${op_name}:public BaseOp<Tensor, ${input_num}, ${output_num}>{
+class ${op_name}:public BaseOp<${input_num}, ${output_num}>{
 public:
     ${op_name}();
     virtual ~${op_name}();

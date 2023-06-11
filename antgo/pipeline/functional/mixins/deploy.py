@@ -339,7 +339,8 @@ def update_cmakelist(output_folder, project_name, src_op_warp_list):
 
         if f'set({project_name}_SRC' in line:
             is_start_add_src_code = True
-
+        
+        # 添加扩展c++代码
         if line.startswith('include_directories') and not is_found_include_directories_insert:
             extent_cpp_include_folder = os.path.dirname(os.path.realpath(__file__))
             extent_cpp_include_folder = os.path.dirname(extent_cpp_include_folder)
@@ -349,6 +350,11 @@ def update_cmakelist(output_folder, project_name, src_op_warp_list):
                 info.append(f'include_directories({extent_cpp_include_folder})\n')
 
             is_found_include_directories_insert = True
+
+        # 添加opencv依赖
+        if 'set(OpenCV_DIR "")' in line and config.USING_OPENCV:
+            opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+            line = f'set(OpenCV_DIR "{opencv_path}")'
 
         info.append(line)
     
@@ -757,6 +763,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     # 准备额外依赖库（libc++_shared.so）
     if platform.lower() == 'android':
         ndk_path = os.environ['ANDROID_NDK_HOME']
+        os.makedirs(os.path.join(output_folder, '3rd', abi), exist_ok=True)
         shutil.copy(os.path.join(ndk_path, "sources/cxx-stl/llvm-libc++/libs", abi, 'libc++_shared.so'), os.path.join(output_folder, '3rd', abi, 'libc++_shared.so'))
 
     # 更新CMakeLists.txt
@@ -841,10 +848,7 @@ class DeployMixin:
             if project_config.get('git', None) is not None and project_config['git'] != '':
                 os.system(f'cd {output_folder} && git clone {project_config["git"]}')
             else:
-                opencv_path = ''
-                if config.USING_OPENCV:
-                    opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
-                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path} --opencv={opencv_path}')
+                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
         output_folder = os.path.join(output_folder, f'{project_config["name"]}_plugin')
 
         # 编译
