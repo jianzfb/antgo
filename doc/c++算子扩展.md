@@ -11,7 +11,7 @@
 #include "eagleeye/basic/Matrix.h"
 
 using namespace eagleeye;
-EAGLEEYE_FUNC void test_func(const CUCTensor* image, CUCTensor* output){
+ANTGO_FUNC void test_func(const CUCTensor* image, CUCTensor* output){
     // 获得输入图像的高和宽
     size_t height = image->dims[0];
     size_t width = image->dims[1];
@@ -75,7 +75,7 @@ EAGLEEYE_FUNC void test_func(const CUCTensor* image, CUCTensor* output){
     ```
 
 ### 函数定义说明
-* EAGLEEYE_FUNC
+* ANTGO_FUNC
     
     用于标记此函数是算子
 * 函数参数

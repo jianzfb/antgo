@@ -1,5 +1,5 @@
-#ifndef EAGLEEYE_INCLUDE_DEFINES_H_
-#define EAGLEEYE_INCLUDE_DEFINES_H_
+#ifndef ANTGO_INCLUDE_DEFINES_H_
+#define ANTGO_INCLUDE_DEFINES_H_
 
 #include <array>
 #include <cassert>
@@ -18,7 +18,7 @@
 #include "./ctypes.h"
 #include "./context.h"
 
-namespace eagleeye {
+namespace antgo {
 template <typename T>
 struct CTensor {
   size_t dim_size;
@@ -178,6 +178,6 @@ T MAX_FUNC(const T &a, const T &b) {
   return a > b ? a : b;
 }
 
-}  // namespace eagleeye
+}  // namespace antgo
 
-#endif  // EAGLEEYE_INCLUDE_DEFINES_H_
+#endif  // ANTGO_INCLUDE_DEFINES_H_

@@ -2,7 +2,7 @@
 #include "defines.h"
 
 using namespace eagleeye;
-EAGLEEYE_FUNC void preprocess_func(
+ANTGO_FUNC void preprocess_func(
     const CFTensor* mean, 
     const CFTensor* std, 
     const bool rgb2bgr,

@@ -4,6 +4,9 @@ include antgo/utils/_encode_png.pyx
 include antgo/cutils/maskApi.h
 recursive-include antgo/resource *
 recursive-include antgo/pipeline/models/cfg *
+recursive-include antgo/pipeline/extent/op/templates *
+recursive-include antgo/pipeline/extent/cpp *
+recursive-include antgo/pipeline/extent/zoo *
 recursive-include antgo/script *.yaml
 recursive-include antgo/script *.sh
 include antgo/config.xml

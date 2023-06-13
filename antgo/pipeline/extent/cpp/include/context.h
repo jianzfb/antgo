@@ -1,11 +1,11 @@
-#ifndef EAGLEEYE_INCLUDE_CONTEXT_CONTEXT_H_
-#define EAGLEEYE_INCLUDE_CONTEXT_CONTEXT_H_
+#ifndef ANTGO_INCLUDE_CONTEXT_CONTEXT_H_
+#define ANTGO_INCLUDE_CONTEXT_CONTEXT_H_
 
 #include <cstring>
 
 #include "./api.h"
 
-#define EAGLEEYE_FUNC
+#define ANTGO_FUNC
 // #if USING_HIP || USING_CUDA
 // #include "./hip_ctx.h"
 // #else
@@ -13,7 +13,7 @@
 // #endif  // USING_CUDA
 
 // extern "C" {
-// EAGLEEYE_API void set_device(const int device_id);
+// ANTGO_API void set_device(const int device_id);
 // }
 
-#endif  // EAGLEEYE_INCLUDE_CONTEXT_CONTEXT_H_
+#endif  // ANTGO_INCLUDE_CONTEXT_CONTEXT_H_

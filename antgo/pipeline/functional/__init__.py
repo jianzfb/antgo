@@ -115,7 +115,10 @@ def _placeholder(*arg):
         }
       )
 
-    return DataFrame.placeholder(*arg).map(lambda x: Entity(**{ii: xx for ii, xx in zip(index, x) }))
+    temp = list((x,y) for x,y in zip(index, arg))
+    return DataFrame.placeholder(temp).map(
+      lambda mm: Entity(**{ii: xx for ii, xx in mm })
+    )
   else:
     for ii, xx in zip([index], arg):
       data_type = -1

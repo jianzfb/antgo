@@ -1,7 +1,7 @@
-#ifndef EAGLEEYE_INCLUDE_CTYPES_H_
-#define EAGLEEYE_INCLUDE_CTYPES_H_
+#ifndef ANTGO_INCLUDE_CTYPES_H_
+#define ANTGO_INCLUDE_CTYPES_H_
 
-namespace eagleeye {
+namespace antgo {
 
 typedef wchar_t wchar;
 typedef char byte;
@@ -16,6 +16,6 @@ typedef char* char_p;
 typedef wchar_t* wchar_p;
 typedef void* void_p;
 
-}  // namespace eagleeye
+}  // namespace antgo
 
-#endif  // EAGLEEYE_INCLUDE_CTYPES_H_
+#endif  // ANTGO_INCLUDE_CTYPES_H_

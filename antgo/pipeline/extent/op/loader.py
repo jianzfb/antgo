@@ -80,7 +80,7 @@ def _get_func_head_reg(name):
     return re.compile(r'^\s*{}\s*(.*)'.format(name))
 
 
-MOBULA_KERNEL_REG = _get_func_head_reg('EAGLEEYE_(KERNEL|FUNC)')
+MOBULA_KERNEL_REG = _get_func_head_reg('ANTGO_(KERNEL|FUNC)')
 DEPEND_3RD_REG = _get_func_head_reg('#include')
 
 FUNC_REG = re.compile(
