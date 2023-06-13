@@ -9,6 +9,9 @@ def main():
         '--with-vscode-server',
         action='store_true', help="")
     parser.add_argument(
+        '--with-android-ndk',
+        action='store_true', help="")
+    parser.add_argument(
         '--with-dev',
         action='store_true', help="")
     parser.add_argument(
@@ -29,6 +32,32 @@ def main():
                 if content == 'COPY code-server-4.0.2-linux-amd64  /opt/':
                     content = fp.readline()
                     content = content.strip()                    
+                    continue
+
+                cmd_list.append(content)
+                if content == 'WORKDIR /root/workspace':
+                    break
+
+                content = fp.readline()
+                content = content.strip()
+
+        with open(os.path.join(os.path.dirname(__file__), 'Dockerfile'), 'w') as fp:
+            for cmd_str in cmd_list:
+                fp.write(f'{cmd_str}\n')
+
+    if args.with_android_ndk:
+        cmd_list = []
+        with open(os.path.join(os.path.dirname(__file__), 'Dockerfile'), 'r') as fp:
+            content = fp.readline()
+            content = content.strip()
+
+            while True:
+                if content == '# RUN mkdir /android-ndk-r20b':
+                    cmd_list.append('RUN mkdir /android-ndk-r20b')
+                    cmd_list.append('COPY android-ndk-r20b /android-ndk-r20b')
+
+                    content = fp.readline()
+                    content = content.strip() 
                     continue
 
                 cmd_list.append(content)

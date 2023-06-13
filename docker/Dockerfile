@@ -21,8 +21,8 @@ RUN mkdir -p /tmp/antgo
 COPY ./ /tmp/antgo/
 
 # 拷贝android ndk 到根目录
-RUN mkdir /android-ndk-r20b
-COPY android-ndk-r20b /android-ndk-r20b
+# RUN mkdir /android-ndk-r20b
+# COPY android-ndk-r20b /android-ndk-r20b
 
 # 拷贝vscode-server到基础容器镜像中的 /opt/
 # COPY code-server-4.0.2-linux-amd64  /opt/
