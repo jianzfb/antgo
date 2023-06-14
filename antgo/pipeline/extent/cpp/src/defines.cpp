@@ -1,21 +1,21 @@
 #include "defines.h"
 
 extern "C" {
-using namespace eagleeye;
+using namespace antgo;
 
-EAGLEEYE_API void destroy_cdtensor(CDTensor* t){
+ANTGO_API void destroy_cdtensor(CDTensor* t){
     t->destroy();
 }
 
-EAGLEEYE_API void destroy_cftensor(CFTensor* t){
+ANTGO_API void destroy_cftensor(CFTensor* t){
     t->destroy();
 }
 
-EAGLEEYE_API void destroy_citensor(CITensor* t){
+ANTGO_API void destroy_citensor(CITensor* t){
     t->destroy();
 }
 
-EAGLEEYE_API void destroy_cuctensor(CUCTensor* t){
+ANTGO_API void destroy_cuctensor(CUCTensor* t){
     t->destroy();
 }
 

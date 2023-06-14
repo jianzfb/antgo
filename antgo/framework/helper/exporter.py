@@ -71,7 +71,7 @@ class Exporter(object):
         )
 
         # 基于目标引擎，转换onnx模型
-        if is_convert_to_deploy is not None:
+        if is_convert_to_deploy:
             # deploy=dict(
             #     engine='rknn',      # rknn,snpe,tensorrt,tnn
             #     device='rk3568',    # rk3568/rk3588,qualcomm,nvidia,mobile

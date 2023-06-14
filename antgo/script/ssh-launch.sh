@@ -8,5 +8,4 @@ image=$6
 project=$7
 
 # 执行
-# TODO, 映射GPU,
-sudo docker run -d -w /tiger -m ${memory} --cpus ${cpu_num} -v /home/${username}/${project}:/tiger ${image} sh -c "cd /tiger && $command"
+docker run --rm -d --shm-size="20G" -w /tiger -v /home/${username}/${project}:/tiger --gpus all --privileged ${image} sh -c "cd /tiger && $command"

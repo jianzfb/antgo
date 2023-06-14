@@ -39,7 +39,6 @@ DEFINE_int('gpu', 0, 'set gpu number')          # gpu 数
 DEFINE_int('memory', 0, 'set memory size (M)')  # 内存大小（单位M）
 DEFINE_string('name', None, '')     # 名字
 DEFINE_string('type', None, '')     # 类型
-DEFINE_indicator('cloud', True, '') # 指定云端运行
 DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')  # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')  # 是否启用finetune模式
@@ -189,12 +188,26 @@ def main():
         config_content['folder'] = os.path.normpath(code_folder).split('/')[-1]
         with open(os.path.join(inner_folder, 'submit-config.yaml'), encoding='utf-8', mode='w') as fp:
           yaml.safe_dump(config_content, fp)
-      return
 
     if has_config_file:
       # 进入到这里，说明已经指定ssh,local,k8s
       # 添加ssh,local,k8s的标准任务提交配置
+      print(f'update submitter config {args.config}')
       shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
+
+      if args.ssh:
+        # 检查是否支持免密登录
+        if not os.path.exists(os.path.join(os.environ['HOME'], '.ssh', 'id_rsa')):
+          os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh-keygen -t rsa')
+
+        # 远程执行命令
+        with open(args.config, 'r') as fp:
+          ssh_config_info = yaml.safe_load(fp)
+
+        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && scp id_rsa.pub {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/.ssh/')
+        os.system(f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} "cd ~/.ssh/ && cat id_rsa.pub > authorized_keys && rm id_rsa.pub"')
+
+      print('finish config')
     else:
       if args.ssh:
         # 生成ssh提交配置模板
@@ -225,10 +238,51 @@ def main():
     return
 
   ####################################################################################################
+  if args.root is None or args.root == '':
+    print('Using default root address ali:///exp')
+    args.root = "ali:///exp"
+
   # 执行指令
   if action_name in action_level_1:
-    # 云端任务执行
-    if args.cloud:
+    # 远程提交任务(local模式仅在开发者调试时使用)
+    if args.ssh or args.k8s or args.local:
+      # 允许非标准项目远程提交
+      if args.project == '':
+        # 非标准项目模式
+        filter_sys_argv_cp = []
+        for t in sys_argv_cp:
+          if t.startswith('--project'):
+            continue
+          if t.startswith('--root'):
+            continue
+          filter_sys_argv_cp.append(t)
+
+        sys_argv_cp = filter_sys_argv_cp
+        sys_argv_cp.append(f'--root={args.root}')
+        sys_argv_cmd = ' '.join(sys_argv_cp[1:])
+
+        # 直接进行任务提交
+        # step 1.1: 检查提交脚本配置
+        if args.local:
+          # 本地提交
+          sys_argv_cmd = sys_argv_cmd.replace('--local', '')
+          sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+          sys_argv_cmd = f'antgo {sys_argv_cmd}'
+          local_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
+        elif args.ssh:
+          # ssh提交
+          sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
+          sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+          sys_argv_cmd = f'antgo {sys_argv_cmd}'        
+          ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
+        else:
+          # 自定义脚本提交
+          sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
+          sys_argv_cmd = f'antgo {sys_argv_cmd}'          
+          custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)
+        return
+
+      # 标准项目模式（需要检查项目规范性）
       # 检查项目环境
       if not check_project_environment(args):
         return
@@ -278,10 +332,11 @@ def main():
         exp_info
       )
 
+      # 创建项目文件
       with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
         json.dump(project_info, fp)
-      
-      # 云端提交        
+
+      # 创建脚本命令
       sys_argv_cp.append(f'--id={exp_info["id"]}')
       filter_sys_argv_cp = []
       for t in sys_argv_cp:
@@ -289,16 +344,12 @@ def main():
           continue
         if t.startswith('--root'):
           continue
-        
         filter_sys_argv_cp.append(t)
-      
-      assert(args.root)
+
       sys_argv_cp = filter_sys_argv_cp
       sys_argv_cp.append(f'--root={args.root}/{args.project}')
-      
-      sys_argv_cmd = ' '.join(sys_argv_cp[1:])
-      sys_argv_cmd = sys_argv_cmd.replace('--cloud', '')
-      
+      sys_argv_cmd = ' '.join(sys_argv_cp[1:])      
+
       # step 1.1: 检查提交脚本配置
       if args.local:
         # 本地提交
@@ -318,9 +369,11 @@ def main():
         sys_argv_cmd = f'antgo {sys_argv_cmd}'          
         custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)
       return
+
     # 本地任务执行
     elif args.project != '':
-      # 可能，运行环境就是本地
+      # 场景：本地直接任务执行
+      # 标准项目需要检查任务规范性
       # 检查项目环境
       if not check_project_environment(args):
         return
@@ -346,7 +399,7 @@ def main():
       rep = git.Repo('./')             
       if not isinstance(project_info['exp'][args.exp], list):
         project_info['exp'][args.exp] = []
-      
+
       exp_info = exp_basic_info()
       exp_info['exp'] = args.exp
       exp_info['id'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
@@ -358,18 +411,19 @@ def main():
         exp_info
       )
 
+      # 创建项目文件
       with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
         json.dump(project_info, fp)
 
       # exp, exp:id
       args.id = exp_info['id']
-    
+
     # 检查后端存储功能
     if args.root is not None and args.root != '':
       status = FileClient.infer_client(uri=args.root)
       if status is None:
         logging.error(f"Fail check backend storage {args.root}")
-    
+
     # 执行任务
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
     script_folder = os.path.join(os.path.dirname(__file__), 'script')
@@ -378,7 +432,7 @@ def main():
         args.checkpoint = ''
       if args.resume_from is None:
         args.resume_from = ''
-        
+
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
@@ -421,7 +475,7 @@ def main():
           command_str += f' --checkpoint={args.checkpoint}'
         if args.max_epochs > 0:
           command_str += f' --max-epochs={args.max_epochs}'
-             
+
         os.system(command_str)
     elif action_name == 'activelearning':
       if args.checkpoint is None:

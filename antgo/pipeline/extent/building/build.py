@@ -1,5 +1,6 @@
 """Building Implementation"""
 import os
+import sys
 import multiprocessing
 try:
     from .build_utils import *
@@ -7,6 +8,7 @@ except Exception:
     from build_utils import *
 
 
+ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
 NUM_CPU_CORE = multiprocessing.cpu_count()
 
 
@@ -70,6 +72,19 @@ def get_common_flags():
         COMMON_FLAGS.add_string('-g')
     COMMON_FLAGS.add_definition('USING_CBLAS', config.USING_CBLAS)
     INC_PATHS.extend(['./cpp/include'])
+
+    if config.USING_OPENCV:
+        # 使用opencv库
+        INC_PATHS.extend([os.path.join(ANTGO_DEPEND_ROOT,'opencv-install/include')])
+
+    if config.USING_EIGEN:
+        # 使用eigen库
+        INC_PATHS.extend([os.path.join(ANTGO_DEPEND_ROOT,'eigen')])
+
+    if config.USING_EAGLEEYE:
+        # 使用eagleeye库
+        INC_PATHS.extend([os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-install', 'include')])
+
     for path in INC_PATHS:
         p = os.path.join(ENV_PATH, path)
         if p:
@@ -96,6 +111,17 @@ def get_build_flag_cpu():
     -Wold-style-cast -Woverloaded-virtual -Wredundant-decls -Wshadow \
     -Wsign-promo -Wundef -fdiagnostics-show-option')
 
+    if config.USING_OPENCV:
+        opencv_dir = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+        opencv_libs = ['opencv_calib3d', 'opencv_core', 'opencv_highgui', 'opencv_imgproc', 'opencv_imgcodecs']
+        opencv_libs = [f'-l{v}' for v in opencv_libs]
+        opencv_libs = ' '.join(opencv_libs)
+        LDFLAGS.add_string(f'-L {opencv_dir}/lib {opencv_libs}')
+        
+    if config.USING_EAGLEEYE:
+        eagleeye_lib_dir = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-install', 'libs', 'X86-64')
+        LDFLAGS.add_string(f'-L {eagleeye_lib_dir} -leagleeye')
+        
     return config.CXX, CFLAGS, LDFLAGS
 
 
@@ -129,6 +155,49 @@ def get_build_flag(ctx_name):
 
 
 def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
+    # 检查依赖库并下载编译
+    if config.USING_OPENCV:
+        install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+        if not os.path.exists(install_path):
+            if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                # 下载源码
+                os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+    
+            # 编译
+            print('compile opencv')
+            os.system(f'cd {ANTGO_DEPEND_ROOT} && cd opencv && mkdir build && cd build && cmake -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. && make -j4 && make install')
+            os.system(f'cd {ANTGO_DEPEND_ROOT} && cd opencv && rm -rf build')
+
+            # 添加so的搜索路径 (for linux)
+            so_abs_path = os.path.join(install_path, 'lib')
+            os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
+
+    if config.USING_EIGEN:
+        install_path = os.path.join(ANTGO_DEPEND_ROOT, 'eigen')
+        if not os.path.exists(install_path):
+            # 下载源码
+            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://gitlab.com/libeigen/eigen.git -b 3.3')
+    
+    if config.USING_EAGLEEYE:
+        src_path = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')
+        if not os.path.exists(src_path):
+            # 下载源码
+            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
+
+        # 编译
+        install_path = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-install')
+        if not os.path.exists(install_path):
+            print('compile eagleeye')
+            if 'darwin' in sys.platform:
+                os.system(f'cd {src_path} && bash osx_build.sh && mv install {sys.platform}-install')
+            else:
+                os.system(f'cd {src_path} && bash linux_build.sh && mv install {sys.platform}-install')
+
+                # 添加so的搜索路径 (for linux)
+                so_abs_path = os.path.join(install_path, 'libs', 'X86-64')
+                os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
+
+    # 构建编译信息
     flags = get_build_flag(ctx_name)
     compiler, cflags, ldflags = flags[:3]
 

@@ -1,6 +1,6 @@
 /*
- * EAGLEEYEOP Wrapper generated from the source code ${cpp_fname}
- * Created by: EAGLEEYEOP ${git_hash}
+ * ANTGOOP Wrapper generated from the source code ${cpp_fname}
+ * Created by: ANTGOOP ${git_hash}
  * Create Time: ${create_time}
  *
  * WARNING! All changes made in this file will be lost!

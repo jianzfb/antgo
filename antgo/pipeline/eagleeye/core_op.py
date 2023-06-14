@@ -2,7 +2,8 @@ import os
 import sys
 import copy
 from typing import Any
-sys.path.append('.3rd/eagleeye-py/libs/X86-64')
+ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
+sys.path.append(f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64')
 
 
 import eagleeye

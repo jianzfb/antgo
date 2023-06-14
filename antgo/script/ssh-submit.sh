@@ -21,5 +21,9 @@ rm ../project.tar
 # remote run
 script_folder=$( dirname "$0" ) 
 echo remote address ${username}@${ip}
+echo remote execute script ${command}
+echo remote image ${image}
+echo remote workspace /home/${username}/${project}
+echo remote running config cpu: ${cpu_num} memory: ${memory} gpu: ${gpu_num}
 ssh ${username}@${ip} 'bash -s' < ${script_folder}/ssh-launch.sh ${username} ${cpu_num} ${memory} ${gpu_num} \"${command}\" ${image} ${project}
 

@@ -27,17 +27,17 @@ def custom_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_
         logging.error('Custom submit scrip launch file not exist.')
         return
 
-    with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
-        project_info = json.load(fp)
+    project_info = {}
+    if project_name != '':
+        with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
+            project_info = json.load(fp)
 
-    image_name = '' # 基础镜像
+    image_name = 'antgo-env:latest' # 基础镜像
     if project_info['image'] != '':
         image_name = project_info['image']
-    if image_name == '':
-        image_name = 'antgo-env:latest'
-    
+
     # 添加扩展配置：保存到当前目录下并一同提交
-    if task_name is not None:
+    if task_name is not None and len(project_info) > 0:
         extra_config = prepare_extra_config(task_name, project_info)
         if extra_config is None:
             return False

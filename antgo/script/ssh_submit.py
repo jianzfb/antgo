@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from queue import PriorityQueue
 import shutil
 import yaml 
@@ -25,17 +26,17 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     ip = config_content['config']['ip']
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
 
-    with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
-        project_info = json.load(fp)
+    project_info = {}
+    if project_name != '':
+        with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
+            project_info = json.load(fp)
 
-    image_name = '' # 基础镜像
-    if project_info['image'] != '':
+    image_name = 'antgo-env:latest' # 基础镜像
+    if 'image' in project_info and project_info['image'] != '':
         image_name = project_info['image']
-    if image_name == '':
-        image_name = 'antgo-env:latest'
-    
+
     # 添加扩展配置：保存到当前目录下并一同提交
-    if task_name is not None:
+    if task_name is not None and len(project_info) > 0:
         extra_config = prepare_extra_config(task_name, project_info)
         if extra_config is None:
             return False
@@ -47,7 +48,9 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     # 执行提交命令
     if password == '':
         password = 'default'
-    submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name}'
+
+    remote_local_folder_name = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
+    submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {remote_local_folder_name}'
     os.system(submit_cmd)
 
     # 删除临时配置：
