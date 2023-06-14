@@ -26,6 +26,7 @@ def main():
         extra_dataset_train_pseudo_label = extra_config['source'].get('pseudo-label', [])
         extra_dataset_train_unlabel = extra_config['source'].get('unlabel', [])
 
+        # 创建dataset-storage文件夹
         if not os.path.exists('dataset-storage'):
             os.mkdir('dataset-storage')
 
@@ -69,7 +70,7 @@ def main():
                         status = file_client_get(data_info['address'], f"dataset-storage/{data_stage}")
                         if not status:
                             logging.error(f'Download {data_info["address"]} error.')
-                    
+
     # 下载配置中的数据到本地
     if not os.path.exists(nn_args.config):
         # 查找位置1
@@ -85,11 +86,15 @@ def main():
         nn_args.config = config_file_path
 
     if os.path.exists(nn_args.config):
+        # 创建dataset-storage文件夹
         if not os.path.exists('dataset-storage'):
             os.mkdir('dataset-storage')
 
         cfg = Config.fromfile(nn_args.config)
         for data_stage in ['train', 'val', 'test']:
+            if getattr(getattr(cfg.data, data_stage), 'data_path_list', None) is None:
+                continue
+            
             if not os.path.exists(f"dataset-storage/{data_stage}/"):
                 os.makedirs(f"dataset-storage/{data_stage}/")
 
@@ -123,6 +128,10 @@ def main():
                     status = file_client_get(data_record_path, f"dataset-storage/{data_stage}")
                     if not status:
                         logging.error(f'Download {data_record_path} error.')
+
+    # 检查dataset-storage是否为空
+    if os.listdir('dataset-storage') == 0:
+        os.system('rm -rf dataset-storage')
 
     # 下载checkpoint到本地
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':

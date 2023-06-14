@@ -4,6 +4,10 @@ import logging
 
 
 def prepare_extra_config(task_name, project_info):
+    if len(project_info) == 0:
+        # 空项目
+        return {}
+
     # 根据当前的任务种类（supervised, semi-supervised, distillation, activelearning）
     # 自动使用项目信息补充任务的额外配置，（如数据）
     # 复合任务标记
@@ -13,7 +17,7 @@ def prepare_extra_config(task_name, project_info):
         if len(project_info['dataset']['train']['label']) == 0:
             logging.error(f"No eough label data.")
             return None
-                
+
         # 扩展数据源 (有监督训练，仅涉及标签数据和伪标签数据)
         # label, pseudo-label
         extra_config['source'] = {

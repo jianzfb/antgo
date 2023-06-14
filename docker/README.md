@@ -23,14 +23,14 @@ sudo bash docker/build_dev.sh with-android-ndk with-vscode-server
 ### 创建运行环境容器
 可以直接以命令行方式，运行相关实验
 ```
-# sudo docker run -it --rm --name antgo-env-runtime --shm-size="20G" --gpus all antgo-env /bin/bash
+# sudo docker run -it --rm --name antgo-env-runtime --shm-size="20G" --gpus all --privileged antgo-env /bin/bash
 
 ```
 
 ### 创建vscode-server服务
 在线IDE环境，运行后你可以访问http://IP:8080，开始在线开发吧
 ```
-sudo docker run --rm -d --name antgo-env-ide --shm-size="20G" -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
+sudo docker run --rm -d --name antgo-env-ide --shm-size="20G" -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all --privileged antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
 ```
 
 
@@ -53,7 +53,7 @@ no-cgroups = false
 然后，重启docker以及容器，
 ```
 sudo systemctl restart docker
-sudo docker run --rm -d --name antgoenvide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
+sudo docker run --rm -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all --privileged antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
 ```
 
 3. 如果Code Server页面 对于图片和markdown无法正常预览，可以通过如下方式解决

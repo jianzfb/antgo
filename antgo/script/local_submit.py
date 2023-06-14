@@ -11,17 +11,18 @@ from antgo.script.base import *
 # 提交任务运行 (仅作为debug时使用，在本地机器上运行任务)
 def local_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size, task_name=None):   
     # 前提假设，调用此函数前当前目录下需要存在项目代码
-    with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
-        project_info = json.load(fp)
+    if project_name != '':
+        with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
+            project_info = json.load(fp)
 
-    if task_name is not None:
-        extra_config = prepare_extra_config(task_name, project_info)
-        if extra_config is None:
-            return False
+        if task_name is not None:
+            extra_config = prepare_extra_config(task_name, project_info)
+            if extra_config is None:
+                return False
 
-        with open('./extra-config.json', 'w') as fp:
-            json.dump(extra_config, fp)      
-        sys_argv += " --extra-config=./extra-config.json"
+            with open('./extra-config.json', 'w') as fp:
+                json.dump(extra_config, fp)      
+            sys_argv += " --extra-config=./extra-config.json"
 
     # 后台运行
     process = subprocess.Popen(sys_argv, shell=True)
