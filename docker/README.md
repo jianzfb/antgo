@@ -63,3 +63,17 @@ sudo docker run --rm -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tm
 
 ![](http://image.mltalker.com/Untitled.png)
 
+4. 如何避免运行docker命令，需要使用sudo的方法
+
+    * 添加docker组
+        ```
+        sudo groupadd docker
+        ```
+    * 添加用户到docker组
+        ```
+        sudo gpasswd -a ${USER} docker
+        ```
+    * 重启docker
+        ```
+        sudo service docker restart
+        ```
