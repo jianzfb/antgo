@@ -21,18 +21,24 @@ import os
 
 @register
 class inference_onnx_op(object):
-    def __init__(self, onnx_path, input_fields, device_id=-1, **kwargs):
+    def __init__(self, onnx_path, input_fields=None, device_id=-1, **kwargs):
         self.sess = ort.InferenceSession(onnx_path)
+        self.input_names = []
+        self.input_shapes = []
+        for input_tensor in self.sess.get_inputs():
+            self.input_names.append(input_tensor.name)
+            self.input_shapes.append(input_tensor.shape)
+
         if device_id >= 0:
             self.sess.set_providers(['CUDAExecutionProvider'], [{'device_id': device_id}])
-        self.input_fields = input_fields
+        self.input_fields = self.input_names
         self.mean_val = kwargs.get('mean', None)   # 均值
         self.std_val = kwargs.get('std', None)     # 方差
         self.rgb2bgr = kwargs.get('rgb2bgr', False)
 
     def __call__(self, *args):        
-        input_map = {}
-        for field, data in zip(self.input_fields, args):
+        input_map = None
+        for field, data, expected_shape in zip(self.input_fields, args, self.input_shapes):
             if self.mean_val is not None:
                 if len(data.shape) == 4:
                     # NxHxWx3
@@ -57,9 +63,35 @@ class inference_onnx_op(object):
 
             if data.dtype != np.float32:
                 data = data.astype(np.float32)
-            input_map[field] = data
 
-        output = self.sess.run(None, input_map)
+            group_num = data.shape[0] // expected_shape[0]
+            if input_map is None:
+                input_map = [{} for _ in range(group_num)]
+
+            for group_i in range(group_num):
+                input_map[group_i][field] = data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]]
+
+        group_output = []
+        for group_input_map in input_map:
+            result = self.sess.run(None, group_input_map)
+            group_output.append(result)
+
+        output = None
+        if len(group_output) == 1:
+            output = group_output[0]
+        else:
+            if isinstance(group_output[0], tuple) or isinstance(group_output[0], list):
+                output = []
+                for elem_i in range(len(group_output[0])):
+                    rr = []
+                    for group_i in range(len(group_output)):
+                        rr.append(group_output[group_i][elem_i])
+                    
+                    rr = np.concatenate(rr, 0)
+                output.append(rr)
+            else:
+                output = np.concatenate(group_output, 0)
+
         if isinstance(output, list) or isinstance(output, tuple):
             return tuple(output)
         
@@ -74,7 +106,7 @@ def __session_run_in_process(onnx_path, device_id, input_fields, input_queue, ou
         data = input_queue.get()
         if data is None:
             break
-        
+
         input_map = {}
         for field, data in zip(input_fields, data):
             data = np.transpose(data, [2,0,1])

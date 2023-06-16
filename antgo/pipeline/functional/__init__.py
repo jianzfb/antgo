@@ -91,14 +91,20 @@ def _placeholder(*arg):
     for ii,xx in zip(index, arg):
       
       data_type = -1
-      if xx.dtype == np.float32:
-        data_type = 6
-      elif xx.dtype == np.float64:
-        data_type = 7
-      elif xx.dtype == np.int32:
-        data_type = 4
-      elif xx.dtype == np.uint8:
-        data_type = 1
+      data_shape = []
+      if isinstance(xx, np.ndarray):
+        data_shape = list(xx.shape)
+        if xx.dtype == np.float32:
+          data_type = 6
+        elif xx.dtype == np.float64:
+          data_type = 7
+        elif xx.dtype == np.int32:
+          data_type = 4
+        elif xx.dtype == np.uint8:
+          data_type = 1
+      elif isinstance(xx, str):
+        data_shape = []
+        data_type = 11
 
       if data_type < 0:
         print('placeholder type abnormal.')
@@ -111,7 +117,7 @@ def _placeholder(*arg):
           'memory_type': 2,     # CPU_BUFFER
           'data_format': 1000,  # AUTO
           'data_type': data_type,        # EAGLEEYE_UCHAR, EAGLEEYE_FLOAT
-          'shape': list(xx.shape),  # 
+          'shape': data_shape,  # 
         }
       )
 
@@ -121,13 +127,19 @@ def _placeholder(*arg):
     )
   else:
     for ii, xx in zip([index], arg):
+      data_shape = []
       data_type = -1
-      if xx.dtype == np.float32:
-        data_type = 6
-      elif xx.dtype == np.int32:
-        data_type = 4
-      elif xx.dtype == np.uint8:
-        data_type = 1
+      if isinstance(xx, np.ndarray):
+        data_shape = list(xx.shape)
+        if xx.dtype == np.float32:
+          data_type = 6
+        elif xx.dtype == np.int32:
+          data_type = 4
+        elif xx.dtype == np.uint8:
+          data_type = 1
+      elif isinstance(xx, str):
+        data_shape = []
+        data_type = 11
 
       if data_type < 0:
         print('placeholder type abnormal.')
@@ -140,7 +152,7 @@ def _placeholder(*arg):
           'memory_type': 2,               # CPU_BUFFER
           'data_format': 1000,            # AUTO
           'data_type': data_type,         # EAGLEEYE_UCHAR, EAGLEEYE_FLOAT
-          'shape': list(xx.shape),        # 
+          'shape': data_shape,        # 
         }
       )
 
