@@ -85,7 +85,7 @@ DEFINE_indicator("ignore-incomplete", True, "")
 DEFINE_nn_args()
 
 action_level_1 = ['train', 'eval', 'export', 'config', 'submitter', 'server', 'activelearning']
-action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload']
 
 
 def main():
@@ -238,12 +238,12 @@ def main():
     return
 
   ####################################################################################################
-  if args.root is None or args.root == '':
-    print('Using default root address ali:///exp')
-    args.root = "ali:///exp"
-
   # 执行指令
   if action_name in action_level_1:
+    if args.root is None or args.root == '':
+      print('Using default root address ali:///exp')
+      args.root = "ali:///exp"
+
     # 远程提交任务(local模式仅在开发者调试时使用)
     if args.ssh or args.k8s or args.local:
       # 允许非标准项目远程提交
@@ -678,8 +678,21 @@ def main():
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return
- 
-        tool_func(args.tgt, args.tags)
+
+        # args.src 远程文件路径
+        # args.tgt 本地路径
+        # args.tags 关键字（对于搜索引擎下载使用）
+        tool_func(args.tgt, args.tags, src_path=args.src)
+      elif sub_action_name.startswith('upload'):
+        tool_func = getattr(tools, f'upload_to_{sub_action_name.split("/")[1]}', None)
+
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+
+        # args.src 本地路径
+        # args.tgt 远程目录
+        tool_func(args.tgt, src_path=args.src)
       elif sub_action_name.startswith('label'):
         if sub_action_name.split("/")[1] == 'start':
           tool_func = getattr(tools, f'label_{sub_action_name.split("/")[1]}', None)
