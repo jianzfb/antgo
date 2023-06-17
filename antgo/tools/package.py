@@ -1,5 +1,4 @@
 import sys
-sys.path.append('/root/workspace/antgo')
 from antgo.dataflow.datasetio import *
 import os
 import json

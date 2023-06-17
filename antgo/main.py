@@ -723,7 +723,9 @@ def main():
     elif action_name == 'share':
       if sub_action_name == 'data':
         tools.share_data_func(args)
-
+    else:
+      logging.error(f'Dont support {action_name}')
+      logging.info(f'All support action {action_level_1 + action_level_2}')
 
 if __name__ == '__main__':
   main()

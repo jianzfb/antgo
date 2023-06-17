@@ -1,6 +1,5 @@
 from inspect import trace
 import sys
-sys.path.append('/opt/tiger/handdetJ/antgo')
 import os
 import argparse
 from antgo.framework.helper.tools import args
