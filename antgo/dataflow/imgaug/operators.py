@@ -352,7 +352,6 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
 
     def __call__(self, sample, context=None):
         image = sample['image']
-
         joints2d = sample['joints2d']
         joints_vis = sample['joints_vis']
         if joints2d.size == 0:
@@ -383,14 +382,14 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
                 'bboxes': np.array([xmin, ymin, xmin+inp_w, ymin+inp_h])
             }
             return sample
-        
+
         bbox = np.zeros((4), dtype=np.int32)
         if len(joints2d.shape) == 3:
             obj_num = joints2d.shape[0]
             obj_i = np.random.randint(0, obj_num)
             joints2d = joints2d[obj_i]
             joints_vis = joints_vis[obj_i]
-            
+
             if 'bboxes' in sample and len(sample['bboxes']) > 0:
                 bbox = sample['bboxes'][obj_i]
             else:
@@ -436,17 +435,16 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         # 转换监督目标
         target, offset_x, offset_y, target_weight = \
             self._target_generator(joints2d, self.num_joints, self._feat_stride)
-        
+
         # 修正bbox
         x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
         bbox = [x1, y1, x2, y2]        
-        
+
         # for joint_i, (x,y) in enumerate(joints2d):
         #     x, y = int(x), int(y)
         #     if joints_vis[joint_i]:
         #         cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
-        # cv2.imwrite(f'./aabb/112233.png', image)
-
+        # cv2.imwrite(f'./112233.png', image)
         sample = {
             'image': image,
             'heatmap': target,
@@ -543,7 +541,6 @@ class KeepRatio(BaseOperator):
             if 'joints_vis' in sample and len(sample['joints_vis']) != 0:
                 pos_outlie_x = sample['joints2d'][:, :, 0] <= 0
                 pos_outlie_y = sample['joints2d'][:, :, 1] <= 0
-
                 pos_outlie = pos_outlie_x | pos_outlie_y | sample['joints_vis'] == 0
                 sample['joints_vis'][pos_outlie] = 0
 
@@ -606,9 +603,8 @@ class KeepRatio(BaseOperator):
 
                 # 调整joints_vis NxC
                 if 'joints_vis' in sample and len(sample['joints_vis']) > 0:
-                    pos_outlie_x = sample['joints2d'][:, 0] <= 0
-                    pos_outlie_y = sample['joints2d'][:, 1] <= 0
-
+                    pos_outlie_x = sample['joints2d'][:, :, 0] <= 0
+                    pos_outlie_y = sample['joints2d'][:, :, 1] <= 0
                     pos_outlie = pos_outlie_x | pos_outlie_y | sample['joints_vis'] == 0
                     sample['joints_vis'][pos_outlie] = 0                    
 
@@ -1902,7 +1898,7 @@ class ResizeS(BaseOperator):
             y2 = sample['bboxes'][:, 3:4]
             y2 = np.clip(y2, 0, resize_h-1)
             sample['bboxes'] = np.concatenate([x1, y1, x2, y2], axis=-1)
-        
+
         if 'joints2d' in sample and len(sample['joints2d']) > 0:
             scale_array = np.array([scale_x, scale_y], dtype=np.float32).reshape(1,1,2)
             sample['joints2d'] = sample['joints2d'] * scale_array
@@ -1917,13 +1913,16 @@ class ResizeS(BaseOperator):
             sample['segments'] = \
                 cv2.resize(sample['segments'], (resize_w, resize_h), interpolation=cv2.INTER_NEAREST)
 
+        if 'image_meta' not in sample:
+            sample['image_meta'] = {}
+
         sample['image_meta']['image_shape'] = (resize_h, resize_w)
         sample['image_meta']['scale_factor'] =  [scale_x, scale_y] * 2
         sample['height'] = resize_h
         sample['width'] = resize_w
         sample['image'] = cv2.resize(
             sample['image'], (resize_w, resize_h), interpolation=self.interp_dict[interp])
-        
+
         if 'image_2' in sample:
             sample['image_2'] = cv2.resize(
                 sample['image_2'], (resize_w, resize_h), interpolation=self.interp_dict[interp])

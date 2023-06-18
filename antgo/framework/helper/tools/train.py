@@ -1,6 +1,5 @@
 # Copyright (c) MLTALKER. All rights reserved.
 import sys
-sys.path.append('/root/paddlejob/workspace/env_run/portrait/antgo')
 # sys.path.append('/root/paddlejob/workspace/env_run/portrait/InterHand26M/common')
 # sys.path.append('/root/paddlejob/workspace/env_run/portrait/InterHand26M/main')
 

@@ -28,7 +28,6 @@ class KeypointNet(BaseModule):
         hard_weight = 2
         mid_weight = 1
         easy_weight = 0.5
-
         loss_hm = self.cls_criterion(pred_heatmap, gt_heatmap)
 
         joint_num = pred_heatmap.shape[1]

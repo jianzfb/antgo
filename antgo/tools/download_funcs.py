@@ -8,13 +8,15 @@ from __future__ import print_function
 from antgo.utils import logger
 from antgo.ant.download import *
 from antgo.ant import flags
+from antgo.framework.helper.fileio.file_client import *
 import os
 import requests
 import time
 import  urllib.parse
 import uuid
 
-def download_from_baidu(target_folder, keys):
+
+def download_from_baidu(target_folder, keys, src_path=None):
     datasource_name = 'baidu'
     datasource_type = ''
     datasource_keyword = ''
@@ -52,7 +54,8 @@ def download_from_baidu(target_folder, keys):
         {'download_data_type': datasource_type}, 
         os.path.join(target_folder, 'spider_%d'%(time_stamp)))
 
-def download_from_bing(target_folder, keys):
+
+def download_from_bing(target_folder, keys, src_path=None):
     datasource_name = 'bing'
     datasource_type = ''
     datasource_keyword = ''
@@ -85,12 +88,14 @@ def download_from_bing(target_folder, keys):
         {'download_data_type': datasource_type}, 
         os.path.join(target_folder, 'spider_%d'%(time_stamp)))
 
-def download_from_google(target_folder, keys):
+
+def download_from_google(target_folder, keys, src_path=None):
     FLAGS = flags.AntFLAGS
 
     logger.error("In coming")
 
-def download_from_vcg(target_folder, keys):
+
+def download_from_vcg(target_folder, keys, src_path=None):
     datasource_name = 'vcg'
     datasource_type = ''
     datasource_keyword = ''
@@ -122,3 +127,11 @@ def download_from_vcg(target_folder, keys):
         datasource_keyword, 
         {'download_data_type': datasource_type}, 
         os.path.join(target_folder, 'spider_%d'%(time_stamp)))
+
+
+def download_from_aliyun(target_folder, keys=None, src_path=None):
+    if not src_path.startswith('ali://'):
+        src_path = f'ali://{src_path}'
+
+    ali = AliBackend()
+    ali.download(src_path, target_folder)

@@ -47,7 +47,7 @@ class SimpleQNetLite0PoseHeatmap2D(nn.Module):
         # deconv_layer2 = []
         # deconv1 = nn.ConvTranspose2d(
         #     2048, self.deconv_dim[0], kernel_size=4, stride=2, padding=int(4 / 2) - 1, bias=False)
-        deconv1 = nn.Upsample(size=(8, 8), mode="nearest")  # ,align_corners=False
+        deconv1 = nn.Upsample(scale_factor=2, mode="nearest")  # ,align_corners=False
         # deconv1 = nn.Upsample(scale_factor=2, mode='nearest')
         conv1_1x1 = nn.Conv2d(
             160, self.deconv_dim[0], kernel_size=3, stride=1, padding=1, bias=False
@@ -55,7 +55,7 @@ class SimpleQNetLite0PoseHeatmap2D(nn.Module):
         bn1 = nn.BatchNorm2d(self.deconv_dim[0])
         # deconv2 = nn.ConvTranspose2d(
         #     self.deconv_dim[0], self.deconv_dim[1], kernel_size=4, stride=2, padding=int(4 / 2) - 1, bias=False)
-        deconv2 = nn.Upsample(size=(16, 16), mode="nearest")
+        deconv2 = nn.Upsample(scale_factor=2, mode="nearest")
         # deconv2 = nn.Upsample(scale_factor=2, mode='nearest')
         conv2_1x1 = nn.Conv2d(self.deconv_dim[0], self.deconv_dim[1], kernel_size=3, stride=1, padding=1, bias=False)
         bn2 = nn.BatchNorm2d(self.deconv_dim[1])

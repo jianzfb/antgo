@@ -12,7 +12,7 @@ import os
 import subprocess
 from pathlib import Path
 from typing import Any, List, Dict, Union
-
+import traceback
 from antgo.pipeline.operators import Operator
 from antgo.pipeline.operators.nop import NOPOperator
 from antgo.pipeline.engine import *
@@ -60,23 +60,23 @@ class OperatorLoader:
         try:
             op = getattr(importlib.import_module(module), op_cls)
         except:
-            subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'openmim'])
-            subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmengine'])
-            subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmcv-full'])
+            subprocess.check_call(['pip3', 'install', 'openmim'])
+            subprocess.check_call(['mim', 'install', 'mmengine'])
+            subprocess.check_call(["mim", "install", "mmcv>=2.0.0rc1"])
             if fname == 'detector':
-                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmdet'])
+                subprocess.check_call(['pip3', 'install', 'mmdet'])
             elif fname == 'segmentor':
-                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmsegmentation'])
+                subprocess.check_call(['pip3', 'install', 'mmsegmentation'])
             elif fname == 'classification':
-                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmcls'])
+                subprocess.check_call(['pip3', 'install', 'mmcls'])
             elif fname == 'ocr':
-                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmocr'])
+                subprocess.check_call(['pip3', 'install', 'mmocr'])
             elif fname == 'pose':
-                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', 'mmpose'])
+                subprocess.check_call(['pip3', 'install', 'mmpose'])
             elif fname == 'editing':
-                subprocess.check_call([sys.executable, '-m', 'git', 'clone', 'https://github.com/open-mmlab/mmediting.git'])
-                subprocess.check_call([sys.executable, '-m', 'cd', 'mmediting'])
-                subprocess.check_call([sys.executable, '-m', 'pip3', 'install', '-e', '.'])
+                subprocess.check_call(['git', 'clone', 'https://github.com/open-mmlab/mmediting.git'])
+                subprocess.check_call(['cd', 'mmediting'])
+                subprocess.check_call(['pip3', 'install', '-e', '.'])
 
             op = getattr(importlib.import_module(module), op_cls)
 
@@ -142,6 +142,7 @@ class OperatorLoader:
             op = getattr(importlib.import_module(module), op_cls)
             return self.instance_operator(op, arg, kws) if op is not None else None
         except Exception:  # pylint: disable=broad-except
+            traceback.print_exc()
             return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:

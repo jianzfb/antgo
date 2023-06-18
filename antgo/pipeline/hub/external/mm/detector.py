@@ -13,21 +13,22 @@ import sys
 
 
 class Detector(object):
-  def __init__(self, config_file, checkpoint_file=None, device='cpu'):
+  def __init__(self, config_file, checkpoint_file=None, thres=0.4, device='cuda:0'):
+    self.thres = thres
     if not config_file.endswith('.py'):
       config_file = f'{config_file}.py'
     config_name = config_file.split('.')[0]
-    model_folder = os.path.join(os.environ['HOME'], '.antgo', 'models', 'mmdetection')
+    model_folder = os.path.join(os.environ['HOME'], '.antgo', 'models', 'mmdetection', config_name)
     if not os.path.exists(model_folder):
       os.makedirs(model_folder)
 
     model_file = os.path.join(model_folder, config_file)
     if not os.path.exists(model_file):
-      subprocess.check_call([sys.executable, '-m', 'mim', 'download', 'mmdet', '--config', config_name, '--dest', model_folder])
+      subprocess.check_call(['mim', 'download', 'mmdet', '--config', config_name, '--dest', model_folder])
 
     if checkpoint_file is None:
       for f in os.listdir(model_folder):
-        if f.startswith(config_name) and f.endswith('.pth'):
+        if f.endswith('.pth'):
           checkpoint_file = f
           break
     assert(checkpoint_file is not None)
@@ -38,20 +39,13 @@ class Detector(object):
 
   def __call__(self, *args, **kwargs):
     result = inference_detector(self.model, args[0])
-
-    bbox = []
-    label = []
-    for cls_i, det_result in enumerate(result):
-      if det_result.size > 0:
-        det_num = det_result.shape[0]
-        bbox.append(det_result)
-        label.append(np.ones((det_num)) * (cls_i+1))
-
-    if len(bbox) == 0:
-      bbox = np.empty([0, 5])
-      label = np.empty([0])
-    else:
-      bbox = np.concatenate(bbox,0)
-      label = np.concatenate(label, 0)
-    return bbox, label
+    pred_instances_score = result.pred_instances.scores.to('cpu').numpy()
+    pred_instances_label = result.pred_instances.labels.to('cpu').numpy()
+    pred_instances_bbox = result.pred_instances.bboxes.to('cpu').numpy()
+    valid_pos = np.where(pred_instances_score > self.thres)
+    valid_pred_bbox = pred_instances_bbox[valid_pos]
+    valid_pred_score = pred_instances_score[valid_pos]
+    valid_pred_label = pred_instances_label[valid_pos]
+    valid_pred_bbox = np.concatenate([valid_pred_bbox, valid_pred_score.reshape(-1, 1)], -1)
+    return valid_pred_bbox, valid_pred_label
 
