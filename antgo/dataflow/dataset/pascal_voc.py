@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from antgo.utils.fs import maybe_here_match_format
 from antgo.dataflow.dataset.dataset import *
 from antgo.framework.helper.fileio.file_client import *
+from filelock import FileLock
 
 
 __all__ = ['Pascal2007', 'Pascal2012']
@@ -26,7 +27,8 @@ class PascalBase(Dataset):
     self._devkit_path = dir
 
     if self._year == '2007':
-      if os.environ.get('LOCAL_RANK', 0) == 0:
+      lock = FileLock('DATASET.lock')
+      with lock:
         if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
           # 数据集不存在，需要重新下载，并创建标记
           ali = AliBackend()
@@ -43,20 +45,9 @@ class PascalBase(Dataset):
             tar = tarfile.open(os.path.join(self.dir, 'VOCtest_06-Nov-2007.tar'), 'r')
             tar.extractall(self.dir)
             tar.close()
-
-          os.system('touch DATASET_IS_READY')
-        else:
-          # 数据集存在，创建标记
-          if not os.path.exists('DATASET_IS_READY'):
-            os.system('touch DATASET_IS_READY')
-      else:
-        while True:
-          # 等待直到存在指定文件
-          if os.path.exists('DATASET_IS_READY'):
-            break
-          time.sleep(5)
     else:
-      if os.environ.get('LOCAL_RANK', 0) == 0:
+      lock = FileLock('DATASET.lock')
+      with lock:
         if not os.path.exists(os.path.join(self._devkit_path, 'VOCdevkit')):
           # 数据集不存在，需要重新下载，并创建标记
           ali = AliBackend()
@@ -83,17 +74,6 @@ class PascalBase(Dataset):
 
             # unzip aug class 
             os.system(f"cd {self.dir} && unzip SegmentationClassAug.zip")
-          os.system('touch DATASET_IS_READY')
-        else:
-          # 数据集存在，创建标记
-          if not os.path.exists('DATASET_IS_READY'):
-            os.system('touch DATASET_IS_READY')
-      else:
-          while True:
-            # 等待直到存在指定文件
-            if os.path.exists('DATASET_IS_READY'):
-              break
-            time.sleep(5)
 
     self._data_path = os.path.join(self.dir,'VOCdevkit', 'VOC' + self._year)
     self._classes = ('background',

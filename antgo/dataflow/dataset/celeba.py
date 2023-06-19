@@ -8,7 +8,9 @@ from __future__ import print_function
 from antgo.dataflow.dataset import *
 import os
 import numpy as np
+from filelock import FileLock
 __all__ = ['CelebA']
+
 
 CELEBA_URL = "http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html"
 class CelebA(Dataset):

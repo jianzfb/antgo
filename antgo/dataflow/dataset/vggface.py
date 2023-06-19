@@ -12,6 +12,7 @@ import time
 from antgo.dataflow.dataset import *
 from antgo.framework.helper.fileio.file_client import *
 import cv2
+from filelock import FileLock
 
 
 class VGGFace(Dataset):
@@ -20,8 +21,8 @@ class VGGFace(Dataset):
       train_or_test = 'test'
     super(VGGFace, self).__init__(train_or_test, dir, ext_params=ext_params)
     assert(train_or_test in ['train', 'test', 'val'])
-
-    if os.environ.get('LOCAL_RANK', 0) == 0:
+    lock = FileLock('DATASET.lock')
+    with lock:
       if not os.path.exists(os.path.join(self.dir, 'data')) or not os.path.exists(os.path.join(self.dir, 'meta')):
         # 数据集不存在，需要重新下载，并创建标记
         ali = AliBackend()
@@ -30,17 +31,6 @@ class VGGFace(Dataset):
 
         os.system(f'cd {os.path.join(self.dir, "data")} && tar -xf vggface2_train.tar.gz && tar -xf vggface2_test.tar.gz')
         os.system(f'cd {os.path.join(self.dir, "meta")} && tar -xf bb_landmark.tar.gz')
-        os.system('touch DATASET_IS_READY')
-      else:
-        # 数据集存在，创建标记
-        if not os.path.exists('DATASET_IS_READY'):
-          os.system('touch DATASET_IS_READY')     
-    else:
-      while True:
-        # 等待直到存在指定文件
-        if os.path.exists('DATASET_IS_READY'):
-          break
-        time.sleep(5)
 
     meta_file_name = 'loose_bb_train.csv' if self.train_or_test == 'train' else 'loose_bb_test.csv'
     

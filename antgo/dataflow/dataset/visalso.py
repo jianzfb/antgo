@@ -12,6 +12,7 @@ import os
 import numpy as np
 import cv2
 import time
+from filelock import FileLock
 
 __all__ = ['VisalSO']
 
@@ -28,24 +29,14 @@ class VisalSO(Dataset):
             'seagull'
         ]
 
-        if os.environ.get('LOCAL_RANK', 0) == 0:
+        lock = FileLock('DATASET.lock')
+        with lock:
             if not os.path.exists(os.path.join(self.dir, 'Small Object dataset')):
                 # 数据集不存在，需要重新下载，并创建标记
                 if not os.path.exists(self.dir):
                     os.makedirs(self.dir)
     
                 os.system(f'cd {self.dir} && wget {url_address} && unzip SmallObjectDataset.zip')
-                os.system('touch DATASET_IS_READY')
-            else:
-                # 数据集存在，创建标记
-                if not os.path.exists('DATASET_IS_READY'):
-                    os.system('touch DATASET_IS_READY')
-        else:
-            while True:
-                # 等待直到存在指定文件
-                if os.path.exists('DATASET_IS_READY'):
-                    break
-                time.sleep(5)
 
         self.image_file_list = []
         self.bboxes_list = []

@@ -15,7 +15,7 @@ from antgo.framework.helper.fileio.file_client import *
 import threading
 import json
 from pprint import pprint
-
+from filelock import FileLock
 
 def _cycle(iterator_fn: typing.Callable) -> typing.Iterable[typing.Any]:
     """Create a repeating iterator from an iterator generator."""
@@ -149,70 +149,11 @@ class TFDataset(torch.utils.data.IterableDataset):
                  sample_num_equalizer=True,
                  auto_ext_info=[]) -> None:
         super().__init__()
-        if data_folder is None:
-            # 不允许data_path_list和data_folder同时不设置
-            logging.error('Must set data_folder')
-            return
+        if isinstance(data_folder, str):
+            data_folder = [data_folder]
 
-        # 自动下载指定数据(仅在首次运行时，进行下载)
-        if ':///' in data_folder:
-            terms = data_folder.split('/')
-            dataset_name = terms[-1]
-            if terms[-1] == '*' or terms[-1] == '':
-                dataset_name = terms[-2]
-
-            # 远程存储，自动下载
-            local_temp_folder = f'./temp_{dataset_name}'
-            if os.environ.get('LOCAL_RANK', 0) == 0:
-                if not os.path.exists(local_temp_folder):
-                    # 数据集不存在，需要重新下载，并创建标记
-                    # 创建临时目录
-                    os.makedirs(local_temp_folder)
-
-                    # 下载
-                    file_client_get(data_folder, local_temp_folder)
-                    os.system('touch DATASET_IS_READY')
-                else:
-                    # 数据集存在，创建标记
-                    if not os.path.exists('DATASET_IS_READY'):
-                        os.system('touch DATASET_IS_READY')                    
-            else:
-                while True:
-                    # 等待直到存在指定文件
-                    if os.path.exists('DATASET_IS_READY'):
-                        break
-                    time.sleep(5)
-
-        # 替换为本地路径
-        if ':///' in data_folder:
-            terms = data_folder.split('/')
-            dataset_name = terms[-1]
-            if terms[-1] == '*' or terms[-1] == '':
-                dataset_name = terms[-2]
-
-            # 使用本地地址替换
-            data_folder = f'./temp_{dataset_name}'
-
-        # 遍历文件夹，发现所有tfrecord数据
-        self.data_path_list = []
-        for tfrecord_file in os.listdir(data_folder):
-            if tfrecord_file.endswith('tfrecord'):
-                tfrecord_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['tfrecord'])
-                self.data_path_list.append(f'{data_folder}/{tfrecord_file}')
-
-        self.index_path_list = []
-        for i in range(len(self.data_path_list)):
-            tfrecord_file = self.data_path_list[i]
-            folder = os.path.dirname(tfrecord_file)
-            if tfrecord_file.endswith('tfrecord') or tfrecord_file.endswith('index'):
-                index_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['index'])
-                index_file = f'{folder}/{index_file}'
-                tfrecord_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['tfrecord'])
-                self.data_path_list[i] = f'{folder}/{tfrecord_file}'
-            else:
-                index_file = tfrecord_file+'-index'
-                self.data_path_list[i] = tfrecord_file+'-tfrecord'
-            self.index_path_list.append(index_file)
+        # 准备数据
+        self._prepare_data(data_folder)
 
         if description is None:
             description = {}
@@ -555,6 +496,69 @@ class TFDataset(torch.utils.data.IterableDataset):
 
     def __len__(self):
         return self.num_samples
+
+    def _prepare_data(self, dataset_folders):
+        self.data_path_list = []
+        self.index_path_list = []
+        for dataset_folder in dataset_folders:
+            if ':///' in dataset_folder:
+                # 远程存储模式
+                terms = dataset_folder.split('/')
+                dataset_name = terms[-1]
+                if terms[-1] == '*' or terms[-1] == '':
+                    dataset_name = terms[-2]
+
+                # 远程存储，自动下载
+                local_temp_folder = f'./temp_{dataset_name}'
+
+                # 多进程锁
+                lock = FileLock('DATASET.lock')
+                with lock:
+                    if not os.path.exists(local_temp_folder):
+                        # 数据集不存在，需要重新下载，并创建标记
+                        # 创建临时目录
+                        os.makedirs(local_temp_folder)
+
+                        # 下载
+                        file_client_get(dataset_folder, local_temp_folder)
+            else:
+                # 本地存储模式
+                if '*' in dataset_folder:
+                    dataset_folder = dataset_folder.replace('*', '')
+
+            # 替换为本地路径
+            if ':///' in dataset_folder:
+                terms = dataset_folder.split('/')
+                dataset_name = terms[-1]
+                if terms[-1] == '*' or terms[-1] == '':
+                    dataset_name = terms[-2]
+
+                # 使用本地地址替换
+                dataset_folder = f'./temp_{dataset_name}'
+
+            # 遍历文件夹，发现所有tfrecord数据
+            part_path_list = []
+            for tfrecord_file in os.listdir(dataset_folder):
+                if tfrecord_file.endswith('tfrecord'):
+                    tfrecord_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['tfrecord'])
+                    part_path_list.append(f'{dataset_folder}/{tfrecord_file}')
+
+            part_index_path_list = []
+            for i in range(len(part_path_list)):
+                tfrecord_file = part_path_list[i]
+                folder = os.path.dirname(tfrecord_file)
+                if tfrecord_file.endswith('tfrecord') or tfrecord_file.endswith('index'):
+                    index_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['index'])
+                    index_file = f'{folder}/{index_file}'
+                    tfrecord_file = '-'.join(tfrecord_file.split('/')[-1].split('-')[:-1]+['tfrecord'])
+                    part_path_list[i] = f'{folder}/{tfrecord_file}'
+                else:
+                    index_file = tfrecord_file+'-index'
+                    part_path_list[i] = tfrecord_file+'-tfrecord'
+                part_index_path_list.append(index_file)
+            
+            self.data_path_list.extend(part_path_list)
+            self.index_path_list.extend(part_index_path_list)
 
 
 # data = [2,4,6,7,8,5]

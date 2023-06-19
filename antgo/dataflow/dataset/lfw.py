@@ -13,7 +13,7 @@ import time
 import copy
 import cv2
 from antgo.framework.helper.fileio.file_client import *
-
+from filelock import FileLock
 
 __all__ = ['LFW']
 
@@ -21,8 +21,8 @@ class LFW(Dataset):
   def __init__(self, train_or_test, dir=None, ext_params=None):
     super(LFW, self).__init__(train_or_test, dir, ext_params)
     assert(train_or_test in ['train', 'val', 'test'])
-
-    if os.environ.get('LOCAL_RANK', 0) == 0:
+    lock = FileLock('DATASET.lock')
+    with lock:
       if not os.path.exists(os.path.join(self.dir, 'lfw-deepfunneled')):  
         # 数据集不存在，需要重新下载，并创建标记
         if not os.path.exists(self.dir):
@@ -38,17 +38,6 @@ class LFW(Dataset):
         ali.download('ali:///dataset/lfw/people.txt', self.dir)
 
         os.system(f'cd {self.dir} && tar -xf lfw-deepfunneled.tgz')
-        os.system('touch DATASET_IS_READY')
-      else:
-        # 数据集存在，创建标记
-        if not os.path.exists('DATASET_IS_READY'):
-          os.system('touch DATASET_IS_READY')
-    else:
-      while True:
-        # 等待直到存在指定文件
-        if os.path.exists('DATASET_IS_READY'):
-          break
-        time.sleep(5)
 
     self.purpose = getattr(self, 'purpose', 'development')
     assert(self.purpose in ['development', 'benchmark'])
