@@ -5,6 +5,7 @@ from torch import nn
 from antgo.framework.helper.models.builder import MODELS, build_backbone, build_head, build_neck
 from antgo.framework.helper.runner import BaseModule
 import numpy as np
+import torch.nn.functional as F
 
 
 @MODELS.register_module()
@@ -139,7 +140,9 @@ class KeypointNet(BaseModule):
         offset_y = offset_y.detach().cpu().numpy()
 
         preds, score = self.get_max_pred_batch(preds, offset_x, offset_y)
-        pred_gt_hm = np.concatenate([preds * (image_h/heatmap_h), score], axis=2)
+        preds[:,:, 0] = preds[:,:, 0] * (image_w/heatmap_w)
+        preds[:,:, 1] = preds[:,:, 1] * (image_h/heatmap_h)
+        pred_gt_hm = np.concatenate([preds, score], axis=2)
         results = {
             'pred_joints2d': [sample_joint2d for sample_joint2d in pred_gt_hm],
         }
@@ -147,6 +150,7 @@ class KeypointNet(BaseModule):
 
     def onnx_export(self, image):
         output = self.backbone(image)   # x32,x16,x8,x4
-        output = self.head(output)      # uv_heatmap, uv_off
-  
-        return output
+        heatmap, offset = self.head(output) # uv_heatmap, uv_off
+        heatmap = torch.sigmoid(heatmap)
+        heatmap = F.max_pool2d(heatmap, 3, stride=1, padding=(3 - 1) // 2)
+        return heatmap, offset

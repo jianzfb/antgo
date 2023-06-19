@@ -32,7 +32,7 @@ COPY ./ /tmp/antgo/
 RUN bash /tmp/Miniconda3-py38_23.3.1-0-Linux-x86_64.sh -b -p /miniconda3
 
 # 使用 Miniconda3 默认 python 环境
-RUN cd /tmp/antgo && apt-get update -y && apt-get install -y gcc && /miniconda3/bin/pip install --no-cache-dir -r requirements.txt &&/miniconda3/bin/pip install opencv-python-headless && /miniconda3/bin/python setup.py build_ext install && rm -rf /tmp/*
+RUN cd /tmp/antgo && apt-get update -y && apt-get install -y gcc && /miniconda3/bin/pip install lit==16.0.5.post0 && /miniconda3/bin/pip install --no-cache-dir -r requirements.txt &&/miniconda3/bin/pip install opencv-python-headless && /miniconda3/bin/python setup.py build_ext install && rm -rf /tmp/*
 
 # 安装工具（依然使用华为开源镜像站）
 RUN cp -a /etc/apt/sources.list /etc/apt/sources.list.bak && \

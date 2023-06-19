@@ -533,6 +533,10 @@ class COCO2017(Dataset):
             continue
         if obj['category_id'] not in self.cat_ids:
             continue
+        if obj['iscrowd'] == 1:
+          # 去除群体标注
+          continue
+
         # 目标框
         boxes.append([x, y, x + w, y + h])
         # 目标类别
@@ -543,7 +547,8 @@ class COCO2017(Dataset):
       img_annotation['labels'] = np.array(category_id)
       img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
       img_annotation['image_meta'] = {
-        'image_shape': (img.shape[0], img.shape[1])
+        'image_shape': (img.shape[0], img.shape[1]),
+        'image_file': os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name'])
       }
 
       return (img, img_annotation)
@@ -566,7 +571,8 @@ class COCO2017(Dataset):
       img_annotation = {
         'segments': segmentation_map,
         'image_meta': {
-          'image_shape': (img.shape[0], img.shape[1])
+          'image_shape': (img.shape[0], img.shape[1]),
+          'image_file': os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name'])
         }
       }
       return (img, img_annotation)
@@ -615,7 +621,8 @@ class COCO2017(Dataset):
         'bboxes': np.array(boxes),
         'labels': np.array(labels),
         'image_meta': {
-          'image_shape': (img.shape[0], img.shape[1])
+          'image_shape': (img.shape[0], img.shape[1]),
+          'image_file': os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name'])
         }
       }
       return (img, img_annotation)

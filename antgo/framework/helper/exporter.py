@@ -23,7 +23,7 @@ class Exporter(object):
             self.cfg = cfg
         self.work_dir = work_dir
 
-    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, is_convert_to_deploy=False, revise_keys=[]):
+    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, is_convert_to_deploy=False, revise_keys=[], strict=True):
         model = None
         if model_builder is not None:
             model = model_builder()
@@ -36,12 +36,12 @@ class Exporter(object):
             state_dict = ckpt
             if 'state_dict' in ckpt:
                 state_dict = ckpt['state_dict']
-
+            
             for p, r in revise_keys:
                 state_dict = OrderedDict(
                     {re.sub(p, r, k): v
                     for k, v in state_dict.items()})
-            model.load_state_dict(state_dict, strict=True)
+            model.load_state_dict(state_dict, strict=strict)
 
         # 获得浮点模型的 FLOPS、PARAMS
         model.eval()

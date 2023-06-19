@@ -109,7 +109,7 @@ def main():
 
             while True:
                 if is_found_pos and not is_replace_base_image:
-                    content = 'FROM nvidia/cuda:12.1.0-runtime-ubuntu18.04'
+                    content = 'FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04'
                     is_replace_base_image = True
 
                 if content == '# builder stage':
