@@ -19,6 +19,7 @@ from antgo.dataflow.dataset.dataset import *
 from antgo.utils import mask as maskUtils
 from antgo.utils.fs import maybe_here_match_format
 from antgo.framework.helper.fileio.file_client import *
+from filelock import FileLock
 
 
 __all__ = ['COCO2017']
@@ -389,7 +390,8 @@ class COCO2017(Dataset):
     assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
 
     if not os.path.exists(os.path.join(self.dir , 'annotations')):
-      if os.environ.get('LOCAL_RANK', 0) == 0:
+      lock = FileLock('DATASET.lock')
+      with lock:
         if not os.path.exists(os.path.join(self.dir, 'COCO')):
           # 数据集不存在，需要重新下载，并创建标记
           ali = AliBackend()
@@ -397,17 +399,6 @@ class COCO2017(Dataset):
           assert(os.path.exists(os.path.join(self.dir, 'COCO.tar')))
           # 解压
           os.system(f'cd {self.dir} && tar -xf COCO.tar')
-          os.system('touch DATASET_IS_READY')
-        else:
-          # 数据集存在，创建标记
-          if not os.path.exists('DATASET_IS_READY'):
-            os.system('touch DATASET_IS_READY')
-      else:
-        while True:
-          # 等待直到存在指定文件
-          if os.path.exists('DATASET_IS_READY'):
-            break
-          time.sleep(5)
 
       # 修改数据目录
       self.dir = os.path.join(self.dir, 'COCO')

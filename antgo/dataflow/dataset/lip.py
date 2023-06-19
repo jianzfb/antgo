@@ -12,6 +12,7 @@ import numpy as np
 import cv2
 import time
 from antgo.framework.helper.fileio.file_client import *
+from filelock import FileLock
 
 
 __all__ = ['LIP']
@@ -19,8 +20,8 @@ class LIP(Dataset):
   def __init__(self, train_or_test, dir=None, ext_params=None):
     super(LIP, self).__init__(train_or_test, dir, ext_params)
     assert (train_or_test in ['train', 'val'])
-
-    if os.environ.get('LOCAL_RANK', 0) == 0:
+    lock = FileLock('DATASET.lock')
+    with lock:
       if not os.path.exists(os.path.join(self.dir, 'train_id.txt')):
         # 数据集不存在，需要重新下载，并创建标记
         if not os.path.exists(self.dir):
@@ -34,17 +35,6 @@ class LIP(Dataset):
         ali.download('ali:///dataset/lip/val_id.txt', self.dir)
 
         os.system(f'cd {self.dir} && unzip TrainVal_images.zip && unzip Testing_images.zip && unzip TrainVal_parsing_annotations.zip')
-        os.system('touch DATASET_IS_READY')
-      else:
-        # 数据集存在，创建标记
-        if not os.path.exists('DATASET_IS_READY'):
-          os.system('touch DATASET_IS_READY')
-    else:
-      while True:
-        # 等待直到存在指定文件
-        if os.path.exists('DATASET_IS_READY'):
-          break
-        time.sleep(5)
 
     self.data_list = []    
     parse_file = os.path.join(self.dir, '%s' % ('train_id.txt' if self.train_or_test == 'train' else 'val_id.txt'))
