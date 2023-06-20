@@ -3,7 +3,6 @@ from decimal import localcontext
 import inspect
 import os
 import os.path as osp
-from pathlib import Path
 import re
 import tempfile
 from threading import local

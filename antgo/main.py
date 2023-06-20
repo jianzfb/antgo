@@ -20,6 +20,8 @@ import json
 from antgo import tools
 from antgo.script import *
 import yaml
+from pathlib import Path
+from aligo import Aligo
 
 
 # 需要使用python3
@@ -204,9 +206,9 @@ def main():
         with open(args.config, 'r') as fp:
           ssh_config_info = yaml.safe_load(fp)
 
-        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && scp id_rsa.pub {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/.ssh/')
-        os.system(f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} "cd ~/.ssh/ && cat id_rsa.pub > authorized_keys && rm id_rsa.pub"')
-
+        shutil.copy(os.path.join(os.path.dirname(__file__), 'script', 'ssh_nopassword_config.sh'), os.path.join(os.environ["HOME"], ".ssh", 'user_ssh_nopassword_config.sh'))
+        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && rsa=`cat id_rsa.pub` && ' + "sed -i 's%placeholder%'"+"\"${rsa}\""+"'%g' user_ssh_nopassword_config.sh")
+        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
       print('finish config')
     else:
       if args.ssh:
@@ -243,6 +245,13 @@ def main():
     if args.root is None or args.root == '':
       print('Using default root address ali:///exp')
       args.root = "ali:///exp"
+
+    if args.root.startswith('ali:'):
+      # 尝试进行认证，从而保证当前路径下生成认证信息
+      # do nothing
+      if not os.path.exists('./aligo.json'):
+        ali = Aligo()
+        shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')      
 
     # 远程提交任务(local模式仅在开发者调试时使用)
     if args.ssh or args.k8s or args.local:

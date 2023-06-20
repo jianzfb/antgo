@@ -81,7 +81,7 @@ def main():
         print('Couldnt find correct config file.')
         return
 
-    cfg = Config.fromfile(os.path.join(os.path.dirname(__file__), nn_args.config))
+    cfg = Config.fromfile(nn_args.config)
     if 'checkpoint_config' in cfg:
         cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
     if 'evaluation' in cfg:
