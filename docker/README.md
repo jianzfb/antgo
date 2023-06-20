@@ -41,6 +41,17 @@ sudo docker run --rm -d --name antgo-env-ide --shm-size="20G" -p 8080:8080 -e PA
     sudo apt-get install nvidia-container-runtime
     sudo systemctl restart docker
 ```
+如果遇到，无法找到nvidia-container-runtime时，尝试
+```
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID) \
+      && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+      && curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+            sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+sudo apt-get update
+```
+
 2. 在一段随机时间后，如果容器中报GPU不可用，并且nvidia-smi返回如下错误
    
 ```
