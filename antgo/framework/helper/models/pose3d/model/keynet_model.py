@@ -24,6 +24,11 @@ class KeypointNet(BaseModule):
         self.ohem = True
         self.cls_criterion = torch.nn.BCEWithLogitsLoss(reduction='none' if self.ohem else 'mean')
         self.criterion = torch.nn.MSELoss(reduction='none' if self.ohem else 'mean')
+        self.offset_loss_weight = 0.1
+        self.heatmap_loss_weight = 1.0
+        if train_cfg is not None:
+            self.offset_loss_weight = train_cfg.get('offset_loss_weight', 0.1)
+            self.heatmap_loss_weight = train_cfg.get('heatmap_loss_weight', 1.0)
     
     def _loss(self, pred_heatmap, pred_offset_xy, gt_heatmap, joint_mask, heatmap_mask, offset_x, offset_y):
         hard_weight = 2
@@ -85,8 +90,8 @@ class KeypointNet(BaseModule):
         )
 
         outloss = dict()
-        outloss["loss_uv_hm"] = loss_hm
-        outloss["loss_xy_offset"] = 0.1 * (loss_offx + loss_offy)
+        outloss["loss_uv_hm"] = self.heatmap_loss_weight * loss_hm
+        outloss["loss_xy_offset"] = self.offset_loss_weight * (loss_offx + loss_offy)
         return outloss
 
     def forward_train(self, image, heatmap, offset_x, offset_y, heatmap_weight, joints_vis, **kwargs):
