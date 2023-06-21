@@ -92,9 +92,11 @@ def main():
 
         cfg = Config.fromfile(nn_args.config)
         for data_stage in ['train', 'val', 'test']:
+            if getattr(cfg.data, data_stage, None) is None:
+                continue
             if getattr(getattr(cfg.data, data_stage), 'data_path_list', None) is None:
                 continue
-            
+
             if not os.path.exists(f"dataset-storage/{data_stage}/"):
                 os.makedirs(f"dataset-storage/{data_stage}/")
 
