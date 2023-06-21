@@ -86,7 +86,7 @@ DEFINE_indicator("ignore-incomplete", True, "")
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'submitter', 'server', 'activelearning']
+action_level_1 = ['train', 'eval', 'export', 'config', 'submitter', 'server', 'activelearning', 'device']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload']
 
 
@@ -145,6 +145,11 @@ def main():
       fp.write(config_content)
 
     logging.info('Update config file.')
+    return
+
+  # 查看设备
+  if action_name == 'device':
+    tools.check_device_info(args)
     return
 
   # 解析配置文件
@@ -399,7 +404,7 @@ def main():
       if args.exp not in project_info['exp']:
         logging.error(f'Exp {args.exp} not exist in project {args.project}.')
         return
-      
+
       if not os.path.exists(args.exp):
         logging.error(f'Exp code not found in current folder.')
         return

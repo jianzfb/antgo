@@ -15,6 +15,7 @@ from antgo.pipeline.hparam import param_scope
 from antgo.pipeline.hparam import dynamic_dispatch
 from antgo.pipeline.functional.common.config import *
 import numpy as np
+import json
 
 read_camera = DataCollection.read_camera
 read_video = DataCollection.read_video
@@ -30,6 +31,36 @@ def glob(*arg):  # pragma: no cover
     if index is None:
         return DataCollection.from_glob(*arg)
     return DataFrame.from_glob(*arg).map(lambda x: Entity(**{index: x}))
+
+
+@dynamic_dispatch
+def json_dc(*args):
+  index = param_scope()._index
+
+  def inner():
+    for json_path in args:
+      with open(json_path, 'r') as fp:
+        info_list = json.load(fp)
+        for data in info_list:
+          yield Entity(**{index: data})
+
+  return DataFrame(inner())
+
+
+@dynamic_dispatch
+def txt_dc(*args):
+  index = param_scope()._index
+
+  def inner():
+    for json_path in args:
+      with open(json_path, 'r') as fp:
+        string = f.readline()
+        while string:
+            data = json.loads(string)
+            string = f.readline()
+            yield Entity(**{index: data})
+
+  return DataFrame(inner())
 
 
 @dynamic_dispatch
