@@ -35,6 +35,9 @@ class plot_bbox(object):
     self.ignore_category = ignore_category
 
   def __call__(self, image, detbbox, detlabel=None):
+    if detbbox.shape[0] == 0:
+      return image
+
     assert(detbbox.shape[1] == 6 or detbbox.shape[1] == 5)
     if detbbox.shape[1] == 6:
       for (*xyxy, conf, cls), label in zip(detbbox, detlabel):
@@ -69,7 +72,6 @@ class plot_bbox(object):
         if self.color is not None:
           bbox_color = self.color[int(label)]
         plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
-
 
     return image
   

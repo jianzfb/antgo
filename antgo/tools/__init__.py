@@ -6,6 +6,8 @@ from .download_funcs import (download_from_baidu, download_from_bing, download_f
 from .label_funcs import (label_to_studio, label_from_studio, label_start, label_from_native, label_to_merge)
 from .share_funcs import (share_data_func)
 from .upload_funcs import (upload_to_aliyun)
+from .check_device import (check_device_info)
+
 __all__ = [
     'extract_from_videos', 
     'extract_from_images', 
@@ -26,5 +28,6 @@ __all__ = [
     'label_from_native',
     'label_start',
     'label_to_merge',
-    'share_data_func'
+    'share_data_func',
+    'check_device_info'
 ]

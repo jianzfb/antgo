@@ -432,6 +432,9 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         for i in range(self.num_joints):
             joints2d[i, 0:2] = self.affine_transform(joints2d[i, 0:2], trans)
 
+        check_mask = (joints2d[:,0] >= 0) * (joints2d[:, 0] < inp_w) * (joints2d[:,1] >= 0) * (joints2d[:, 1] < inp_h)
+        joints_vis[np.where(check_mask == False)] = 0
+
         # 转换监督目标
         target, offset_x, offset_y, target_weight = \
             self._target_generator(joints2d, self.num_joints, self._feat_stride)
