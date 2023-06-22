@@ -45,6 +45,7 @@ DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')  # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')  # 是否启用finetune模式
 DEFINE_string('id', None, '')
+DEFINE_string("ip", "", "set ip")
 DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 
@@ -86,8 +87,8 @@ DEFINE_indicator("ignore-incomplete", True, "")
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'submitter', 'server', 'activelearning', 'device']
-action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter']
 
 
 def main():
@@ -174,33 +175,26 @@ def main():
 
   ##################################### 支持任务提交脚本配置  ###########################################
   if action_name == 'submitter':
-    has_config_file = not (args.config == '' or args.config == 'config.py')
-    has_config_file = has_config_file and os.path.exists(args.config)
-    
-    if has_config_file:
-      if not (args.ssh or args.local or args.k8s):
-        # 当前配置脚本为用户定制化提交脚本（在提交任务时，优先使用此脚本提交）
-        # 任务提交脚本，参数必须如下格式:
-        # 镜像名字, 启动命令, GPU 数, CPU 数, 内存大小
-        # image_name, launch_argv, gpu_num, cpu_num, memory_size
-        inner_folder = os.path.join(os.environ['HOME'], '.config', 'antgo')
-        with open(args.config, encoding='utf-8', mode='r') as fp:
-          config_content = yaml.safe_load(fp)
-
-        # 将配置脚本目录写入内部目录
-        code_folder = config_content['folder']
-        shutil.copytree(code_folder, os.path.join(inner_folder, os.path.normpath(code_folder).split('/')[-1]))
-
-        # 将配置文件重新写入 (替换脚本目录地址)
-        config_content['folder'] = os.path.normpath(code_folder).split('/')[-1]
-        with open(os.path.join(inner_folder, 'submit-config.yaml'), encoding='utf-8', mode='w') as fp:
-          yaml.safe_dump(config_content, fp)
-
-    if has_config_file:
-      # 进入到这里，说明已经指定ssh,local,k8s
-      # 添加ssh,local,k8s的标准任务提交配置
-      print(f'update submitter config {args.config}')
-      shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo'))
+    if sub_action_name is None or sub_action_name == '':
+      logging.error(f'Only support {action_name} select/list/update/template')
+      return
+    if sub_action_name == 'template':
+      # 生成任务提交配置
+      if args.ssh:
+        # 生成ssh提交配置模板
+        ssh_submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'ssh-submit-config.yaml')
+        shutil.copy(ssh_submit_config_file, './')        
+      else:
+        # 生成自定义的提交配置模板
+        submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'submit-config.yaml')
+        shutil.copy(submit_config_file, './')
+    elif sub_action_name == 'update':
+      # 更新任务提交配置
+      has_config_file = not (args.config == '' or args.config == 'config.py')
+      has_config_file = has_config_file and os.path.exists(args.config)
+      if not has_config_file:
+        logging.error('Need set --config=')
+        return
 
       if args.ssh:
         # 检查是否支持免密登录
@@ -211,19 +205,45 @@ def main():
         with open(args.config, 'r') as fp:
           ssh_config_info = yaml.safe_load(fp)
 
+        shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml'))
+        shutil.copy(args.config, os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{ssh_config_info["config"]["ip"]}-submit-config.yaml'))
+
         shutil.copy(os.path.join(os.path.dirname(__file__), 'script', 'ssh_nopassword_config.sh'), os.path.join(os.environ["HOME"], ".ssh", 'user_ssh_nopassword_config.sh'))
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && rsa=`cat id_rsa.pub` && ' + "sed -i 's%placeholder%'"+"\"${rsa}\""+"'%g' user_ssh_nopassword_config.sh")
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
-      print('finish config')
-    else:
-      if args.ssh:
-        # 生成ssh提交配置模板
-        ssh_submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'ssh-submit-config.yaml')
-        shutil.copy(ssh_submit_config_file, './')        
       else:
-        # 生成自定义的提交配置模板
-        submit_config_file = os.path.join(os.path.dirname(__file__), 'script', 'submit-config.yaml')
-        shutil.copy(submit_config_file, './')    
+        logging.info("Only support ssh remote task submitter")
+        return
+
+      print(f'update submitter config {args.config}')
+    elif sub_action_name == 'list':
+      # 输出已经配置的远程信息
+      if args.ssh:
+        for file_name in os.listdir(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+          if file_name.endswith('.yaml'):
+            terms = file_name.split('-')
+            if len(terms) == 4:
+              pprint(f'{terms[1]}')
+      else:
+        logging.info("Only support ssh remote task submitter")
+    elif sub_action_name == 'select':
+      # 将选定远程作为默认
+      if args.ssh:
+        if args.ip == '':
+          logging.error('Need set --ip=')
+          return
+        if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')):
+          logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml')
+          return
+
+        shutil.copy(
+          os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml'),
+          os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
+        )
+    else:
+      logging.error("Only support ssh remote task submitter")
+      return
+
     return
 
   ######################################### 后台监控服务 ################################################
@@ -707,6 +727,15 @@ def main():
         # args.src 本地路径
         # args.tgt 远程目录
         tool_func(args.tgt, src_path=args.src)
+      elif sub_action_name.startswith('ls'):
+        tool_func = getattr(tools, f'ls_from_{sub_action_name.split("/")[1]}', None)
+
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+
+        # args.src 远程目录
+        tool_func(args.src)
       elif sub_action_name.startswith('label'):
         if sub_action_name.split("/")[1] == 'start':
           tool_func = getattr(tools, f'label_{sub_action_name.split("/")[1]}', None)
