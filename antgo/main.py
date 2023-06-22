@@ -1,4 +1,4 @@
-antgo/main.py# encoding=utf-8
+# encoding=utf-8
 # @Time    : 17-3-3
 # @File    : main.py
 # @Author  : jian<jian@mltalker.com>
