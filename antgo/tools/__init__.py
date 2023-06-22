@@ -8,6 +8,7 @@ from .share_funcs import (share_data_func)
 from .upload_funcs import (upload_to_aliyun)
 from .check_device import (check_device_info)
 from .ls_funcs import (ls_from_aliyun)
+from .operate_funcs import (operate_on_running_status)
 
 __all__ = [
     'extract_from_videos', 
@@ -31,5 +32,6 @@ __all__ = [
     'label_to_merge',
     'share_data_func',
     'check_device_info',
-    'ls_from_aliyun'
+    'ls_from_aliyun',
+    'operate_on_running_status'
 ]

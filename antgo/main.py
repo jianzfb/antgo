@@ -1,4 +1,4 @@
-# encoding=utf-8
+antgo/main.py# encoding=utf-8
 # @Time    : 17-3-3
 # @File    : main.py
 # @Author  : jian<jian@mltalker.com>
@@ -87,7 +87,7 @@ DEFINE_indicator("ignore-incomplete", True, "")
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter']
 
 
@@ -148,9 +148,14 @@ def main():
     logging.info('Update config file.')
     return
 
-  # 查看设备
+  # 查看运行设备（本地/远程）
   if action_name == 'device':
     tools.check_device_info(args)
+    return
+
+  # 操作执行任务（本地/远程）
+  if action_name in ['stop', 'ls', 'log']:
+    tools.operate_on_running_status(action_name, args)
     return
 
   # 解析配置文件
