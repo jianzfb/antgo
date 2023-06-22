@@ -7,6 +7,7 @@ from .label_funcs import (label_to_studio, label_from_studio, label_start, label
 from .share_funcs import (share_data_func)
 from .upload_funcs import (upload_to_aliyun)
 from .check_device import (check_device_info)
+from .ls_funcs import (ls_from_aliyun)
 
 __all__ = [
     'extract_from_videos', 
@@ -29,5 +30,6 @@ __all__ = [
     'label_start',
     'label_to_merge',
     'share_data_func',
-    'check_device_info'
+    'check_device_info',
+    'ls_from_aliyun'
 ]

@@ -1,6 +1,17 @@
 import os
 import sys
 import argparse
+import subprocess
+import re
+
+def get_cuda_version():
+    try:
+        content = subprocess.check_output('nvidia-smi').decode('utf-8')
+    except:
+        return None
+
+    driver_version = re.findall('(?<=CUDA Version: )[\d.]+', content)[0]
+    return f'{driver_version}.0'
 
 def main():
     parser = argparse.ArgumentParser(description=f'Dockerfile')
@@ -17,9 +28,8 @@ def main():
     parser.add_argument(
         '--with-runtime',
         action='store_true', help="")        
-     
     args = parser.parse_args()
-    
+
     if args.with_vscode_server:
         cmd_list = []
         with open(os.path.join(os.path.dirname(__file__), 'Dockerfile'), 'r') as fp:
@@ -75,13 +85,14 @@ def main():
         cmd_list = []
         is_found_pos = False
         is_replace_base_image = False
+        cuda_version = get_cuda_version()
         with open(os.path.join(os.path.dirname(__file__), 'Dockerfile'), 'r') as fp:
             content = fp.readline()
             content = content.strip()
 
             while True:
                 if is_found_pos and not is_replace_base_image:
-                    content = 'FROM nvidia/cuda:12.1.0-devel-ubuntu22.04'
+                    content = f'FROM nvidia/cuda:{cuda_version}-devel-ubuntu22.04'
                     is_replace_base_image = True
 
                 if content == '# builder stage':
@@ -103,13 +114,14 @@ def main():
         cmd_list = []
         is_found_pos = False
         is_replace_base_image = False
+        cuda_version = get_cuda_version()
         with open(os.path.join(os.path.dirname(__file__), 'Dockerfile'), 'r') as fp:
             content = fp.readline()
             content = content.strip()
 
             while True:
                 if is_found_pos and not is_replace_base_image:
-                    content = 'FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04'
+                    content = f'FROM nvidia/cuda:{cuda_version}-runtime-ubuntu22.04'
                     is_replace_base_image = True
 
                 if content == '# builder stage':
@@ -119,7 +131,7 @@ def main():
 
                 if content == 'WORKDIR /root/workspace':
                     break
-         
+
                 content = fp.readline()
                 content = content.strip()
 
