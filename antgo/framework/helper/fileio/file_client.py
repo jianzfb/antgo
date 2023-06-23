@@ -241,6 +241,9 @@ class HardDiskBackend(BaseStorageBackend):
         return os.listdir(remote_folder)
 
     def mkdir(self, remote_path, p=False):
+        if os.path.exists(remote_path):
+            return False
+
         os.makedirs(remote_path)
         return True
 
@@ -522,7 +525,7 @@ class AliBackend(BaseStorageBackend):
         p = filepath.find(filename)
         parent_path = filepath[:p]
         self.upload(parent_path, os.path.join('./temp', filename))
-    
+
     def remove(self, filepath: str) -> None:
         pass
 
@@ -542,14 +545,14 @@ class AliBackend(BaseStorageBackend):
             return False
 
         return True
-    
+
     def isfile(self, filepath: str) -> bool:
         file = self.ali.get_file_by_path(filepath)
         if file is None:
             return False
-        
+
         return True
-    
+
     def join_path(self, filepath: str, *filepaths: str) -> str:
         """Concatenate all file paths.
 
@@ -563,7 +566,7 @@ class AliBackend(BaseStorageBackend):
             str: The result of concatenation.
         """
         return osp.join(filepath, *filepaths)
-    
+
     def ls(self, remote_folder):
         remote_folder = remote_folder.replace(self.prefix, '')
         file_handler = self.ali.get_folder_by_path(remote_folder)
@@ -631,7 +634,7 @@ class AliBackend(BaseStorageBackend):
                 self.ali.download_files(filter_ll, local_folder=local_path)
 
         return True
-    
+
     def upload(self, remote_path, local_path, is_exist=False):
         # 检查远程目录是否存在
         file_id = self.mkdir(remote_path, True)
@@ -645,7 +648,7 @@ class AliBackend(BaseStorageBackend):
         else:
             # 文件
             self.ali.upload_file(local_path, file_id)
-        
+
         return True
 
 
