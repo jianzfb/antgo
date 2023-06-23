@@ -221,7 +221,7 @@ def main():
         return
 
       print(f'update submitter config {args.config}')
-    elif sub_action_name == 'list':
+    elif sub_action_name == 'ls':
       # 输出已经配置的远程信息
       if args.ssh:
         for file_name in os.listdir(os.path.join(os.environ['HOME'], '.config', 'antgo')):
@@ -281,7 +281,10 @@ def main():
       # do nothing
       if not os.path.exists('./aligo.json'):
         ali = Aligo()
-        shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')      
+        shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
+
+    # 创建root根目录
+    file_client_mkdir(args.root)
 
     # 远程提交任务(local模式仅在开发者调试时使用)
     if args.ssh or args.k8s or args.local:
