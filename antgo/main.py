@@ -568,7 +568,10 @@ def main():
 
         os.system(command_str)
     elif action_name == 'eval':
-      assert(args.checkpoint is not None)      
+      if args.checkpoint is None:
+        logging.error('Must set --checkpoint=')
+        return
+
       # (1)安装;(2)数据准备;(3)运行
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
@@ -591,8 +594,10 @@ def main():
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
     elif action_name == 'export':
-      assert(args.checkpoint is not None)
-      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root}')
+      if args.checkpoint is None:
+        logging.error('Must set --checkpoint=')
+        return
+      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config}')
   else:
     if action_name == 'create':
       if sub_action_name == 'project':
