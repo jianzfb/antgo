@@ -181,7 +181,7 @@ def main():
   ##################################### 支持任务提交脚本配置  ###########################################
   if action_name == 'submitter':
     if sub_action_name is None or sub_action_name == '':
-      logging.error(f'Only support {action_name} select/list/update/template')
+      logging.error(f'Only support {action_name} activate/ls/update/template')
       return
     if sub_action_name == 'template':
       # 生成任务提交配置
@@ -231,7 +231,7 @@ def main():
               pprint(f'{terms[1]}')
       else:
         logging.info("Only support ssh remote task submitter")
-    elif sub_action_name == 'select':
+    elif sub_action_name == 'activate':
       # 将选定远程作为默认
       if args.ssh:
         if args.ip == '':
