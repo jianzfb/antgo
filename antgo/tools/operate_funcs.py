@@ -17,6 +17,7 @@ def stop_ssh_running(action_name, id):
     password = ssh_config_info['config']['password']
     ip = ssh_config_info['config']['ip']
 
+    print(f'ACTIVE(REMOTE BY SSH): {ssh_config_info["config"]["ip"]}')
     os.system(f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} docker stop {id}')
 
 def ls_ssh_running():
@@ -32,6 +33,7 @@ def ls_ssh_running():
     password = ssh_config_info['config']['password']
     ip = ssh_config_info['config']['ip']
 
+    print(f'ACTIVE(REMOTE BY SSH): {ssh_config_info["config"]["ip"]}')
     cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} docker ps'
     ret = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if ret.returncode:
@@ -68,6 +70,7 @@ def log_ssh_running(action_name, id):
     password = ssh_config_info['config']['password']
     ip = ssh_config_info['config']['ip']
 
+    print(f'ACTIVE(REMOTE BY SSH): {ssh_config_info["config"]["ip"]}')
     os.system(f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} docker logs -f {id}')
 
 

@@ -10,6 +10,7 @@ def check_device_info(args):
         with open(ssh_config_file, 'r') as fp:
           ssh_config_info = yaml.safe_load(fp)
 
+        print(f'ACTIVE(REMOTE BY SSH): {ssh_config_info["config"]["ip"]}')
         os.system(f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} nvidia-smi')
     elif args.local:
         os.system('nvidia-smi')
