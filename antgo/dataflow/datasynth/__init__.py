@@ -5,3 +5,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+
+from .simplesyn import simple_syn_sample
+
+__all__ = ['simple_syn_sample']
