@@ -23,6 +23,14 @@ def simple_syn_sample(image_generator, obj_generator, min_scale=0.5, max_scale=0
 
         min_size = max(image_w, image_h) * random_scale
         obj_scale = min_size / max(obj_h, obj_w)
+
+        if obj_w * obj_scale > image_w * random_scale or obj_h * obj_scale > image_h * random_scale:
+            if obj_w * obj_scale > image_w * random_scale:
+                obj_scale = image_w * random_scale / obj_w
+
+            if obj_h * obj_scale > image_h * random_scale:
+                obj_scale = image_h * random_scale / obj_h
+
         object_image = cv2.resize(object_image, dsize=(int(obj_w * obj_scale), int(obj_h * obj_scale)))
         obj_h, obj_w = object_image.shape[:2]
 
@@ -61,9 +69,15 @@ def simple_syn_sample(image_generator, obj_generator, min_scale=0.5, max_scale=0
                     borderValue=(255))
 
         # 合成
-        paste_x = np.random.randint(0, image_w - obj_w)
-        paste_y = np.random.randint(0, image_h - obj_h)
+        paste_x = 0
+        if image_w > obj_w:
+            paste_x = np.random.randint(0, image_w - obj_w)
+        paste_y = 0
+        if image_h > obj_h:
+            paste_y = np.random.randint(0, image_h - obj_h)
 
+        print(f'image {image_w} {image_h}')
+        print(f'obj {obj_w} {obj_h}')
         object_paste_mask_expand = np.expand_dims(object_paste_mask, -1)
         image[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = image[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] * (1-object_paste_mask_expand) + object_image * object_paste_mask_expand
 

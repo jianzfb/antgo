@@ -88,7 +88,7 @@ DEFINE_indicator("ignore-incomplete", True, "")
 DEFINE_nn_args()
 
 action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log']
-action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset']
 
 
 def main():
@@ -246,11 +246,84 @@ def main():
           os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
         )
     else:
-      logging.error("Only support ssh remote task submitter")
+      logging.error("Only support submitter template/update/ls/activate")
       return
 
     return
 
+  ##################################### 支持计算资源数据集操作 add/del/ls  ##############################
+  if action_name == 'dataset':
+    if sub_action_name is None or sub_action_name == '':
+      logging.error(f'Only support {action_name} add/del/ls')
+      return
+    if args.src is None:
+      logging.error(f'Need set --src=')
+      return
+
+    if sub_action_name == 'add':
+      if not args.src.endswith('.tar'):
+        logging.error('Only support tar dataset package')
+        return
+
+      if args.ssh:
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
+        if not os.path.exists(ssh_submit_config_file):
+            logging.error('No ssh submit config.')
+            logging.error('Please run antgo submitter update --config= --ssh')
+            return False
+
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            config_content = yaml.safe_load(fp)
+
+        user_name = config_content['config']['username']
+        remote_ip = config_content['config']['ip']
+        os.system(f'scp {args.src} {user_name}@{remote_ip}:~/')
+        os.system(f'ssh {user_name}@{remote_ip} "sudo -S tar -xf ~/{os.path.basename(args.src)} -C /data/ && rm ~/{os.path.basename(args.src)}"')
+        print(f'Finish dataset {os.path.basename(args.src)} deploy.')
+      else:
+        logging.error("Now only support ssh remote control")
+    elif sub_action_name == 'del':
+      if '/' in args.src:
+        logging.error('Only need set dataset name in --src, not a path')
+        return
+
+      if args.ssh:
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
+        if not os.path.exists(ssh_submit_config_file):
+            logging.error('No ssh submit config.')
+            logging.error('Please run antgo submitter update --config= --ssh')
+            return False
+
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            config_content = yaml.safe_load(fp)
+
+        user_name = config_content['config']['username']
+        remote_ip = config_content['config']['ip']
+        os.system(f'ssh {user_name}@{remote_ip} "sudo -S rm -rf /data/{args.src}"')
+        print(f'Finish dataset {args.src} delete.')
+      else:
+        logging.error("Now only support ssh remote control")
+    elif sub_action_name == 'ls':
+      if args.ssh:
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
+        if not os.path.exists(ssh_submit_config_file):
+            logging.error('No ssh submit config.')
+            logging.error('Please run antgo submitter update --config= --ssh')
+            return False
+
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            config_content = yaml.safe_load(fp)
+
+        user_name = config_content['config']['username']
+        remote_ip = config_content['config']['ip']
+        os.system(f'ssh {user_name}@{remote_ip} "ls -lh /data/"')
+      else:
+        logging.error("Now only support ssh remote control")
+    else:
+      logging.error("Only support dataset add/del/ls")
+      return
+
+    return
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
     os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
@@ -282,6 +355,11 @@ def main():
       if not os.path.exists('./aligo.json'):
         ali = Aligo()
         shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
+
+    if args.root.endswith('/'):
+      args.root = args.root[:-1]
+    # 基于时间戳修改实验root地址
+    args.root = f'{args.root}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
 
     # 创建root根目录
     file_client_mkdir(args.root)
