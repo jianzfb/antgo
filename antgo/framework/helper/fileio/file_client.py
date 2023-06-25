@@ -585,19 +585,19 @@ class AliBackend(BaseStorageBackend):
         levels = remote_path.split('/')[1:]
         level_num = len(levels)
         find_file = None
-        find_i = 0
-        for i in range(level_num,0,-1):
+        find_i = level_num
+        for i in range(level_num,-1,-1):
             check_path = '/'+'/'.join(levels[:i])            
             find_file = self.ali.get_folder_by_path(check_path)
             if find_file:
                 break
-            find_i = i
+            find_i = i - 1
 
-        if find_i == 0:
+        if find_i == level_num:
             # 已经存在，不进行重新创建
             return find_file.file_id
 
-        sub_folder = '/'.join(levels[find_i-1:])
+        sub_folder = '/'.join(levels[find_i:])
         ss = self.ali.create_folder(sub_folder,find_file.file_id)
         return ss.file_id
 
