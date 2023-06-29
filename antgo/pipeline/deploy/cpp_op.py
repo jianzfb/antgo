@@ -27,15 +27,25 @@ class CppOp(object):
                 func_args[i] = args[input_i]
                 input_i += 1
 
-        # 输出数据(仅用于占位)
+        # 输出数据(Tensor<->numpy 类型)(仅用于占位)
         type_map = {
             'CDTensor': np.float64,
             'CFTensor': np.float32,
             'CITensor': np.int32,
-            'CUCTensor': np.uint8
+            'CUCTensor': np.uint8,
         }
-        out_placeholders = [np.empty((1), type_map[self.func.func.arg_types[i].cname.replace('*', '')]) \
-                for i in range(len(self.func.func.arg_types)) if not self.func.func.arg_types[i].is_const]
+        
+        out_placeholders = []
+        for i in range(len(self.func.func.arg_types)):
+            arg_type = self.func.func.arg_types[i].cname.replace('*', '')
+            if arg_type in type_map and not self.func.func.arg_types[i].is_const:
+                # numpy 类型
+                out_placeholders.append(
+                    np.empty((1), type_map[arg_type])
+                )
+            elif not self.func.func.arg_types[i].is_const:
+                # dict 类型（需要自己实现初始化字典）
+                out_placeholders.append(None)
 
         # 绑定输出数据（顺序绑定）
         output_i = 0
@@ -43,13 +53,6 @@ class CppOp(object):
             if not var_type.is_const and func_args[i] is None and output_i < len(args):
                 func_args[i] = out_placeholders[output_i]
                 output_i += 1
-
-        # 检查函数参数
-        for func_arg in func_args:
-            if func_arg is None:
-                print(f'cpp func {self.func_op_name} arg abnormal.')
-                print(func_args)
-                break
 
         # 运行
         output_data = self.func(*func_args)

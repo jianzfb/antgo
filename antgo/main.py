@@ -324,6 +324,19 @@ def main():
       return
 
     return
+
+  ######################################### ROOT 设置 #################################################
+  if args.root is None or args.root == '':
+    print('Using default root address ali:///exp')
+    args.root = "ali:///exp"
+
+  if args.root.startswith('ali:'):
+    # 尝试进行认证，从而保证当前路径下生成认证信息
+    # do nothing
+    if not os.path.exists('./aligo.json'):
+      ali = Aligo()
+      shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
+
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
     os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
@@ -345,24 +358,11 @@ def main():
   ####################################################################################################
   # 执行指令
   if action_name in action_level_1:
-    if args.root is None or args.root == '':
-      print('Using default root address ali:///exp')
-      args.root = "ali:///exp"
-
-    if args.root.startswith('ali:'):
-      # 尝试进行认证，从而保证当前路径下生成认证信息
-      # do nothing
-      if not os.path.exists('./aligo.json'):
-        ali = Aligo()
-        shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
-
     if args.root.endswith('/'):
       args.root = args.root[:-1]
-    # 基于时间戳修改实验root地址
-    args.root = f'{args.root}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
-
-    # 创建root根目录
-    file_client_mkdir(args.root)
+  
+    # 基于实验名称和时间戳修改实验root
+    args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
 
     # 远程提交任务(local模式仅在开发者调试时使用)
     if args.ssh or args.k8s or args.local:
@@ -548,6 +548,9 @@ def main():
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
     script_folder = os.path.join(os.path.dirname(__file__), 'script')
     if action_name == 'train':
+      # 为训练实验，创建存储root
+      file_client_mkdir(args.root)
+
       if args.checkpoint is None:
         args.checkpoint = ''
       if args.resume_from is None:
@@ -598,6 +601,7 @@ def main():
 
         os.system(command_str)
     elif action_name == 'activelearning':
+      # 为主动学习实验，创建存储root
       if args.checkpoint is None:
         args.checkpoint = ''
 
@@ -646,6 +650,7 @@ def main():
 
         os.system(command_str)
     elif action_name == 'eval':
+      # 为评估实验，创建存储root
       if args.checkpoint is None:
         logging.error('Must set --checkpoint=')
         return

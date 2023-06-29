@@ -178,8 +178,22 @@ class CFuncDef:
                 target[:] = value
                 if res is None:
                     out.append(target)
+            elif target is None:
+                # value is dict
+                target_dict = {}
+                for info in value._fields_:
+                    elem = getattr(value, info[0])
+                    if isinstance(elem, ctypes.Array):
+                        target_dict[info[0]] = [elem[i] for i in range(len(elem))]
+                    elif isinstance(elem, ctypes._Pointer):
+                        # 不知道具体指针长度，无法拆解出具体数值
+                        print('Dont support pointer type, dangers for memory leak')
+                        target_dict[info[0]] = elem
+                    else:
+                        target_dict[info[0]] = elem
+                out.append(target_dict)
             else:
-                # for CStructArg
+                # value is numpy
                 target = np.ctypeslib.as_array(value.data, shape=[value.dims[i] for i in range(value.dim_size)])
                 # 自动释放
                 if value.data != mutable_vars[0][1].data:

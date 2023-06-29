@@ -15,9 +15,14 @@ class BaseExecution:
         # Multi inputs.
         if isinstance(self._index[0], tuple):
             args = [getattr(arg[0], x) for x in self._index[0]]
-        # Single input.
+        # Single input or No input.
         else:
-            args = [getattr(arg[0], self._index[0])]
+            if isinstance(self._index, str) or len(self._index) == 1:
+                # no input
+                args = []
+            else:
+                # single input
+                args = [getattr(arg[0], self._index[0])]
         
         return self._op(*args, **kws)
 
@@ -38,7 +43,10 @@ class BaseExecution:
                         setattr(arg[0], i, j)
                 # Single output.
                 else:
-                    setattr(arg[0], self._index[1], res)
+                    if isinstance(self._index, str):
+                        setattr(arg[0], self._index, res)
+                    else:
+                        setattr(arg[0], self._index[1], res)
 
                 return arg[0]
             else:
