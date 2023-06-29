@@ -319,12 +319,11 @@ def main():
 
     # step5 添加root (运行时，输出结果保存的根目录地址)
     cfg.root = nn_args.root if nn_args.root != '' else './output/'
-    cfg.root = os.path.join(cfg.root, nn_args.exp)
     # step5.1 添加root地址（影响checkpoint_config, evaluation）
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
         cfg.evaluation.out_dir = cfg.root
-    
+
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程

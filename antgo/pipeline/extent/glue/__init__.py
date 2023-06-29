@@ -32,6 +32,7 @@ class CDTensor(ctypes.Structure):
 
     _fields_ = [("dim_size", ctypes.c_size_t), ("dims", ctypes.POINTER(ctypes.c_size_t)), ("data", ctypes.POINTER(ctypes.c_double)), ('is_assign_inner', ctypes.c_bool)]
 
+
 common.register_cstruct('CDTensor', CDTensor)
 common.register_cstruct('CFTensor', CFTensor)
 common.register_cstruct('CITensor', CITensor)

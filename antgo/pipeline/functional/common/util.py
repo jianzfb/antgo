@@ -22,3 +22,12 @@ class stack(object):
         if self.transpose_dims is not None:
             x = np.transpose(x, self.transpose_dims)
         return x
+
+@register
+class global_var(object):
+    def __init__(self, **kwargs) -> None:
+        self.memory_obj = {}
+        self.memory_obj.update(kwargs)
+
+    def __call__(self, *args, **kwargs):
+        return self.memory_obj
