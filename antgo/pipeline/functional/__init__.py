@@ -22,15 +22,28 @@ read_video = DataCollection.read_video
 
 
 @dynamic_dispatch
-def glob(*arg):  # pragma: no cover
+def glob(*args):  # pragma: no cover
     """
     Return a DataCollection of paths matching a pathname pattern.
     """
 
+    # index = param_scope()._index
+    # if index is None:
+    #     return DataCollection.from_glob(*arg)
+    # return DataFrame.from_glob(*arg).map(lambda x: Entity(**{index: x}))
+
     index = param_scope()._index
-    if index is None:
-        return DataCollection.from_glob(*arg)
-    return DataFrame.from_glob(*arg).map(lambda x: Entity(**{index: x}))
+    def inner():
+        from glob import glob
+        files = []
+        for path in args:
+            files.extend(glob(path))
+        if len(files) == 0:
+            raise FileNotFoundError(f'There is no files with {args}.')
+        for ff in files:
+          yield Entity(**{index: ff})
+
+    return DataFrame(inner())
 
 
 @dynamic_dispatch

@@ -202,6 +202,9 @@ def main():
         return
 
       if args.ssh:
+        if not os.path.exists(os.path.join(os.environ['HOME'], '.ssh')):
+          os.system(f'mkdir {os.path.join(os.environ["HOME"], ".ssh")}')
+
         # 检查是否支持免密登录
         if not os.path.exists(os.path.join(os.environ['HOME'], '.ssh', 'id_rsa')):
           os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh-keygen -t rsa')
