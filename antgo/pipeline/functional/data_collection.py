@@ -375,14 +375,18 @@ class DataCollection(Iterable, DCMixins):
 
     return self._factory(filter(inner, self._iterable))
 
-  def run(self):
+  def run(self, early_stop=0):
     """Iterate through the DataCollections data.
 
     Stream-based DataCollections will not run if the data is not a datasink. This
     function is a datasink that consumes the data without any operations.
     """
+    count = 0
     for _ in self._iterable:
-      pass
+      count += 1
+      if early_stop > 0 and count >= early_stop:
+        break
+
 
   def to_df(self) -> 'DataFrame':
     """Turn a DataCollection into a DataFrame.

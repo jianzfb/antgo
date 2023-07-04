@@ -25,9 +25,13 @@ class stack(object):
 
 @register
 class global_var(object):
-    def __init__(self, **kwargs) -> None:
-        self.memory_obj = {}
-        self.memory_obj.update(kwargs)
+    def __init__(self, *args, **kwargs) -> None:
+        assert(len(args) == 0 or len(kwargs) == 0)
+        if len(args) > 0:
+            self.memory_obj = args if len(args) > 1 else args[0]
+        else:
+            self.memory_obj = {}
+            self.memory_obj.update(kwargs)
 
     def __call__(self, *args, **kwargs):
         return self.memory_obj

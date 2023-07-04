@@ -95,7 +95,7 @@ def get_common_flags():
 
 def get_build_flag_cpu():
     COMMON_FLAGS = get_common_flags()
-    CFLAGS = Flags('-std=c++11').add_definition('USING_CUDA', 0).add_definition('USING_OPENMP', config.USING_OPENMP).\
+    CFLAGS = Flags('-std=c++14').add_definition('USING_CUDA', 0).add_definition('USING_OPENMP', config.USING_OPENMP).\
         add_string(COMMON_FLAGS)
     if not OS_IS_WINDOWS:
         CFLAGS.add_string('-fPIC')
@@ -113,7 +113,7 @@ def get_build_flag_cpu():
 
     if config.USING_OPENCV:
         opencv_dir = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
-        opencv_libs = ['opencv_calib3d', 'opencv_core', 'opencv_highgui', 'opencv_imgproc', 'opencv_imgcodecs']
+        opencv_libs = ['opencv_calib3d', 'opencv_core', 'opencv_highgui', 'opencv_imgproc', 'opencv_imgcodecs', 'opencv_tracking']
         opencv_libs = [f'-l{v}' for v in opencv_libs]
         opencv_libs = ' '.join(opencv_libs)
         LDFLAGS.add_string(f'-L {opencv_dir}/lib {opencv_libs}')
@@ -162,10 +162,11 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
             if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
                 # 下载源码
                 os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
     
             # 编译
             print('compile opencv')
-            os.system(f'cd {ANTGO_DEPEND_ROOT} && cd opencv && mkdir build && cd build && cmake -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. && make -j4 && make install')
+            os.system(f'cd {ANTGO_DEPEND_ROOT} && cd opencv && mkdir build && cd build && cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. && make -j4 && make install')
             os.system(f'cd {ANTGO_DEPEND_ROOT} && cd opencv && rm -rf build')
 
             # 添加so的搜索路径 (for linux)
