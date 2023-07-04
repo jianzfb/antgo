@@ -172,7 +172,7 @@ class CFuncDef:
                 'Unsupported func kind: {}'.format(self.func_kind))
         
         out = [] if res is None else [res]
-        for target, value in mutable_vars:
+        for v_i, (target, value) in enumerate(mutable_vars):
             if isinstance(value, np.ndarray):
                 # for CFuncTensor
                 target[:] = value
@@ -196,7 +196,7 @@ class CFuncDef:
                 # value is numpy
                 target = np.ctypeslib.as_array(value.data, shape=[value.dims[i] for i in range(value.dim_size)])
                 # 自动释放
-                if value.data != mutable_vars[0][1].data:
+                if value.data != mutable_vars[v_i][1].data:
                     # clone 
                     target = target.copy()
 

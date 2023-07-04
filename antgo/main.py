@@ -248,6 +248,8 @@ def main():
           os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml'),
           os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
         )
+
+        pprint(f'Activate {args.ip}')
     else:
       logging.error("Only support submitter template/update/ls/activate")
       return
