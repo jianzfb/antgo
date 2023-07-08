@@ -82,6 +82,20 @@ class OperatorLoader:
 
         return self.instance_operator(op, arg, kws) if op is not None else None
 
+    def load_operator_from_mp(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str):
+        module, fname = function.split('/')
+        op_cls = ''.join(x.capitalize() or '_' for x in fname.split('_'))
+        module = '.'.join(['antgo.pipeline.hub.external', '{}.{}'.format(module, fname)])
+
+        try:
+            op = getattr(importlib.import_module(module), op_cls)
+        except:
+            subprocess.check_call(['pip3', 'install', 'mediapipe'])
+            op = getattr(importlib.import_module(module), op_cls)
+        
+        return self.instance_operator(op, arg, kws) if op is not None else None
+
+
     def load_operator_from_deploy(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         module, fname = function.split('/')
         if module != 'deploy':

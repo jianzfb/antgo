@@ -6,15 +6,17 @@ namespace antgo {
 typedef wchar_t wchar;
 typedef char byte;
 typedef unsigned char ubyte;
-typedef unsigned short ushort;
 typedef unsigned int uint;
-typedef unsigned long ulong;
-typedef long long longlong;
-typedef unsigned long long ulonglong;
-typedef long double longdouble;
+typedef unsigned int* uint_p;
+typedef float* float_p;
+typedef double* double_p;
+typedef int* int_p;
 typedef char* char_p;
 typedef wchar_t* wchar_p;
 typedef void* void_p;
+typedef bool* bool_p;
+
+
 
 }  // namespace antgo
 

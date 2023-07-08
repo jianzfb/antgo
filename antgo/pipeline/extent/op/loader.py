@@ -14,10 +14,11 @@ from ..building.build import source_to_so_ctx, get_virtual_dirname, build_contex
 from ..building.build_utils import *
 from ..utils import get_git_hash, makedirs
 from ..internal.dtype import DType, CStruct, TemplateType, CTYPENAME2CTYPE
-from ..glue.common import CSTRUCT_CONSTRUCTOR
+from ..glue.common import CSTRUCT_CONSTRUCTOR, register_cstruct
 from ..glue.backend import get_glue_modules
 from .gen_code import get_gen_rel_code
 import antgo
+import numpy as np
 
 
 gen_code = get_gen_rel_code(os.path.dirname(__file__))
@@ -80,12 +81,44 @@ def _get_func_head_reg(name):
     return re.compile(r'^\s*{}\s*(.*)'.format(name))
 
 
-MOBULA_KERNEL_REG = _get_func_head_reg('ANTGO_(KERNEL|FUNC)')
+ANTGO_KERNEL_REG = _get_func_head_reg('ANTGO_(KERNEL|FUNC)')
 DEPEND_3RD_REG = _get_func_head_reg('#include')
+
+ANTGO_STRUCT_REG = re.compile('^struct \s*')
+STRUCT_NAME_REG = re.compile(r'struct\s*(.*?)\s*{')
+VAR_REG = re.compile(r'(char\*|bool\*|unsigned int\*|int\*|float\*|double\*|void\*|unsigned char|char|int|unsigned int|uint|char_p|void_p|ubyte|byte|float|double|int|unsigned int|float_p|double_p|int_p|uint_p|bool|bool_p)\s*(.*?)\s*(.*?)\s*;')
+ARRAY_REG = re.compile(r'\[(\d*[+|-|*|/]?\d*)\]')
 
 FUNC_REG = re.compile(
     r'^\s*(.*?)\s*\((.*?)\)(?:.*?)*')
 CPP_TEMPLATE_REG = re.compile(r'^\s*template\s*\<(.*?)\>\s*')
+
+ctype_map={
+    'float': 'ctypes.c_float',
+    'double': 'ctypes.c_double',
+    'void*': 'ctypes.c_void_p',
+    'unsigned char': 'ctypes.c_ubyte',
+    'char': 'ctypes.c_byte',
+    'int': 'ctypes.c_int',
+    'unsigned int': 'ctypes.c_uint',
+    'uint': 'ctypes.c_uint',
+    'char*': 'ctypes.c_char_p',
+    'char_p': 'ctypes.c_char_p',
+    'void_p': 'ctypes.c_void_p',
+    'ubyte': 'ctypes.c_ubyte',
+    'byte': 'ctypes.c_byte',
+    'float*': 'ctypes.POINTER(ctypes.c_float)',
+    'double*': 'ctypes.POINTER(ctypes.c_double)',
+    'int*': 'ctypes.POINTER(ctypes.c_int)',
+    'unsigned int*': 'ctypes.POINTER(ctypes.c_uint)',
+    'float_p': 'ctypes.POINTER(ctypes.c_float)',
+    'double_p': 'ctypes.POINTER(ctypes.c_double)',
+    'int_p': 'ctypes.POINTER(ctypes.c_int)',
+    'uint_p': 'ctypes.POINTER(ctypes.c_uint)',
+    'bool': 'ctypes.c_bool',
+    'bool_p': 'ctypes.POINTER(ctypes.c_bool)',
+    'bool*': 'ctypes.POINTER(ctypes.c_bool)'
+}
 
 
 def _get_template_decl(code):
@@ -180,6 +213,75 @@ def parse_parameters_list(plist):
     rtn_type = head_split[-2] if len(head_split) == 3 else None
     pars_list = list(map(parse_parameter_decl, plist_split))
     return rtn_type, func_name, pars_list
+
+
+def parse_struct_list(plist):
+    # struct_name, type_name_list, var_name_list
+    match = STRUCT_NAME_REG.search(plist)
+    struct_name = match.groups()[0]
+
+    match = VAR_REG.findall(plist)
+    type_name_list = []
+    var_name_list = []
+    for type_name, _, var_name in match:
+        type_name_list.append(type_name)
+        var_name_list.append(var_name)
+    return struct_name, type_name_list, var_name_list
+
+
+struct_def_str = '''
+class {STRUCT_NAME}(ctypes.Structure):
+    def __init__(self, data):
+        self.val = data
+        if data is None:
+            v = []
+            for name, ct in self._fields_:
+                v.append(ct())
+            
+            super().__init__(*v)
+            return
+
+        v = []
+        for name, ct in self._fields_:
+            if isinstance(data[name], list) or isinstance(data[name], tuple):
+                # 对于数组类型，需要输入的数据为list
+                v.append(ct(*data[name]))
+            elif data[name] is None or isinstance(data[name], np.ndarray):
+                # 对于指针类型，需要输入的数据为numpy类型
+                if data[name] is None:
+                    v.append(ct())
+                else:
+                    v.append(ctypes.cast(data[name].ctypes.data, ct))
+            else:
+                v.append(ct(data[name]))
+        super().__init__(*v)
+    
+    _fields_={STRUCT_FIELD}
+'''
+
+
+def register_struct_info(struct_name, type_name_list, var_name_list):
+    # 动态创建 ctypes.Structure
+    fields = []
+    for type_name, var_name in zip(type_name_list, var_name_list):
+        ctype_name = ctype_map[type_name]
+        if '[' in var_name:
+            # 数组类型
+            match = ARRAY_REG.search(var_name)
+            array_num = match.groups()[0]
+            var_name = var_name.replace(f'[{array_num}]', '')
+            if '+' in array_num or '-' in array_num or '*' in array_num or '/' in array_num:
+                array_num = eval(array_num)
+            ctype_name = f'{ctype_name} * {int(array_num)}'
+
+        fields.append((f'\"{var_name}\"', ctype_name))
+
+    struct_cls_str = struct_def_str.format(STRUCT_NAME=struct_name, STRUCT_FIELD=fields)
+    struct_cls_str = struct_cls_str.replace('\'', '')
+    exec(struct_cls_str)
+    struct_cls = locals()[struct_name]
+
+    register_cstruct(struct_name, struct_cls)
 
 
 # runtime
@@ -542,6 +644,27 @@ Please update AntgoOP.""" % (map_data.get('version'), antgo.__version__))
         return glue_mod.get_async_func(self.cpp_info, self.idcode_hash)
 
 
+def _get_struct_define_from_cpp(cpp_fname):
+    struct_started = False
+    unmatched_brackets = 0
+    struct_def = ''
+    for line in open(cpp_fname):
+        if not struct_started:
+            match = ANTGO_STRUCT_REG.search(line)
+            if match is not None:
+                struct_started = True
+
+        if struct_started:
+            unmatched_brackets += line.count('{') - line.count('}')
+            struct_def += line
+            if unmatched_brackets == 0:
+                # 读完结构体的所有定义
+                struct_started = False
+                struct_def = struct_def.replace('\n', '').replace('\r', '')
+                struct_name, type_name_list, var_name_list = parse_struct_list(struct_def)
+                register_struct_info(struct_name, type_name_list, var_name_list)
+
+
 def _get_functions_from_cpp(cpp_fname):
     unmatched_brackets = 0
     func_def = ''
@@ -568,7 +691,7 @@ def _get_functions_from_cpp(cpp_fname):
             current_template_list = _get_template_decl(line)
             if current_template_list is not None:
                 template_list = current_template_list
-            match = MOBULA_KERNEL_REG.search(line)
+            match = ANTGO_KERNEL_REG.search(line)
             if match is not None:
                 func_def = ''
                 func_kind_str = match.groups()[0]
@@ -662,6 +785,10 @@ def load(module_name, path=''):
     cpp_fname = os.path.join(path, op_name + '.cpp')
     if os.path.exists(cpp_fname):
         found = True
+
+        # Get struct and register
+        _get_struct_define_from_cpp(cpp_fname)
+
         # Get functions
         functions = _get_functions_from_cpp(cpp_fname)
         bind(functions)
