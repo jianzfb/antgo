@@ -93,9 +93,12 @@ class inference_onnx_op(object):
                 output = np.concatenate(group_output, 0)
 
         if isinstance(output, list) or isinstance(output, tuple):
+            if len(output) == 1:
+                return output[0]
+
             return tuple(output)
         
-        return (output,)
+        return output
     
 
 def __session_run_in_process(onnx_path, device_id, input_fields, input_queue, output_queue):
