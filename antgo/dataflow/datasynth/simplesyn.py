@@ -39,7 +39,8 @@ def simple_syn_sample(image_generator, obj_generator, min_scale=0.5, max_scale=0
 
         object_paste_mask = np.ones((obj_h, obj_w)).astype(np.uint8)
         if object_image.shape[-1] == 4:
-            object_paste_mask = object_paste_mask[:,:, 3]
+            object_paste_mask = object_image[:,:, 3] / 255
+            object_image = object_image[:,:,:3]
 
         if 'mask' in obj_info:
             obj_info['mask'] = cv2.resize(obj_info['mask'], dsize=(obj_w, obj_h))
@@ -66,7 +67,7 @@ def simple_syn_sample(image_generator, obj_generator, min_scale=0.5, max_scale=0
                     M, 
                     (obj_w, obj_h), 
                     borderMode=cv2.BORDER_CONSTANT,
-                    borderValue=(255))
+                    borderValue=obj_info['fill'] if 'fill' in obj_info else 255)
 
         # 合成
         paste_x = 0
@@ -85,8 +86,16 @@ def simple_syn_sample(image_generator, obj_generator, min_scale=0.5, max_scale=0
             obj_info['points'] = obj_info['points'] + np.float32([[paste_x, paste_y]])
 
         if 'mask' in obj_info:
-            mask = np.ones((image_h, image_w), dtype=np.uint8) * 255
-            mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] * (1-object_paste_mask) + obj_info['mask'] * object_paste_mask
+            fill_value = 255
+            if 'fill' in obj_info:
+                fill_value = obj_info['fill']
+
+            mask = np.ones((image_h, image_w), dtype=np.uint8) * fill_value
+            if 'hard' in obj_info:
+                mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = obj_info['mask']
+            else:
+                mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] * (1-object_paste_mask) + obj_info['mask'] * object_paste_mask
+
             obj_info['mask'] = mask
 
         # for joint_i, (x,y) in enumerate(obj_info['points']):

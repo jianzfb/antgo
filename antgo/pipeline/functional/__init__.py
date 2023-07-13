@@ -79,19 +79,21 @@ def txt_dc(*args):
 @dynamic_dispatch
 def video_dc(*args):
     index = param_scope()._index
-    if index is None:
-        return DataCollection.read_video(*args)
-      
-    return DataFrame.read_video(*args).map(lambda x: Entity(**{index: x}))
+    if not isinstance(index, tuple):
+      print('Video dc neef (frame, frame_index) export')
+      return
+
+    return DataFrame.read_video(*args).map(lambda x: Entity(**{key: value for key,value in zip(index, x)}))
 
 
 @dynamic_dispatch
 def camera_dc(*args):
     index = param_scope()._index
-    if index is None:
-        return DataCollection.read_camera(*args)
-      
-    return DataFrame.read_camera(*args).map(lambda x: Entity(**{index: x}))
+    if not isinstance(index, tuple):
+      print('Camera dc neef (frame, frame_index) export')
+      return
+
+    return DataFrame.read_video(*args).map(lambda x: Entity(**{key: value for key,value in zip(index, x)}))
 
 
 def _api():

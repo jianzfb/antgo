@@ -486,7 +486,7 @@ class KeepRatio(BaseOperator):
         im = sample['image']
         height, width = im.shape[:2]
         cur_ratio = width / height
-        gt_bbox = sample['bboxes']
+        gt_bbox = sample.get('bboxes', np.empty((0, 4), dtype=np.float32))
 
         # 获得目标范围
         if gt_bbox.shape[0] != 0 and self.focus_on_objects:
