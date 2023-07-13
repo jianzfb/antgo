@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.pipeline.engine import *
-import cv2
 import os
 import base64
 import numpy as np
@@ -35,3 +34,14 @@ class global_var(object):
 
     def __call__(self, *args, **kwargs):
         return self.memory_obj
+
+@register
+class filepath_parse(object):
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def __call__(self, *args, **kwargs):
+        file_path = args[0]
+        file_dir = os.path.dirname(file_path)
+        base_name = os.path.basename(file_path)
+        return file_dir, base_name

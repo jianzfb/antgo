@@ -30,11 +30,13 @@ class ComputerVisionMixin:
     def inner():
       nonlocal cnt
       cap = cv2.VideoCapture(device_id)
+      frame_count = 0
       while cnt != 0:
         retval, im = cap.read()
         if retval:
-          yield im
+          yield im, frame_count
           cnt -= 1
+          frame_count += 1
 
     return cls(inner())
 
@@ -52,11 +54,13 @@ class ComputerVisionMixin:
     """
     def inner():
       cap = cv2.VideoCapture(path)
+      frame_count = 0
       while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
           break
-        yield frame
+        yield frame, frame_count
+        frame_count += 1
 
     return cls(inner())
 
