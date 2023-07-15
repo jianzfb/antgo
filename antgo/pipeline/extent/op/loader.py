@@ -81,7 +81,7 @@ def _get_func_head_reg(name):
     return re.compile(r'^\s*{}\s*(.*)'.format(name))
 
 
-ANTGO_KERNEL_REG = _get_func_head_reg('ANTGO_(KERNEL|FUNC)')
+ANTGO_KERNEL_REG = _get_func_head_reg('ANTGO_(CLASS|FUNC)')
 DEPEND_3RD_REG = _get_func_head_reg('#include')
 
 ANTGO_STRUCT_REG = re.compile('^struct \s*')
@@ -697,12 +697,14 @@ def _get_functions_from_cpp(cpp_fname):
                 func_kind_str = match.groups()[0]
                 if func_kind_str == 'KERNEL':
                     func_kind = CFuncDef.KERNEL
+                    func_started = True
                 elif func_kind_str == 'FUNC':
                     func_kind = CFuncDef.FUNC
+                    func_started = True
                 else:
                     raise TypeError(
                         'Unknown kind of function: %s' % func_kind_str)
-                func_started = True
+
         # In a declaration of a function
         if func_started:
             unmatched_brackets += line.count('(') - line.count(')')
@@ -761,6 +763,52 @@ def _get_functions_from_cpp(cpp_fname):
         (name, CFuncDef(**kwargs)) for name, kwargs in function_args.items())
     # Load dynamic function for MXNet
     return functions
+
+
+def _get_class_from_cpp(cpp_fname):
+    unmatched_brackets = 0
+    func_def = ''
+    func_kind = ''
+    class_started = False
+    template_list = []
+    cpp_info = CPPInfo(cpp_fname=cpp_fname)
+    function_args = cpp_info.function_args
+    for line in open(cpp_fname):
+        # 检查第三方依赖
+        match_include = DEPEND_3RD_REG.search(line)
+        if match_include is not None:
+            if 'opencv' in match_include.groups()[0]:
+                config.USING_OPENCV = True
+
+            if 'Eigen' in match_include.groups()[0]:
+                config.USING_EIGEN = True
+
+            if 'eagleeye' in match_include.groups()[0]:
+                config.USING_EAGLEEYE = True
+
+        # 检查函数定义信息
+        if not class_started:
+            current_template_list = _get_template_decl(line)
+            if current_template_list is not None:
+                template_list = current_template_list
+            match = ANTGO_KERNEL_REG.search(line)
+            if match is not None:
+                func_def = ''
+                func_kind_str = match.groups()[0]
+                if func_kind_str == 'CLASS':
+                    func_kind = CFuncDef.CLASS
+                    class_started = True
+
+        if class_started:
+            pass
+
+    # # Load dynamic file
+    # functions = dict(
+    #     (name, CFuncDef(**kwargs)) for name, kwargs in function_args.items())
+    # # Load dynamic function for MXNet
+    # return functions
+    return None
+
 
 
 def load(module_name, path=''):

@@ -133,6 +133,7 @@ class CFuncDef:
     """The definition of CFunction."""
     KERNEL = 1
     FUNC = 2
+    CLASS = 3
 
     def __init__(self, func_name, func_kind, arg_names=None, arg_types=None, rtn_type=None,
                  template_list=None, loader=None, loader_kwargs=None):
