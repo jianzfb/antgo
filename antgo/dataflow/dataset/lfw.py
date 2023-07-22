@@ -153,11 +153,11 @@ class LFW(Dataset):
       
       cx = same_person_a_image.shape[1]/2
       cy = same_person_a_image.shape[0]/2
-      left_t_x = int(cx - 64)
-      left_t_y = int(cy - 64)
+      left_t_x = int(cx - 80)
+      left_t_y = int(cy - 80)
       
-      right_b_x = int(cx + 64)
-      right_b_y = int(cy + 64)
+      right_b_x = int(cx + 80)
+      right_b_y = int(cy + 80)
       
       crop_a_image = same_person_a_image[left_t_y:right_b_y, left_t_x:right_b_x]
       crop_b_image = same_person_b_image[left_t_y:right_b_y, left_t_x:right_b_x]
@@ -178,11 +178,11 @@ class LFW(Dataset):
       
       cx = diff_person_a_image.shape[1]/2
       cy = diff_person_a_image.shape[0]/2
-      left_t_x = int(cx - 64)
-      left_t_y = int(cy - 64)
+      left_t_x = int(cx - 80)
+      left_t_y = int(cy - 80)
       
-      right_b_x = int(cx + 64)
-      right_b_y = int(cy + 64)
+      right_b_x = int(cx + 80)
+      right_b_y = int(cy + 80)
       
       crop_a_image = diff_person_a_image[left_t_y:right_b_y, left_t_x:right_b_x]
       crop_b_image = diff_person_b_image[left_t_y:right_b_y, left_t_x:right_b_x]      

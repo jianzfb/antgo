@@ -13,8 +13,8 @@ COPY rknn-toolkit2-master.zip /
 RUN unzip /rknn-toolkit2-master.zip && \
     cd /rknn-toolkit2-master && \
     pip3 install numpy -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-    pip3 install -r doc/requirements_cp36-1.4.0.txt -i https://pypi.tuna.tsinghua.edu.cn/simple && \
-    cd packages && pip3 install rknn_toolkit2-1.4.0_22dcfef4-cp36-cp36m-linux_x86_64.whl
+    pip3 install -r doc/requirements_cp36-1.5.0.txt -i https://pypi.tuna.tsinghua.edu.cn/simple && \
+    cd packages && pip3 install rknn_toolkit2-1.50+1fa95b5c-cp36-cp36m-linux_x86_64.whl
 
 RUN mkdir /workspace && mkdir /tools/
 ENV PATH=$PATH:/tools/

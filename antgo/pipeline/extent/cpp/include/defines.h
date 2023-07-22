@@ -29,15 +29,22 @@ struct CTensor {
   T &operator[](int i) { return data[i]; }
   T &operator[](int i) const { return data[i]; }
 
+  ~CTensor(){
+    std::cout<<"destruct"<<std::endl;
+    this->destroy();
+  }
+
   void destroy(){
     // dim
-    if(is_assign_inner){
+    if(is_assign_inner && this->dims != NULL){
       delete[] this->dims;
+      this->dims = NULL;
     }
 
     // data
-    if(is_assign_inner){
+    if(is_assign_inner && this->data != NULL){
       delete[] this->data;
+      this->data = NULL;
     }
   }
 

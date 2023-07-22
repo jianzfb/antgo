@@ -6,6 +6,7 @@
 #include "./api.h"
 
 #define ANTGO_FUNC
+#define ANTGO_CLASS
 // #if USING_HIP || USING_CUDA
 // #include "./hip_ctx.h"
 // #else
