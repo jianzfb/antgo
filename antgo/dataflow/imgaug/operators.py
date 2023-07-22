@@ -1506,7 +1506,6 @@ class RandomCropImageV1(BaseOperator):
 
         if 'image_meta' in sample:
             sample['image_meta']['image_shape'] = (crop_image.shape[0], crop_image.shape[1])
-
         return sample
 
 

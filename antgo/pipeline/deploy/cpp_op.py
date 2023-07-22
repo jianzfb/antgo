@@ -1,6 +1,7 @@
 import os
 from antgo.pipeline import extent
 from antgo.pipeline.extent.glue.common import *
+from antgo.pipeline.extent.func import CFuncDef
 import copy
 
  
@@ -9,12 +10,21 @@ class CppOp(object):
         # get cpp func
         self.func_op_name = func_op_name
         self.func = getattr(extent.func, func_op_name)
+        self.func_kind = self.func.func.func_kind
 
         # parameter
-        self.args = list(args) + [None] * (len(self.func.func.arg_names)-len(args))
-        for i, (var_name, var_type) in enumerate(zip(self.func.func.arg_names, self.func.func.arg_types)):
-            if kwargs.get(var_name, None) is not None and var_type.is_const:
-                self.args[i] = kwargs.get(var_name)
+        self.kwargs = {}
+        self.args = ()
+        if self.func_kind == CFuncDef.FUNC:
+            # 函数类型算子
+            self.args = list(args) + [None] * (len(self.func.func.arg_names)-len(args))
+            for i, (var_name, var_type) in enumerate(zip(self.func.func.arg_names, self.func.func.arg_types)):
+                if kwargs.get(var_name, None) is not None and var_type.is_const:
+                    self.args[i] = kwargs.get(var_name)
+        else:
+            # 类类型算子
+            self.kwargs = kwargs
+            self.args = [None] * len(self.func.func.arg_names)
 
     def __call__(self, *args):
         # 输入数据部分
@@ -41,7 +51,7 @@ class CppOp(object):
             if arg_type in type_map and not self.func.func.arg_types[i].is_const:
                 # numpy 类型
                 out_placeholders.append(
-                    np.empty((1), type_map[arg_type])
+                    np.empty((), type_map[arg_type])
                 )
             elif not self.func.func.arg_types[i].is_const:
                 # dict 类型（需要自己实现初始化字典）
@@ -55,7 +65,7 @@ class CppOp(object):
                 output_i += 1
 
         # 运行
-        output_data = self.func(*func_args)
+        output_data = self.func(*func_args, **self.kwargs)
 
         # 返回结果
         return tuple(output_data) if len(output_data) > 1 else output_data[0]

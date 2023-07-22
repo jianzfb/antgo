@@ -76,7 +76,7 @@ class Tester(object):
             else:
                 self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
 
-    def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False):
+    def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False, strict=True):
         # build the model and load checkpoint
         if model_builder is not None:
             self.model = model_builder()
@@ -85,16 +85,16 @@ class Tester(object):
 
         if checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
-        
+
         if checkpoint is None or checkpoint == '':
             logger.error('Missing checkpoint file')
         else:
-            checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu', revise_keys=revise_keys)
-        
+            checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu', revise_keys=revise_keys, strict=strict)
+
         if is_fuse_conv_bn:
             print('use fuse conv_bn')
             self.model = fuse_conv_bn(self.model)
-        
+
         if not self.distributed:
             self.model = build_dp(self.model, self.device, device_ids=self.cfg.gpu_ids)
         else:

@@ -145,33 +145,30 @@ class CFuncDef:
         self.template_list = template_list or list()
         self.loader = loader
         self.loader_kwargs = loader_kwargs
+        self.func_c_handler = None
 
-    def __call__(self, arg_datas, arg_types, dev_id, glue_mod=None, using_async=False):
+    def __call__(self, arg_datas, arg_types, dev_id, init_key_values=None, glue_mod=None, using_async=False):
         if dev_id is None:
             ctx = 'cpu'
             dev_id = -1
         else:
             ctx = config.GPU_BACKEND
         # function loader
-        func = self.loader(self, arg_types, ctx, **self.loader_kwargs)
-        if using_async and glue_mod is not None:
-            async_func = func.get_async_func(glue_mod)
-            if async_func is not None:
-                return async_func(*_get_async_pointers(arg_datas))
-
+        if self.func_c_handler is None:
+            self.func_c_handler = self.loader(self, arg_types, ctx, **self.loader_kwargs)
         _args_wait_to_rw(arg_datas)
         const_vars = []
         mutable_vars = []
         raw_pointers = _get_raw_pointers(arg_datas, const_vars, mutable_vars)
         res = None
-        if self.func_kind == CFuncDef.KERNEL:
-            res = func(dev_id, *raw_pointers)
-        elif self.func_kind == CFuncDef.FUNC:
-            res = func(*raw_pointers)
+        if self.func_kind == CFuncDef.FUNC:
+            res = self.func_c_handler(*raw_pointers)
+        elif self.func_kind == CFuncDef.CLASS:
+            res = self.func_c_handler(*raw_pointers, **init_key_values)
         else:
             raise TypeError(
                 'Unsupported func kind: {}'.format(self.func_kind))
-        
+
         out = [] if res is None else [res]
         for v_i, (target, value) in enumerate(mutable_vars):
             if isinstance(value, np.ndarray):
@@ -202,7 +199,7 @@ class CFuncDef:
                     target = target.copy()
 
                     # c函数内部创建，需要销毁内存
-                    func.clear(ctypes.byref(value))
+                    self.func_c_handler.clear(ctypes.byref(value))
 
                 if res is None:
                     out.append(target)
@@ -236,8 +233,12 @@ class AntgoFunc:
     def __call__(self, *args, **kwargs):
         # move kwargs into args
         args = list(args)
-        for name in self.func.arg_names[len(args):]:
-            args.append(kwargs[name])
+        if self.func.func_kind == CFuncDef.FUNC:
+            # 对于函数将kwargs参数合入args
+            for name in self.func.arg_names[len(args):]:
+                args.append(kwargs[name])
+            # 清空
+            kwargs = {}
 
         # type check
         arg_datas = []
@@ -257,6 +258,7 @@ class AntgoFunc:
                 _wait_to_write(args[i])
 
         try:
+            # parse args 
             for var, ptype in zip(args, self.func.arg_types):
                 if ptype.is_pointer:
                     if hasattr(ptype, 'constructor'):
@@ -299,12 +301,36 @@ class AntgoFunc:
                     ctype = template_mapping[vtype.tname]._type_
                     arg_types[i] = DType(ctype, vtype.is_const)
                     arg_datas[i] = ctype(arg_datas[i])
+
+            # kwargs (class op)
+            if self.func.func_kind == CFuncDef.CLASS:
+                for name, ptype in zip(kwargs.keys(), self.func.loader_kwargs['construct_arg_types']):
+                    var = kwargs[name]
+
+                    if ptype.is_pointer:
+                        if hasattr(ptype, 'constructor'):
+                            var_dev_id = None
+                            ctype = ctypes.POINTER(ptype.cstruct)
+                            try:
+                                data = CStructArg(ptype.constructor(var), ptype)
+                            except TypeError:
+                                data = CStructArg(ptype.constructor(*var), ptype)
+                        else:
+                            # The type of `var` is Tensor.
+                            data, var_dev_id, ctype = self._get_tensor_info(
+                                var, ptype, template_mapping, using_async)
+                    else:
+                        # The type of `var` is Scalar.
+                        data, var_dev_id, ctype = self._get_scalar_info(var, ptype)
+
+                    kwargs[name] = data
         except TypeError:
             raise TypeError('Unmatched parameters list of the function `{}`:\n\t{}\n\t\tvs\n\t{}'.format(
                 self.name, self.func.arg_types, list(map(type, args))))
 
         rtn = self.func(arg_datas=arg_datas,
                         arg_types=arg_types,
+                        init_key_values=kwargs,
                         dev_id=dev_id,
                         glue_mod=glue_mod,
                         using_async=using_async)

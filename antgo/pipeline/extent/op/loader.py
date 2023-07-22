@@ -93,6 +93,13 @@ FUNC_REG = re.compile(
     r'^\s*(.*?)\s*\((.*?)\)(?:.*?)*')
 CPP_TEMPLATE_REG = re.compile(r'^\s*template\s*\<(.*?)\>\s*')
 
+CLASS_REG = re.compile(
+    r'\s*class\s*(\w*)\s*'
+)
+RUN_FUNC_IN_CLASS_REG = re.compile(
+    r'^\s*void\s*run'
+)
+
 ctype_map={
     'float': 'ctypes.c_float',
     'double': 'ctypes.c_double',
@@ -285,7 +292,7 @@ def register_struct_info(struct_name, type_name_list, var_name_list):
 
 
 # runtime
-FuncInfo = namedtuple('FuncInfo', ['func', 'cpp_info'])
+FuncInfo = namedtuple('FuncInfo', ['func', 'cpp_info', 'init'])
 CTX_FUNC_MAP = dict()  # CTX_FUNC_MAP[ctx][cpp_fname] -> FuncInfo
 
 
@@ -427,6 +434,30 @@ def _generate_func_code(func_idcode_hash, rtn_type, arg_types, arg_names, func_n
 
     return code
 
+def _generate_class_code(func_idcode_hash, rtn_type, arg_types, arg_names, func_name, constructor_arg_types, constructor_arg_names):
+    # 需要封装构造函数和运行函数
+    args_def = ', '.join(['{ctype} {name}'.format(
+        ctype=dtype.cname,
+        name=name
+    ) for dtype, name in zip(arg_types, arg_names)])
+    args_inst = ', '.join(arg_names)
+
+    constructor_args_def = ', '.join(['{ctype} {name}'.format(
+        ctype=dtype.cname,
+        name=name
+    ) for dtype, name in zip(constructor_arg_types, constructor_arg_names)])
+    constructor_args_inst = ', '.join(constructor_arg_names)
+
+    code = gen_code('./templates/class_code.cpp')(
+        func_idcode_hash=func_idcode_hash,
+        class_name=func_name,        
+        run_args_def=args_def,
+        run_args_inst=args_inst,
+        init_args_def=constructor_args_def,
+        init_args_inst=constructor_args_inst
+    )
+    return code
+
 
 def _update_template_inst_map(idcode, template_functions, cfunc, arg_types):
     # template function
@@ -459,17 +490,29 @@ def _update_template_inst_map(idcode, template_functions, cfunc, arg_types):
         rtn_type = template_mapping[rtn_type]
 
     func_kind = cfunc.func_kind
-    if func_kind == CFuncDef.KERNEL:
-        code = _generate_kernel_code(func_idcode_hash, arg_types, cfunc.arg_names, '({}_kernel{})'.format(
-            func_name, template_post))
+    if func_kind == CFuncDef.CLASS:
+        # class op
+        code = _generate_class_code(
+            func_idcode_hash, rtn_type, arg_types, cfunc.arg_names, func_name+template_post, cfunc.loader_kwargs["construct_arg_types"], cfunc.loader_kwargs["construct_arg_names"])
     else:
+        # func op
         code = _generate_func_code(
             func_idcode_hash, rtn_type, arg_types, cfunc.arg_names, func_name + template_post)
     template_functions[idcode] = (code, rtn_type)
 
 
-def _add_function(func_map, func_idcode, rtn_type, cpp_info, dll_fname):
+def _add_function(func_map, func_idcode, rtn_type, cpp_info, dll_fname, func_kind):
     func_idcode_hash = get_idcode_hash(func_idcode)
+    if func_kind == CFuncDef.CLASS:
+        init = getattr(cpp_info.dll, f'{func_idcode_hash}_init', None)
+        init.restype = CTYPENAME2CTYPE['void*']
+
+        func = getattr(cpp_info.dll, f'{func_idcode_hash}_run', None)
+        func.restype = None
+
+        func_map[func_idcode] = FuncInfo(func=func, cpp_info=cpp_info, init=init)
+        return
+
     func = getattr(cpp_info.dll, func_idcode_hash, None)
     if func is None:
         functions = [name for name in dir(
@@ -484,7 +527,7 @@ def _add_function(func_map, func_idcode, rtn_type, cpp_info, dll_fname):
             warnings.warn('The function `{}` in `{}` will be overridden by that in `{}`'.format(
                 func_idcode, old_func.cpp_info.cpp_fname, cpp_info.cpp_fname))
 
-    func_map[func_idcode] = FuncInfo(func=func, cpp_info=cpp_info)
+    func_map[func_idcode] = FuncInfo(func=func, cpp_info=cpp_info, init=None)
 
 
 class OpLoader:
@@ -507,7 +550,7 @@ class OpLoader:
     CTX_FUNC_MAP[ctx][fname][idcode] : FuncInfo
     '''
 
-    def __init__(self, cfunc, arg_types, ctx, cpp_info):
+    def __init__(self, cfunc, arg_types, ctx, cpp_info, **kwargs):
         idcode = get_func_idcode(cfunc.func_name, arg_types)
         if ctx not in CTX_FUNC_MAP:
             CTX_FUNC_MAP[ctx] = dict()
@@ -546,8 +589,7 @@ class OpLoader:
             if map_data.get('version') > antgo.__version__:
                 portalocker.unlock(build_info_fs)
                 raise Exception(
-                    """Unsupported higher version %s of wrapper file (Current AntgoOP ver: %s) :-(.
-Please update AntgoOP.""" % (map_data.get('version'), antgo.__version__))
+                    """Unsupported higher version %s of wrapper file (Current AntgoOP ver: %s) :-(.Please update AntgoOP.""" % (map_data.get('version'), antgo.__version__))
             build_id = map_data.get('build_id', 0)
             is_old_version = map_data.get(
                 'version') < antgo.__version__
@@ -623,15 +665,25 @@ Please update AntgoOP.""" % (map_data.get('version'), antgo.__version__))
             # import all functions
             for func_idcode in template_functions.keys():
                 _add_function(func_map,
-                              func_idcode, template_functions[func_idcode][1], cpp_info, dll_fname)
+                              func_idcode, template_functions[func_idcode][1], cpp_info, dll_fname, cfunc.func_kind)
 
         # 算子/函数
         self.func = func_map[idcode].func
+        self.init = func_map[idcode].init
+        self.init_args = cfunc.loader_kwargs['construct_arg_names'] if 'construct_arg_names' in cfunc.loader_kwargs else None
+        self.init_handler = None
         self.cpp_info = func_map[idcode].cpp_info
         self.idcode_hash = get_idcode_hash(idcode)
 
     def __call__(self, *args, **kwargs):
-        return self.func(*args, **kwargs)
+        if self.init is not None and self.init_handler is None:
+            self.init_handler = self.init(*[kwargs[k] for k in self.init_args])
+
+        if self.init_handler is not None:
+            args = (self.init_handler,) +args
+
+        result = self.func(*args)
+        return result
 
     def clear(self, data):
         # 资源销毁函数
@@ -695,15 +747,9 @@ def _get_functions_from_cpp(cpp_fname):
             if match is not None:
                 func_def = ''
                 func_kind_str = match.groups()[0]
-                if func_kind_str == 'KERNEL':
-                    func_kind = CFuncDef.KERNEL
-                    func_started = True
-                elif func_kind_str == 'FUNC':
+                if func_kind_str == 'FUNC':
                     func_kind = CFuncDef.FUNC
                     func_started = True
-                else:
-                    raise TypeError(
-                        'Unknown kind of function: %s' % func_kind_str)
 
         # In a declaration of a function
         if func_started:
@@ -729,12 +775,7 @@ def _get_functions_from_cpp(cpp_fname):
                 if not use_template:
                     template_list = []
 
-                if func_kind == CFuncDef.KERNEL:
-                    assert kernel_name.endswith('_kernel'),\
-                        Exception('the postfix of a MOBULA_KERNEL name must be `_kernel`, \
-                            e.g. addition_forward_kernel')
-                    func_name = kernel_name[:-len('_kernel')]
-                elif func_kind == CFuncDef.FUNC:
+                if func_kind == CFuncDef.FUNC:
                     func_name = kernel_name
                 else:
                     raise Exception(
@@ -758,12 +799,165 @@ def _get_functions_from_cpp(cpp_fname):
     assert unmatched_brackets == 0,\
         Exception('# unmatched brackets: {}'.format(unmatched_brackets))
 
+    if len(function_args) == 0:
+        return None
+
     # Load dynamic file
     functions = dict(
         (name, CFuncDef(**kwargs)) for name, kwargs in function_args.items())
     # Load dynamic function for MXNet
     return functions
 
+
+# def _get_functions_from_cpp(cpp_fname):
+#     unmatched_brackets = 0
+#     func_def = ''
+#     func_kind = ''
+#     func_started = False
+#     template_list = []
+#     cpp_info = CPPInfo(cpp_fname=cpp_fname)
+#     function_args = cpp_info.function_args
+#     for line in open(cpp_fname):
+#         # 检查第三方依赖
+#         match_include = DEPEND_3RD_REG.search(line)
+#         if match_include is not None:
+#             if 'opencv' in match_include.groups()[0]:
+#                 config.USING_OPENCV = True
+
+#             if 'Eigen' in match_include.groups()[0]:
+#                 config.USING_EIGEN = True
+
+#             if 'eagleeye' in match_include.groups()[0]:
+#                 config.USING_EAGLEEYE = True
+
+#         # 检查函数定义信息
+#         if not func_started:
+#             current_template_list = _get_template_decl(line)
+#             if current_template_list is not None:
+#                 template_list = current_template_list
+#             match = ANTGO_KERNEL_REG.search(line)
+#             if match is not None:
+#                 func_def = ''
+#                 func_kind_str = match.groups()[0]
+#                 if func_kind_str == 'FUNC':
+#                     func_kind = CFuncDef.FUNC
+#                     func_started = True
+#                 else:
+#                     raise TypeError(
+#                         'Unknown kind of function: %s' % func_kind_str)
+
+#         # In a declaration of a function
+#         if func_started:
+#             unmatched_brackets += line.count('(') - line.count(')')
+#             func_def += line
+#             if unmatched_brackets == 0:
+#                 func_def = func_def.replace('\n', '').replace('\r', '')
+#                 func_started = False
+#                 rtn_type, kernel_name, par_list = parse_parameters_list(
+#                     func_def)
+#                 # template name check
+#                 template_set = set(template_list)
+#                 assert len(template_set) == len(template_list),\
+#                     Exception('Duplicated template name in {}'.format(
+#                         ', '.join(template_list)))
+#                 use_template = False
+#                 for dtype, _ in par_list:
+#                     if isinstance(dtype, TemplateType):
+#                         assert dtype.tname in template_set,\
+#                             Exception(
+#                                 "template name '{}' is not defined".format(dtype.tname))
+#                         use_template = True
+#                 if not use_template:
+#                     template_list = []
+
+#                 if func_kind == CFuncDef.KERNEL:
+#                     assert kernel_name.endswith('_kernel'),\
+#                         Exception('the postfix of a MOBULA_KERNEL name must be `_kernel`, \
+#                             e.g. addition_forward_kernel')
+#                     func_name = kernel_name[:-len('_kernel')]
+#                 elif func_kind == CFuncDef.FUNC:
+#                     func_name = kernel_name
+#                 else:
+#                     raise Exception(
+#                         'Unknown function kind: {}'.format(func_kind))
+
+#                 # Arguments
+#                 funcdef_args = edict(func_name=func_name,
+#                                      func_kind=func_kind,
+#                                      arg_names=[t[1] for t in par_list],
+#                                      arg_types=[t[0] for t in par_list],
+#                                      rtn_type=rtn_type,
+#                                      template_list=template_list,
+#                                      loader=OpLoader,
+#                                      loader_kwargs=dict(
+#                                          cpp_info=cpp_info,
+#                                      )
+#                                      )
+#                 template_list = []
+#                 function_args[func_name] = funcdef_args
+
+#     assert unmatched_brackets == 0,\
+#         Exception('# unmatched brackets: {}'.format(unmatched_brackets))
+
+#     # Load dynamic file
+#     functions = dict(
+#         (name, CFuncDef(**kwargs)) for name, kwargs in function_args.items())
+#     # Load dynamic function for MXNet
+#     return functions
+
+def _parse_class_meta(class_def):
+    constructor_func_started = False
+    call_func_started = False
+    class_name = None
+    
+    constructor_func_def = ''
+    run_func_def = ''
+
+    CONSTRUCTOR_FUNC_IN_CLASS_REG = None
+    unmatched_brackets = 0
+    for line in class_def.split('\n'):
+        if class_name is None:
+            match_include = CLASS_REG.search(line)
+            if match_include is not None:
+                class_name = match_include.groups()[0]
+        if class_name is None:
+            continue
+
+        if not constructor_func_started:
+            if CONSTRUCTOR_FUNC_IN_CLASS_REG is None:
+                CONSTRUCTOR_FUNC_IN_CLASS_REG = re.compile(
+                    f'\s*{class_name}\s*\('
+                )
+            match_include =  CONSTRUCTOR_FUNC_IN_CLASS_REG.search(line)
+            if match_include is not None and '~' not in line:
+                constructor_func_started = True
+        if constructor_func_started:
+            unmatched_brackets += line.count('(') - line.count(')')
+            constructor_func_def += line
+            if unmatched_brackets == 0:
+                constructor_func_started = False
+                # 解析constructor_func_def
+                _, constructor_name, constructor_par_list = parse_parameters_list(constructor_func_def)
+
+            continue
+
+        if not call_func_started:
+            match_include =  RUN_FUNC_IN_CLASS_REG.search(line)
+            if match_include is not None:
+                call_func_started = True
+            pass
+        if call_func_started:
+            unmatched_brackets += line.count('(') - line.count(')')
+            run_func_def += line
+            if unmatched_brackets == 0:
+                call_func_started = False
+                # 解析constructor_func_def
+                _, run_name, run_par_list = parse_parameters_list(run_func_def)
+
+            continue
+    
+  
+    return class_name, constructor_par_list, run_par_list
 
 def _get_class_from_cpp(cpp_fname):
     unmatched_brackets = 0
@@ -772,6 +966,7 @@ def _get_class_from_cpp(cpp_fname):
     class_started = False
     template_list = []
     cpp_info = CPPInfo(cpp_fname=cpp_fname)
+
     function_args = cpp_info.function_args
     for line in open(cpp_fname):
         # 检查第三方依赖
@@ -786,7 +981,7 @@ def _get_class_from_cpp(cpp_fname):
             if 'eagleeye' in match_include.groups()[0]:
                 config.USING_EAGLEEYE = True
 
-        # 检查函数定义信息
+        # 检查类定义信息
         if not class_started:
             current_template_list = _get_template_decl(line)
             if current_template_list is not None:
@@ -800,15 +995,36 @@ def _get_class_from_cpp(cpp_fname):
                     class_started = True
 
         if class_started:
-            pass
+            unmatched_brackets += line.count('{') - line.count('}')
+            func_def += line
+            if unmatched_brackets == 0:
+                class_started = False
+
+                # 针对类的信息进一步解析
+                class_name, constructor_par_list, run_par_list = _parse_class_meta(func_def)
+
+                # run func Arguments
+                funcdef_args = edict(
+                    func_name=class_name,
+                    func_kind=func_kind,
+                    arg_names=[t[1] for t in run_par_list],
+                    arg_types=[t[0] for t in run_par_list],
+                    rtn_type=None,
+                    template_list=[],
+                    loader=OpLoader,
+                    loader_kwargs=dict(
+                        cpp_info=cpp_info, 
+                        construct_arg_names=[t[1] for t in constructor_par_list],
+                        construct_arg_types=[t[0] for t in constructor_par_list],
+                        construct_rtn_type=None,
+                    ))
+                function_args[class_name] = funcdef_args
 
     # # Load dynamic file
-    # functions = dict(
-    #     (name, CFuncDef(**kwargs)) for name, kwargs in function_args.items())
-    # # Load dynamic function for MXNet
-    # return functions
-    return None
-
+    functions = dict(
+        (name, CFuncDef(**kwargs)) for name, kwargs in function_args.items())
+    # Load dynamic function for MXNet
+    return functions
 
 
 def load(module_name, path=''):
@@ -839,4 +1055,13 @@ def load(module_name, path=''):
 
         # Get functions
         functions = _get_functions_from_cpp(cpp_fname)
-        bind(functions)
+        if functions is not None:
+            bind(functions)
+            return
+
+        # Get class
+        functions = _get_class_from_cpp(cpp_fname)
+        if functions is not None:
+            bind(functions)
+            return
+
