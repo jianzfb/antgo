@@ -30,7 +30,6 @@ struct CTensor {
   T &operator[](int i) const { return data[i]; }
 
   ~CTensor(){
-    std::cout<<"destruct"<<std::endl;
     this->destroy();
   }
 

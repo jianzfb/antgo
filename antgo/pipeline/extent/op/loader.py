@@ -93,9 +93,14 @@ FUNC_REG = re.compile(
     r'^\s*(.*?)\s*\((.*?)\)(?:.*?)*')
 CPP_TEMPLATE_REG = re.compile(r'^\s*template\s*\<(.*?)\>\s*')
 
+FUNC_IN_STRUCT_REG = re.compile(
+    r'^\s*[\w~]*\(.*?\)'
+)
+
 CLASS_REG = re.compile(
     r'\s*class\s*(\w*)\s*'
 )
+
 RUN_FUNC_IN_CLASS_REG = re.compile(
     r'^\s*void\s*run'
 )
@@ -322,7 +327,7 @@ class CPPInfo:
         self.dll = ctypes.CDLL(dll_fname)
 
 
-def _build_lib(cpp_fname, code_buffer, ctx, target_name):
+def _build_lib(cpp_fname, code_buffer, ctx, target_name, depedent_src=[]):
     # the virtual dirname of the source code
     cpp_path, cpp_basename = os.path.split(cpp_fname)
     create_time = time.strftime('%a %Y-%m-%d %H:%M:%S (%z)', time.localtime())
@@ -345,6 +350,7 @@ def _build_lib(cpp_fname, code_buffer, ctx, target_name):
 
     # build lib
     srcs = [cpp_wrapper_fname]
+    srcs.extend(depedent_src)
     build_path = os.path.dirname(os.path.dirname(target_name))
     source_to_so_ctx(build_path, srcs, target_name, ctx)
 
@@ -642,7 +648,7 @@ class OpLoader:
 
                 with build_context():
                     try:
-                        _build_lib(cpp_fname, code_buffer, ctx, dll_fname)
+                        _build_lib(cpp_fname, code_buffer, ctx, dll_fname, cfunc.loader_kwargs.get('depedent_src', []))
                     except:
                         # if build fail, unlock the build info file
                         portalocker.unlock(build_info_fs)
@@ -700,6 +706,9 @@ def _get_struct_define_from_cpp(cpp_fname):
     struct_started = False
     unmatched_brackets = 0
     struct_def = ''
+    function_started = False
+    unmatched_function_brackets = 0
+    # 忽略结构体中的函数定义
     for line in open(cpp_fname):
         if not struct_started:
             match = ANTGO_STRUCT_REG.search(line)
@@ -707,14 +716,26 @@ def _get_struct_define_from_cpp(cpp_fname):
                 struct_started = True
 
         if struct_started:
-            unmatched_brackets += line.count('{') - line.count('}')
-            struct_def += line
-            if unmatched_brackets == 0:
-                # 读完结构体的所有定义
-                struct_started = False
-                struct_def = struct_def.replace('\n', '').replace('\r', '')
-                struct_name, type_name_list, var_name_list = parse_struct_list(struct_def)
-                register_struct_info(struct_name, type_name_list, var_name_list)
+            if not function_started:
+                function_match = FUNC_IN_STRUCT_REG.search(line)
+                if function_match is not None:
+                    function_started = True
+
+            if function_started:
+                unmatched_function_brackets += line.count('{') - line.count('}')
+                if unmatched_function_brackets == 0:
+                    function_started = False
+                    continue
+
+            if not function_started:
+                unmatched_brackets += line.count('{') - line.count('}')
+                struct_def += line
+                if unmatched_brackets == 0:
+                    # 读完结构体的所有定义
+                    struct_started = False
+                    struct_def = struct_def.replace('\n', '').replace('\r', '')
+                    struct_name, type_name_list, var_name_list = parse_struct_list(struct_def)
+                    register_struct_info(struct_name, type_name_list, var_name_list)
 
 
 def _get_functions_from_cpp(cpp_fname):
@@ -725,18 +746,28 @@ def _get_functions_from_cpp(cpp_fname):
     template_list = []
     cpp_info = CPPInfo(cpp_fname=cpp_fname)
     function_args = cpp_info.function_args
+    function_depedent_src = []
+    base_folder = os.path.dirname(cpp_fname)
     for line in open(cpp_fname):
         # 检查第三方依赖
         match_include = DEPEND_3RD_REG.search(line)
         if match_include is not None:
             if 'opencv' in match_include.groups()[0]:
                 config.USING_OPENCV = True
+                continue
 
             if 'Eigen' in match_include.groups()[0]:
                 config.USING_EIGEN = True
+                continue
 
             if 'eagleeye' in match_include.groups()[0]:
                 config.USING_EAGLEEYE = True
+                continue
+
+            check_cpp_src = match_include.groups()[0][1:-1].split('.')[0]
+            check_cpp_src = f'{check_cpp_src}.cpp'
+            if os.path.exists(os.path.join(base_folder, check_cpp_src)):
+                function_depedent_src.append(os.path.join(base_folder, check_cpp_src))
 
         # 检查函数定义信息
         if not func_started:
@@ -791,6 +822,7 @@ def _get_functions_from_cpp(cpp_fname):
                                      loader=OpLoader,
                                      loader_kwargs=dict(
                                          cpp_info=cpp_info,
+                                         depedent_src=function_depedent_src
                                      )
                                      )
                 template_list = []
@@ -808,102 +840,6 @@ def _get_functions_from_cpp(cpp_fname):
     # Load dynamic function for MXNet
     return functions
 
-
-# def _get_functions_from_cpp(cpp_fname):
-#     unmatched_brackets = 0
-#     func_def = ''
-#     func_kind = ''
-#     func_started = False
-#     template_list = []
-#     cpp_info = CPPInfo(cpp_fname=cpp_fname)
-#     function_args = cpp_info.function_args
-#     for line in open(cpp_fname):
-#         # 检查第三方依赖
-#         match_include = DEPEND_3RD_REG.search(line)
-#         if match_include is not None:
-#             if 'opencv' in match_include.groups()[0]:
-#                 config.USING_OPENCV = True
-
-#             if 'Eigen' in match_include.groups()[0]:
-#                 config.USING_EIGEN = True
-
-#             if 'eagleeye' in match_include.groups()[0]:
-#                 config.USING_EAGLEEYE = True
-
-#         # 检查函数定义信息
-#         if not func_started:
-#             current_template_list = _get_template_decl(line)
-#             if current_template_list is not None:
-#                 template_list = current_template_list
-#             match = ANTGO_KERNEL_REG.search(line)
-#             if match is not None:
-#                 func_def = ''
-#                 func_kind_str = match.groups()[0]
-#                 if func_kind_str == 'FUNC':
-#                     func_kind = CFuncDef.FUNC
-#                     func_started = True
-#                 else:
-#                     raise TypeError(
-#                         'Unknown kind of function: %s' % func_kind_str)
-
-#         # In a declaration of a function
-#         if func_started:
-#             unmatched_brackets += line.count('(') - line.count(')')
-#             func_def += line
-#             if unmatched_brackets == 0:
-#                 func_def = func_def.replace('\n', '').replace('\r', '')
-#                 func_started = False
-#                 rtn_type, kernel_name, par_list = parse_parameters_list(
-#                     func_def)
-#                 # template name check
-#                 template_set = set(template_list)
-#                 assert len(template_set) == len(template_list),\
-#                     Exception('Duplicated template name in {}'.format(
-#                         ', '.join(template_list)))
-#                 use_template = False
-#                 for dtype, _ in par_list:
-#                     if isinstance(dtype, TemplateType):
-#                         assert dtype.tname in template_set,\
-#                             Exception(
-#                                 "template name '{}' is not defined".format(dtype.tname))
-#                         use_template = True
-#                 if not use_template:
-#                     template_list = []
-
-#                 if func_kind == CFuncDef.KERNEL:
-#                     assert kernel_name.endswith('_kernel'),\
-#                         Exception('the postfix of a MOBULA_KERNEL name must be `_kernel`, \
-#                             e.g. addition_forward_kernel')
-#                     func_name = kernel_name[:-len('_kernel')]
-#                 elif func_kind == CFuncDef.FUNC:
-#                     func_name = kernel_name
-#                 else:
-#                     raise Exception(
-#                         'Unknown function kind: {}'.format(func_kind))
-
-#                 # Arguments
-#                 funcdef_args = edict(func_name=func_name,
-#                                      func_kind=func_kind,
-#                                      arg_names=[t[1] for t in par_list],
-#                                      arg_types=[t[0] for t in par_list],
-#                                      rtn_type=rtn_type,
-#                                      template_list=template_list,
-#                                      loader=OpLoader,
-#                                      loader_kwargs=dict(
-#                                          cpp_info=cpp_info,
-#                                      )
-#                                      )
-#                 template_list = []
-#                 function_args[func_name] = funcdef_args
-
-#     assert unmatched_brackets == 0,\
-#         Exception('# unmatched brackets: {}'.format(unmatched_brackets))
-
-#     # Load dynamic file
-#     functions = dict(
-#         (name, CFuncDef(**kwargs)) for name, kwargs in function_args.items())
-#     # Load dynamic function for MXNet
-#     return functions
 
 def _parse_class_meta(class_def):
     constructor_func_started = False
@@ -967,19 +903,29 @@ def _get_class_from_cpp(cpp_fname):
     template_list = []
     cpp_info = CPPInfo(cpp_fname=cpp_fname)
 
+    function_depedent_src = []
     function_args = cpp_info.function_args
+    base_folder = os.path.dirname(cpp_fname)
     for line in open(cpp_fname):
         # 检查第三方依赖
         match_include = DEPEND_3RD_REG.search(line)
         if match_include is not None:
             if 'opencv' in match_include.groups()[0]:
                 config.USING_OPENCV = True
+                continue
 
             if 'Eigen' in match_include.groups()[0]:
                 config.USING_EIGEN = True
+                continue
 
             if 'eagleeye' in match_include.groups()[0]:
                 config.USING_EAGLEEYE = True
+                continue
+            
+            check_cpp_src = match_include.groups()[0][1:-1].split('.')[0]
+            check_cpp_src = f'{check_cpp_src}.cpp'
+            if os.path.exists(os.path.join(base_folder, check_cpp_src)):
+                function_depedent_src.append(os.path.join(base_folder, check_cpp_src))
 
         # 检查类定义信息
         if not class_started:
@@ -1017,6 +963,7 @@ def _get_class_from_cpp(cpp_fname):
                         construct_arg_names=[t[1] for t in constructor_par_list],
                         construct_arg_types=[t[0] for t in constructor_par_list],
                         construct_rtn_type=None,
+                        depedent_src=function_depedent_src
                     ))
                 function_args[class_name] = funcdef_args
 

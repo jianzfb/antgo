@@ -64,6 +64,8 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
     rknn_path = os.path.join(root_folder, 'rknpu2')
 
     rknn_runtime_folder = os.path.join(rknn_path, 'runtime')
+    if device.startswith('rk356'):
+        device = 'rk356X'
     assert(os.path.exists(os.path.join(rknn_runtime_folder, device.upper())))
     device_rknn_runtime_folder = os.path.join(rknn_runtime_folder, device.upper())
     assert(os.path.exists(os.path.join(device_rknn_runtime_folder, platform.capitalize())))
@@ -167,7 +169,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
             input_num=len(input_ctx),
             output_num=len(output_ctx)
         )
-    
+
     # folder tree
     # output_folder/
     #   include/
@@ -201,7 +203,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         if not var_type.is_const and func_args[i] is None:
             func_args[i] = (f'output_{output_i}', var_name, var_type, None)
             output_i += 1
-    
+
     # 从Tensor到C*Tensor转换
     convert_map_1 = {
         'CFTensor': 'convert_tensor_cftensor',
@@ -231,7 +233,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         '<i4': 'init_citensor',
         '|u1': 'init_cuctensor'
     }
-    
+
     args_convert = ''
     output_covert = ''
     args_clear = ''
@@ -727,7 +729,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             in_port='{'+','.join([str(i) for i in range(len(project_config['input']))]) + '}',
             in_signal='{'+','.join(['"'+info[-1]+'"' for info in project_config['input']])+'}',
             out_port='{'+','.join([str(i) for i in range(len(project_config['output']))]) + '}',
-            out_signal='{'+','.join(['"'+info[-1]+'"' for info in project_config['output']])+'}',
+            out_signal=','.join(['"'+info[-1]+'"' for info in project_config['output']]),
             graph_in_ops='{'+','.join(['"'+deploy_output_data_name_inv_link[info[0]][0]+'"' for info in project_config['input']])+'}',
             graph_out_ops='{'+','.join(['{"'+deploy_output_data_name_inv_link[info[0]][0]+'",'+str(deploy_output_data_name_inv_link[info[0]][1])+'}' for info in project_config['output']])+'}',
             op_graph=op_graph_code
@@ -784,6 +786,20 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         fp.write(shell_code_content)
 
     # 保存项目配置信息
+    for item in graph_config:
+        # check op_args
+        op_args = []
+        for value in item['op_args']:
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
+            op_args.append(value)
+        item['op_args'] = op_args
+
+        # check op_kwargs
+        for key in item['op_kwargs']:
+            if isinstance(item['op_kwargs'][key], np.ndarray):
+                item['op_kwargs'][key] = item['op_kwargs'][key].tolist()
+
     project_config.update({
         'graph': graph_config,
         'platform': platform

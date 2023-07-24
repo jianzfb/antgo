@@ -87,7 +87,7 @@ int main(int argc, char** argv){
                 input_size_str += tos(input_size[k]);
             }
         }
-        std::string file_path = std::string("../../data/input/")+input_name+".0."+tos(input_type)+"."+input_size_str+".bin";
+        std::string file_path = std::string("./data/input/")+input_name+".0."+tos(input_type)+"."+input_size_str+".bin";
         std::ifstream file_path_handle;
         file_path_handle.open(file_path.c_str(),std::ios::binary);
         
@@ -138,7 +138,7 @@ int main(int argc, char** argv){
                     output_size_str += tos(out_data_size[k]);
                 }
             }
-            std::string file_path = std::string("../../data/output/")+output_name+"."+output_port+"."+tos(out_data_type)+"."+output_size_str+".bin";
+            std::string file_path = std::string("./data/output/")+output_name+"."+output_port+"."+tos(out_data_type)+"."+output_size_str+".bin";
             std::ofstream file_path_handle;
             file_path_handle.open(file_path.c_str(),std::ios::binary);
             int data_byte_size = get_data_size(out_data_type, std::vector<size_t>(out_data_size, out_data_size+out_data_dims));
