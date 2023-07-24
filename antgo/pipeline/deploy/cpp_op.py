@@ -51,7 +51,7 @@ class CppOp(object):
             if arg_type in type_map and not self.func.func.arg_types[i].is_const:
                 # numpy 类型
                 out_placeholders.append(
-                    np.empty((), type_map[arg_type])
+                    np.empty((1), type_map[arg_type])
                 )
             elif not self.func.func.arg_types[i].is_const:
                 # dict 类型（需要自己实现初始化字典）

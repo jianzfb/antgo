@@ -1,6 +1,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
+import numpy as np
 
 __graph_info = {}
 
@@ -8,6 +9,11 @@ def add_op_info(op_name, op_index, op_args, op_kwargs):
     global __graph_info
     if 'op' not in __graph_info:
         __graph_info['op'] = []
+    
+    # for k in op_kwargs.keys():
+    #     if isinstance(op_kwargs[k], np.ndarray):
+    #         op_kwargs[k] = op_kwargs[k].tolist()
+
     __graph_info['op'].append({
         'op_name': op_name,     # 算子名称
         'op_index': op_index,   # 上下游数据流转
