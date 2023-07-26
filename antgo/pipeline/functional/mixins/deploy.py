@@ -320,11 +320,11 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
     return converted_op_args
 
 
-def update_cmakelist(output_folder, project_name, src_op_warp_list):
+def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list):
     info = []
     is_found_include_directories_insert = False
     is_start_add_src_code = False
-
+    pipeline_plugin_flag = []
     src_op_warp_flag = [0 for _ in range(len(src_op_warp_list))]
     for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
         if is_start_add_src_code and not line.strip().endswith(')'):
@@ -332,7 +332,12 @@ def update_cmakelist(output_folder, project_name, src_op_warp_list):
                 if src_op_warp_file == line.strip():
                     src_op_warp_flag[src_op_warp_file_i] = 1
                     break
+            pipeline_plugin_flag.append(line.strip())
+
         if is_start_add_src_code and line.strip().endswith(')'):
+            if f'./{pipeline_name}_plugin.cpp' not in pipeline_plugin_flag:
+                info.append(f'./{pipeline_name}_plugin.cpp\n')
+
             for src_op_warp_file_i, src_op_warp_file_flag in enumerate(src_op_warp_flag):
                 if src_op_warp_file_flag == 0:
                     info.append(f'{src_op_warp_list[src_op_warp_file_i]}\n')
@@ -574,7 +579,12 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     return f'{platform_engine.capitalize()}Op', template_args, op_args, include_path
 
 
-def package_build(output_folder, eagleeye_path, project_config, platform, abi=None):    
+def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True):    
+    project_name = project_config["name"]
+    pipeline_name = project_name
+    if '/' in project_name:
+        project_name, pipeline_name = project_name.split('/')
+
     # 获得eagleeye核心算子集合
     core_op_set = load_eagleeye_op_set(eagleeye_path)
 
@@ -643,7 +653,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             if op_name.startswith('inference_onnx_op'):
                 # 算子转换为平台预测引擎算子
                 engine_op_name, template_args, op_args, include_path = \
-                    convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder, platform, abi, project_name=project_config['name'])
+                    convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder, platform, abi, project_name=project_name)
 
                 deploy_graph_info[op_unique_name] = {
                     'type': engine_op_name,
@@ -721,8 +731,8 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     op_graph_code += 'op_graph->init(NULL);'
 
     eagleeye_plugin_code_content = \
-        gen_code('./templates/plugin_code.cpp')(            
-            project=project_config['name'],
+        gen_code('./templates/plugin_code.cpp')(        
+            project=pipeline_name,
             version=project_config.get('version', '1.0.0.0'),
             signature=project_config.get('signature', 'xxx'),
             include_list=include_list,
@@ -735,32 +745,39 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             op_graph=op_graph_code
         )
 
-    with open(os.path.join(output_folder, f'{project_config["name"]}_plugin.cpp'), 'w') as fp:
+    with open(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp'), 'w') as fp:
         fp.write(eagleeye_plugin_code_content)
 
-    # 准备插件demo文件
+    eagleeye_plugin_header_content = \
+        gen_code('./templates/plugin_code.h')(project=pipeline_name)
+
+    with open(os.path.join(output_folder, f'{pipeline_name}_plugin.h'), 'w') as fp:
+        fp.write(eagleeye_plugin_header_content)
+
     os.makedirs(os.path.join(output_folder, 'data'), exist_ok=True)
 
-    plugin_input_size_list = []
-    plugin_input_type_list = []
-    for info_i, info in enumerate(project_config['input']):
-        for graph_op_info in graph_config:
-            if graph_op_info['op_index'][-1][0] == info[0]:
-                plugin_input_size_list.append(graph_op_info['op_kwargs']['shape'])
-                plugin_input_type_list.append(graph_op_info['op_kwargs']['data_type'])
+    # 准备插件demo文件
+    if generate_demo_code:
+        plugin_input_size_list = []
+        plugin_input_type_list = []
+        for info_i, info in enumerate(project_config['input']):
+            for graph_op_info in graph_config:
+                if graph_op_info['op_index'][-1][0] == info[0]:
+                    plugin_input_size_list.append(graph_op_info['op_kwargs']['shape'])
+                    plugin_input_type_list.append(graph_op_info['op_kwargs']['data_type'])
 
-    plugin_input_size_list = ['{'+','.join([str(v) for v in shape])+'}' for shape in plugin_input_size_list]
-    plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
-    demo_code_content = gen_code(f'./templates/demo_code.cpp')(
-        project=project_config["name"],
-        input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
-        input_size_list='{'+','.join(plugin_input_size_list)+'}',
-        input_type_list='{'+plugin_input_type_list+'}',
-        output_name_list='{'+','.join(['"nnnode"' for _ in range(len(project_config['output']))])+'}',
-        output_port_list='{'+','.join([f"{i}" for i in range(len(project_config['output']))])+'}'
-    )
-    with open(os.path.join(output_folder, f'{project_config["name"]}_demo.cpp'), 'w') as fp:
-        fp.write(demo_code_content)
+        plugin_input_size_list = ['{'+','.join([str(v) for v in shape])+'}' for shape in plugin_input_size_list]
+        plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
+        demo_code_content = gen_code(f'./templates/demo_code.cpp')(
+            project=project_name,
+            input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
+            input_size_list='{'+','.join(plugin_input_size_list)+'}',
+            input_type_list='{'+plugin_input_type_list+'}',
+            output_name_list='{'+','.join(['"nnnode"' for _ in range(len(project_config['output']))])+'}',
+            output_port_list='{'+','.join([f"{i}" for i in range(len(project_config['output']))])+'}'
+        )
+        with open(os.path.join(output_folder, f'{project_name}_demo.cpp'), 'w') as fp:
+            fp.write(demo_code_content)
 
     # 准备额外依赖库（libc++_shared.so）
     if platform.lower() == 'android':
@@ -769,18 +786,18 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         shutil.copy(os.path.join(ndk_path, "sources/cxx-stl/llvm-libc++/libs", abi, 'libc++_shared.so'), os.path.join(output_folder, '3rd', abi, 'libc++_shared.so'))
 
     # 更新CMakeLists.txt
-    update_cmakelist(output_folder, project_config["name"], [s['src'] for s in deploy_graph_info.values() if 'src' in s])
+    update_cmakelist(output_folder, project_name, pipeline_name,[s['src'] for s in deploy_graph_info.values() if 'src' in s])
 
     # 更新插件工程编译脚本
     shell_code_content = gen_code('./templates/android_build.sh')(
-        project=project_config['name'],
+        project=project_name,
         ANDROID_NDK_HOME=os.environ['ANDROID_NDK_HOME']
     )
     with open(os.path.join(output_folder, 'android_build.sh'), 'w') as fp:
         fp.write(shell_code_content)
 
     shell_code_content = gen_code('./templates/linux_build.sh')(
-        project=project_config['name']
+        project=project_name
     )
     with open(os.path.join(output_folder, 'linux_build.sh'), 'w') as fp:
         fp.write(shell_code_content)
@@ -859,19 +876,23 @@ class DeployMixin:
         eagleeye_path = prepare_eagleeye_environment(system_platform, abi_platform)
 
         # 创建工程
+        project_name = project_config["name"]
+        pipeline_name = project_name
+        if '/' in project_name:
+            project_name, pipeline_name = project_name.split('/')
         os.makedirs(output_folder, exist_ok=True)
-        if not os.path.exists(os.path.join(output_folder, f'{project_config["name"]}_plugin')):
+        if not os.path.exists(os.path.join(output_folder, f'{project_name}_plugin')):
             if project_config.get('git', None) is not None and project_config['git'] != '':
                 os.system(f'cd {output_folder} && git clone {project_config["git"]}')
             else:
-                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_config["name"]} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
-        output_folder = os.path.join(output_folder, f'{project_config["name"]}_plugin')
+                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
+        output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
         # 编译
         package_build(
             output_folder, 
             eagleeye_path, 
-            project_config=project_config, platform=system_platform, abi=abi_platform)
+            project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=project_name==pipeline_name)
 
         return True
 
