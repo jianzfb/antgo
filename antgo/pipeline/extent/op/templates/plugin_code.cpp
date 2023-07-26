@@ -146,8 +146,8 @@ ${project}->add(nnnode, "nnnode");
 // 4.step link all node in pipeline
 for(size_t i=0; i<nnnode->getOpGraphIn(); ++i){
     std::string placeholer_i_name = formatString("placeholder_%d", i);
-    ${project}->bind(placeholer_i_name.c_str(), i, "nnnode", i);
+    ${project}->bind(placeholer_i_name.c_str(), 0, "nnnode", i);
 }
 
-EAGLEEYE_END_PIPELINE_INITIALIZE
+EAGLEEYE_END_PIPELINE_INITIALIZE(${project})
 }

@@ -40,6 +40,8 @@ class CoreOp(object):
                 else:
                     print(f'Dont support {var_key}')
                     print(var_value)
+            else:
+                self.param_1[var_key] = [float(var_value)]
 
     def __call__(self, *args):
         input_tensors = []
