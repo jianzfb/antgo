@@ -53,6 +53,9 @@ class OperatorLoader:
         return self.instance_operator(op, arg, kws) if op is not None else None
 
     def load_operator_from_mm(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
+        if not function.startswith('mm'):
+            return None
+
         module, fname = function.split('/')
         op_cls = ''.join(x.capitalize() or '_' for x in fname.split('_'))
         module = '.'.join(['antgo.pipeline.hub.external', '{}.{}'.format(module, fname)])
@@ -83,6 +86,9 @@ class OperatorLoader:
         return self.instance_operator(op, arg, kws) if op is not None else None
 
     def load_operator_from_mp(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str):
+        if not function.startswith('mp'):
+            return None
+
         module, fname = function.split('/')
         op_cls = ''.join(x.capitalize() or '_' for x in fname.split('_'))
         module = '.'.join(['antgo.pipeline.hub.external', '{}.{}'.format(module, fname)])
@@ -97,23 +103,20 @@ class OperatorLoader:
 
 
     def load_operator_from_deploy(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
-        module, fname = function.split('/')
-        if module != 'deploy':
+        if not function.startswith('deploy'):
             return None
 
-        op = getattr(importlib.import_module('antgo.pipeline.deploy.cpp_op'), 'CppOp', None)
-        if op is None:
-            return None
+        module, fname = function.split('/')
         kws.update({
             'func_op_name': fname.replace('-', '_')
         })
         return self.instance_operator(op, arg, kws) if op is not None else None
 
     def load_operator_from_eagleeye(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
-        module, fname = function.split('/')
-        if module != 'eagleeye':
+        if not function.startswith('eagleeye'):
             return None
 
+        module, category, fname = function.split('/')
         os.makedirs(ANTGO_DEPEND_ROOT, exist_ok=True)
         if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', 'py')):
             if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')):
@@ -131,8 +134,13 @@ class OperatorLoader:
                     cur_abs_path = os.path.abspath(os.curdir)
                     so_abs_path = os.path.join(cur_abs_path, f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64")
                     os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
-
-        op = getattr(importlib.import_module('antgo.pipeline.eagleeye.core_op'), 'CoreOp', None)
+        op = None
+        if category.lower() == 'op':
+            op = getattr(importlib.import_module('antgo.pipeline.eagleeye.core_op'), 'CoreOp', None)
+        elif category.lower() == 'pipeline':
+            op = getattr(importlib.import_module('antgo.pipeline.eagleeye.pipeline_op'), 'Pipeline', None)
+        else:
+            op = getattr(importlib.import_module('antgo.pipeline.eagleeye.exe_op'), 'Exe', None)
         if op is None:
             return None
         kws.update({
@@ -143,6 +151,9 @@ class OperatorLoader:
 
     def load_operator_from_packages(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         try:
+            if len(function.split('/')) > 2:
+                return None
+
             module, fname = function.split('/')
             load_func = getattr(self, f'load_operator_from_{module}', None)
             if load_func is not None:
@@ -182,8 +193,8 @@ class OperatorLoader:
                         self.load_operator_from_registry,
                         self.load_operator_from_remote,
                         self.load_operator_from_packages,
-                        self.load_operator_from_deploy,
-                        self.load_operator_from_eagleeye]:
+                        self.load_operator_from_eagleeye,
+                        self.load_operator_from_deploy]:
             op = factory(function, arg, kws, tag)
             if op is not None:
                 return op

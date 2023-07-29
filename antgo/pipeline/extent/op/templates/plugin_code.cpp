@@ -6,6 +6,7 @@
 ${include_list}
 #include "${project}_plugin.h"
 #include "eagleeye/processnode/NNNode.h"
+#include "eagleeye/framework/pipeline/DynamicPipelineCreater.h"
 
 namespace eagleeye{
 using namespace dataflow;
