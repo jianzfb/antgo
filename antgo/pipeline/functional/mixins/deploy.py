@@ -320,7 +320,7 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
     return converted_op_args
 
 
-def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list):
+def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info):
     info = []
     is_found_include_directories_insert = False
     is_start_add_src_code = False
@@ -359,12 +359,12 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
             is_found_include_directories_insert = True
 
         # 添加opencv依赖
-        if 'set(OpenCV_DIR "")' in line and config.USING_OPENCV:
+        if 'set(OpenCV_DIR "")' in line and (config.USING_OPENCV or 'opencv' in compile_info):
             opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
             line = f'set(OpenCV_DIR "{opencv_path}")'
 
         info.append(line)
-    
+
     with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
         for line in info:
             fp.write(line)
@@ -620,7 +620,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             deploy_graph_info[op_unique_name] = op_info
         elif op_name.startswith('eagleeye'):
             # eagleeye核心算子 (op级别算子)
-            op_name = op_name[9:]
+            op_name = op_name[12:]
             if op_name not in op_name_count:
                 op_name_count[op_name] = 0
             op_unique_name = f'{op_name}_{op_name_count[op_name]}'
@@ -786,7 +786,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         shutil.copy(os.path.join(ndk_path, "sources/cxx-stl/llvm-libc++/libs", abi, 'libc++_shared.so'), os.path.join(output_folder, '3rd', abi, 'libc++_shared.so'))
 
     # 更新CMakeLists.txt
-    update_cmakelist(output_folder, project_name, pipeline_name,[s['src'] for s in deploy_graph_info.values() if 'src' in s])
+    update_cmakelist(output_folder, project_name, pipeline_name,[s['src'] for s in deploy_graph_info.values() if 'src' in s], project_config.get('compile', []))
 
     # 更新插件工程编译脚本
     shell_code_content = gen_code('./templates/android_build.sh')(
@@ -824,7 +824,16 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
         json.dump(project_config, fp)
 
-    os.system(f'cd {output_folder} && bash {platform}_build.sh')
+    if 'python' in project_config.get('compile', []):
+        pymodel_code_content = gen_code('./templates/pypipelinemodel_code.cpp')(
+            project=project_name
+        )
+        with open(os.path.join(output_folder, 'PyPipelineModel.cpp'), 'w') as fp:
+            fp.write(pymodel_code_content)
+
+        os.system(f'cd {output_folder} && bash {platform}_build.sh BUILD_PYTHON_MODULE')
+    else:
+        os.system(f'cd {output_folder} && bash {platform}_build.sh')
 
 
 NANO_OP_REG = re.compile('^class\s*\w*\s*:')

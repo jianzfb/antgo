@@ -13,7 +13,7 @@ using namespace eagleeye;
 
 int get_data_size(int data_type, std::vector<size_t> shape){
     int num = std::accumulate(shape.begin(), shape.end(), 1, [](int64_t a, int64_t b){return a*b;});
-    if(data_type == 0 || data_type == 1){
+    if(data_type == 0 || data_type == 1 || data_type == 8 || data_type == 9){
         // char,uchar
         return sizeof(char) * num;
     }
