@@ -3,4 +3,5 @@ config:
   password: ''
   ip: ''
 
-script: 'ssh-submit.sh'
+script: ''
+image: ''

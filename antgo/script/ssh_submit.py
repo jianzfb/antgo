@@ -31,11 +31,8 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
         with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
             project_info = json.load(fp)
 
-    image_name = 'antgo-env:latest' # 基础镜像
-    if 'image' in project_info and project_info['image'] != '':
-        image_name = project_info['image']
 
-    # 添加扩展配置：保存到当前目录下并一同提交
+    # 添加扩展配置:保存到当前目录下并一同提交
     if task_name is not None and len(project_info) > 0:
         extra_config = prepare_extra_config(task_name, project_info)
         if extra_config is None:
@@ -49,11 +46,22 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     if password == '':
         password = 'default'
 
+    launch_script = config_content['script']
+    if launch_script != '':
+        sys_argv = launch_script
+
+    image_name = 'antgo-env:latest' # 基础镜像
+    launch_image = config_content['image']
+    if launch_image != '':
+        image_name = launch_image
+    if 'image' in project_info and project_info['image'] != '':
+        image_name = project_info['image']
+
     remote_local_folder_name = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
     submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {remote_local_folder_name}'
     os.system(submit_cmd)
 
-    # 删除临时配置：
+    # 删除临时配置:
     if os.path.exists('./extra-config.py'):
         os.remove('./extra-config.py')
     return True
