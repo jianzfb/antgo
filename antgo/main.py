@@ -220,10 +220,10 @@ def main():
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && rsa=`cat id_rsa.pub` && ' + "sed -i 's%placeholder%'"+"\"${rsa}\""+"'%g' user_ssh_nopassword_config.sh")
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
       else:
-        logging.info("Only support ssh remote task submitter")
+        logging.info("Only support ssh remote task submitter (--ssh)")
         return
 
-      print(f'update submitter config {args.config}')
+      print(f'Update & Activate submitter config {args.config}')
     elif sub_action_name == 'ls':
       # 输出已经配置的远程信息
       if args.ssh:
@@ -233,7 +233,7 @@ def main():
             if len(terms) == 4:
               pprint(f'{terms[1]}')
       else:
-        logging.info("Only support ssh remote task submitter")
+        logging.info("Only support ssh remote task submitter (--ssh)")
     elif sub_action_name == 'activate':
       # 将选定远程作为默认
       if args.ssh:
@@ -250,6 +250,8 @@ def main():
         )
 
         pprint(f'Activate {args.ip}')
+      else:
+        logging.info("Only support ssh remote task submitter (--ssh)")
     else:
       logging.error("Only support submitter template/update/ls/activate")
       return
@@ -416,7 +418,7 @@ def main():
       if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} hasnot create.')
         return
-
+xf
       project_info = {}      
       with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp)
@@ -477,7 +479,7 @@ def main():
 
       # step 1.1: 检查提交脚本配置
       if args.local:
-        # 本地提交
+        # 本地提交 (debug使用)
         sys_argv_cmd = sys_argv_cmd.replace('--local', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
