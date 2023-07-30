@@ -22,7 +22,7 @@ class CoreOp(object):
         self.param_3 = dict()   # {"key": [[float,float,...],[],...]}
 
         for var_key, var_value in kwargs.items():
-            if isinstance(var_value, list):
+            if isinstance(var_value, list) or isinstance(var_value, tuple):
                 if len(var_value) > 0:
                     if isinstance(var_value[0], str):
                         self.param_2[var_key] = var_value

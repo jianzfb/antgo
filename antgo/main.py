@@ -220,7 +220,7 @@ def main():
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && rsa=`cat id_rsa.pub` && ' + "sed -i 's%placeholder%'"+"\"${rsa}\""+"'%g' user_ssh_nopassword_config.sh")
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
       else:
-        logging.info("Only support ssh remote task submitter (--ssh)")
+        logging.error("Only support ssh remote task submitter (--ssh)")
         return
 
       print(f'Update & Activate submitter config {args.config}')
@@ -233,7 +233,7 @@ def main():
             if len(terms) == 4:
               pprint(f'{terms[1]}')
       else:
-        logging.info("Only support ssh remote task submitter (--ssh)")
+        logging.error("Only support ssh remote task submitter (--ssh)")
     elif sub_action_name == 'activate':
       # 将选定远程作为默认
       if args.ssh:
@@ -251,7 +251,7 @@ def main():
 
         pprint(f'Activate {args.ip}')
       else:
-        logging.info("Only support ssh remote task submitter (--ssh)")
+        logging.error("Only support ssh remote task submitter (--ssh)")
     else:
       logging.error("Only support submitter template/update/ls/activate")
       return
@@ -268,10 +268,6 @@ def main():
       return
 
     if sub_action_name == 'add':
-      if not args.src.endswith('.tar'):
-        logging.error('Only support tar dataset package')
-        return
-
       if args.ssh:
         ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
         if not os.path.exists(ssh_submit_config_file):
@@ -284,8 +280,16 @@ def main():
 
         user_name = config_content['config']['username']
         remote_ip = config_content['config']['ip']
-        os.system(f'scp {args.src} {user_name}@{remote_ip}:~/')
-        os.system(f'ssh {user_name}@{remote_ip} "sudo -S tar -xf ~/{os.path.basename(args.src)} -C /data/ && rm ~/{os.path.basename(args.src)}"')
+
+        if args.src.endswith('.tar'):
+          os.system(f'scp {args.src} {user_name}@{remote_ip}:~/')
+          os.system(f'ssh {user_name}@{remote_ip} "sudo -S tar -xf ~/{os.path.basename(args.src)} -C /data/ && rm ~/{os.path.basename(args.src)}"')
+        elif args.src.endswith('.zip'):
+          os.system(f'scp {args.src} {user_name}@{remote_ip}:~/')
+          os.system(f'ssh {user_name}@{remote_ip} "sudo -S unzip -d /data/ ~/{os.path.basename(args.src)} && rm ~/{os.path.basename(args.src)}"')
+        else:
+          os.system(f'scp -r {args.src} {user_name}@{remote_ip}:~/')
+          os.system(f'ssh {user_name}@{remote_ip} "sudo -S mv ~/{os.path.basename(args.src)} /data/"')
         print(f'Finish dataset {os.path.basename(args.src)} deploy.')
       else:
         logging.error("Now only support ssh remote control")
@@ -418,7 +422,7 @@ def main():
       if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
         logging.error(f'Project {args.project} hasnot create.')
         return
-xf
+
       project_info = {}      
       with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
         project_info = json.load(fp)
