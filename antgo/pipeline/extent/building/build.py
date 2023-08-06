@@ -166,8 +166,8 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
     
             # 编译
             print('compile opencv')
-            os.system(f'cd {ANTGO_DEPEND_ROOT} && cd opencv && mkdir build && cd build && cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. && make -j4 && make install')
-            os.system(f'cd {ANTGO_DEPEND_ROOT} && cd opencv && rm -rf build')
+            os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+            os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
 
             # 添加so的搜索路径 (for linux)
             so_abs_path = os.path.join(install_path, 'lib')

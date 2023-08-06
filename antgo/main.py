@@ -823,7 +823,7 @@ def main():
         # args.src 远程文件路径
         # args.tgt 本地路径
         # args.tags 关键字（对于搜索引擎下载使用）
-        tool_func(args.tgt, args.tags, src_path=args.src)
+        tool_func(args.tgt, args.tags, src_path=args.src, target_num=args.num)
       elif sub_action_name.startswith('upload'):
         tool_func = getattr(tools, f'upload_to_{sub_action_name.split("/")[1]}', None)
 

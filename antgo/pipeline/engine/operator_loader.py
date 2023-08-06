@@ -107,6 +107,9 @@ class OperatorLoader:
             return None
 
         module, fname = function.split('/')
+        op = getattr(importlib.import_module('antgo.pipeline.deploy.cpp_op'), 'CppOp', None)
+        if op is None:
+            return None        
         kws.update({
             'func_op_name': fname.replace('-', '_')
         })

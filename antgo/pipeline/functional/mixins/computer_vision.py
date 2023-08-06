@@ -141,6 +141,9 @@ class ComputerVisionMixin:
     """
     assert(width is not None and height is not None)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 用于mp4格式的生成的参数
+    output_folder = os.path.dirname(output_path)
+    if not os.path.exists(output_folder):
+      os.makedirs(output_folder)
     out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
 
     for array in self:
@@ -156,6 +159,9 @@ class ComputerVisionMixin:
     for data in self:
       assert(isinstance(data, dict))
       total.append(data)
-      
+
+    output_folder = os.path.dirname(path)
+    if not os.path.exists(output_folder):
+      os.makedirs(output_folder)
     with open(path, 'w') as fp:
       json.dump(total, fp)
