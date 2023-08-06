@@ -16,7 +16,7 @@ import  urllib.parse
 import uuid
 
 
-def download_from_baidu(target_folder, keys, src_path=None):
+def download_from_baidu(target_folder, keys, src_path=None, target_num=10000):
     datasource_name = 'baidu'
     datasource_type = ''
     datasource_keyword = ''
@@ -52,10 +52,10 @@ def download_from_baidu(target_folder, keys, src_path=None):
     baidu_download(
         datasource_keyword,
         {'download_data_type': datasource_type}, 
-        os.path.join(target_folder, 'spider_%d'%(time_stamp)))
+        os.path.join(target_folder, 'spider_%d'%(time_stamp)), target_num=target_num)
 
 
-def download_from_bing(target_folder, keys, src_path=None):
+def download_from_bing(target_folder, keys, src_path=None, target_num=10000):
     datasource_name = 'bing'
     datasource_type = ''
     datasource_keyword = ''
@@ -86,16 +86,16 @@ def download_from_bing(target_folder, keys, src_path=None):
     bing_download(
         datasource_keyword,
         {'download_data_type': datasource_type}, 
-        os.path.join(target_folder, 'spider_%d'%(time_stamp)))
+        os.path.join(target_folder, 'spider_%d'%(time_stamp)), target_num=target_num)
 
 
-def download_from_google(target_folder, keys, src_path=None):
+def download_from_google(target_folder, keys, src_path=None, target_num=10000):
     FLAGS = flags.AntFLAGS
 
     logger.error("In coming")
 
 
-def download_from_vcg(target_folder, keys, src_path=None):
+def download_from_vcg(target_folder, keys, src_path=None, target_num=10000):
     datasource_name = 'vcg'
     datasource_type = ''
     datasource_keyword = ''
@@ -126,10 +126,10 @@ def download_from_vcg(target_folder, keys, src_path=None):
     vcg_download(
         datasource_keyword, 
         {'download_data_type': datasource_type}, 
-        os.path.join(target_folder, 'spider_%d'%(time_stamp)))
+        os.path.join(target_folder, 'spider_%d'%(time_stamp)), target_num=target_num)
 
 
-def download_from_aliyun(target_folder, keys=None, src_path=None):
+def download_from_aliyun(target_folder, keys=None, src_path=None, **kwargs):
     if not src_path.startswith('ali://'):
         src_path = f'ali://{src_path}'
 
