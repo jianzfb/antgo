@@ -282,14 +282,13 @@ def main():
         remote_ip = config_content['config']['ip']
 
         if args.src.endswith('.tar'):
-          os.system(f'scp {args.src} {user_name}@{remote_ip}:~/')
-          os.system(f'ssh {user_name}@{remote_ip} "sudo -S tar -xf ~/{os.path.basename(args.src)} -C /data/ && rm ~/{os.path.basename(args.src)}"')
+          os.system(f'scp {args.src} {user_name}@{remote_ip}:/data')
+          os.system(f'ssh {user_name}@{remote_ip} "tar -xf /data/{os.path.basename(args.src)} -C /data/ && rm /data/{os.path.basename(args.src)}"')
         elif args.src.endswith('.zip'):
-          os.system(f'scp {args.src} {user_name}@{remote_ip}:~/')
-          os.system(f'ssh {user_name}@{remote_ip} "sudo -S unzip -d /data/ ~/{os.path.basename(args.src)} && rm ~/{os.path.basename(args.src)}"')
+          os.system(f'scp {args.src} {user_name}@{remote_ip}:/data')
+          os.system(f'ssh {user_name}@{remote_ip} "unzip -d /data/ /data/{os.path.basename(args.src)} && rm /data/{os.path.basename(args.src)}"')
         else:
-          os.system(f'scp -r {args.src} {user_name}@{remote_ip}:~/')
-          os.system(f'ssh {user_name}@{remote_ip} "sudo -S mv ~/{os.path.basename(args.src)} /data/"')
+          os.system(f'scp -r {args.src} {user_name}@{remote_ip}:/data')
         print(f'Finish dataset {os.path.basename(args.src)} deploy.')
       else:
         logging.error("Now only support ssh remote control")
@@ -310,7 +309,7 @@ def main():
 
         user_name = config_content['config']['username']
         remote_ip = config_content['config']['ip']
-        os.system(f'ssh {user_name}@{remote_ip} "sudo -S rm -rf /data/{args.src}"')
+        os.system(f'ssh {user_name}@{remote_ip} "rm -rf /data/{args.src}"')
         print(f'Finish dataset {args.src} delete.')
       else:
         logging.error("Now only support ssh remote control")
