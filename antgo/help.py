@@ -92,6 +92,10 @@ def generate_project_exp_example(template_project_folder, target_folder, exp_nam
         # 复制cifar10分类样例代码
         if exp_name is None or exp_name == '':
             exp_name = 'cifar10'
+
+        template_exp = exp_name
+        if '/' in exp_name:
+            exp_name, template_exp = exp_name.split('/')
         shutil.copytree(os.path.join(template_project_folder, 'cifar10'), os.path.join(target_folder, exp_name))
 
         if exp_name != 'cifar10':
@@ -105,8 +109,8 @@ def generate_project_exp_example(template_project_folder, target_folder, exp_nam
 
             # 修改标准配置文件 (lsp, pascal_voc)
             os.remove(os.path.join(target_folder, exp_name, 'configs', 'config.py'))
-            if os.path.exists(os.path.join(template_project_folder, f'{exp_name}_config.py')):
-                shutil.copy(os.path.join(template_project_folder, f'{exp_name}_config.py'), os.path.join(target_folder, exp_name, 'configs', 'config.py'))
+            if os.path.exists(os.path.join(template_project_folder, f'{template_exp}_config.py')):
+                shutil.copy(os.path.join(template_project_folder, f'{template_exp}_config.py'), os.path.join(target_folder, exp_name, 'configs', 'config.py'))
             else:      
                shutil.copy(os.path.join(template_project_folder, 'config.py'), os.path.join(target_folder, exp_name, 'configs'))
     else:
