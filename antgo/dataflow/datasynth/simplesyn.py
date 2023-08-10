@@ -67,7 +67,8 @@ def simple_syn_sample(image_generator, obj_generator, disturb_generator=None, mi
                     M, 
                     (obj_w, obj_h), 
                     borderMode=cv2.BORDER_CONSTANT,
-                    borderValue=obj_info['fill'] if 'fill' in obj_info else 255)
+                    borderValue=obj_info['fill'] if 'fill' in obj_info else 255,
+                    flags=cv2.INTER_NEAREST)
 
         # 合成
         paste_x = 0
