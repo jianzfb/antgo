@@ -73,6 +73,7 @@ class OperatorLoader:
             elif fname == 'classification':
                 subprocess.check_call(['pip3', 'install', 'mmcls'])
             elif fname == 'ocr':
+                subprocess.check_call(['pip3', 'install', 'mmdet'])
                 subprocess.check_call(['pip3', 'install', 'mmocr'])
             elif fname == 'pose':
                 subprocess.check_call(['pip3', 'install', 'mmpose'])
@@ -140,8 +141,10 @@ class OperatorLoader:
         op = None
         if category.lower() == 'op':
             op = getattr(importlib.import_module('antgo.pipeline.eagleeye.core_op'), 'CoreOp', None)
+        elif category.lower() == 'node':
+            op = getattr(importlib.import_module('antgo.pipeline.eagleeye.node_op'), 'CoreNode', None)
         elif category.lower() == 'pipeline':
-            op = getattr(importlib.import_module('antgo.pipeline.eagleeye.pipeline_op'), 'Pipeline', None)
+            op = getattr(importlib.import_module('antgo.pipeline.eagleeye.pipeline_op'), 'CorePipeline', None)
         else:
             op = getattr(importlib.import_module('antgo.pipeline.eagleeye.exe_op'), 'Exe', None)
         if op is None:

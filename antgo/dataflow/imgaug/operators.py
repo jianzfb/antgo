@@ -428,6 +428,9 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
 
         # 裁减图像
         image = cv2.warpAffine(image, trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
+        if 'segments' in sample:
+            sample['segments'] = cv2.warpAffine(sample['segments'], trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
+
         # 转换2D关键点
         for i in range(self.num_joints):
             joints2d[i, 0:2] = self.affine_transform(joints2d[i, 0:2], trans)
@@ -448,7 +451,15 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         #     if joints_vis[joint_i]:
         #         cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
         # cv2.imwrite(f'./112233.png', image)
-        sample = {
+        out_sample = {}
+        if 'segments' in sample:
+            out_sample['segments'] = sample['segments']
+            sample.pop('segments')
+
+        sample.pop('image')
+        sample.pop('joints2d')
+        sample.pop('joints_vis')
+        out_sample.update({
             'image': image,
             'heatmap': target,
             'offset_x': offset_x,
@@ -457,8 +468,9 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             'joints_vis': joints_vis,
             'joints2d': joints2d,
             'bboxes': np.array(bbox)
-        }
-        return sample
+        })
+        out_sample.update(sample)
+        return out_sample
 
 
 class UnSqueeze(BaseOperator):

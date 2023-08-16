@@ -5,10 +5,11 @@ from typing import Any
 import numpy as np
 import importlib
 
-class Pipeline(object):
+class CorePipeline(object):
     def __init__(self, func_op_name, plugin_name=None, **kwargs):
         self.pipeline_name = func_op_name
         self.plugin_name = plugin_name
+        self.plugin_id = str(uuid.uuid4())
         if self.plugin_name is None:
             # 自动查找当前文件夹下的plugin
             for subfolder in os.listdir('./deploy'):
