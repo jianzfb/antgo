@@ -2,6 +2,7 @@ import os
 import sys
 import copy
 from typing import Any
+import uuid
 ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
 sys.path.append(f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64')
 
@@ -16,7 +17,8 @@ class CoreOp(object):
             a,b = func_op_name.split('_')
             func_op_name = f'{a.capitalize()}{b.capitalize()}'
         self.func_op_name = func_op_name
-        
+        self.op_id = str(uuid.uuid4())
+
         self.param_1 = dict()   # {"key": [float,float,float,...]}
         self.param_2 = dict()   # {"key": ["","","",...]}
         self.param_3 = dict()   # {"key": [[float,float,...],[],...]}
@@ -49,5 +51,5 @@ class CoreOp(object):
             assert(isinstance(tensor, np.ndarray))
             input_tensors.append(tensor)
 
-        output_tensors = eagleeye.execute(self.func_op_name, self.func_op_name,self.param_1, self.param_2,self.param_3, input_tensors)
+        output_tensors = eagleeye.op_execute(self.func_op_name, self.op_id, self.func_op_name, self.param_1, self.param_2,self.param_3, input_tensors)
         return output_tensors if len(output_tensors) > 1 else output_tensors[0]
