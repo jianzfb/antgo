@@ -153,18 +153,17 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
             fp.write(line)
 
 
-def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder):
+def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_folder):
     func = getattr(extent.func, op_name)
-
     input_ctx, output_ctx = op_index
     if isinstance(input_ctx, str):
         input_ctx = [input_ctx]
     if isinstance(output_ctx, str):
         output_ctx = [output_ctx]
-    
+
     # 创建header文件
     eagleeye_warp_h_code_content = \
-        gen_code('./templates/op_code.h')(            
+        gen_code('./templates/op_func_code.h')(            
             op_name=f"{op_name.replace('_','').capitalize()}Op",
             input_num=len(input_ctx),
             output_num=len(output_ctx)
@@ -218,7 +217,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         'CUCTensor':'convert_cuctensor_tensor',
         'CDTensor': 'convert_cdtensor_tensor',
     }
-    
+
     # 创建C*Tensor    
     new_map = {
         'CFTensor': 'new_cftensor',
@@ -226,7 +225,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         'CUCTensor':'new_cuctensor',
         'CDTensor': 'new_cdtensor',
     }
-    
+
     # 初始化C*Tensor
     init_map = {
         '<f4': 'init_cftensor',
@@ -274,7 +273,7 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
             args_inst += f',{arg_name}'
     
     eagleeye_warp_cpp_code_content = \
-        gen_code('./templates/op_code.cpp')(
+        gen_code('./templates/op_func_code.cpp')(
             op_name=f"{op_name.replace('_','').capitalize()}Op",
             func_name=op_name,
             inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
@@ -300,6 +299,172 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
         'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp')
     }
     return info
+
+
+def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_folder):
+    func = getattr(extent.func, op_name)
+    input_ctx, output_ctx = op_index
+    if isinstance(input_ctx, str):
+        input_ctx = [input_ctx]
+    if isinstance(output_ctx, str):
+        output_ctx = [output_ctx]
+
+    # 创建header文件
+    eagleeye_warp_h_code_content = \
+        gen_code('./templates/op_class_code.h')(            
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            input_num=len(input_ctx),
+            output_num=len(output_ctx),
+            cls_name=func.func.func_name
+        )
+
+    # folder tree
+    # output_folder/
+    #   include/
+    #   src/
+    include_folder = os.path.join(output_folder, 'extent','include')
+    os.makedirs(include_folder, exist_ok=True)
+    with open(os.path.join(include_folder, f'{op_name}_op_warp.h'), 'w') as fp:
+        fp.write(eagleeye_warp_h_code_content)
+
+    # 创建cpp文件
+    # 函数参数部分
+    func_args = [None] * len(func.func.arg_names)
+    # for i, (var_name, var_type) in enumerate(zip(func.func.arg_names, func.func.arg_types)):
+    #     if i < len(op_args):
+    #         func_args[i] =  ('param', var_name, var_type, op_args[i])
+
+    # for i, (var_name, var_type) in enumerate(zip(func.func.arg_names, func.func.arg_types)):
+    #     if op_kwargs.get(var_name, None) is not None and var_type.is_const:
+    #         func_args[i] = ('param', var_name, var_type, op_kwargs.get(var_name))
+
+    # 函数输入部分
+    input_i = 0
+    for i, (var_name, var_type) in enumerate(zip(func.func.arg_names, func.func.arg_types)):
+        if var_type.is_const and func_args[i] is None:
+            func_args[i] = (f'input_{input_i}',var_name, var_type, None)
+            input_i += 1
+
+    # 函数输出部分
+    output_i = 0
+    for i, (var_name, var_type) in enumerate(zip(func.func.arg_names, func.func.arg_types)):
+        if not var_type.is_const and func_args[i] is None:
+            func_args[i] = (f'output_{output_i}', var_name, var_type, None)
+            output_i += 1
+
+    # 从Tensor到C*Tensor转换
+    convert_map_1 = {
+        'CFTensor': 'convert_tensor_cftensor',
+        'CITensor': 'convert_tensor_citensor',
+        'CUCTensor':'convert_tensor_cuctensor',
+        'CDTensor': 'convert_tensor_cdtensor',
+    }
+    # 从C*Tensor到Tensor转换
+    convert_map_2 = {
+        'CFTensor': 'convert_cftensor_tensor',
+        'CITensor': 'convert_citensor_tensor',
+        'CUCTensor':'convert_cuctensor_tensor',
+        'CDTensor': 'convert_cdtensor_tensor',
+    }
+
+    # 创建C*Tensor    
+    new_map = {
+        'CFTensor': 'new_cftensor',
+        'CITensor': 'new_citensor',
+        'CUCTensor':'new_cuctensor',
+        'CDTensor': 'new_cdtensor',
+    }
+
+    # 初始化C*Tensor
+    init_map = {
+        '<f4': 'init_cftensor',
+        '<i4': 'init_citensor',
+        '|u1': 'init_cuctensor'
+    }
+
+    args_convert = ''
+    output_covert = ''
+    args_clear = ''
+    for arg in func_args:
+        flag, arg_name, arg_type, arg_value = arg
+        if flag.startswith('input'):
+            input_p = int(flag[6:])
+            arg_type = arg_type.cname.replace('*','')
+            args_convert += f'{arg_type}*{arg_name}={convert_map_1[arg_type]}(input[{input_p}]);\n'
+
+            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+        elif flag.startswith('output'):
+            arg_type = arg_type.cname.replace('*','')
+            args_convert += f'{arg_type}*{arg_name}={new_map[arg_type]}();\n'
+
+            output_p = int(flag[7:])
+            output_covert += f'm_outputs[{output_p}]={convert_map_2[arg_type]}({arg_name});\n'
+            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+        else:
+            if isinstance(arg_value, np.ndarray):
+                assert(arg_value.dtype == np.float32 or arg_value.dtype == np.int32 or arg_value.dtype == np.uint8)
+
+                data_value_str = '{'+','.join([f'{v}' for v in arg_value.tolist()])+'}'
+                data_shape_str = '{'+','.join([f'{v}' for v in arg_value.shape])+'}'
+                arg_type = arg_type.cname.replace('*','')
+                args_convert += f'{arg_type}*{arg_name}={init_map[arg_value.dtype.str]}({data_value_str}, {data_shape_str});\n'
+
+                args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+            else:
+                arg_type = arg_type.cname.replace('const', '')
+                args_convert += f'{arg_type} {arg_name}={str(arg_value).lower()};\n'
+
+    args_run = ''
+    for _, arg_name, _, _ in func_args:
+        if args_run == '':
+            args_run = f'{arg_name}'
+        else:
+            args_run += f',{arg_name}'
+
+    args_run_names = func.func.loader_kwargs['construct_arg_names']
+    args_init = ','.join([f'{op_kwargs[n]}' for n in args_run_names])
+    eagleeye_warp_cpp_code_content = \
+        gen_code('./templates/op_class_code.cpp')(
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            func_name=op_name,
+            inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
+            inc_fname2=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
+            args_convert=args_convert,
+            cls_name=func.func.func_name,
+            args_init=args_init,
+            args_run=args_run,
+            return_statement='',
+            output_covert=output_covert,
+            args_clear=args_clear
+        )
+
+    src_folder = os.path.join(output_folder, 'extent', 'src')
+    os.makedirs(src_folder, exist_ok=True)
+    with open(os.path.join(src_folder, f'{op_name}_op_warp.cpp'), 'w') as fp:
+        fp.write(eagleeye_warp_cpp_code_content)
+
+    info = {
+        'type': f"{op_name.replace('_','').capitalize()}Op",
+        'input': input_ctx,
+        'output': output_ctx,
+        'args': {},
+        'include': os.path.join('extent','include', f'{op_name}_op_warp.h'),
+        'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp')
+    }
+    return info
+
+
+
+def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder):
+    func = getattr(extent.func, op_name)
+    if func.func.func_kind == 3:
+        # class
+        result = generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_folder)
+        return result
+    else:
+        # func
+        result = generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_folder)
+        return result
 
 
 def convert_args_eagleeye_op_args(op_args, op_kwargs):
@@ -904,4 +1069,3 @@ class DeployMixin:
             project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=project_name==pipeline_name)
 
         return True
-
