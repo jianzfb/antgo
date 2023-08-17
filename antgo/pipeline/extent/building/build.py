@@ -95,7 +95,7 @@ def get_common_flags():
 
 def get_build_flag_cpu():
     COMMON_FLAGS = get_common_flags()
-    CFLAGS = Flags('-std=c++14').add_definition('USING_CUDA', 0).add_definition('USING_OPENMP', config.USING_OPENMP).\
+    CFLAGS = Flags('-std=c++17').add_definition('USING_CUDA', 0).add_definition('USING_OPENMP', config.USING_OPENMP).\
         add_string(COMMON_FLAGS)
     if not OS_IS_WINDOWS:
         CFLAGS.add_string('-fPIC')
@@ -127,7 +127,7 @@ def get_build_flag_cpu():
 
 def get_build_flag_cuda():
     COMMON_FLAGS = get_common_flags()
-    CU_FLAGS = Flags('-std=c++11 -x cu -Wno-deprecated-gpu-targets -dc \
+    CU_FLAGS = Flags('-std=c++17 -x cu -Wno-deprecated-gpu-targets -dc \
     -D_MWAITXINTRIN_H_INCLUDED -D_FORCE_INLINES --expt-extended-lambda').\
         add_definition('USING_CUDA', 1).\
         add_definition('USING_HIP', 0).\
