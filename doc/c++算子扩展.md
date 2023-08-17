@@ -19,6 +19,7 @@ testclass
 #include "Eigen/Dense"
 #include "eagleeye/basic/Matrix.h"
 
+using namespace antgo;
 using namespace eagleeye;
 ANTGO_FUNC void demo_func(const CUCTensor* image, CUCTensor* output){
     // 获得输入图像的高和宽
@@ -73,8 +74,9 @@ testclass
 #include "Eigen/Dense"
 #include "eagleeye/basic/Matrix.h"
 
+using namespace antgo;
 using namespace eagleeye;
-ANTGO_CLASS DemoCls{
+ANTGO_CLASS class DemoCls{
 public:
     DemoCls(){
     }
