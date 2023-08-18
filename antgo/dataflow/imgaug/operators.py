@@ -354,35 +354,6 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         image = sample['image']
         joints2d = sample['joints2d']
         joints_vis = sample['joints_vis']
-        if joints2d.size == 0:
-            image_h, image_w = image.shape[:2]
-            
-            inp_h, inp_w = self.input_size            
-            xmin = np.random.randint(0, image_w - inp_w)
-            ymin = np.random.randint(0, image_h - inp_h)
-            center, scale = self._box_to_center_scale(xmin, ymin, inp_w, inp_h, 1.0)
-            trans = self.get_affine_transform(center, scale, 0, [inp_w, inp_h])
-
-            # 裁减图像
-            image = cv2.warpAffine(image, trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
-            target_weight = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
-            target = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
-            offset_x = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
-            offset_y = np.zeros((self.num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
-            # 关节点可见性
-            joints_vis = np.zeros((self.num_joints), dtype=np.float32)
-            sample = {
-                'image': image,
-                'heatmap': target,
-                'offset_x': offset_x,
-                'offset_y': offset_y,
-                'heatmap_weight': target_weight,
-                'joints_vis': joints_vis,
-                'joints2d': np.zeros((self.num_joints, 2)),
-                'bboxes': np.array([xmin, ymin, xmin+inp_w, ymin+inp_h])
-            }
-            return sample
-
         bbox = np.zeros((4), dtype=np.int32)
         if len(joints2d.shape) == 3:
             obj_num = joints2d.shape[0]
@@ -450,6 +421,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         #     x, y = int(x), int(y)
         #     if joints_vis[joint_i]:
         #         cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
+        #         cv2.putText(image, f'{joint_i}', (x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,255), 1)
         # cv2.imwrite(f'./112233.png', image)
         out_sample = {}
         if 'segments' in sample:
