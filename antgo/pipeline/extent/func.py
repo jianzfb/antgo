@@ -321,6 +321,8 @@ class AntgoFunc:
                                 var, ptype, template_mapping, using_async)
                     else:
                         # The type of `var` is Scalar.
+                        if isinstance(var, str):
+                            var = var.encode('utf-8')
                         data, var_dev_id, ctype = self._get_scalar_info(var, ptype)
 
                     kwargs[name] = data

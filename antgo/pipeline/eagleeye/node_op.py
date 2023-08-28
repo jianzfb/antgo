@@ -19,7 +19,7 @@ class CoreNode(object):
     def __call__(self, *args):
         input_tensors = []
         for tensor in args:
-            assert(isinstance(tensor, np.ndarray))
+            assert(isinstance(tensor, np.ndarray) or isinstance(tensor, bool) or isinstance(tensor, str))
             input_tensors.append(tensor)
 
         output_tensors = eagleeye.node_execute(self.node_name,  self.node_id, self.node_name,  self.param, input_tensors)

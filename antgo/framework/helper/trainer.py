@@ -267,10 +267,10 @@ class Trainer(BaseTrainer):
             # 需要模型自己控制
             optimizer = {}
             if is_module_wrapper(model):
-                model = model.module
+                optimizer_model = model.module
 
             for submodule_name, optimizer_dict in self.cfg.optimizer.items():
-                optimizer[submodule_name] = build_optimizer(getattr(model, submodule_name), optimizer_dict)
+                optimizer[submodule_name] = build_optimizer(getattr(optimizer_model, submodule_name), optimizer_dict)
 
         # build lr scheduler
         # 如果构造复合lr调度，则不在全局hook中注册

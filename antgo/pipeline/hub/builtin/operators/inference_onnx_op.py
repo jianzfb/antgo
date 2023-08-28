@@ -22,15 +22,20 @@ import os
 @register
 class inference_onnx_op(object):
     def __init__(self, onnx_path, input_fields=None, device_id=-1, **kwargs):
-        self.sess = ort.InferenceSession(onnx_path)
+        privider = []
+        if device_id >= 0:
+            privider.append(('CUDAExecutionProvider', {'device_id': device_id}))
+        privider.append('CPUExecutionProvider')
+
+        self.sess = ort.InferenceSession(onnx_path, providers=privider)
+        print(self.sess.get_providers())
+
         self.input_names = []
         self.input_shapes = []
         for input_tensor in self.sess.get_inputs():
             self.input_names.append(input_tensor.name)
             self.input_shapes.append(input_tensor.shape)
 
-        if device_id >= 0:
-            self.sess.set_providers(['CUDAExecutionProvider'], [{'device_id': device_id}])
         self.input_fields = self.input_names
         self.mean_val = kwargs.get('mean', None)   # 均值
         self.std_val = kwargs.get('std', None)     # 方差
