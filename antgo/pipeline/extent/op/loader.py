@@ -185,6 +185,11 @@ def parse_parameter_decl(decl):
 
     # ctype func(...)
     ctype_name = 'c_{}'.format(type_name)
+    if type_name == 'char':
+        assert is_pointer
+        ctype = getattr(ctypes, 'c_char_p')
+        return DType(ctype, is_const=is_const), var_name
+
     if hasattr(ctypes, ctype_name):
         ctype = getattr(ctypes, ctype_name)
         if is_pointer:

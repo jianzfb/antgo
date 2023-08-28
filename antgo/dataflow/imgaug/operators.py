@@ -184,7 +184,7 @@ class Meta(BaseOperator):
 
 
 class ConvertRandomObjJointsAndOffset(BaseOperator):
-    def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.5, center_factor=0.25, rot_factor=30, with_random=True, inputs=None):
+    def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.5, center_factor=0.25, rot_factor=30, skeleton=[], with_random=True, inputs=None):
         super().__init__(inputs=inputs)
         self.input_size = input_size
         self._heatmap_size = heatmap_size
@@ -195,6 +195,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         self.num_joints = num_joints
         self._feat_stride = np.array(self.input_size) / np.array(self._heatmap_size) 
         self._sigma = sigma
+        self.skeleton = skeleton
 
     def extend_bbox(self, bbox, image_shape=None):
         x1, y1, x2, y2 = bbox
@@ -422,7 +423,16 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         #     if joints_vis[joint_i]:
         #         cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
         #         cv2.putText(image, f'{joint_i}', (x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,255), 1)
+        # for s,e in self.skeleton:
+        #     if joints_vis[s] and joints_vis[e]:
+        #         start_x,start_y = joints2d[s]
+        #         end_x, end_y = joints2d[e]
+        #         if start_x < 0 or end_x < 0:
+        #             continue
+
+        #         cv2.line(image, (int(start_x), int(start_y)), (int(end_x), int(end_y)), (255,0,0), 1)
         # cv2.imwrite(f'./112233.png', image)
+
         out_sample = {}
         if 'segments' in sample:
             out_sample['segments'] = sample['segments']

@@ -218,12 +218,12 @@ class DefaultOptimizerConstructor:
                             'weight_decay'] = self.base_wd * bias_decay_mult
             params.append(param_group)
 
-        if check_ops_exist():
-            from mmcv.ops import DeformConv2d, ModulatedDeformConv2d
-            is_dcn_module = isinstance(module,
-                                       (DeformConv2d, ModulatedDeformConv2d))
-        else:
-            is_dcn_module = False
+        # if check_ops_exist():
+        #     from mmcv.ops import DeformConv2d, ModulatedDeformConv2d
+        #     is_dcn_module = isinstance(module,
+        #                                (DeformConv2d, ModulatedDeformConv2d))
+        # else:
+        is_dcn_module = False
         for child_name, child_mod in module.named_children():
             child_prefix = f'{prefix}.{child_name}' if prefix else child_name
             self.add_params(

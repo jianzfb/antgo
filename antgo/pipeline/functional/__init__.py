@@ -151,6 +151,9 @@ def _placeholder(*arg):
       elif isinstance(xx, str):
         data_shape = []
         data_type = 11
+      elif isinstance(xx, bool):
+        data_shape = []
+        data_type = 10
 
       if data_type < 0:
         print('placeholder type abnormal.')
@@ -186,7 +189,10 @@ def _placeholder(*arg):
       elif isinstance(xx, str):
         data_shape = []
         data_type = 11
-
+      elif isinstance(xx, bool):
+        data_shape = []
+        data_type = 10
+  
       if data_type < 0:
         print('placeholder type abnormal.')
       
