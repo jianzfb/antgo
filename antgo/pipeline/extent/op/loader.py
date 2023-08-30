@@ -998,7 +998,10 @@ def load(module_name, path=''):
     path = os.path.join(path, module_name)
 
     found = False
-    cpp_fname = os.path.join(path, op_name + '.cpp')
+    cpp_fname = os.path.join(path, op_name + '.hpp')
+    if not os.path.exists(cpp_fname):
+        cpp_fname = os.path.join(path, op_name + '.cpp')
+
     if os.path.exists(cpp_fname):
         found = True
 

@@ -25,7 +25,7 @@ class sync_layout_op(object):
         if not isinstance(layout_id, list):
             layout_id = [layout_id]
         if len(layout_id) != len(self.layout_gen):
-            layout_id = [layout_id[0]] * len(slef.layout_gen)
+            layout_id = [layout_id[0]] * len(self.layout_gen)
         self.layout_id = layout_id
 
     def extract(self, layout_image, layout_info, layout_id):
@@ -60,7 +60,7 @@ class sync_layout_op(object):
 
         for layout_i in range(1, len(self.layout_gen)):
             overlap_layout_image, overlap_layout_info = self.layout_gen[layout_i](image)
-            overlap_layout_image, overlap_layout_mask, overlap_layout_points = self.extract(layout_image, layout_info, self.layout_id[layout_i])
+            overlap_layout_image, overlap_layout_mask, overlap_layout_points = self.extract(overlap_layout_image, overlap_layout_info, self.layout_id[layout_i])
             overlap_layout_h, overlap_layout_w = overlap_layout_image.shape[:2]
 
             # 随机叠加
@@ -103,7 +103,6 @@ class sync_op(object):
         self.max_scale = max_scale
         self.border_fill = border_fill
         self.hard = hard_paste
-        self.save = save
 
     def __call__(self, image, *args):
         image = image.copy()

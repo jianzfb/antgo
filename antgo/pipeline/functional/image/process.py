@@ -41,6 +41,8 @@ class keep_ratio_op(object):
 
     def __call__(self, image):
         rhi, rwi = image.shape[:2]
+        left_padding = 0
+        top_padding = 0
         if abs(rwi / rhi - self.aspect_ratio) > 0.0001:
             if rwi / rhi > self.aspect_ratio:
                 nwi = rwi
@@ -61,8 +63,8 @@ class keep_ratio_op(object):
             # 调整image
             image = cv2.copyMakeBorder(image, top_padding, bottom_padding, left_padding, right_padding,
                                             cv2.BORDER_CONSTANT, value=(128, 128, 128))
-            
-        return image
+
+        return image, [left_padding, top_padding, rwi, rhi]
 
 
 @register
