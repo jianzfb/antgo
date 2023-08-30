@@ -23,7 +23,7 @@ except:
     import Queue as queue
 
 
-def baidu_download(keyward, download_params, save_dir, process_queue=None):
+def baidu_download(keyward, download_params, save_dir, process_queue=None, target_num=1000):
     headers = {
         'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
         'Connection': 'keep-alive',
@@ -34,10 +34,10 @@ def baidu_download(keyward, download_params, save_dir, process_queue=None):
     A.headers = headers
     url = 'https://image.baidu.com/search/flip?tn=baiduimage&ie=utf-8&word=' + keyward + '&pn='
 
-    def __baidu_find_and_download(waiting_process_queue, search_url, session, dir, max_page_num=50):
+    def __baidu_find_and_download(waiting_process_queue, search_url, session, dir, max_page_num=50, max_num=1000):
         t = 0
         num = 0
-        while t < max_page_num:
+        while t < max_page_num and num < max_num:
             Url = search_url + str(t)
             t = t+1
             try:
@@ -79,13 +79,13 @@ def baidu_download(keyward, download_params, save_dir, process_queue=None):
 
     # 搜索和下载
     if process_queue is not None:
-        t = threading.Thread(target=__baidu_find_and_download, args=(process_queue, url, A, save_dir))
+        t = threading.Thread(target=__baidu_find_and_download, args=(process_queue, url, A, save_dir, 50, target_num))
         t.start()
     else:
-        __baidu_find_and_download(process_queue, url, A, save_dir)
+        __baidu_find_and_download(process_queue, url, A, save_dir, 50, target_num)
 
 
-def bing_download(keyward, download_params, save_dir, process_queue=None):
+def bing_download(keyward, download_params, save_dir, process_queue=None, target_num=1000):
     headers = {
         'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
         'Connection': 'keep-alive',
@@ -97,10 +97,10 @@ def bing_download(keyward, download_params, save_dir, process_queue=None):
     #url = 'https://image.baidu.com/search/flip?tn=baiduimage&ie=utf-8&word=' + keyward + '&pn='
     url = 'http://cn.bing.com/images/async?q='+keyward+'&first={0}&count=35&relp=35&lostate=r&mmasync=1&dgState=x*175_y*848_h*199_c*1_i*106_r*0'
 
-    def __bing_find_and_download(waiting_process_queue, search_url, session, dir, max_page_num=50):
+    def __bing_find_and_download(waiting_process_queue, search_url, session, dir, max_page_num=50, max_num=1000):
         t = 0
         num = 0
-        while t < max_page_num:
+        while t < max_page_num and num < max_num:
             Url = search_url.format(t*35+1)
 
             t = t+1
@@ -143,17 +143,17 @@ def bing_download(keyward, download_params, save_dir, process_queue=None):
 
     # 搜索和下载
     if process_queue is not None:
-        t = threading.Thread(target=__bing_find_and_download, args=(process_queue, url, A, save_dir))
+        t = threading.Thread(target=__bing_find_and_download, args=(process_queue, url, A, save_dir, 50, target_num))
         t.start()
     else:
-        __bing_find_and_download(process_queue, url, A, save_dir)
+        __bing_find_and_download(process_queue, url, A, save_dir, 50, target_num)
 
 
-def google_download(keyward, download_params, save_dir, process_queue=None):
+def google_download(keyward, download_params, save_dir, process_queue=None, target_num=1000):
     pass
 
 
-def vcg_download(keyword, download_params, download_save_dir, process_queue=None):
+def vcg_download(keyword, download_params, download_save_dir, process_queue=None, target_num=1000):
     # 视觉中国
     headers = {
         'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
@@ -199,7 +199,7 @@ def vcg_download(keyword, download_params, download_save_dir, process_queue=None
         
         return None
 
-    def __vcg_find_and_download(waiting_process_queue, save_dir):
+    def __vcg_find_and_download(waiting_process_queue, save_dir, target_num):
         A = requests.Session()
         A.headers = headers
         query_url = 'https://www.vcg.com/creative-image/{}'.format(keyword)
@@ -267,6 +267,14 @@ def vcg_download(keyword, download_params, download_save_dir, process_queue=None
         for img_url in img_url_list:
             __vcg_img_download(waiting_process_queue, save_dir, img_url, keyword, download_count)
             download_count += 1
+            if download_count > target_num:           
+                break
+
+        if download_count > target_num:
+            # 添加结束标记
+            if waiting_process_queue is not None:
+                waiting_process_queue.put(None)                
+            return
 
         # 3.step 继续分析所有等待导航页面
         for page_index, page_url in enumerate(nav_page_list):
@@ -302,6 +310,8 @@ def vcg_download(keyword, download_params, download_save_dir, process_queue=None
             for img_url in img_url_list:
                 __vcg_img_download(waiting_process_queue, save_dir, img_url, keyword, download_count)
                 download_count += 1
+                if download_count > target_num:           
+                    break
 
         # 添加结束标记
         if waiting_process_queue is not None:
@@ -312,9 +322,9 @@ def vcg_download(keyword, download_params, download_save_dir, process_queue=None
         os.makedirs(os.path.join(download_save_dir, 'test'))
 
     if process_queue is not None:
-        t = threading.Thread(target=__vcg_find_and_download, args=(process_queue, os.path.join(download_save_dir, 'test')))
+        t = threading.Thread(target=__vcg_find_and_download, args=(process_queue, os.path.join(download_save_dir, 'test'), target_num))
         t.start()
     else:
-        __vcg_find_and_download(process_queue, os.path.join(download_save_dir, 'test'))
+        __vcg_find_and_download(process_queue, os.path.join(download_save_dir, 'test'), target_num)
 
 
