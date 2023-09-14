@@ -5,6 +5,7 @@ import numbers
 from numbers import Number
 from typing import Sequence
 import numpy as np
+from PIL import Image
 import torch
 from ..builder import PIPELINES
 import torchvision.transforms as transforms
@@ -42,6 +43,20 @@ class IAnyToTensor(object):
     def __call__(self, results):
         for key in self.keys:
             results[key] = to_tensor(results[key])
+        return results
+
+    def __repr__(self):
+        return self.__class__.__name__ + f'(keys={self.keys})'
+
+@PIPELINES.register_module()
+class IAnyToPil(object):
+
+    def __init__(self, keys=['image']):
+        self.keys = keys
+
+    def __call__(self, results):
+        for key in self.keys:
+            results[key] = Image.fromarray(results[key])
         return results
 
     def __repr__(self):
