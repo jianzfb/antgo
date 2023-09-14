@@ -67,7 +67,7 @@ class sync_layout_op(object):
             random_min_scale, random_max_scale = self.layout_gen[layout_i].scale()
             scale_value = (layout_w * (random_min_scale + (random_max_scale-random_min_scale) * np.random.random()))/overlap_layout_w
             scaled_w = int(overlap_layout_w * scale_value)
-            scaled_h = int(overlap_layout_w * scale_value)
+            scaled_h = int(overlap_layout_h * scale_value)
             overlap_layout_image = cv2.resize(overlap_layout_image, (scaled_w, scaled_h))
             overlap_layout_mask = cv2.resize(overlap_layout_mask, (scaled_w, scaled_h), interpolation=cv2.INTER_NEAREST)
 
