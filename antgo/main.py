@@ -578,6 +578,8 @@ def main():
           command_str += f' --checkpoint={args.checkpoint}'
         if args.max_epochs > 0:
           command_str += f' --max-epochs={args.max_epochs}'
+        if args.find_unused_parameters:
+          command_str += f' --find-unused-parameters'
 
         os.system(command_str)
       elif len(args.gpu_id.split(',')) == 1:
@@ -593,6 +595,8 @@ def main():
           command_str += f' --checkpoint={args.checkpoint}'
         if args.max_epochs > 0:
           command_str += f' --max-epochs={args.max_epochs}'
+        if args.find_unused_parameters:
+          command_str += f' --find-unused-parameters'
 
         os.system(command_str)
       else:
@@ -608,6 +612,8 @@ def main():
           command_str += f' --checkpoint={args.checkpoint}'
         if args.max_epochs > 0:
           command_str += f' --max-epochs={args.max_epochs}'
+        if args.find_unused_parameters:
+          command_str += f' --find-unused-parameters'
 
         os.system(command_str)
     elif action_name == 'activelearning':
