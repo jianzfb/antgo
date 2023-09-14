@@ -17,14 +17,14 @@ def __transform_call__(self, samples):
     for key in self.keys:
         samples[key] = self.parent_cls.__call__(self, samples[key])
     return samples
-    
+
 
 def register_torchvision_transforms():
     torch_transfoms = []
     for module_name in dir(torchvision.transforms):
         if module_name.startswith('__'):
             continue
-        
+
         __transform = getattr(torchvision.transforms, module_name)
         if inspect.isclass(__transform) and module_name not in ['AutoAugmentPolicy', 'InterpolationMode']:
             __transform_proxy = \

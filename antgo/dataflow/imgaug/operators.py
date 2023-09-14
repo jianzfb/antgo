@@ -401,7 +401,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         # 裁减图像
         image = cv2.warpAffine(image, trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
         if 'segments' in sample:
-            sample['segments'] = cv2.warpAffine(sample['segments'], trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
+            sample['segments'] = cv2.warpAffine(sample['segments'], trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=255)
 
         # 转换2D关键点
         for i in range(self.num_joints):
