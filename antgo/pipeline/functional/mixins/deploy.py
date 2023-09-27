@@ -27,7 +27,7 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
     root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder, 'snpe-2.9.0.4462')):
-        os.system(f'cd {root_folder} && wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip && unzip snpe-2.9.0.4462.zip')
+        os.system(f'cd {root_folder} ; wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip ; unzip snpe-2.9.0.4462.zip')
     snpe_path = os.path.join(root_folder, 'snpe-2.9.0.4462')
 
     # step2: 推送依赖库到包位置
@@ -55,12 +55,45 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
             fp.write(line)
 
 
+def tnn_import_config(output_folder, project_name, platform, abi, device=''):
+    # step1: 下载tnn库，并编译
+    root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
+    os.makedirs(root_folder, exist_ok=True)
+    tnn_path = os.path.join(root_folder, 'TNN')
+    if not os.path.exists(tnn_path):
+        os.system(f'cd {root_folder} ; git clone https://github.com/Tencent/TNN.git')
+    if not os.path.exists(os.path.join(tnn_path, 'scripts', 'release')):
+        os.system(f'cd {tnn_path}/scripts; export ANDROID_NDK=$ANDROID_NDK_HOME ; bash build_android.sh')
+
+    # step2: 推送依赖库到包为止
+    os.makedirs(os.path.join(output_folder, '3rd', abi), exist_ok=True)
+    TNN_ROOT_PATH = os.path.join(tnn_path, 'scripts', 'release')
+    shutil.copyfile(os.path.join(TNN_ROOT_PATH, abi, 'libTNN.so'), os.path.join(output_folder, '3rd', abi, 'libTNN.so'))
+
+    # step3: 生成cmake代码片段 (include, so)
+    tnn_cmake_code_snippet = f'include_directories({TNN_ROOT_PATH}/include)\n'
+    tnn_cmake_code_snippet += f'add_library(libtnn SHARED IMPORTED)\n'
+    tnn_cmake_code_snippet += f'set_target_properties(libtnn PROPERTIES IMPORTED_LOCATION {TNN_ROOT_PATH}/{abi}/libTNN.so)\n'
+    tnn_cmake_code_snippet += f'target_link_libraries({project_name} libtnn)\n'
+
+    code_line_list = []
+    for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
+        if len(code_line_list) > 0 and code_line_list[-1].strip() == '# model engine' and line == '\n':
+            code_line_list.append(tnn_cmake_code_snippet)
+
+        code_line_list.append(line)
+
+    with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
+        for line in code_line_list:
+            fp.write(line)
+
+
 def rknn_import_config(output_folder, project_name, platform, abi, device='rk3588'):
     # step1: 下载rknn库，并解压到固定为止
     root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder, 'rknpu2')):
-        os.system(f'cd {root_folder} && git clone https://github.com/rockchip-linux/rknpu2.git')
+        os.system(f'cd {root_folder} ; git clone https://github.com/rockchip-linux/rknpu2.git')
     rknn_path = os.path.join(root_folder, 'rknpu2')
 
     rknn_runtime_folder = os.path.join(rknn_path, 'runtime')
@@ -110,10 +143,10 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     # 下载 tensorrt TensorRT-8.6.1.6 https://developer.nvidia.com/nvidia-tensorrt-8x-download
     if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')):
         print('download cudnn')
-        os.system(f'cd {root_folder} && wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+        os.system(f'cd {root_folder} ; wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
     if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6')):
         print('download tensorrt')
-        os.system(f'cd {root_folder} && wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+        os.system(f'cd {root_folder} ; wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
 
     cudnn_path = os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')
     tensorrt_path = os.path.join(root_folder, 'TensorRT-8.6.1.6')
@@ -161,23 +194,6 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
     if isinstance(output_ctx, str):
         output_ctx = [output_ctx]
 
-    # 创建header文件
-    eagleeye_warp_h_code_content = \
-        gen_code('./templates/op_func_code.h')(            
-            op_name=f"{op_name.replace('_','').capitalize()}Op",
-            input_num=len(input_ctx),
-            output_num=len(output_ctx)
-        )
-
-    # folder tree
-    # output_folder/
-    #   include/
-    #   src/
-    include_folder = os.path.join(output_folder, 'extent','include')
-    os.makedirs(include_folder, exist_ok=True)
-    with open(os.path.join(include_folder, f'{op_name}_op_warp.h'), 'w') as fp:
-        fp.write(eagleeye_warp_h_code_content)
-
     # 创建cpp文件
     # 函数参数部分
     func_args = [None] * len(func.func.arg_names)
@@ -203,27 +219,52 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
             func_args[i] = (f'output_{output_i}', var_name, var_type, None)
             output_i += 1
 
-    # 从Tensor到C*Tensor转换
-    convert_map_1 = {
-        'CFTensor': 'convert_tensor_cftensor',
-        'CITensor': 'convert_tensor_citensor',
-        'CUCTensor':'convert_tensor_cuctensor',
-        'CDTensor': 'convert_tensor_cdtensor',
-    }
-    # 从C*Tensor到Tensor转换
-    convert_map_2 = {
-        'CFTensor': 'convert_cftensor_tensor',
-        'CITensor': 'convert_citensor_tensor',
-        'CUCTensor':'convert_cuctensor_tensor',
-        'CDTensor': 'convert_cdtensor_tensor',
+    # 输入/输出定义映射
+    args_define_map = {
+        'CFTensor': 'CFTensor* %s;',
+        'CITensor': 'CITensor* %s;',
+        'CUCTensor': 'CUCTensor* %s;',
+        'CDTensor': 'CDTensor* %s;'
     }
 
-    # 创建C*Tensor    
-    new_map = {
-        'CFTensor': 'new_cftensor',
-        'CITensor': 'new_citensor',
-        'CUCTensor':'new_cuctensor',
-        'CDTensor': 'new_cdtensor',
+    # 输入/输出默认值映射
+    args_default_map = {
+        'CFTensor': '%s = NULL;',
+        'CITensor': '%s = NULL;',
+        'CUCTensor': '%s = NULL;',
+        'CDTensor': '%s = NULL;',
+    }
+
+    # 输入/输出删除映射
+    args_delete_map = {
+        'CFTensor': 'if(%s != NULL){delete %s;};',
+        'CITensor': 'if(%s != NULL){delete %s;};',
+        'CUCTensor': 'if(%s != NULL){delete %s;};',
+        'CDTensor': 'if(%s != NULL){delete %s;};',
+    }
+
+    # 输入/输出创建映射
+    args_create_map = {
+        'CFTensor': 'if(%s == NULL){%s=new_cftensor();};',
+        'CITensor': 'if(%s == NULL){%s=new_citensor();};',
+        'CUCTensor': 'if(%s == NULL){%s=new_cuctensor();};',
+        'CDTensor': 'if(%s == NULL){%s=new_cdtensor();};',
+    }
+
+    # 输入初始化映射
+    args_init_map = {
+        'CFTensor': '%s->mirror(input[%d].cpu<float>(), input[%d].dims().data());',
+        'CITensor': '%s->mirror(input[%d].cpu<int>(), input[%d].dims().data());',
+        'CUCTensor': '%s->mirror(input[%d].cpu<unsigned char>(), input[%d].dims().data());',
+        'CDTensor': '%s->mirror(input[%d].cpu<double>(), input[%d].dims().data());',
+    }
+
+    # 输出导出映射
+    args_export_map = {
+        'CFTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_FLOAT, DataFormat::AUTO,%s->data);',
+        'CITensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_INT, DataFormat::AUTO,%s->data);',
+        'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
+        'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
     }
 
     # 初始化C*Tensor
@@ -233,38 +274,80 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         '|u1': 'init_cuctensor'
     }
 
-    args_convert = ''
-    output_covert = ''
-    args_clear = ''
+    input_define = ''
+    output_define = ''
+    input_default = ''
+    output_default = ''
+    input_delete = ''
+    output_delete = ''
+    input_create = ''
+    output_create = ''
+    input_init = ''
+    output_export = ''
+
+    const_define = ''
+    const_default = ''
+    const_delete = ''
+    const_init = ''
+    ext_cont_init = ''
     for arg in func_args:
         flag, arg_name, arg_type, arg_value = arg
         if flag.startswith('input'):
             input_p = int(flag[6:])
             arg_type = arg_type.cname.replace('*','')
-            args_convert += f'{arg_type}*{arg_name}={convert_map_1[arg_type]}(input[{input_p}]);\n'
+            input_define += f'{args_define_map[arg_type]}\n' % arg_name
+            input_default += f'{args_default_map[arg_type]}\n' % arg_name
+            input_delete += f'{args_delete_map[arg_type]}\n' % (arg_name,arg_name)
+            input_create += f'{args_create_map[arg_type]}\n' % (arg_name,arg_name)
             
-            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+            input_init += f'{args_init_map[arg_type]}\n' % (arg_name, input_p, input_p)
+
         elif flag.startswith('output'):
             arg_type = arg_type.cname.replace('*','')
-            args_convert += f'{arg_type}*{arg_name}={new_map[arg_type]}();\n'
-            
+            output_define += f'{args_define_map[arg_type]}\n' % arg_name
+            output_default += f'{args_default_map[arg_type]}\n' % arg_name
+            output_delete += f'{args_delete_map[arg_type]}\n' % (arg_name,arg_name)
+            output_create += f'{args_create_map[arg_type]}\n' % (arg_name,arg_name)
+
             output_p = int(flag[7:])
-            output_covert += f'm_outputs[{output_p}]={convert_map_2[arg_type]}({arg_name});\n'
-            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+            output_export += f'{args_export_map[arg_type]}\n' % (output_p,arg_name,arg_name,arg_name,arg_name)
         else:
             if isinstance(arg_value, np.ndarray):
+                # array const 参数
                 assert(arg_value.dtype == np.float32 or arg_value.dtype == np.int32 or arg_value.dtype == np.uint8)
-                
+
                 data_value_str = '{'+','.join([f'{v}' for v in arg_value.tolist()])+'}'
                 data_shape_str = '{'+','.join([f'{v}' for v in arg_value.shape])+'}'
                 arg_type = arg_type.cname.replace('*','')
-                args_convert += f'{arg_type}*{arg_name}={init_map[arg_value.dtype.str]}({data_value_str}, {data_shape_str});\n'
-                
-                args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+
+                const_define += f'{args_define_map[arg_type]}\n' % arg_name
+                const_default += f'{args_default_map[arg_type]}\n' % arg_name
+                const_delete += f'{args_delete_map[arg_type]}\n' % (arg_name,arg_name)
+                const_init += f'{arg_name}={init_map[arg_value.dtype.str]}({data_value_str}, {data_shape_str});\n'
             else:
                 arg_type = arg_type.cname.replace('const', '')
-                args_convert += f'{arg_type} {arg_name}={str(arg_value).lower()};\n'
-           
+                ext_cont_init += f'{arg_type} {arg_name}={str(arg_value).lower()};\n'
+
+    # 创建header文件
+    eagleeye_warp_h_code_content = \
+        gen_code('./templates/op_func_code.h')(            
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            input_num=len(input_ctx),
+            output_num=len(output_ctx),
+            input_define=input_define,
+            output_define=output_define,
+            const_define=const_define
+        )
+
+    # folder tree
+    # output_folder/
+    #   include/
+    #   src/
+    include_folder = os.path.join(output_folder, 'extent','include')
+    os.makedirs(include_folder, exist_ok=True)
+    with open(os.path.join(include_folder, f'{op_name}_op_warp.h'), 'w') as fp:
+        fp.write(eagleeye_warp_h_code_content)
+
     args_inst = ''
     for _, arg_name, _, _ in func_args:
         if args_inst == '':
@@ -278,11 +361,27 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
             func_name=op_name,
             inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
             inc_fname2=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
-            args_convert=args_convert,
+            # args_convert=args_convert,
             args_inst=args_inst,
             return_statement='',
-            output_covert=output_covert,
-            args_clear=args_clear
+            # output_covert=output_covert,
+            # args_clear=args_clear
+            input_default=input_default,
+            output_default=output_default,
+
+            input_delete=input_delete,
+            output_delete=output_delete,
+
+            input_create=input_create,
+            output_create=output_create,
+
+            input_init=input_init,
+            output_export=output_export,
+
+            const_default=const_default,
+            const_delete=const_delete,
+            const_init=const_init,
+            ext_cont_init=ext_cont_init   
         )
 
     src_folder = os.path.join(output_folder, 'extent', 'src')
@@ -309,24 +408,6 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
     if isinstance(output_ctx, str):
         output_ctx = [output_ctx]
 
-    # 创建header文件
-    eagleeye_warp_h_code_content = \
-        gen_code('./templates/op_class_code.h')(            
-            op_name=f"{op_name.replace('_','').capitalize()}Op",
-            input_num=len(input_ctx),
-            output_num=len(output_ctx),
-            cls_name=func.func.func_name
-        )
-
-    # folder tree
-    # output_folder/
-    #   include/
-    #   src/
-    include_folder = os.path.join(output_folder, 'extent','include')
-    os.makedirs(include_folder, exist_ok=True)
-    with open(os.path.join(include_folder, f'{op_name}_op_warp.h'), 'w') as fp:
-        fp.write(eagleeye_warp_h_code_content)
-
     # 创建cpp文件
     # 函数参数部分
     func_args = [None] * len(func.func.arg_names)
@@ -352,27 +433,52 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
             func_args[i] = (f'output_{output_i}', var_name, var_type, None)
             output_i += 1
 
-    # 从Tensor到C*Tensor转换
-    convert_map_1 = {
-        'CFTensor': 'convert_tensor_cftensor',
-        'CITensor': 'convert_tensor_citensor',
-        'CUCTensor':'convert_tensor_cuctensor',
-        'CDTensor': 'convert_tensor_cdtensor',
-    }
-    # 从C*Tensor到Tensor转换
-    convert_map_2 = {
-        'CFTensor': 'convert_cftensor_tensor',
-        'CITensor': 'convert_citensor_tensor',
-        'CUCTensor':'convert_cuctensor_tensor',
-        'CDTensor': 'convert_cdtensor_tensor',
+    # 输入/输出定义映射
+    args_define_map = {
+        'CFTensor': 'CFTensor* %s;',
+        'CITensor': 'CITensor* %s;',
+        'CUCTensor': 'CUCTensor* %s;',
+        'CDTensor': 'CDTensor* %s;'
     }
 
-    # 创建C*Tensor    
-    new_map = {
-        'CFTensor': 'new_cftensor',
-        'CITensor': 'new_citensor',
-        'CUCTensor':'new_cuctensor',
-        'CDTensor': 'new_cdtensor',
+    # 输入/输出默认值映射
+    args_default_map = {
+        'CFTensor': '%s = NULL;',
+        'CITensor': '%s = NULL;',
+        'CUCTensor': '%s = NULL;',
+        'CDTensor': '%s = NULL;',
+    }
+
+    # 输入/输出删除映射
+    args_delete_map = {
+        'CFTensor': 'if(%s != NULL){delete %s;};',
+        'CITensor': 'if(%s != NULL){delete %s;};',
+        'CUCTensor': 'if(%s != NULL){delete %s;};',
+        'CDTensor': 'if(%s != NULL){delete %s;};',
+    }
+
+    # 输入/输出创建映射
+    args_create_map = {
+        'CFTensor': 'if(%s == NULL){%s=new_cftensor();};',
+        'CITensor': 'if(%s == NULL){%s=new_citensor();};',
+        'CUCTensor': 'if(%s == NULL){%s=new_cuctensor();};',
+        'CDTensor': 'if(%s == NULL){%s=new_cdtensor();};',
+    }
+
+    # 输入初始化映射
+    args_init_map = {
+        'CFTensor': '%s->mirror(input[%d].cpu<float>(), input[%d].dims().data());',
+        'CITensor': '%s->mirror(input[%d].cpu<int>(), input[%d].dims().data());',
+        'CUCTensor': '%s->mirror(input[%d].cpu<unsigned char>(), input[%d].dims().data());',
+        'CDTensor': '%s->mirror(input[%d].cpu<double>(), input[%d].dims().data());',
+    }
+
+    # 输出导出映射
+    args_export_map = {
+        'CFTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_FLOAT, DataFormat::AUTO,%s->data);',
+        'CITensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_INT, DataFormat::AUTO,%s->data);',
+        'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
+        'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
     }
 
     # 初始化C*Tensor
@@ -382,37 +488,80 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         '|u1': 'init_cuctensor'
     }
 
-    args_convert = ''
-    output_covert = ''
-    args_clear = ''
+    input_define = ''
+    output_define = ''
+    input_default = ''
+    output_default = ''
+    input_delete = ''
+    output_delete = ''
+    input_create = ''
+    output_create = ''
+    input_init = ''
+    output_export = ''
+
+    const_define = ''
+    const_default = ''
+    const_delete = ''
+    const_init = ''
+    ext_cont_init = ''
     for arg in func_args:
         flag, arg_name, arg_type, arg_value = arg
         if flag.startswith('input'):
             input_p = int(flag[6:])
             arg_type = arg_type.cname.replace('*','')
-            args_convert += f'{arg_type}*{arg_name}={convert_map_1[arg_type]}(input[{input_p}]);\n'
+            input_define += f'{args_define_map[arg_type]}\n' % arg_name
+            input_default += f'{args_default_map[arg_type]}\n' % arg_name
+            input_delete += f'{args_delete_map[arg_type]}\n' % (arg_name,arg_name)
+            input_create += f'{args_create_map[arg_type]}\n' % (arg_name,arg_name)
+            
+            input_init += f'{args_init_map[arg_type]}\n' % (arg_name, input_p, input_p)
 
-            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
         elif flag.startswith('output'):
             arg_type = arg_type.cname.replace('*','')
-            args_convert += f'{arg_type}*{arg_name}={new_map[arg_type]}();\n'
+            output_define += f'{args_define_map[arg_type]}\n' % arg_name
+            output_default += f'{args_default_map[arg_type]}\n' % arg_name
+            output_delete += f'{args_delete_map[arg_type]}\n' % (arg_name,arg_name)
+            output_create += f'{args_create_map[arg_type]}\n' % (arg_name,arg_name)
 
             output_p = int(flag[7:])
-            output_covert += f'm_outputs[{output_p}]={convert_map_2[arg_type]}({arg_name});\n'
-            args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+            output_export += f'{args_export_map[arg_type]}\n' % (output_p,arg_name,arg_name,arg_name,arg_name)
         else:
             if isinstance(arg_value, np.ndarray):
+                # array const 参数
                 assert(arg_value.dtype == np.float32 or arg_value.dtype == np.int32 or arg_value.dtype == np.uint8)
 
                 data_value_str = '{'+','.join([f'{v}' for v in arg_value.tolist()])+'}'
                 data_shape_str = '{'+','.join([f'{v}' for v in arg_value.shape])+'}'
                 arg_type = arg_type.cname.replace('*','')
-                args_convert += f'{arg_type}*{arg_name}={init_map[arg_value.dtype.str]}({data_value_str}, {data_shape_str});\n'
 
-                args_clear += f'{arg_name}->destroy();\ndelete {arg_name};\n'
+                const_define += f'{args_define_map[arg_type]}\n' % arg_name
+                const_default += f'{args_default_map[arg_type]}\n' % arg_name
+                const_delete += f'{args_delete_map[arg_type]}\n' % (arg_name,arg_name)
+                const_init += f'{arg_name}={init_map[arg_value.dtype.str]}({data_value_str}, {data_shape_str});\n'
             else:
                 arg_type = arg_type.cname.replace('const', '')
-                args_convert += f'{arg_type} {arg_name}={str(arg_value).lower()};\n'
+                ext_cont_init += f'{arg_type} {arg_name}={str(arg_value).lower()};\n'
+
+    # 创建header文件
+    eagleeye_warp_h_code_content = \
+        gen_code('./templates/op_class_code.h')(            
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            input_num=len(input_ctx),
+            output_num=len(output_ctx),
+            cls_name=func.func.func_name,
+            input_define=input_define,
+            output_define=output_define,
+            const_define=const_define
+        )
+
+    # folder tree
+    # output_folder/
+    #   include/
+    #   src/
+    include_folder = os.path.join(output_folder, 'extent','include')
+    os.makedirs(include_folder, exist_ok=True)
+    with open(os.path.join(include_folder, f'{op_name}_op_warp.h'), 'w') as fp:
+        fp.write(eagleeye_warp_h_code_content)
 
     args_run = ''
     for _, arg_name, _, _ in func_args:
@@ -429,13 +578,27 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
             func_name=op_name,
             inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
             inc_fname2=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
-            args_convert=args_convert,
             cls_name=func.func.func_name,
             args_init=args_init,
             args_run=args_run,
             return_statement='',
-            output_covert=output_covert,
-            args_clear=args_clear
+
+            input_default=input_default,
+            output_default=output_default,
+
+            input_delete=input_delete,
+            output_delete=output_delete,
+
+            input_create=input_create,
+            output_create=output_create,
+
+            input_init=input_init,
+            output_export=output_export,
+
+            const_default=const_default,
+            const_delete=const_delete,
+            const_init=const_init,
+            ext_cont_init=ext_cont_init
         )
 
     src_folder = os.path.join(output_folder, 'extent', 'src')
@@ -555,41 +718,41 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
         if platform_engine == 'snpe':
             if platform_engine_args.get('quantize', False):
                 # 转量化模型
-                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
                 # 确保存在校正数据集
                 assert(os.path.exists(platform_engine_args.get('calibration-images')))
                 shutil.copytree(platform_engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
                         converted_model_file = file_name
                         break
 
-                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
             else:
                 # 转浮点模型
-                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/snpe && cp {onnx_file_path} /tmp/onnx/')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
                         converted_model_file = file_name
                         break
 
-                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
         elif platform_engine == 'rknn':
             if platform_engine_args.get('quantize', False):
                 # 转量化模型
-                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
                 # 确保存在校正数据集
                 assert(os.path.exists(platform_engine_args.get('calibration-images')))
                 shutil.copytree(platform_engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
@@ -598,49 +761,68 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                 onnx_dir_path = os.path.dirname(onnx_file_path)
                 mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
                 std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
-                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
                         converted_model_file = file_name
                         break
 
-                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
             else:
                 # 转浮点模型
-                os.system(f'mkdir /tmp/onnx && mkdir /tmp/onnx/rknn && cp {onnx_file_path} /tmp/onnx/')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
                 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
                 mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
                 std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
-                os.system(f'cd /tmp/onnx && docker run -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
                         converted_model_file = file_name
                         break
                 
-                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} && rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
         elif platform_engine == 'tnn':
-            print('TODO support tnn')
-            pass
+            os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
+            prefix = os.path.basename(onnx_file_path)[:-5]
+            onnx_dir_path = os.path.dirname(onnx_file_path)
+            os.system(f'cd /tmp/onnx/ ; docker run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+            converted_model_file = []
+            for file_name in os.listdir('/tmp/onnx/tnn/'):
+                if file_name[0] != '.' and '.tnnproto' in file_name:
+                    converted_model_file = file_name
+                    break
+
+            os.system(f'cp -r /tmp/onnx/tnn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+            platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
 
     if platform_model_path is None and platform == 'linux':
         platform_model_path = op_kwargs.get('onnx_path')
 
     # 将平台关联模型放入输出目录中
+    os.makedirs(os.path.join(output_folder, 'model'), exist_ok=True)
     if os.path.exists(platform_model_path):
         os.makedirs(os.path.join(output_folder, 'model'), exist_ok=True)
         shutil.copyfile(platform_model_path, os.path.join(output_folder, 'model', os.path.basename(platform_model_path)))
+        if '.tnnproto' in  platform_model_path:
+            another_model_path = platform_model_path.replace('.tnnproto', '.tnnmodel')
+            shutil.copyfile(another_model_path, os.path.join(output_folder, 'model', os.path.basename(another_model_path)))
+
+        if '.tnnmodel' in platform_model_path:
+            another_model_path = platform_model_path.replace('.tnnmodel', '.tnnproto')
+            shutil.copyfile(another_model_path, os.path.join(output_folder, 'model', os.path.basename(another_model_path)))
 
     # 2.step 参数转换及代码生成
     config_func_map = {
         'snpe': snpe_import_config,
         'rknn': rknn_import_config,
-        'tensorrt': tensorrt_import_config
+        'tensorrt': tensorrt_import_config,
+        'tnn': tnn_import_config
     }
     config_func_map[platform_engine](output_folder, project_name, platform, abi, platform_device)
 
@@ -661,8 +843,8 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     output_names = []
     output_shapes = []
     output_types = []
-    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])     # 考虑将转好的模型放置的位置
-    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])        # 考虑到 设备可写权限位置(android)
+    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])          # 考虑将转好的模型放置的位置
+    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])           # 考虑到 设备可写权限位置(android)
 
     # 更新run.sh（仅设备端运行时需要添加推送模型代码）
     if platform.lower() == 'android':
@@ -670,9 +852,13 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
         is_found_model_push_line = False
         is_found_model_platform_folder = False
         for line in open(os.path.join(output_folder, 'run.sh')):
-            if line.startswith(f'adb push {platform_model_path}'):
+            if '.tnnmodel' in line:
+                continue
+            if line.startswith(f'adb push {platform_model_path}') and not is_found_model_push_line:
                 # 替换
                 line = f'adb push {platform_model_path} {model_folder}\n'
+                if platform_model_path.endswith('.tnnproto'):
+                    line += f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n'
                 is_found_model_push_line = True
 
             if f'mkdir -p {model_folder};' in line:
@@ -685,8 +871,9 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
             if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
                 # 插入
                 run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
+                if platform_model_path.endswith('.tnnproto'):
+                    run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
             
-
             run_shell_code_list.append(line)
 
         with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
@@ -738,9 +925,10 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     if op_kwargs.get('mean', None) is not None:
         op_args[-1]['mean'] = ['{'+','.join(str(m) for m in op_kwargs['mean'])+'}']
         op_args[-1]['std'] = ['{'+','.join(str(m) for m in op_kwargs['std'])+'}']
-        op_args[-1]['rgb2bgr'] = ['{1}'] if op_kwargs.get('rgb2bgr', False) else ['{0}']
+        op_args[-1]['reverse_channel'] = ['{1}'] if op_kwargs.get('reverse_channel', False) else ['{0}']
 
     include_path = f'eagleeye/engine/nano/op/{platform_engine.lower()}_op.hpp'
+
     return f'{platform_engine.capitalize()}Op', template_args, op_args, include_path
 
 
@@ -996,9 +1184,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         with open(os.path.join(output_folder, 'PyPipelineModel.cpp'), 'w') as fp:
             fp.write(pymodel_code_content)
 
-        os.system(f'cd {output_folder} && bash {platform}_build.sh BUILD_PYTHON_MODULE')
+        os.system(f'cd {output_folder} ; bash {platform}_build.sh BUILD_PYTHON_MODULE')
     else:
-        os.system(f'cd {output_folder} && bash {platform}_build.sh')
+        os.system(f'cd {output_folder} ; bash {platform}_build.sh')
 
 
 NANO_OP_REG = re.compile('^class\s*\w*\s*:')
@@ -1025,17 +1213,17 @@ def prepare_eagleeye_environment(system_platform, abi_platform):
     os.makedirs(ANTGO_DEPEND_ROOT, exist_ok=True)
     if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')) or len(os.listdir(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye'))) == 0:
         print('Download eagleeye git')
-        os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
+        os.system(f'cd {ANTGO_DEPEND_ROOT} ; git clone https://github.com/jianzfb/eagleeye.git')
 
     p = subprocess.Popen("pip3 show eagleeye", shell=True, encoding="utf-8", stdout=subprocess.PIPE)
     if p.stdout.read() == '':
         print('Install eagleeye scafold')
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye/scripts && pip3 install -r requirements.txt && python3 setup.py install')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye/scripts ; pip3 install -r requirements.txt ; python3 setup.py install')
 
     eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_platform}-install'
     if not os.path.exists(eagleeye_path):
         print('Compile eagleeye core sdk')
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash {system_platform.lower()}_build.sh && mv install {system_platform}-install')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {system_platform.lower()}_build.sh ; mv install {system_platform}-install')
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path
 
@@ -1057,9 +1245,9 @@ class DeployMixin:
         os.makedirs(output_folder, exist_ok=True)
         if not os.path.exists(os.path.join(output_folder, f'{project_name}_plugin')):
             if project_config.get('git', None) is not None and project_config['git'] != '':
-                os.system(f'cd {output_folder} && git clone {project_config["git"]}')
+                os.system(f'cd {output_folder} ; git clone {project_config["git"]}')
             else:
-                os.system(f'cd {output_folder} && eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
+                os.system(f'cd {output_folder} ; eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
         output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
         # 编译

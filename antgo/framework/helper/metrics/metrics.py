@@ -36,20 +36,22 @@ class COCOWarp(COCO):
 
 @MEASURES.register_module()
 class COCOCompatibleEval(object):
-    def __init__(self, categories, without_background=True):
+    def __init__(self, categories, without_background=True, prob_thres=0.1, ignore_category_ids=None):
         self.categories = categories
         for c in self.categories:
             if 'supercategory' not in c:
                 c['supercategory'] = 'default'
         
         self.without_background = without_background
+        self.prob_thres = prob_thres
+        self.ignore_category_ids = ignore_category_ids
     
     def keys(self):
         # 约束使用此评估方法，需要具体的关键字信息
         return {'pred': ['box', 'label'], 'gt': ['image_meta', 'bboxes', 'labels']}
 
     def __call__(self, preds, gts):
-        # gts 格式 'info', 'licenses', 'images', 'annotations', 'categories’
+        # gts 格式 'info', 'licenses', 'images', 'annotations', 'categories'
         # 将GT 转换为COCO格式
         # image_metas, bboxes, labels
         images = []
@@ -64,6 +66,11 @@ class COCOCompatibleEval(object):
             for _, (bbox, area, category_id) in enumerate(zip(bboxes, areas, category_ids)):
                 if self.without_background:
                     category_id += 1
+
+                if self.ignore_category_ids is not None:
+                    if category_id in self.ignore_category_ids:
+                        # ignore category
+                        continue
 
                 annotations.append({
                     "segmentation": [],
@@ -96,13 +103,21 @@ class COCOCompatibleEval(object):
             pred_bboxes = pred['box'][:,:4]
             pred_probs = pred['box'][:,4]
             pred_labels = pred['label']
-
             for _, (pred_bbox, pred_prob, pred_label) in enumerate(zip(pred_bboxes, pred_probs, pred_labels)):
+                if pred_prob < self.prob_thres:
+                    # ignore low prob pred
+                    continue
+
                 x1, y1, x2, y2 = pred_bbox
                 score = (float)(pred_prob)
                 label = (int)(pred_label)
                 if self.without_background:
                     label += 1
+
+                if self.ignore_category_ids is not None:
+                    if label in self.ignore_category_ids:
+                        # ignore category
+                        continue
 
                 w, h = x2 - x1, y2 - y1
                 pred_dict = {

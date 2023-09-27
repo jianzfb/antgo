@@ -965,7 +965,7 @@ def _get_class_from_cpp(cpp_fname):
                     loader=OpLoader,
                     loader_kwargs=dict(
                         cpp_info=cpp_info, 
-                        construct_arg_names=[t[1] for t in constructor_par_list],
+                        construct_arg_names=[t[1].split('=')[0].replace(' ','') for t in constructor_par_list],
                         construct_arg_types=[t[0] for t in constructor_par_list],
                         construct_rtn_type=None,
                         depedent_src=function_depedent_src

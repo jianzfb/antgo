@@ -22,7 +22,7 @@ class OKS(object):
 
             # GT信息
             gt_joints2d = gt['joints2d']            # Nx2            
-            gt_bboxes = gt['bboxes']                # 4
+            gt_bboxes = gt['bboxes'][0]             # 1x4
             gt_joints_vis = gt['joints_vis']        # N
 
             if np.sum(gt_joints_vis) == 0:

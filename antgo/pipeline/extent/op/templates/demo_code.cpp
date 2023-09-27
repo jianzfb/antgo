@@ -1,6 +1,7 @@
 #include "${project}_plugin.h"
 #include "eagleeye/common/EagleeyeStr.h"
 #include "eagleeye/common/EagleeyeLog.h"
+#include "eagleeye/common/EagleeyeFile.h"
 #include <iostream>
 #include <fstream>
 #include <iostream>
@@ -114,6 +115,10 @@ int main(int argc, char** argv){
     eagleeye_${project}_run();
 
     // 5.step get output data of ${project} module
+    if(isdirexist("./data/output/")){
+        deletedir("./data/output");
+    }
+
     std::vector<std::string> output_name_list = ${output_name_list};             // 输出节点名字（见计算管线搭建中的设置）
     std::vector<int> output_port_list = ${output_port_list};                     // 输出节点端口（见计算管线搭建中的设置）
     for(int i=0; i<output_name_list.size(); ++i){
@@ -139,6 +144,9 @@ int main(int argc, char** argv){
                 }
             }
             std::string file_path = std::string("./data/output/")+output_name+"."+output_port+"."+tos(out_data_type)+"."+output_size_str+".bin";
+            if(!isdirexist("./data/output")){
+                createdirectory("./data/output");
+            }
             std::ofstream file_path_handle;
             file_path_handle.open(file_path.c_str(),std::ios::binary);
             int data_byte_size = get_data_size(out_data_type, std::vector<size_t>(out_data_size, out_data_size+out_data_dims));

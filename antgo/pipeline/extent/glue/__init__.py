@@ -14,9 +14,9 @@ class CFTensor(ctypes.Structure):
 class CITensor(ctypes.Structure):
     def __init__(self, data):
         self.val = data
-        super().__init__(ctypes.c_size_t(len(data.shape)), ctypes.cast((ctypes.c_size_t * len(data.shape))(*data.shape), ctypes.POINTER(ctypes.c_size_t)), ctypes.cast(data.ctypes.data, ctypes.POINTER(ctypes.c_int)), False)
+        super().__init__(ctypes.c_size_t(len(data.shape)), ctypes.cast((ctypes.c_size_t * len(data.shape))(*data.shape), ctypes.POINTER(ctypes.c_size_t)), ctypes.cast(data.ctypes.data, ctypes.POINTER(ctypes.c_int32)), False)
 
-    _fields_ = [("dim_size", ctypes.c_size_t), ("dims", ctypes.POINTER(ctypes.c_size_t)), ("data", ctypes.POINTER(ctypes.c_int)),  ('is_assign_inner', ctypes.c_bool)]
+    _fields_ = [("dim_size", ctypes.c_size_t), ("dims", ctypes.POINTER(ctypes.c_size_t)), ("data", ctypes.POINTER(ctypes.c_int32)),  ('is_assign_inner', ctypes.c_bool)]
 
 class CUCTensor(ctypes.Structure):
     def __init__(self, data):

@@ -52,7 +52,6 @@ DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distill
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
 DEFINE_indicator('k8s', True, '')     # k8s 提交
-DEFINE_indicator('local', True, '')   # 本地提交
 
 ############## global config ###############
 DEFINE_string('token', None, '')
@@ -150,11 +149,19 @@ def main():
 
   # 查看运行设备（本地/远程）
   if action_name == 'device':
+    if not (args.ssh or args.k8s):
+      logging.info("Use default backend (SSH)")
+      args.ssh = True
+    
     tools.check_device_info(args)
     return
 
   # 操作执行任务（本地/远程）
   if action_name in ['stop', 'ls', 'log']:
+    if not (args.ssh or args.k8s):
+      logging.info("Use default backend (SSH)")
+      args.ssh = True
+    
     tools.operate_on_running_status(action_name, args)
     return
 
@@ -180,6 +187,10 @@ def main():
 
   ##################################### 支持任务提交脚本配置  ###########################################
   if action_name == 'submitter':
+    if not (args.ssh or args.k8s):
+      logging.info("Use default backend (SSH)")
+      args.ssh = True
+
     if sub_action_name is None or sub_action_name == '':
       logging.error(f'Only support {action_name} activate/ls/update/template')
       return
@@ -266,6 +277,10 @@ def main():
     if args.src is None:
       logging.error(f'Need set --src=')
       return
+
+    if not (args.ssh or args.k8s):
+      logging.info("Use default backend (SSH)")
+      args.ssh = True
 
     if sub_action_name == 'add':
       if args.ssh:
@@ -374,8 +389,8 @@ def main():
     # 基于实验名称和时间戳修改实验root
     args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
 
-    # 远程提交任务(local模式仅在开发者调试时使用)
-    if args.ssh or args.k8s or args.local:
+    # 远程提交任务
+    if args.ssh or args.k8s:
       # 允许非标准项目远程提交
       if args.project == '':
         # 非标准项目模式
@@ -393,13 +408,7 @@ def main():
 
         # 直接进行任务提交
         # step 1.1: 检查提交脚本配置
-        if args.local:
-          # 本地提交
-          sys_argv_cmd = sys_argv_cmd.replace('--local', '')
-          sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-          sys_argv_cmd = f'antgo {sys_argv_cmd}'
-          local_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
-        elif args.ssh:
+        if args.ssh:
           # ssh提交
           sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
           sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
@@ -440,11 +449,6 @@ def main():
         if not os.path.exists(ssh_submit_config_file):
           logging.error('No ssh submit config.')
           return
-      elif not args.local:
-        submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'submit-config.yaml')    
-        if not os.path.exists(submit_config_file):
-            logging.error('No custom submit script config')
-            return
 
       # 记录commit
       rep = git.Repo('./')     
@@ -481,13 +485,7 @@ def main():
       sys_argv_cmd = ' '.join(sys_argv_cp[1:])      
 
       # step 1.1: 检查提交脚本配置
-      if args.local:
-        # 本地提交 (debug使用)
-        sys_argv_cmd = sys_argv_cmd.replace('--local', '')
-        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-        sys_argv_cmd = f'antgo {sys_argv_cmd}'
-        local_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
-      elif args.ssh:
+      if args.ssh:
         # ssh提交
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')

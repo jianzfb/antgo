@@ -4,6 +4,8 @@
 #include "eagleeye/basic/Tensor.h"
 #include <string>
 #include <vector>
+#include "defines.h"
+#include "eagleeye/basic/DataConvert.h"
 
 class  ${cls_name};
 namespace eagleeye{
@@ -21,6 +23,10 @@ public:
 
 private:
     ${cls_name}* m_${cls_name};
+
+    ${input_define}
+    ${output_define}
+    ${const_define}
 };
 
 } // namespace dataflow

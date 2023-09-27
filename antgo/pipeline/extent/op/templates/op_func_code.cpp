@@ -5,27 +5,38 @@
 
 namespace eagleeye{
 namespace dataflow{
-${op_name}::${op_name}(){}
-${op_name}::~${op_name}(){}
+${op_name}::${op_name}(){
+    ${input_default}
+    ${output_default} 
+    ${const_default}
+}
+${op_name}::~${op_name}(){
+    ${input_delete}
+    ${output_delete} 
+    ${const_delete}
+}
 
 int ${op_name}::init(std::map<std::string, std::vector<float>> params){
     // ignore
+    ${const_init}
     return 0;
 }
 
 int ${op_name}::runOnCpu(const std::vector<Tensor>& input){
 
 // input
-${args_convert}
+// input
+${input_create}
+${output_create}
+
+${input_init}
+${ext_cont_init}
 
 // run
 ${return_statement} ${func_name}(${args_inst});
 
-// convert output
-${output_covert}
-
-// release resource
-${args_clear}
+// output
+${output_export}
 
     return 0;
 }

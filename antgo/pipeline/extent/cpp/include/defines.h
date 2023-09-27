@@ -17,18 +17,20 @@
 
 #include "./ctypes.h"
 #include "./context.h"
-
 namespace antgo {
 template <typename T>
 struct CTensor {
-  size_t dim_size;
-  size_t* dims;
+  int64_t dim_size;
+  int64_t* dims;
   T* data;
   bool is_assign_inner;
 
-  T &operator[](int i) { return data[i]; }
-  T &operator[](int i) const { return data[i]; }
-
+  CTensor(){
+    this->dim_size = 0;
+    this->dims = NULL;
+    this->data = NULL;
+    this->is_assign_inner = false;
+  }
   ~CTensor(){
     this->destroy();
   }
@@ -45,16 +47,36 @@ struct CTensor {
       delete[] this->data;
       this->data = NULL;
     }
+    is_assign_inner = false;
   }
 
-  void create1d(size_t dim_0){
-    this->dim_size = 1;
+  void mirror(const T* data, const std::vector<int64_t>& shape){
+    // 尝试释放资源
+    this->destroy();
 
+    is_assign_inner = false;
+    this->data = const_cast<T*>(data);
+    this->dim_size = shape.size();
+    this->dims = const_cast<int64_t*>(shape.data());
+  }
+
+  void create1d(int64_t dim_0){
+    if(this->data != NULL){
+      if(this->dims[0] == dim_0){
+        // 不需要重新分配空间, 清空空间
+        if(dim_0 > 0)
+          memset(this->data, 0, sizeof(T)*dim_0);
+        return;
+      }
+    }
+
+    this->dim_size = 1;
+    
     // dim
     if(is_assign_inner){
       delete[] this->dims;
     }    
-    this->dims = new size_t[1];
+    this->dims = new int64_t[1];
     this->dims[0] = dim_0;
 
     // data
@@ -62,17 +84,30 @@ struct CTensor {
       delete[] this->data;
     }
     this->data = new T[dim_0];
+    if(dim_0 > 0){
+      memset(this->data, 0, sizeof(T)*dim_0);
+    }
     is_assign_inner = true;
   }
 
-  void create2d(size_t dim_0, size_t dim_1){
+  void create2d(int64_t dim_0, int64_t dim_1){
+    if(this->data != NULL){
+      if(this->dims[0] == dim_0 && this->dims[1] == dim_1){
+        // 不需要重新分配空间, 清空空间
+        if(dim_0 > 0 && dim_1 > 0){
+          memset(this->data, 0, sizeof(T)*dim_0*dim_1);
+        }
+        return;
+      }
+    }
+
     this->dim_size = 2;
 
     // dim
     if(is_assign_inner){
       delete[] this->dims;
     }    
-    this->dims = new size_t[2];
+    this->dims = new int64_t[2];
     this->dims[0] = dim_0; this->dims[1] = dim_1; 
 
     // data
@@ -80,16 +115,29 @@ struct CTensor {
       delete[] this->data;
     }
     this->data = new T[dim_0*dim_1];
+    if(dim_0*dim_1 > 0){
+      memset(this->data, 0, sizeof(T)*dim_0*dim_1);
+    }    
     is_assign_inner = true;
   }
 
-  void create3d(size_t dim_0, size_t dim_1, size_t dim_2){
+  void create3d(int64_t dim_0, int64_t dim_1, int64_t dim_2){
+    if(this->data != NULL){
+      if(this->dims[0] == dim_0 && this->dims[1] == dim_1 && this->dims[2] == dim_2){
+        // 不需要重新分配空间, 清空空间
+        if(dim_0 > 0 && dim_1 > 0 && dim_2 > 0){
+          memset(this->data, 0, sizeof(T)*dim_0*dim_1*dim_2);
+        }
+        return;
+      }
+    }
+
     this->dim_size = 3;
     // dim
     if(is_assign_inner){
       delete[] this->dims;
     }
-    this->dims = new size_t[3];
+    this->dims = new int64_t[3];
     this->dims[0] = dim_0; this->dims[1] = dim_1; this->dims[2] = dim_2; 
 
     // data
@@ -97,17 +145,33 @@ struct CTensor {
       delete[] this->data;
     }
     this->data = new T[dim_0*dim_1*dim_2];
+    if(dim_0*dim_1*dim_2 > 0){
+      memset(this->data, 0, sizeof(T)*dim_0*dim_1*dim_2);
+    }        
     is_assign_inner = true;
   }
 
-  void create4d(size_t dim_0, size_t dim_1, size_t dim_2, size_t dim_3){
+  void create4d(int64_t dim_0, int64_t dim_1, int64_t dim_2, int64_t dim_3){
+    if(this->data != NULL){
+      if(this->dims[0] == dim_0 && 
+          this->dims[1] == dim_1 && 
+          this->dims[2] == dim_2 && 
+          this->dims[3] == dim_3){
+        // 不需要重新分配空间, 清空空间
+        if(dim_0 > 0 && dim_1 > 0 && dim_2 > 0 && dim_3 > 0){
+          memset(this->data, 0, sizeof(T)*dim_0*dim_1*dim_2*dim_3);
+        }
+        return;
+      }
+    }
+
     this->dim_size = 4;
 
     // dim
     if(is_assign_inner){
       delete[] this->dims;
     }
-    this->dims = new size_t[4];
+    this->dims = new int64_t[4];
     this->dims[0] = dim_0; this->dims[1] = dim_1; this->dims[2] = dim_2; this->dims[3] = dim_3; 
 
     // data
@@ -115,17 +179,34 @@ struct CTensor {
       delete[] this->data;
     }
     this->data = new T[dim_0*dim_1*dim_2*dim_3];
+    if(dim_0*dim_1*dim_2*dim_3 > 0){
+      memset(this->data, 0, sizeof(T)*dim_0*dim_1*dim_2*dim_3);
+    }
     is_assign_inner = true;
   }  
 
-  void create5d(size_t dim_0, size_t dim_1, size_t dim_2, size_t dim_3, size_t dim_4){
+  void create5d(int64_t dim_0, int64_t dim_1, int64_t dim_2, int64_t dim_3, int64_t dim_4){
+    if(this->data != NULL){
+      if(this->dims[0] == dim_0 && 
+          this->dims[1] == dim_1 && 
+          this->dims[2] == dim_2 && 
+          this->dims[3] == dim_3 && 
+          this->dims[4] == dim_4){
+        // 不需要重新分配空间, 清空空间
+        if(dim_0 > 0 && dim_1 > 0 && dim_2 > 0 && dim_3 > 0 && dim_4 > 0){
+          memset(this->data, 0, sizeof(T)*dim_0*dim_1*dim_2*dim_3*dim_4);
+        }        
+        return;
+      }
+    }
+
     this->dim_size = 5;
 
     // dim
     if(is_assign_inner){
       delete[] this->dims;
     }
-    this->dims = new size_t[5];
+    this->dims = new int64_t[5];
     this->dims[0] = dim_0; this->dims[1] = dim_1; this->dims[2] = dim_2; this->dims[3] = dim_3; this->dims[4] = dim_4; 
 
     // data
@@ -133,6 +214,9 @@ struct CTensor {
       delete[] this->data;
     }
     this->data = new T[dim_0*dim_1*dim_2*dim_3*dim_4];
+    if(dim_0*dim_1*dim_2*dim_3*dim_4 > 0){
+      memset(this->data, 0, sizeof(T)*dim_0*dim_1*dim_2*dim_3*dim_4);
+    }
     is_assign_inner = true;
   }
 
@@ -145,7 +229,7 @@ typedef CTensor<unsigned char> CUCTensor;
 
 
 template <typename F, typename T>
-inline void mobula_map(F func, const T *data, const int n,
+inline void antgo_map(F func, const T *data, const int n,
                                      const int stride = 1, T *out = nullptr) {
   if (out == nullptr) out = const_cast<T *>(data);
   for (int i = 0, j = 0; i < n; ++i, j += stride) {
@@ -154,7 +238,7 @@ inline void mobula_map(F func, const T *data, const int n,
 }
 
 template <typename F, typename T>
-inline void mobula_reduce(F func, const T *data, const int n,
+inline void antgo_reduce(F func, const T *data, const int n,
                                         const int stride = 1,
                                         T *out = nullptr) {
   if (out == nullptr) out = const_cast<T *>(data);
