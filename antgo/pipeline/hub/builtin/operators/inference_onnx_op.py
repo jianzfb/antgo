@@ -36,18 +36,27 @@ class inference_onnx_op(object):
             self.input_names.append(input_tensor.name)
             self.input_shapes.append(input_tensor.shape)
 
+        self.output_names = []
+        self.output_shapes = []
+        for output_tensor in self.sess.get_outputs():
+            self.output_names.append(output_tensor.name)
+            self.output_shapes.append(output_tensor.shape)
+
         self.input_fields = self.input_names
         self.mean_val = kwargs.get('mean', None)   # 均值
         self.std_val = kwargs.get('std', None)     # 方差
-        self.rgb2bgr = kwargs.get('rgb2bgr', False)
+        self.reverse_channel = kwargs.get('reverse_channel', False)
 
     def __call__(self, *args):        
         input_map = None
         for field, data, expected_shape in zip(self.input_fields, args, self.input_shapes):
+            if data.shape[0] == 0:
+                continue
+
             if self.mean_val is not None:
                 if len(data.shape) == 4:
                     # NxHxWx3
-                    if self.rgb2bgr:
+                    if self.reverse_channel:
                         data = data[:,:,:,::-1]
                     data = data - np.reshape(np.array(self.mean_val), (1,1,1,3))
                     data = data / np.reshape(np.array(self.std_val), (1,1,1,3))
@@ -56,7 +65,7 @@ class inference_onnx_op(object):
                     data = np.transpose(data, (0,3,1,2))
                 else:
                     # HxWx3
-                    if self.rgb2bgr:
+                    if self.reverse_channel:
                         data = data[:,:,::-1]
                     data = data - np.reshape(np.array(self.mean_val), (1,1,3))
                     data = data / np.reshape(np.array(self.std_val), (1,1,3))
@@ -75,6 +84,17 @@ class inference_onnx_op(object):
 
             for group_i in range(group_num):
                 input_map[group_i][field] = data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]]
+
+        if input_map is None:
+            if len(self.output_shapes) == 1:
+                return np.empty([0,]+self.output_shapes[0][1:], dtype=np.float32)
+            else:
+                oo = []
+                for i in range(len(self.output_shapes)):
+                    oo.append(
+                        np.empty([0,]+self.output_shapes[i][1:], dtype=np.float32)
+                    )
+                return oo
 
         group_output = []
         for group_input_map in input_map:

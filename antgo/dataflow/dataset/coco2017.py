@@ -515,7 +515,7 @@ class COCO2017(Dataset):
       boxes = []
       category_id = []
       for ix, obj in enumerate(annotation):
-        x, y, w, h = obj['bbox']        
+        x, y, w, h = obj['bbox']
         inter_w = max(0, min(x + w, img_obj['width']) - max(x, 0))
         inter_h = max(0, min(y + h, img_obj['height']) - max(y, 0))
         if inter_w * inter_h == 0:

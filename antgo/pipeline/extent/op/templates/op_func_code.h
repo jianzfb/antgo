@@ -4,6 +4,8 @@
 #include "eagleeye/basic/Tensor.h"
 #include <string>
 #include <vector>
+#include "defines.h"
+#include "eagleeye/basic/DataConvert.h"
 
 namespace eagleeye{
 namespace dataflow{
@@ -17,6 +19,11 @@ public:
     virtual int init(std::map<std::string, std::vector<std::string>> params){return 0;};
     virtual int runOnCpu(const std::vector<Tensor>& input);
     virtual int runOnGpu(const std::vector<Tensor>& input);
+
+private:
+    ${input_define}
+    ${output_define}
+    ${const_define}
 };
 
 } // namespace dataflow

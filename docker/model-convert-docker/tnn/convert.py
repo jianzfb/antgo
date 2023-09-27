@@ -6,7 +6,7 @@ import shutil
 import onnx
 
 def main():
-    parser = argparse.ArgumentParser(description=f'TENSORRT-CONVERT')
+    parser = argparse.ArgumentParser(description=f'TNN-CONVERT')
     parser.add_argument('--i', type=str, help='onnx model file')
     parser.add_argument('--o', type=str, default='model', help='device model file')
     parser.add_argument('--innode', type=str, default='', help='in node name list')
@@ -43,8 +43,8 @@ def main():
         print('TODO support.')
         return -1
     else:
-        os.system(f'python3 converter.py onnx2tnn /workspace/{args.i} -in "{in_args}" -optimize -o /workspace/')
-        model_file_name = args.i.split('/')[-1].replace('.onnx', '')
+        os.system(f'python3 converter.py onnx2tnn /workspace/{args.i} -optimize -align -o /workspace/')
+        model_file_name = args.i.split('/')[-1].replace('.onnx', '.opt')
         tnn_model_name = f'{args.o}.{args.version}'
 
         os.system(f'mv /workspace/{model_file_name}.tnnmodel /workspace/{tnn_model_name}.tnnmodel')

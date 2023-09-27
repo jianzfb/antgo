@@ -40,3 +40,5 @@ fastapi
 uvicorn
 httpx
 portalocker
+filelock
+scikit-image
