@@ -23,7 +23,7 @@ class Exporter(object):
             self.cfg = cfg
         self.work_dir = work_dir
 
-    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, revise_keys=[], strict=True):
+    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, revise_keys=[], strict=True, is_dynamic=False):
         model = None
         if model_builder is not None:
             model = model_builder()
@@ -59,10 +59,14 @@ class Exporter(object):
             os.makedirs(self.work_dir)
 
         # Export the model
-        # dynamic_axes = {
-        #     input_name_list[0] : [0],
-        #     output_name_list[0] : [0]
-        # }
+        dynamic_axes = None
+        if is_dynamic:
+            dynamic_axes = {}
+            for input_node_name in input_name_list:
+                dynamic_axes[input_node_name] = [0]
+            for output_node_name in output_name_list:
+                dynamic_axes[output_node_name] = [0]
+
         torch.onnx.export(
                 model,                                      # model being run
                 tuple(input_tensor_list),                   # model input (or a tuple for multiple inputs)
@@ -72,7 +76,7 @@ class Exporter(object):
                 do_constant_folding=True,                   # whether to execute constant folding for optimization
                 input_names = input_name_list,              # the model's input names
                 output_names = output_name_list,
-                # dynamic_axes=dynamic_axes
+                dynamic_axes=dynamic_axes
         )
 
         # 基于目标引擎，转换onnx模型
