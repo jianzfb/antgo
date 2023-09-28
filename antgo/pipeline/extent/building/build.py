@@ -9,6 +9,8 @@ except Exception:
 
 
 ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
+if not os.path.exists(ANTGO_DEPEND_ROOT):
+    os.makedirs(ANTGO_DEPEND_ROOT)
 NUM_CPU_CORE = multiprocessing.cpu_count()
 
 

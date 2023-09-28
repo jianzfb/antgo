@@ -27,7 +27,7 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
     root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder, 'snpe-2.9.0.4462')):
-        os.system(f'cd {root_folder} ; wget http://experiment.mltalker.com/snpe-2.9.0.4462.zip ; unzip snpe-2.9.0.4462.zip')
+        os.system(f'cd {root_folder} ; wget http://files.mltalker.com/snpe-2.9.0.4462.zip ; unzip snpe-2.9.0.4462.zip')
     snpe_path = os.path.join(root_folder, 'snpe-2.9.0.4462')
 
     # step2: 推送依赖库到包位置
@@ -143,10 +143,17 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     # 下载 tensorrt TensorRT-8.6.1.6 https://developer.nvidia.com/nvidia-tensorrt-8x-download
     if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')):
         print('download cudnn')
-        os.system(f'cd {root_folder} ; wget http://experiment.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+        if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')):
+            os.system(f'cd {root_folder} ; wget http://files.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+        else:
+            os.system(f'cd {root_folder} ; tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+
     if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6')):
         print('download tensorrt')
-        os.system(f'cd {root_folder} ; wget http://experiment.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+        if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')):
+            os.system(f'cd {root_folder} ; wget http://files.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+        else:
+            os.system(f'cd {root_folder} ; tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
 
     cudnn_path = os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')
     tensorrt_path = os.path.join(root_folder, 'TensorRT-8.6.1.6')
