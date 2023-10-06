@@ -43,8 +43,9 @@ class CppOp(object):
             'CFTensor': np.float32,
             'CITensor': np.int32,
             'CUCTensor': np.uint8,
+            'CBTensor': np.bool
         }
-        
+
         out_placeholders = []
         for i in range(len(self.func.func.arg_types)):
             arg_type = self.func.func.arg_types[i].cname.replace('*', '')

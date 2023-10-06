@@ -27,11 +27,7 @@ def glob(*args):  # pragma: no cover
     Return a DataCollection of paths matching a pathname pattern.
     """
 
-    # index = param_scope()._index
-    # if index is None:
-    #     return DataCollection.from_glob(*arg)
-    # return DataFrame.from_glob(*arg).map(lambda x: Entity(**{index: x}))
-
+    global_entity = Entity()
     index = param_scope()._index
     def inner():
         from glob import glob
@@ -40,8 +36,11 @@ def glob(*args):  # pragma: no cover
             files.extend(glob(path))
         if len(files) == 0:
             raise FileNotFoundError(f'There is no files with {args}.')
+
+        # sort
+        files.sort()
         for ff in files:
-          yield Entity(**{index: ff})
+          yield global_entity(**{index: ff})
 
     return DataFrame(inner())
 
@@ -50,12 +49,13 @@ def glob(*args):  # pragma: no cover
 def json_dc(*args):
   index = param_scope()._index
 
+  global_entity = Entity()
   def inner():
     for json_path in args:
       with open(json_path, 'r') as fp:
         info_list = json.load(fp)
         for data in info_list:
-          yield Entity(**{index: data})
+          yield global_entity(**{index: data})
 
   return DataFrame(inner())
 
@@ -64,6 +64,7 @@ def json_dc(*args):
 def txt_dc(*args):
   index = param_scope()._index
 
+  global_entity = Entity()
   def inner():
     for json_path in args:
       with open(json_path, 'r') as fp:
@@ -71,7 +72,7 @@ def txt_dc(*args):
         while string:
             data = json.loads(string)
             string = f.readline()
-            yield Entity(**{index: data})
+            yield global_entity(**{index: data})
 
   return DataFrame(inner())
 
@@ -83,7 +84,8 @@ def video_dc(*args):
       print('Video dc neef (frame, frame_index) export')
       return
 
-    return DataFrame.read_video(*args).map(lambda x: Entity(**{key: value for key,value in zip(index, x)}))
+    video_entity = Entity()
+    return DataFrame.read_video(*args).map(lambda x: video_entity(**{key: value for key,value in zip(index, x)}))
 
 
 @dynamic_dispatch
@@ -93,7 +95,8 @@ def camera_dc(*args):
       print('Camera dc neef (frame, frame_index) export')
       return
 
-    return DataFrame.read_video(*args).map(lambda x: Entity(**{key: value for key,value in zip(index, x)}))
+    camera_entity = Entity()
+    return DataFrame.read_video(*args).map(lambda x: camera_entity(**{key: value for key,value in zip(index, x)}))
 
 
 def _api():

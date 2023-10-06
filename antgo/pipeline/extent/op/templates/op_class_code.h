@@ -12,6 +12,7 @@ namespace eagleeye{
 namespace dataflow{
 class ${op_name}:public BaseOp<${input_num}, ${output_num}>{
 public:
+    using BaseOp<${input_num}, ${output_num}>::init;
     ${op_name}();
     virtual ~${op_name}();
 

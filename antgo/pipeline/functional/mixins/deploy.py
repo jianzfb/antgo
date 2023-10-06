@@ -231,7 +231,8 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CFTensor': 'CFTensor* %s;',
         'CITensor': 'CITensor* %s;',
         'CUCTensor': 'CUCTensor* %s;',
-        'CDTensor': 'CDTensor* %s;'
+        'CDTensor': 'CDTensor* %s;',
+        'CBTensor': 'CBTensor* %s;'
     }
 
     # 输入/输出默认值映射
@@ -240,6 +241,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CITensor': '%s = NULL;',
         'CUCTensor': '%s = NULL;',
         'CDTensor': '%s = NULL;',
+        'CBTensor': '%s = NULL;',
     }
 
     # 输入/输出删除映射
@@ -248,6 +250,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CITensor': 'if(%s != NULL){delete %s;};',
         'CUCTensor': 'if(%s != NULL){delete %s;};',
         'CDTensor': 'if(%s != NULL){delete %s;};',
+        'CBTensor': 'if(%s != NULL){delete %s;};',
     }
 
     # 输入/输出创建映射
@@ -256,6 +259,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CITensor': 'if(%s == NULL){%s=new_citensor();};',
         'CUCTensor': 'if(%s == NULL){%s=new_cuctensor();};',
         'CDTensor': 'if(%s == NULL){%s=new_cdtensor();};',
+        'CBTensor': 'if(%s == NULL){%s=new_cbtensor();};',
     }
 
     # 输入初始化映射
@@ -264,6 +268,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CITensor': '%s->mirror(input[%d].cpu<int>(), input[%d].dims().data());',
         'CUCTensor': '%s->mirror(input[%d].cpu<unsigned char>(), input[%d].dims().data());',
         'CDTensor': '%s->mirror(input[%d].cpu<double>(), input[%d].dims().data());',
+        'CBTensor': '%s->mirror(input[%d].cpu<bool>(), input[%d].dims().data());',
     }
 
     # 输出导出映射
@@ -272,13 +277,16 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CITensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_INT, DataFormat::AUTO,%s->data);',
         'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
         'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
+        'CBTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_BOOL DataFormat::AUTO,%s->data);',
+
     }
 
     # 初始化C*Tensor
     init_map = {
         '<f4': 'init_cftensor',
         '<i4': 'init_citensor',
-        '|u1': 'init_cuctensor'
+        '|u1': 'init_cuctensor',
+
     }
 
     input_define = ''
@@ -445,7 +453,8 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CFTensor': 'CFTensor* %s;',
         'CITensor': 'CITensor* %s;',
         'CUCTensor': 'CUCTensor* %s;',
-        'CDTensor': 'CDTensor* %s;'
+        'CDTensor': 'CDTensor* %s;',
+        'CBTensor': 'CBTensor* %s;',
     }
 
     # 输入/输出默认值映射
@@ -454,6 +463,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CITensor': '%s = NULL;',
         'CUCTensor': '%s = NULL;',
         'CDTensor': '%s = NULL;',
+        'CBTensor': '%s = NULL;',
     }
 
     # 输入/输出删除映射
@@ -462,6 +472,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CITensor': 'if(%s != NULL){delete %s;};',
         'CUCTensor': 'if(%s != NULL){delete %s;};',
         'CDTensor': 'if(%s != NULL){delete %s;};',
+        'CBTensor': 'if(%s != NULL){delete %s;};',
     }
 
     # 输入/输出创建映射
@@ -470,6 +481,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CITensor': 'if(%s == NULL){%s=new_citensor();};',
         'CUCTensor': 'if(%s == NULL){%s=new_cuctensor();};',
         'CDTensor': 'if(%s == NULL){%s=new_cdtensor();};',
+        'CBTensor': 'if(%s == NULL){%s=new_cbtensor();};',
     }
 
     # 输入初始化映射
@@ -478,6 +490,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CITensor': '%s->mirror(input[%d].cpu<int>(), input[%d].dims().data());',
         'CUCTensor': '%s->mirror(input[%d].cpu<unsigned char>(), input[%d].dims().data());',
         'CDTensor': '%s->mirror(input[%d].cpu<double>(), input[%d].dims().data());',
+        'CBTensor': '%s->mirror(input[%d].cpu<bool>(), input[%d].dims().data());',
     }
 
     # 输出导出映射
@@ -486,6 +499,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CITensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_INT, DataFormat::AUTO,%s->data);',
         'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
         'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
+        'CBTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_BOOL, DataFormat::AUTO,%s->data);',
     }
 
     # 初始化C*Tensor
@@ -578,6 +592,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
             args_run += f',{arg_name}'
 
     args_run_names = func.func.loader_kwargs['construct_arg_names']
+    depedent_src = func.func.loader_kwargs.get('depedent_src', [])
     args_init = ','.join([f'{op_kwargs[n]}' for n in args_run_names])
     eagleeye_warp_cpp_code_content = \
         gen_code('./templates/op_class_code.cpp')(
@@ -619,7 +634,8 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'output': output_ctx,
         'args': {},
         'include': os.path.join('extent','include', f'{op_name}_op_warp.h'),
-        'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp')
+        'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp'),
+        'depedent_src': depedent_src
     }
     return info
 
@@ -641,7 +657,42 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
     # ignore op_args
     converted_op_args = {}
     for arg_name, arg_info in op_kwargs.items():
-        if isinstance(arg_info, np.ndarray):
+        if isinstance(arg_info, tuple) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
+            # complex arg (func)
+            # TODO, 需要支持多种初始化模式
+            temp_args = convert_args_eagleeye_op_args(None, arg_info[1])
+            temp_args.pop('c++_type')
+            converted_op_args['c++_type'] = 'std::map<std::string, void*>'
+            
+            arg_code = ''
+            for sub_arg_name, sub_arg_list in temp_args.items():
+                if arg_code == '':
+                    arg_code = '{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
+                else:
+                    arg_code += ',{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
+
+            op_name = arg_info[0]
+            if op_name.startswith('deploy'):
+                op_name = op_name[7:]
+            elif op_name.startswith('eagleeye'):
+                op_name = op_name[12:]
+                if op_name.endswith('_op'):
+                    op_name = op_name.capitalize()
+                    kk = op_name.split('_')
+                    op_name = kk[0]
+                    for i in range(1, len(kk)):
+                        op_name += kk[i].capitalize()
+            else:
+                if op_name.endswith('_op'):
+                    op_name = op_name.capitalize()
+                    kk = op_name.split('_')
+                    op_name = kk[0]
+                    for i in range(1, len(kk)):
+                        op_name += kk[i].capitalize()
+
+            converted_op_args[arg_name] = f'{op_name}* {arg_name} = new {op_name}();\n{arg_name}->init(std::map<std::string, std::vector<float>>('+'{'+f'{arg_code}'+'}));'
+
+        elif isinstance(arg_info, np.ndarray):
             # numpy
             converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
         elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
@@ -651,7 +702,8 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
             # scalar
             converted_op_args[arg_name] = [float(arg_info)]
 
-    converted_op_args['c++_type'] = 'std::map<std::string, std::vector<float>>'
+    if 'c++_type' not in converted_op_args:
+        converted_op_args['c++_type'] = 'std::map<std::string, std::vector<float>>'
     return converted_op_args
 
 
@@ -783,8 +835,8 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
-                std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
+                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean', [0,0,0])])
+                std_values = ','.join([str(v) for v in  op_kwargs.get('std', [1,1,1])])
                 os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
@@ -950,10 +1002,13 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
 
     # 获得计算图配置信息
     graph_config = get_graph_info()['op']
+    circle_node_list = []
 
     # 准备算子函数代码
     deploy_graph_info = {}
     op_name_count = {}
+    pre_exist_node_info = {}
+    order_graph_op_list = []
     for graph_op_info in graph_config:
         op_name = graph_op_info['op_name']
         op_index = graph_op_info['op_index']
@@ -961,7 +1016,18 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         op_kwargs = graph_op_info['op_kwargs']
 
         print(f'op_name {op_name}')
-        input_ctx, output_ctx = op_index
+        input_ctx = ()
+        output_ctx = ()
+        if isinstance(op_index, str) or len(op_index) == 1:
+            # 仅有输出数据
+            if isinstance(op_index, str):
+                output_ctx = (op_index)
+            else:
+                output_ctx = (op_index[0])
+        else:
+            # 输入+输出数据
+            input_ctx, output_ctx = op_index
+
         if not isinstance(input_ctx, tuple):
             input_ctx = (input_ctx,)
         if not isinstance(output_ctx, tuple):
@@ -987,8 +1053,11 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             op_name_count[op_name] += 1
 
             if op_name.endswith('_op'):
-                op_name = op_name.capitalize()                
-                op_name = op_name.replace('_op', 'Op')
+                op_name = op_name.capitalize()
+                kk = op_name.split('_')
+                op_name = kk[0]
+                for i in range(1, len(kk)):
+                    op_name += kk[i].capitalize()
 
             if op_name not in core_op_set:
                 print(f'{op_name} not support')
@@ -1024,11 +1093,13 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                     'include': include_path
                 }
                 continue
-            
-            # 转换统一格式
+
             if op_name.endswith('_op'):
-                op_name = op_name.capitalize()                     
-                op_name = op_name.replace('_op', 'Op')
+                op_name = op_name.capitalize()
+                kk = op_name.split('_')
+                op_name = kk[0]
+                for i in range(1, len(kk)):
+                    op_name += kk[i].capitalize()
 
             # 检查是否在核心集中
             if op_name not in core_op_set:
@@ -1045,6 +1116,25 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 'include': core_op_set[op_name]['include']
             }
 
+            if op_name == 'IfelseendOp':
+                deploy_graph_info[op_unique_name].update({
+                    'template': f'<{len(input_ctx)},{len(output_ctx)}>'
+                })
+
+        # parse ext graph info
+        order_graph_op_list.append(op_unique_name)
+
+        for node_out_data_name in output_ctx:
+            if node_out_data_name in pre_exist_node_info:
+                circle_node_list.append(pre_exist_node_info[node_out_data_name]['name'])
+
+        for out_i, out_name in enumerate(output_ctx):
+            if out_name not in pre_exist_node_info:
+                pre_exist_node_info[out_name] = {
+                    'name': op_unique_name,
+                    'index': out_i
+                }
+
     # 准备插件文件代码
     # 包括任务管线建立, nano算子图，任务输入信号设置，任务输出信号设置
     t = [v['include'] for v in deploy_graph_info.values()]
@@ -1052,13 +1142,19 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     for f in t:
         include_list += f'#include "{f}"\n'
 
+    # 创建算子(有序)
     op_graph_code = ''
     deploy_output_data_name_inv_link = {}
-    for deploy_op_name, deploy_op_info in deploy_graph_info.items():
+    for deploy_op_name in order_graph_op_list:
+        deploy_op_info = deploy_graph_info[deploy_op_name]
         if 'template' in deploy_op_info:
-            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add("{deploy_op_name}", {deploy_op_info["type"]}{deploy_op_info["template"]}(), EagleeyeRuntime(EAGLEEYE_CPU));\n'
+            node_cls_type = f'{deploy_op_info["type"]}{deploy_op_info["template"]}'
+            is_circle = "true" if deploy_op_name in circle_node_list else "false"
+            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
         else:
-            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add("{deploy_op_name}", {deploy_op_info["type"]}(), EagleeyeRuntime(EAGLEEYE_CPU));\n'
+            node_cls_type = f'{deploy_op_info["type"]}'
+            is_circle = "true" if deploy_op_name in circle_node_list else "false"
+            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
 
         deploy_op_args_tuple = deploy_op_info['args']
         if isinstance(deploy_op_args_tuple, dict):
@@ -1067,6 +1163,14 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         for deploy_op_args in deploy_op_args_tuple:
             arg_code = ''
             for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
+                if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                    op_graph_code += f'{deploy_arg_list}\n'
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    continue
+
                 if deploy_arg_name != 'c++_type':
                     if arg_code == '':
                         arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
@@ -1079,15 +1183,26 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
 
         print(deploy_op_info['output'])
         for data_i, data_name in enumerate(deploy_op_info['output']):
-            deploy_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
+            if data_name not in deploy_output_data_name_inv_link:
+                deploy_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
 
-    for deploy_op_name, deploy_op_info in deploy_graph_info.items():
+    # 创建算子连接关系(有序)
+    for deploy_op_name in order_graph_op_list:
+        deploy_op_info = deploy_graph_info[deploy_op_name]
         if deploy_op_info['input'] is not None:
             for input_data_i, input_data_name in enumerate(deploy_op_info['input']):
                 if input_data_name is not None:
                     from_op_name, from_op_out_i = deploy_output_data_name_inv_link[input_data_name]
                     op_graph_code += f'op_graph->bind("{from_op_name}", {from_op_out_i}, "{deploy_op_name}", {input_data_i});\n'
 
+        # 考虑回环结构
+        if deploy_op_info['output'] is not None:
+            for output_data_i, output_data_name in enumerate(deploy_op_info['output']):
+                if output_data_name in deploy_output_data_name_inv_link and deploy_output_data_name_inv_link[output_data_name][0] != deploy_op_name:
+                    to_op_name, to_op_out_i = deploy_output_data_name_inv_link[output_data_name]
+                    op_graph_code += f'op_graph->bind("{deploy_op_name}", {output_data_i}, "{to_op_name}", {to_op_out_i});\n'
+
+    # 初始化计算图
     op_graph_code += 'op_graph->init(NULL);'
 
     eagleeye_plugin_code_content = \
@@ -1146,7 +1261,11 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         shutil.copy(os.path.join(ndk_path, "sources/cxx-stl/llvm-libc++/libs", abi, 'libc++_shared.so'), os.path.join(output_folder, '3rd', abi, 'libc++_shared.so'))
 
     # 更新CMakeLists.txt
-    update_cmakelist(output_folder, project_name, pipeline_name,[s['src'] for s in deploy_graph_info.values() if 'src' in s], project_config.get('compile', []))
+    src_code_list = [s['src'] for s in deploy_graph_info.values() if 'src' in s]
+    for src_info in deploy_graph_info.values():
+        if 'depedent_src' in src_info:
+            src_code_list.extend(src_info['depedent_src'])
+    update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []))
 
     # 更新插件工程编译脚本
     shell_code_content = gen_code('./templates/android_build.sh')(

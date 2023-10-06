@@ -6,6 +6,8 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import traceback
+from antgo.pipeline.engine.execution.base_data import *
+
 
 class BaseExecution:
     """
@@ -43,6 +45,9 @@ class BaseExecution:
                         setattr(arg[0], i, j)
                 # Single output.
                 else:
+                    if isinstance(res, NoUpdate):
+                        return arg[0]
+
                     if isinstance(self._index, str):
                         setattr(arg[0], self._index, res)
                     else:

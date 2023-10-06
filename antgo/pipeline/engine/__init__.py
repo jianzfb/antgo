@@ -10,7 +10,6 @@ from __future__ import print_function
 from pathlib import Path
 from .operator_registry import OperatorRegistry # pylint: disable=import-outside-toplevel
 
-
 register = OperatorRegistry.register
 resolve = OperatorRegistry.resolve
 

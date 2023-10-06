@@ -30,6 +30,15 @@ class Entity:
         for k, v in kwargs.items():
             self.__setattr__(k, v)
 
+    def __call__(self, **kwargs):
+        """
+        Create an Entity with given attributes.
+        """
+        for k, v in kwargs.items():
+            self.__setattr__(k, v)
+        
+        return self
+
     def __repr__(self):
         """
         Define the representation of the Entity.

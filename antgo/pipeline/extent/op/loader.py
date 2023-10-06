@@ -818,18 +818,19 @@ def _get_functions_from_cpp(cpp_fname):
                         'Unknown function kind: {}'.format(func_kind))
 
                 # Arguments
-                funcdef_args = edict(func_name=func_name,
-                                     func_kind=func_kind,
-                                     arg_names=[t[1] for t in par_list],
-                                     arg_types=[t[0] for t in par_list],
-                                     rtn_type=rtn_type,
-                                     template_list=template_list,
-                                     loader=OpLoader,
-                                     loader_kwargs=dict(
-                                         cpp_info=cpp_info,
-                                         depedent_src=function_depedent_src
-                                     )
-                                     )
+                funcdef_args = edict(
+                    func_name=func_name,
+                    func_kind=func_kind,
+                    arg_names=[t[1] for t in par_list],
+                    arg_types=[t[0] for t in par_list],
+                    rtn_type=rtn_type,
+                    template_list=template_list,
+                    loader=OpLoader,
+                    loader_kwargs=dict(
+                        cpp_info=cpp_info,
+                        depedent_src=function_depedent_src
+                        )
+                )
                 template_list = []
                 function_args[func_name] = funcdef_args
 
