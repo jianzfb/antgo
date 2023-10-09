@@ -893,6 +893,9 @@ class CorrectBoxes(BaseOperator):
     def __call__(self, sample, context=None):
         if 'bboxes' not in sample:
             return sample
+        
+        if sample['bboxes'].shape[0] == 0:
+            return sample
 
         h, w = sample['image'].shape[:2]
         min_x = np.minimum(sample['bboxes'][:,0:1], sample['bboxes'][:,2:3])

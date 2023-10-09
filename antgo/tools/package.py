@@ -126,7 +126,7 @@ class __SampleDataGenerator(object):
                     logging.error("Couldnt download %s."%sample['image_url'])
                     sample['image'] = b''
                     wait_count -= 1
-                    time.sleep(2)               
+                    time.sleep(2)
         else:
             try:
                 image_path = os.path.join(src_folder, sample['image_file'])

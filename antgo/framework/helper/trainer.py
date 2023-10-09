@@ -363,7 +363,7 @@ class Trainer(BaseTrainer):
 
                 dist.barrier()
                 self.runner.load_checkpoint(checkpoint_path)
-        
+
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
         # 计算浮点模型
