@@ -1468,7 +1468,7 @@ class RandomCropImageV1(BaseOperator):
         x_offset = padding_top - xmin
         y_offset = padding_left - ymin
         valid = None
-        if 'bboxes' in sample:
+        if 'bboxes' in sample and len(sample['bboxes']) > 0:
             # Nx4
             boxes = sample['bboxes'] + np.array([[x_offset, y_offset, x_offset, y_offset]])
 
