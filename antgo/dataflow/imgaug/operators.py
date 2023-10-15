@@ -320,8 +320,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         if not isinstance(scale, np.ndarray) and not isinstance(scale, list):
             scale = np.array([scale, scale])
 
-        scale_tmp = scale
-        src_w = scale_tmp[0]
+        src_w = scale[0]
         dst_w = output_size[0]
         dst_h = output_size[1]
 
@@ -331,8 +330,8 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
 
         src = np.zeros((3, 2), dtype=np.float32)
         dst = np.zeros((3, 2), dtype=np.float32)
-        src[0, :] = center + scale_tmp * shift
-        src[1, :] = center + src_dir + scale_tmp * shift
+        src[0, :] = center + scale * shift
+        src[1, :] = center + src_dir + scale * shift
         dst[0, :] = [dst_w * 0.5, dst_h * 0.5]
         dst[1, :] = np.array([dst_w * 0.5, dst_h * 0.5]) + dst_dir
 
@@ -380,7 +379,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         center, scale = self._box_to_center_scale(xmin, ymin, xmax - xmin, ymax - ymin, 1.0)
         if self.with_random:
             sf = self._scale_factor
-            ran_tmp = np.clip((np.random.rand() - 0.2) * 1.2 * sf + 1, 1 - 0.1, 1 + sf)
+            ran_tmp = np.clip((np.random.rand() - 0.5) * 2.0 * sf + 1.0, 1 - sf, 1 + sf)
             scale = scale * ran_tmp
 
         if self.with_random:

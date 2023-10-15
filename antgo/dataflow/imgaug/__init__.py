@@ -27,7 +27,8 @@ from .operators import (
   ResizeByShort,
   RGB2BGR,
   FixedCrop,
-  CorrectBoxes)
+  CorrectBoxes,
+  RandomBlur)
 
 __all__ = [
   'DecodeImage', 
@@ -54,5 +55,6 @@ __all__ = [
   'FixedCrop',
   'RGB2BGR',
   'CorrectBoxes',
-  'Meta'
+  'Meta',
+  'RandomBlur'
 ]
