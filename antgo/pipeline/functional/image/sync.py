@@ -175,8 +175,6 @@ class sync_op(object):
             if image_h > obj_h:
                 paste_y = np.random.randint(0, image_h - obj_h)
 
-            print(f'image {image_w} {image_h}')
-            print(f'obj {obj_w} {obj_h}')
             object_paste_mask_expand = np.expand_dims(object_paste_mask, -1)
             image[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = image[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] * (1-object_paste_mask_expand) + object_image * object_paste_mask_expand
 

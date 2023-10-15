@@ -431,7 +431,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         #             continue
 
         #         cv2.line(image, (int(start_x), int(start_y)), (int(end_x), int(end_y)), (255,0,0), 1)
-        # cv2.imwrite(f'./112233.png', image)
+        # cv2.imwrite(f'./check.png', image)
 
         out_sample = {}
         if 'segments' in sample:

@@ -62,7 +62,7 @@ class keep_ratio_op(object):
   
             # 调整image
             image = cv2.copyMakeBorder(image, top_padding, bottom_padding, left_padding, right_padding,
-                                            cv2.BORDER_CONSTANT, value=(128, 128, 128))
+                                            cv2.BORDER_CONSTANT, value=(0, 0, 0))
 
         return image, [left_padding, top_padding, rwi, rhi]
 

@@ -113,7 +113,7 @@ class inference_onnx_op(object):
                         rr.append(group_output[group_i][elem_i])
                     
                     rr = np.concatenate(rr, 0)
-                output.append(rr)
+                    output.append(rr)
             else:
                 output = np.concatenate(group_output, 0)
 

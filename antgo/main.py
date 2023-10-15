@@ -358,9 +358,8 @@ def main():
   if args.root.startswith('ali:'):
     # 尝试进行认证，从而保证当前路径下生成认证信息
     # do nothing
-    if not os.path.exists('./aligo.json'):
-      ali = Aligo()
-      shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
+    ali = Aligo()
+    shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
 
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':

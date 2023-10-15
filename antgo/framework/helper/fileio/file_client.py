@@ -471,10 +471,8 @@ class AliBackend(BaseStorageBackend):
             shutil.copy(local_config_file, Path.home().joinpath('.aligo'))
 
         self.ali = Aligo()  # 第一次使用，会弹出二维码，供扫描登录
-        if not os.path.exists(local_config_file):
-            shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
         self.prefix = 'ali://'
-        
+
     def get(self, filepath) -> bytes:
         if not os.path.exists('./temp'):
             os.makedirs('./temp')
