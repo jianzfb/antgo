@@ -14,6 +14,8 @@ from thop import profile
 import json
 from collections import OrderedDict
 import re
+import shutil
+
 
 class Exporter(object):
     def __init__(self, cfg, work_dir):
@@ -23,7 +25,7 @@ class Exporter(object):
             self.cfg = cfg
         self.work_dir = work_dir
 
-    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, revise_keys=[], strict=True, is_dynamic=False):
+    def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, revise_keys=[], strict=True, is_dynamic=False, skip_flops_stats=False):
         model = None
         if model_builder is not None:
             model = model_builder()
@@ -51,9 +53,10 @@ class Exporter(object):
             for i in range(len(input_tensor_list)):
                 input_tensor_list[i] = input_tensor_list[i].to('cpu')
 
-        flops, params = profile(model, inputs=input_tensor_list)
-        print('FLOPs = ' + str(flops/1000**3) + 'G')
-        print('Params = ' + str(params/1000**2) + 'M')
+        if not skip_flops_stats:
+            flops, params = profile(model, inputs=input_tensor_list)
+            print('FLOPs = ' + str(flops/1000**3) + 'G')
+            print('Params = ' + str(params/1000**2) + 'M')
 
         if not os.path.exists(self.work_dir):
             os.makedirs(self.work_dir)
@@ -101,25 +104,31 @@ class Exporter(object):
                 if self.cfg.deploy.quantize:
                     # int8
                     # 生成校准数据
-                    dataset = build_dataset(self.cfg.deploy.calibration)
                     if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
+                        dataset = build_dataset(self.cfg.deploy.calibration)
                         os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
 
-                    count = 0
-                    for sample in dataset:
-                        image = sample['image']
-                        
-                        if not isinstance(image, np.ndarray) or len(image.shape) != 3 or image.shape[-1] != 3 or image.dtype != np.uint8:
-                            print('calibration data not correct.')
-                            return 
+                        count = 0
+                        for sample in dataset:
+                            image = sample['image']
+                            
+                            if not isinstance(image, np.ndarray) or len(image.shape) != 3 or image.shape[-1] != 3 or image.dtype != np.uint8:
+                                print('calibration data not correct.')
+                                return 
 
-                        cv2.imwrite(os.path.join(self.work_dir, 'calibration-images', f'{count}.png'), image)
-                        count += 1
+                            cv2.imwrite(os.path.join(self.work_dir, 'calibration-images', f'{count}.png'), image)
+                            count += 1
+
+                            if self.cfg.deploy.get('calibration_size', -1) > 0:
+                                if count > self.cfg.deploy.calibration_size:
+                                    break
 
                     # 开始转模型
                     onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
                     os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
-                    os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --image-folder=calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                    shutil.copytree(os.path.join(self.work_dir, 'calibration-images'), '/tmp/onnx/calibration-images')
+
+                    os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --image-folder=./calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
                     os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
                 else:
                     # fp16

@@ -150,7 +150,7 @@ class LFW(Dataset):
       same_person_a_image = cv2.imread(same_person_a_path)
       same_person_b_path = os.path.join(self._data_folder, same_person_b)
       same_person_b_image = cv2.imread(same_person_b_path)
-      
+
       cx = same_person_a_image.shape[1]/2
       cy = same_person_a_image.shape[0]/2
       left_t_x = int(cx - 80)
@@ -175,7 +175,7 @@ class LFW(Dataset):
       diff_person_a_image = cv2.imread(diff_person_a_path)
       diff_person_b_path = os.path.join(self._data_folder, diff_person_b)
       diff_person_b_image = cv2.imread(diff_person_b_path)
-      
+
       cx = diff_person_a_image.shape[1]/2
       cy = diff_person_a_image.shape[0]/2
       left_t_x = int(cx - 80)

@@ -35,7 +35,7 @@ class BaseExecution:
                 res = self.__apply__(*arg, **kws)
 
                 # Multi outputs.
-                if isinstance(res, tuple):
+                if isinstance(res, tuple) or isinstance(res, list):
                     if not isinstance(self._index[1],
                                     tuple) or len(self._index[1]) != len(res):
                         raise IndexError(
