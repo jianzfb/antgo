@@ -19,6 +19,7 @@ from .show import ShowMixin
 from .serve import ServeMixin
 from .demo import DemoMixin
 from .deploy import DeployMixin
+from .interactive import InteractiveMixin
 
 class DCMixins(
   DagMixin,
@@ -34,7 +35,8 @@ class DCMixins(
   ShowMixin,
   ServeMixin,
   DemoMixin,
-  DeployMixin):
+  DeployMixin,
+  InteractiveMixin):
 
   def __init__(self) -> None:  # pylint: disable=useless-super-delegation
     super().__init__()

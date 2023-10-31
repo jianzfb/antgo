@@ -16,10 +16,12 @@ import traceback
 from antgo.pipeline.operators import Operator
 from antgo.pipeline.operators.nop import NOPOperator
 from antgo.pipeline.engine import *
-
 from antgo.pipeline.hparam import param_scope
+import pathlib
+ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
+if not os.path.exists(ANTGO_DEPEND_ROOT):
+    os.makedirs(ANTGO_DEPEND_ROOT)
 
-ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
 
 class OperatorLoader:
     """Wrapper class used to load operators from either local cache or a remote

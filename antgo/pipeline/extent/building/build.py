@@ -2,13 +2,13 @@
 import os
 import sys
 import multiprocessing
+import pathlib
 try:
     from .build_utils import *
 except Exception:
     from build_utils import *
 
-
-ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
+ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
 if not os.path.exists(ANTGO_DEPEND_ROOT):
     os.makedirs(ANTGO_DEPEND_ROOT)
 NUM_CPU_CORE = multiprocessing.cpu_count()

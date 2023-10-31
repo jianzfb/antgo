@@ -15,6 +15,7 @@ import uuid
 
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
+from .interactive import *
 from .serve import _APIWrapper,_PipeWrapper, _decode_content
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -36,6 +37,8 @@ class DemoMixin:
       from fastapi import Request
     api = _APIWrapper.tls.place_holder
     pipeline = _PipeWrapper(self._iterable, api)
+
+    print(InteractiveMixin.interactive_elements)
 
     input_selection = [cc['data'] for cc in input]
     input_selection_types = [cc['type'] for cc in input]
@@ -83,56 +86,82 @@ class DemoMixin:
 
     @app.post('/antgo/api/demo/submit/')
     async def wrapper(req: Request):
-      nonlocal pipeline
-      req = await _decode_content(req)
-      req = json.loads(req['query'])
-      for i, b in enumerate(input_selection_types):
-        if b in ['image', 'video', 'file']:
-          req[i] = os.path.join(dump_folder, req[i])
-        if b == 'checkbox':
-          req[i] = bool(req[i])
+        nonlocal pipeline
+        req = await _decode_content(req)
+        req = json.loads(req['query'])
+        input_req = req['input']
+        element_req = req['element']
+        for i, b in enumerate(input_selection_types):
+            if b in ['image', 'video', 'file']:
+                input_req[i] = os.path.join(dump_folder, input_req[i])
+            if b == 'checkbox':
+                input_req[i] = bool(input_req[i])
 
-      if len(req) == 1:
-        req = req[0]
-      rsp = pipeline.execute(req)
-      # 输出与类型对齐
-      rsp_value = rsp.get()
-      output_info = {}
-      for i, b in enumerate(output_selection):
-        if output_selection_types[i] in ['image', 'video', 'file']:
-          value = rsp_value.__dict__[b]
-          if type(value) == str:
-            shutil.copyfile(value, os.path.join(static_folder, 'image'))
-            file_name = value.split('/')[-1]
-            value = f'image/{file_name}'
-          else:
-            if value.dtype == np.uint8:
-              transfer_result = value
+        feed_info = {}
+        for a,b in zip(input_selection, input_req):
+           feed_info[a] = b
+
+        interactive_info = {}
+        for i,b in enumerate(element_req):
+            data = []
+            for info in b['value']:
+               data.append(info['data'])
+            bind_name = b['name']
+            assert(bind_name in InteractiveMixin.interactive_elements)
+            interactive_info[InteractiveMixin.interactive_elements[bind_name]['target']] = data
+
+        feed_info.update(interactive_info)
+        rsp_value = pipeline.execute(feed_info)
+        # 输出与类型对齐
+        output_info = {}
+        for i, b in enumerate(output_selection):
+            if output_selection_types[i] in ['image', 'video', 'file']:
+                value = rsp_value.__dict__[b]
+                image_width, image_height = 0, 0
+                
+                if type(value) == str:
+                    shutil.copyfile(value, os.path.join(static_folder, 'image'))
+                    image_width, image_height = imagesize.get(os.path.join(static_folder, 'image'))
+                    file_name = value.split('/')[-1]
+                    value = f'image/{file_name}'
+                else:
+                    if value.dtype == np.uint8:
+                        transfer_result = value
+                    else:
+                        data_min = np.min(value)
+                        data_max = np.max(value)
+                        transfer_result = ((value - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+
+                    if len(value.shape) == 3:
+                        assert (value.shape[2] == 3 or value.shape[2] == 4)
+
+                    assert (len(value.shape) == 2 or len(value.shape) == 3)
+                    file_name = f'{uuid.uuid4()}.png'
+                    cv2.imwrite(os.path.join(static_folder, 'image', file_name), transfer_result)
+                    image_width, image_height = imagesize.get(os.path.join(static_folder, 'image', file_name))
+                    value = f'image/{file_name}'
+                    
+                output_info[b] = {
+					'type': output_selection_types[i],
+					'name': b,
+					'value': value,
+               		'height': image_height,
+                    'width': image_width
+                }
+                if output_selection_types[i] == 'image':
+                    if b in InteractiveMixin.interactive_elements:
+                        output_info[b]['interactive'] = True
+                        output_info[b]['element'] = {
+						    'mode': InteractiveMixin.interactive_elements[b]['mode']
+                        }
+
             else:
-              data_min = np.min(value)
-              data_max = np.max(value)
-              transfer_result = ((value - data_min) / (data_max - data_min) * 255).astype(np.uint8)
-
-            if len(value.shape) == 3:
-              assert (value.shape[2] == 3 or value.shape[2] == 4)
-
-            assert (len(value.shape) == 2 or len(value.shape) == 3)
-            file_name = f'{uuid.uuid4()}.png'
-            cv2.imwrite(os.path.join(static_folder, 'image', file_name), transfer_result)
-            value = f'image/{file_name}'
-
-          output_info[b] = {
-            'type': output_selection_types[i],
-            'name': b,
-            'value': value
-          }
-        else:
-          output_info[b] = {
-            'type': output_selection_types[i],
-            'name': b,
-            'value': rsp_value.__dict__[b]
-          }
-      return output_info
+                output_info[b] = {
+					'type': output_selection_types[i],
+					'name': b,
+					'value': rsp_value.__dict__[b]
+                }
+        return output_info
 
     @app.get('/')
     async def home(request: Request):

@@ -68,10 +68,10 @@ def txt_dc(*args):
   def inner():
     for json_path in args:
       with open(json_path, 'r') as fp:
-        string = f.readline()
+        string = fp.readline()
         while string:
             data = json.loads(string)
-            string = f.readline()
+            string = fp.readline()
             yield global_entity(**{index: data})
 
   return DataFrame(inner())

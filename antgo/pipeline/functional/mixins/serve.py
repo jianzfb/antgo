@@ -29,24 +29,8 @@ class _APIWrapper:
             self._index = index
 
     def feed(self, x) -> None:
-        if self._index is None:
-            entity = x
-        else:
-            index = self._index
-            if len(index) == 2:
-                input_selection, _ = index
-            else:
-                input_selection = index
-
-            if type(input_selection) == str:
-                input_selection = [input_selection]
-
-            if len(input_selection) == 1:
-                x = (x, )
-
-            data = dict(zip(input_selection, x))
-            entity = Entity(**data)
-        entity = Some(entity)
+        entity = Entity(**x)
+        # entity = Some(entity)
         self._queue.put(entity)
 
     def __iter__(self):
