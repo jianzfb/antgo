@@ -30,22 +30,19 @@ import cv2
 
 
 class DemoMixin:
-  def demo(self, input=[], output=[], title="", description="", app=None, default_config=None):
-    if app is None:
-      from fastapi import FastAPI, Request
-      app = FastAPI()
-    else:
-      from fastapi import Request
-    api = _APIWrapper.tls.place_holder
-    pipeline = _PipeWrapper(self._iterable, api)
-
-    print(InteractiveMixin.interactive_elements)
+  app = None
+  pipeline_info = {}
+  def demo(self, input=[], output=[], title="", description="", default_config=None):
+    api = _APIWrapper.tls.placeholder
+    DemoMixin.pipeline_info[api._name] = {
+       'exe': _PipeWrapper(self._iterable, api)
+	}
 
     input_selection = [cc['data'] for cc in input]
     input_selection_types = [cc['type'] for cc in input]
     for ui_type in input_selection_types:
       assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select'])
-    
+
     output_selection = [cc['data'] for cc in output]
     output_selection_types = [cc['type'] for cc in output]
     for ui_type in output_selection_types:
@@ -55,12 +52,27 @@ class DemoMixin:
     if default_config is None:
       input_config = [{} for _ in range(len(input_selection))]
 
+    DemoMixin.pipeline_info[api._name].update({
+       'input_selection': input_selection,
+       'input_selection_types': input_selection_types,
+       'output_selection': output_selection,
+       'output_selection_types': output_selection_types,
+       'input_config': input_config,
+       'title': title,
+       'description': description
+	})
     dump_folder = './dump'
     if not os.path.exists(dump_folder):
       os.makedirs(dump_folder)
-
     resource_dir = '/'.join(os.path.dirname(__file__).split('/')[0:-3])
     static_folder = os.path.join(dump_folder, 'demo', 'static')
+
+    if DemoMixin.app is not None:
+        return DemoMixin.app
+
+    from fastapi import FastAPI, Request
+    DemoMixin.app = FastAPI()
+
     if os.path.exists(static_folder):
       shutil.rmtree(static_folder)
     shutil.copytree(os.path.join(resource_dir, 'resource', 'app'), static_folder)
@@ -68,7 +80,7 @@ class DemoMixin:
     if not os.path.exists(os.path.join(static_folder, 'image')):
       os.makedirs(os.path.join(static_folder, 'image'))
 
-    app.add_middleware(
+    DemoMixin.app.add_middleware(
       CORSMiddleware,
       # 允许跨域的源列表，例如 ["http://www.example.org"] 等等，["*"] 表示允许任何源
       allow_origins=["http://localhost:8080"],
@@ -85,19 +97,30 @@ class DemoMixin:
       # max_age=1000
     )
 
-    @app.post('/antgo/api/demo/submit/')
-    async def wrapper(req: Request):
-        nonlocal pipeline
+    @DemoMixin.app.post('/antgo/api/demo/submit/')
+    async def wrapper(req: Request):        
         req = await _decode_content(req)
         req = json.loads(req['query'])
+        
+        demo_name = ''
+        if 'demo' in req:
+           demo_name = req['demo']
+        if demo_name == '':
+           demo_name = list(DemoMixin.pipeline_info.keys())[0]
+
+        if demo_name not in DemoMixin.pipeline_info:
+            raise HTTPException(status_code=404, detail=f"{demo_name} not exist.")
+
         input_req = req['input']
         element_req = req['element']
+        input_selection_types = DemoMixin.pipeline_info[demo_name]['input_selection_types']
         for i, b in enumerate(input_selection_types):
             if b in ['image', 'video', 'file']:
                 input_req[i] = os.path.join(dump_folder, input_req[i])
             if b == 'checkbox':
                 input_req[i] = bool(input_req[i])
 
+        input_selection = DemoMixin.pipeline_info[demo_name]['input_selection']
         feed_info = {}
         for a,b in zip(input_selection, input_req):
            feed_info[a] = b
@@ -112,12 +135,14 @@ class DemoMixin:
             interactive_info[InteractiveMixin.interactive_elements[bind_name]['target']] = data
 
         feed_info.update(interactive_info)
-        rsp_value = pipeline.execute(feed_info)
-        
+        rsp_value = DemoMixin.pipeline_info[demo_name]['exe'].execute(feed_info)
+
         if rsp_value is None:
            raise HTTPException(status_code=500, detail="管线执行错误")
 
         # 输出与类型对齐
+        output_selection = DemoMixin.pipeline_info[demo_name]['output_selection']
+        output_selection_types = DemoMixin.pipeline_info[demo_name]['output_selection_types']
         output_info = {}
         for i, b in enumerate(output_selection):
             if output_selection_types[i] in ['image', 'video', 'file']:
@@ -172,11 +197,11 @@ class DemoMixin:
 
         return output_info
 
-    @app.get('/')
+    @DemoMixin.app.get('/')
     async def home(request: Request):
       return FileResponse(os.path.join(static_folder, 'index.html'))
 
-    @app.get('/antgo/api/info/')
+    @DemoMixin.app.get('/antgo/api/info/')
     async def info():
       return {
         'status': 'OK',
@@ -187,7 +212,7 @@ class DemoMixin:
         }
       }
 
-    @app.get('/antgo/api/user/info/')
+    @DemoMixin.app.get('/antgo/api/user/info/')
     async def user_info():
       return {
         'status': 'OK',
@@ -201,7 +226,7 @@ class DemoMixin:
         }
       }
 
-    @app.post('/antgo/api/demo/upload/')
+    @DemoMixin.app.post('/antgo/api/demo/upload/')
     async def upload(file: UploadFile = File(...)):
       try:
         contents = file.file.read()
@@ -212,8 +237,25 @@ class DemoMixin:
       finally:
         file.file.close()
 
-    @app.get('/antgo/api/demo/query_config/')
-    async def query_config():
+    @DemoMixin.app.get('/antgo/api/demo/query_config/')
+    async def query_config(req: Request):
+    #   req = await _decode_content(req)
+    #   req = json.loads(req['query'])
+      demo_name = ''
+      if req.query_params['demo'] != '':
+         demo_name = req.query_params['demo']
+
+      if demo_name == '':
+         demo_name = list(DemoMixin.pipeline_info.keys())[0]
+
+      if demo_name not in DemoMixin.pipeline_info:
+         raise HTTPException(status_code=404, detail=f"{demo_name} not exist.")
+
+      input_selection = DemoMixin.pipeline_info[demo_name]['input_selection']
+      input_selection_types = DemoMixin.pipeline_info[demo_name]['input_selection_types']
+      input_config = DemoMixin.pipeline_info[demo_name]['input_config']
+      title = DemoMixin.pipeline_info[demo_name]['title']
+      description = DemoMixin.pipeline_info[demo_name]['description']
       input_info = []
       for k, v, config in zip(input_selection, input_selection_types, input_config):
         info = {
@@ -246,9 +288,10 @@ class DemoMixin:
       return info
 
     # static resource
-    app.mount("/", StaticFiles(directory=static_folder), name="static")
-    return app
+    DemoMixin.app.mount("/", StaticFiles(directory=static_folder), name="static")
+
+    return DemoMixin.app
 
   @classmethod
-  def web(cls, index=None):
-    return _APIWrapper(index=index, cls=cls)
+  def web(cls, index=None, name='demo'):
+    return _APIWrapper(index=index, cls=cls, name=name)
