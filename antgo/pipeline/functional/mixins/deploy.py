@@ -18,8 +18,11 @@ import onnxruntime
 import re
 import shutil
 import subprocess
+import pathlib
+ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
+if not os.path.exists(ANTGO_DEPEND_ROOT):
+    os.makedirs(ANTGO_DEPEND_ROOT)
 
-ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', '/workspace/.3rd')
 
 def snpe_import_config(output_folder, project_name, platform, abi, device='GPU'):
     # load snpe lib
