@@ -48,6 +48,7 @@ DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
 DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
+DEFINE_string('main', None, '')
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -86,7 +87,7 @@ DEFINE_indicator("ignore-incomplete", True, "")
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset']
 
 
@@ -96,7 +97,7 @@ def main():
   
   # 备份脚本参数
   sys_argv_cp = sys.argv
-  
+
   # 解析参数
   action_name = sys.argv[1]
   sub_action_name = None
@@ -114,7 +115,11 @@ def main():
     if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
       os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
-    config_data = {'FACTORY': './.factory', 'USER_TOKEN': ''}
+	# 位置优先选择/data/, /HOME/
+    config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
+    if not os.path.exists('/data'):
+      config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
+        
     env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
     config_template = env.get_template('config.xml')
     config_content = config_template.render(**config_data)
@@ -145,6 +150,13 @@ def main():
       fp.write(config_content)
 
     logging.info('Update config file.')
+    return
+
+  # web服务
+  if action_name == 'web':
+    if args.port == 0:
+      args.port = 8000
+    os.system(f'uvicorn {args.main} --reload --port {args.port}')
     return
 
   # 查看运行设备（本地/远程）
