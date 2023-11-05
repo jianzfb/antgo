@@ -109,8 +109,8 @@ def _api():
 api = dynamic_dispatch(_api)
 
 
-def _web():
-  return DataFrame.web(index=param_scope()._index)
+def _web(name='demo'):
+  return DataFrame.web(index=param_scope()._index, name=name)
 
 
 web = dynamic_dispatch(_web)

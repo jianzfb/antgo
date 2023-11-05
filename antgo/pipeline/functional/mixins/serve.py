@@ -20,9 +20,10 @@ class _APIWrapper:
     """
     tls = threading.local()
 
-    def __init__(self, index=None, cls=None) -> None:
+    def __init__(self, index=None, cls=None, name='demo') -> None:
         self._queue = queue.Queue()
         self._cls = cls
+        self._name = name
 
         if index is not None:
             self._index = index if isinstance(index, list) else [index]
@@ -39,12 +40,13 @@ class _APIWrapper:
             yield self._queue.get()
 
     def __enter__(self):
-        _APIWrapper.tls.place_holder = self
+        _APIWrapper.tls.placeholder = self
+
         return self._cls(self).stream()
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if hasattr(_APIWrapper.tls, 'place_holder'):
-            _APIWrapper.tls.place_holder = None
+        if hasattr(_APIWrapper.tls, 'placeholder'):
+            _APIWrapper.tls.placeholder = None
 
 
 class _PipeWrapper:
@@ -52,9 +54,9 @@ class _PipeWrapper:
     Wrapper for execute pipeline as function
     """
 
-    def __init__(self, pipe, place_holder) -> None:
+    def __init__(self, pipe, placeholder) -> None:
         self._pipe = pipe
-        self._place_holder = place_holder
+        self._placeholder = placeholder
         self._futures = queue.Queue()
         self._lock = threading.Lock()
         self._executor = threading.Thread(target=self.worker, daemon=True)
@@ -75,7 +77,7 @@ class _PipeWrapper:
         with self._lock:
             future = concurrent.futures.Future()
             self._futures.put(future)
-            self._place_holder.feed(x)
+            self._placeholder.feed(x)
         return future.result()
 
 
@@ -112,7 +114,7 @@ class ServeMixin:
         else:
             from fastapi import Request
 
-        api = _APIWrapper.tls.place_holder
+        api = _APIWrapper.tls.placeholder
 
         pipeline = _PipeWrapper(self._iterable, api)
 
