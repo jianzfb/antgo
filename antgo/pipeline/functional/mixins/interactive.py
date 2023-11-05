@@ -19,10 +19,12 @@ import imagesize
 class InteractiveMixin:
 	interactive_elements = {}
 	# POLYGON, POINT, LINE, RECT
-	def interactive_points(self, bind_src, bind_tgt):
+	def interactive_points(self, bind_src, bind_tgt, num=1, config={}):
 		InteractiveMixin.interactive_elements[bind_src] = {
 			'mode': 'POINT',
+			'num': num,
 			'target': bind_tgt,
+			'config': config
 		}
 
 		def inner():
@@ -32,10 +34,12 @@ class InteractiveMixin:
 				yield x
 		return self._factory(inner())
 
-	def interactive_rects(self, bind_src, bind_tgt):
+	def interactive_rects(self, bind_src, bind_tgt, num=1, config={}):
 		InteractiveMixin.interactive_elements[bind_src] = {
 			'mode': 'RECT',
+			'num': num,
 			'target': bind_tgt,
+			'config': config
 		}
 
 		def inner():
@@ -46,10 +50,12 @@ class InteractiveMixin:
 		return self._factory(inner())
 
 
-	def interactive_lines(self, bind_src, bind_tgt):
+	def interactive_lines(self, bind_src, bind_tgt, num=1, config={}):
 		InteractiveMixin.interactive_elements[bind_src] = {
 			'mode': 'LINE',
+			'num': num,
 			'target': bind_tgt,
+			'config': config
 		}
 
 		def inner():
@@ -59,10 +65,12 @@ class InteractiveMixin:
 				yield x
 		return self._factory(inner())
 	
-	def interactive_polygon(self, bind_src, bind_tgt):
+	def interactive_polygon(self, bind_src, bind_tgt, num=1, config={}):
 		InteractiveMixin.interactive_elements[bind_src] = {
 			'mode': 'POLYGON',
+			'num': num,
 			'target': bind_tgt,
+			'config': config
 		}
 
 		def inner():

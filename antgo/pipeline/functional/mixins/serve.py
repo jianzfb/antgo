@@ -11,6 +11,7 @@ import threading
 import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
+import logging
 
 
 class _APIWrapper:
@@ -62,7 +63,12 @@ class _PipeWrapper:
     def worker(self):
         while True:
             future = self._futures.get()
-            result = next(self._pipe)
+            try:
+                result = next(self._pipe)
+            except:
+                logging.error('pipeline execute error.')
+                result = None
+
             future.set_result(result)
 
     def execute(self, x):

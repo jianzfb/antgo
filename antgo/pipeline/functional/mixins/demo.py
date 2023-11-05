@@ -23,13 +23,14 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Response
 from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import HTTPException
 import json
 import numpy as np
 import cv2
 
 
 class DemoMixin:
-  def demo(self, input=[], output=[], app=None, default_config=None):
+  def demo(self, input=[], output=[], title="", description="", app=None, default_config=None):
     if app is None:
       from fastapi import FastAPI, Request
       app = FastAPI()
@@ -112,10 +113,17 @@ class DemoMixin:
 
         feed_info.update(interactive_info)
         rsp_value = pipeline.execute(feed_info)
+        
+        if rsp_value is None:
+           raise HTTPException(status_code=500, detail="管线执行错误")
+
         # 输出与类型对齐
         output_info = {}
         for i, b in enumerate(output_selection):
             if output_selection_types[i] in ['image', 'video', 'file']:
+                if b not in rsp_value.__dict__:
+                   continue
+
                 value = rsp_value.__dict__[b]
                 image_width, image_height = 0, 0
                 
@@ -152,15 +160,16 @@ class DemoMixin:
                     if b in InteractiveMixin.interactive_elements:
                         output_info[b]['interactive'] = True
                         output_info[b]['element'] = {
-						    'mode': InteractiveMixin.interactive_elements[b]['mode']
+						    'mode': InteractiveMixin.interactive_elements[b]['mode'],
+							'num': InteractiveMixin.interactive_elements[b]['num']
                         }
-
             else:
                 output_info[b] = {
 					'type': output_selection_types[i],
 					'name': b,
 					'value': rsp_value.__dict__[b]
                 }
+
         return output_info
 
     @app.get('/')
@@ -229,7 +238,12 @@ class DemoMixin:
 
         input_info.append(info)
 
-      return input_info
+      info = {
+        'input': input_info,
+        'title': title,
+        'description': description
+	  }	
+      return info
 
     # static resource
     app.mount("/", StaticFiles(directory=static_folder), name="static")
