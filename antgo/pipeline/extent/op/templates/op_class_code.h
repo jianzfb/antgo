@@ -22,6 +22,7 @@ public:
     virtual int runOnCpu(const std::vector<Tensor>& input);
     virtual int runOnGpu(const std::vector<Tensor>& input);
 
+    virtual void clear();
 private:
     ${cls_name}* m_${cls_name};
 

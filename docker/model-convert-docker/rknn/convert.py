@@ -82,7 +82,7 @@ def main():
 
         # Build model
         print('--> Building model')
-        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt')
+        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt', pre_compile=True)
         if ret != 0:
             print('Build model failed!')
             exit(ret)
@@ -91,7 +91,7 @@ def main():
         # 导出浮点模型（fp16）
         # Build model
         print('--> Building model')
-        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt')
+        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt', pre_compile=True)
         if ret != 0:
             print('Build model failed!')
             exit(ret)

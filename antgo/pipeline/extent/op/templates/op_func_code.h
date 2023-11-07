@@ -11,6 +11,8 @@ namespace eagleeye{
 namespace dataflow{
 class ${op_name}:public BaseOp<${input_num}, ${output_num}>{
 public:
+    using BaseOp<${input_num}, ${output_num}>::init;
+
     ${op_name}();
     virtual ~${op_name}();
 
@@ -20,6 +22,7 @@ public:
     virtual int runOnCpu(const std::vector<Tensor>& input);
     virtual int runOnGpu(const std::vector<Tensor>& input);
 
+    virtual void clear();
 private:
     ${input_define}
     ${output_define}

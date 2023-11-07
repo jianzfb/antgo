@@ -27,6 +27,7 @@ class inference_onnx_op(object):
             privider.append(('CUDAExecutionProvider', {'device_id': device_id}))
         privider.append('CPUExecutionProvider')
 
+        self.onnx_path = onnx_path
         self.sess = ort.InferenceSession(onnx_path, providers=privider)
         print(self.sess.get_providers())
 
@@ -46,6 +47,8 @@ class inference_onnx_op(object):
         self.mean_val = kwargs.get('mean', None)   # 均值
         self.std_val = kwargs.get('std', None)     # 方差
         self.reverse_channel = kwargs.get('reverse_channel', False)
+        self.engine = kwargs.get('engine', None)
+        self.engine_args = kwargs.get('engine_args', {}) 
 
     def __call__(self, *args):        
         input_map = None
@@ -78,21 +81,26 @@ class inference_onnx_op(object):
             if data.dtype != np.float32:
                 data = data.astype(np.float32)
 
-            group_num = data.shape[0] // expected_shape[0]
-            if input_map is None:
-                input_map = [{} for _ in range(group_num)]
+            if not isinstance(expected_shape[0], str):
+                group_num = data.shape[0] // expected_shape[0]
+                if input_map is None:
+                    input_map = [{} for _ in range(group_num)]
 
-            for group_i in range(group_num):
-                input_map[group_i][field] = data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]]
+                for group_i in range(group_num):
+                    input_map[group_i][field] = data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]]
+            else:
+                if input_map is None:
+                    input_map = [{}]
+                input_map[0][field] = data
 
         if input_map is None:
             if len(self.output_shapes) == 1:
-                return np.empty([0,]+self.output_shapes[0][1:], dtype=np.float32)
+                return np.empty([0]*len(self.output_shapes[0]), dtype=np.float32)
             else:
                 oo = []
                 for i in range(len(self.output_shapes)):
                     oo.append(
-                        np.empty([0,]+self.output_shapes[i][1:], dtype=np.float32)
+                        np.empty([0]*len(self.output_shapes[i]), dtype=np.float32)
                     )
                 return oo
 
@@ -125,6 +133,96 @@ class inference_onnx_op(object):
         
         return output
     
+    def export(self):
+        if self.engine is None:
+            logging.error(f'engine must be set.')
+            return
+
+        platform_device = self.engine_args.get('device', None)
+        assert(platform_device is not None) 
+        if self.engine == 'rknn':
+            if self.engine_args.get('quantize', False):
+                # 转量化模型
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {self.onnx_path} /tmp/onnx/')
+                # 确保存在校正数据集
+                assert(os.path.exists(self.engine_args.get('calibration-images')))
+                shutil.copytree(self.engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
+
+                prefix = os.path.basename(self.onnx_path)[:-5]
+                onnx_dir_path = os.path.dirname(self.onnx_path)
+                mean_values = ','.join([str(v) for v in self.mean_val])
+                std_values = ','.join([str(v) for v in self.std_val])
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/rknn/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+            else:
+                # 转浮点模型
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {self.onnx_path} /tmp/onnx/')
+                
+                prefix = os.path.basename(self.onnx_path)[:-5]
+                onnx_dir_path = os.path.dirname(self.onnx_path)
+                mean_values = ','.join([str(v) for v in  self.mean_val])
+                std_values = ','.join([str(v) for v in  self.std_val])
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/rknn/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+                
+                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+        elif self.engine == 'snpe':
+            if self.engine_args.get('quantize', False):
+                # 转量化模型
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {self.onnx_path} /tmp/onnx/')
+                # 确保存在校正数据集
+                assert(os.path.exists(platform_engine_args.get('calibration-images')))
+                shutil.copytree(platform_engine_args.get('calibration-images'), '/tmp/onnx/calibration-images')
+
+                prefix = os.path.basename(self.onnx_path)[:-5]
+                onnx_dir_path = os.path.dirname(self.onnx_path)
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/snpe/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+            else:
+                # 转浮点模型
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
+
+                prefix = os.path.basename(onnx_file_path)[:-5]
+                onnx_dir_path = os.path.dirname(onnx_file_path)
+                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                converted_model_file = ''
+                for file_name in os.listdir('/tmp/onnx/snpe/'):
+                    if file_name[0] != '.':
+                        converted_model_file = file_name
+                        break
+
+                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+        elif self.engine == 'tnn':
+            os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {self.onnx_path} /tmp/onnx/')                 
+            prefix = os.path.basename(self.onnx_path)[:-5]
+            onnx_dir_path = os.path.dirname(self.onnx_path)
+            os.system(f'cd /tmp/onnx/ ; docker run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+            converted_model_file = []
+            for file_name in os.listdir('/tmp/onnx/tnn/'):
+                if file_name[0] != '.' and '.tnnproto' in file_name:
+                    converted_model_file = file_name
+                    break
+
+            os.system(f'cp -r /tmp/onnx/tnn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+        else:
+            logging.error(f'Dont support engine {self.engine}')
+
 
 def __session_run_in_process(onnx_path, device_id, input_fields, input_queue, output_queue):
     sess = ort.InferenceSession(onnx_path)

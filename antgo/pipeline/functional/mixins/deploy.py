@@ -1095,6 +1095,18 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                     'args': op_args,
                     'include': include_path
                 }
+
+                order_graph_op_list.append(op_unique_name)
+                for node_out_data_name in output_ctx:
+                    if node_out_data_name in pre_exist_node_info:
+                        circle_node_list.append(pre_exist_node_info[node_out_data_name]['name'])
+
+                for out_i, out_name in enumerate(output_ctx):
+                    if out_name not in pre_exist_node_info:
+                        pre_exist_node_info[out_name] = {
+                            'name': op_unique_name,
+                            'index': out_i
+                        }                
                 continue
 
             if op_name.endswith('_op'):

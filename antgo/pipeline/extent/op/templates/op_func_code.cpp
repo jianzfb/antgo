@@ -44,5 +44,9 @@ ${output_export}
 int ${op_name}::runOnGpu(const std::vector<Tensor>& input){
     return -1;
 }
+
+void ${op_name}::clear(){
+    // clear some info
+}
 } // namespace dataflow
 } // namespace eagleeye
