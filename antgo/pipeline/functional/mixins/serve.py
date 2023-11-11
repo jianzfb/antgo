@@ -11,7 +11,9 @@ import threading
 import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
+from fastapi import HTTPException
 import logging
+import json
 
 
 class _APIWrapper:
@@ -96,8 +98,9 @@ class ServeMixin:
     """
     Mixin for API serve
     """
-
-    def serve(self, path='/', app=None):
+    server_app = None
+    pipeline_info = {}
+    def serve(self):
         """
         Serve the DataFrame as a RESTful API
 
@@ -107,28 +110,38 @@ class ServeMixin:
 
         Returns:
             _type_: the app that bind to
-        """
-        if app is None:
-            from fastapi import FastAPI, Request
-            app = FastAPI()
-        else:
-            from fastapi import Request
-
+        """      
         api = _APIWrapper.tls.placeholder
+        ServeMixin.pipeline_info[api._name] = {
+           'api': _PipeWrapper(self._iterable, api)
+	    }
 
-        pipeline = _PipeWrapper(self._iterable, api)
+        if ServeMixin.server_app is not None:
+            return ServeMixin.server_app
 
-        @app.post(path)
-        async def wrapper(req: Request):
-            nonlocal pipeline
+        from fastapi import FastAPI, Request
+        ServeMixin.server_app = FastAPI()
+
+        @ServeMixin.server_app.post("/{serve_name}")
+        async def wrapper(serve_name: str, req: Request):
             req = await _decode_content(req)
-            rsp = pipeline.execute(req)
-            if rsp.is_empty():
-                return rsp.get()
-            return rsp.get()
+            try:
+                req = json.loads(req)
+            except:
+                logging.error('Fail to parsing request.')
+                raise HTTPException(status_code=404, detail="请求不合规")
 
-        return app
+            if serve_name not in ServeMixin.pipeline_info:
+                raise HTTPException(status_code=404, detail="服务不存在")
+
+            rsp = ServeMixin.pipeline_info[serve_name]['api'].execute(req)
+            if rsp is None:
+                raise HTTPException(status_code=500, detail="管线执行错误")
+
+            return rsp.__dict__
+
+        return ServeMixin.server_app
 
     @classmethod
-    def api(cls, index=None):
-        return _APIWrapper(index=index, cls=cls)
+    def api(cls, index=None, name='serve'):
+        return _APIWrapper(index=index, cls=cls, name=name)
