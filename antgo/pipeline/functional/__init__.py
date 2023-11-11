@@ -99,11 +99,11 @@ def camera_dc(*args):
     return DataFrame.read_video(*args).map(lambda x: camera_entity(**{key: value for key,value in zip(index, x)}))
 
 
-def _api():
+def _api(name='serve'):
   """
   Create an API input, for building RestFul API or application API.
   """
-  return DataFrame.api(index=param_scope()._index)
+  return DataFrame.api(index=param_scope()._index, name=name)
 
 
 api = dynamic_dispatch(_api)
