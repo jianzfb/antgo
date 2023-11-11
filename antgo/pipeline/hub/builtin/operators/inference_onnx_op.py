@@ -17,6 +17,7 @@ from multiprocessing import Process
 from multiprocessing import queues
 import logging
 import os
+import shutil
 
 
 @register

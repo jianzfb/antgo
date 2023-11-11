@@ -596,7 +596,19 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
 
     args_run_names = func.func.loader_kwargs['construct_arg_names']
     depedent_src = func.func.loader_kwargs.get('depedent_src', [])
-    args_init = ','.join([f'{op_kwargs[n]}' for n in args_run_names])
+    # args_init = ','.join([f'{op_kwargs[n]}' for n in args_run_names])
+    args_init = ''
+    for n in args_run_names:
+        value = op_kwargs[n]
+        if isinstance(value, bool):
+            value = 'true' if value else 'false'
+        elif isinstance(value, str) and value == '':
+            value = '\"\"'
+
+        args_init += f'{value},'
+
+    if args_init.endswith(','):
+        args_init = args_init[:-1]
     eagleeye_warp_cpp_code_content = \
         gen_code('./templates/op_class_code.cpp')(
             op_name=f"{op_name.replace('_','').capitalize()}Op",

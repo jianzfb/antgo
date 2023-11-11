@@ -115,7 +115,7 @@ def get_build_flag_cpu():
 
     if config.USING_OPENCV:
         opencv_dir = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
-        opencv_libs = ['opencv_calib3d', 'opencv_core', 'opencv_highgui', 'opencv_imgproc', 'opencv_imgcodecs', 'opencv_tracking']
+        opencv_libs = ['opencv_calib3d', 'opencv_core', 'opencv_highgui', 'opencv_imgproc', 'opencv_imgcodecs', 'opencv_tracking', 'opencv_ximgproc', 'opencv_xfeatures2d']
         opencv_libs = [f'-l{v}' for v in opencv_libs]
         opencv_libs = ' '.join(opencv_libs)
         LDFLAGS.add_string(f'-L {opencv_dir}/lib {opencv_libs}')
