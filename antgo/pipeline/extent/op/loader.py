@@ -516,7 +516,7 @@ def _add_function(func_map, func_idcode, rtn_type, cpp_info, dll_fname, func_kin
     func_idcode_hash = get_idcode_hash(func_idcode)
     if func_kind == CFuncDef.CLASS:
         init = getattr(cpp_info.dll, f'{func_idcode_hash}_init', None)
-        init.restype = CTYPENAME2CTYPE['void*']
+        init.restype = CTYPENAME2CTYPE['uint64_t']
 
         func = getattr(cpp_info.dll, f'{func_idcode_hash}_run', None)
         func.restype = None
@@ -691,7 +691,7 @@ class OpLoader:
             self.init_handler = self.init(*[kwargs[k] for k in self.init_args])
 
         if self.init_handler is not None:
-            args = (self.init_handler,) +args
+            args = (ctypes.c_ulong(self.init_handler),) +args
 
         result = self.func(*args)
         return result

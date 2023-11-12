@@ -22,7 +22,7 @@ import shutil
 
 @register
 class inference_onnx_op(object):
-    def __init__(self, onnx_path, input_fields=None, device_id=-1, **kwargs):
+    def __init__(self, onnx_path, input_fields=None, device_id=0, **kwargs):
         privider = []
         if device_id >= 0:
             privider.append(('CUDAExecutionProvider', {'device_id': device_id}))

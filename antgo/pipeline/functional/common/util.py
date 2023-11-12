@@ -74,6 +74,15 @@ class condition_op(object):
 
 
 @register
+class const_op(object):
+    def __init__(self, init_val):
+        self.val = init_val
+
+    def __call__(self):
+        return self.val
+
+
+@register
 class filepath_parse(object):
     def __init__(self, *args, **kwargs) -> None:
         pass
