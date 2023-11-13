@@ -4,6 +4,7 @@ import copy
 from typing import Any
 import numpy as np
 import json
+import shutil
 
 
 class Exe(object):
@@ -35,8 +36,18 @@ class Exe(object):
         os.makedirs(os.path.join(self.data_folder, 'data', 'input'), exist_ok=True)
         os.makedirs(os.path.join(self.data_folder, 'data', 'output'), exist_ok=True)
 
+        self.is_first_call = True
 
     def __call__(self, *args):
+        # 清空数据
+        if os.path.exists(os.path.join(self.data_folder, 'data', 'input')):
+            shutil.rmtree(os.path.join(self.data_folder, 'data', 'input')) 
+            os.makedirs(os.path.join(self.data_folder, 'data', 'input'), exist_ok=True)
+
+        if os.path.exists(os.path.join(self.data_folder, 'data', 'output')):
+            shutil.rmtree(os.path.join(self.data_folder, 'data', 'output')) 
+            os.makedirs(os.path.join(self.data_folder, 'data', 'output'), exist_ok=True)
+
         # 准备输入数据
         for data_value, data_info in zip(args, self.project_input_info):
             # file format
@@ -62,7 +73,11 @@ class Exe(object):
                 data_value.tofile(os.path.join(self.data_folder, 'data', 'input', f'placeholder_0.{0}.{data_type_code}.{data_shape_code}.bin'))
 
         # 运行
-        os.system(f'cd {self.project_folder} && bash run.sh')
+        if self.is_first_call:
+            os.system(f'cd {self.project_folder} && bash run.sh reload')
+            self.is_first_call = False
+        else:
+            os.system(f'cd {self.project_folder} && bash run.sh')
 
         # 解析输出数据
         out_list = [None for _ in range(len(self.project_output_info))]

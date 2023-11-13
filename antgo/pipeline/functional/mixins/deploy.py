@@ -411,9 +411,9 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': {'c++_type': 'std::map<std::string, std::vector<float>>'},
         'include': os.path.join('extent','include', f'{op_name}_op_warp.h'),
-        'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp')
+        'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp'),
     }
     return info
 
@@ -944,10 +944,12 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
             if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
                 # 插入
+                run_shell_code_list.append(f'if [ "$1"x = "reload"x ]; then\n')
                 run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
                 if platform_model_path.endswith('.tnnproto'):
                     run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
-            
+                run_shell_code_list.append('fi\n')
+
             run_shell_code_list.append(line)
 
         with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
@@ -1204,7 +1206,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                     else:
                         arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-            if arg_code != '':
+            if 'c++_type' in deploy_op_args:
                 args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
                 op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
 
