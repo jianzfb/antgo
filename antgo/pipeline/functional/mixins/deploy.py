@@ -1274,9 +1274,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
         demo_code_content = gen_code(f'./templates/demo_code.cpp')(
             project=project_name,
-            input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
-            input_size_list='{'+','.join(plugin_input_size_list)+'}',
-            input_type_list='{'+plugin_input_type_list+'}',
+            # input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
+            # input_size_list='{'+','.join(plugin_input_size_list)+'}',
+            # input_type_list='{'+plugin_input_type_list+'}',
             output_name_list='{'+','.join(['"nnnode"' for _ in range(len(project_config['output']))])+'}',
             output_port_list='{'+','.join([f"{i}" for i in range(len(project_config['output']))])+'}'
         )

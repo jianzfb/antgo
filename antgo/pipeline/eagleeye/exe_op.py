@@ -49,7 +49,8 @@ class Exe(object):
             os.makedirs(os.path.join(self.data_folder, 'data', 'output'), exist_ok=True)
 
         # 准备输入数据
-        for data_value, data_info in zip(args, self.project_input_info):
+        run_args = []
+        for arg_i, (data_value, data_info) in enumerate(zip(args, self.project_input_info)):
             # file format
             # input_name.input_port.type.shape.bin
             if isinstance(data_value, np.ndarray):
@@ -69,22 +70,25 @@ class Exe(object):
                 elif data_value.dtype == np.bool:
                     data_type_code = 10
 
-                data_shape_code = '-'.join([str(s) for s in data_value.shape])
+                data_shape_code = ','.join([str(s) for s in data_value.shape])
                 data_value.tofile(os.path.join(self.data_folder, 'data', 'input', f'placeholder_0.{0}.{data_type_code}.{data_shape_code}.bin'))
+                run_args.append(f'placeholder_{arg_i}/{data_shape_code}/{data_type_code}')
+
+        run_args = ' '.join(run_args)
 
         # 运行
         if self.is_first_call:
-            os.system(f'cd {self.project_folder} && bash run.sh reload')
+            os.system(f'cd {self.project_folder} && bash run.sh reload {run_args}')
             self.is_first_call = False
         else:
-            os.system(f'cd {self.project_folder} && bash run.sh')
+            os.system(f'cd {self.project_folder} && bash run.sh normal {run_args}')
 
         # 解析输出数据
         out_list = [None for _ in range(len(self.project_output_info))]
         for file_name in os.listdir(os.path.join(self.data_folder, 'data', 'output')):
             file_prefix = file_name[:-4]
             _, data_port, data_type_code, data_shape = file_prefix.split('.')
-            shape_list = [int(v) for v in data_shape.split('-')]
+            shape_list = [int(v) for v in data_shape.split(',')]
             data_port = (int)(data_port)
             data_type_code = (int)(data_type_code)
 

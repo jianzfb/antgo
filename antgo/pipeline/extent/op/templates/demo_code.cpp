@@ -67,9 +67,29 @@ int main(int argc, char** argv){
     */
 
     // 3.step set input data 
-    std::vector<std::string> input_name_list = ${input_name_list};           // 输入节点名字（见计算管线搭建中的设置）
-    std::vector<std::vector<size_t>> input_size_list = ${input_size_list};   // 输入节点数据形状
-    std::vector<int> input_type_list = ${input_type_list};                   // 输入节点属性类型（见EagleeyeType类型）
+    std::vector<std::string> input_name_list = {};           // 输入节点名字（见计算管线搭建中的设置）
+    std::vector<std::vector<size_t>> input_size_list = {};   // 输入节点数据形状
+    std::vector<int> input_type_list = {};                   // 输入节点属性类型（见EagleeyeType类型）
+
+    for(int argi=1; argi<argc; ++argi){
+        std::string arg_str(argv[argi]);
+        std::cout<<arg_str<<std::endl;
+        std::string arg_sep = "/";
+        std::vector<std::string> name_shape_type = split(arg_str, arg_sep);
+        std::string input_name = name_shape_type[0];
+        std::string input_shape = name_shape_type[1];
+        std::string input_type = name_shape_type[2];
+
+        arg_sep = ",";
+        std::vector<std::string> shape_str = split(input_shape, arg_sep);
+        input_name_list.push_back(input_name);
+        std::vector<size_t> shape;
+        for(int shape_i=0; shape_i<shape_str.size(); ++shape_i){
+            shape.push_back(tof<size_t>(shape_str[shape_i]));
+        }
+        input_size_list.push_back(shape);
+        input_type_list.push_back(tof<int>(input_type));
+    }
 
     std::vector<void*> data_list;
     for(int input_port=0; input_port<input_name_list.size(); ++input_port){
@@ -137,7 +157,7 @@ int main(int argc, char** argv){
             std::string output_size_str = "";
             for(int k=0; k<out_data_dims; ++k){
                 if(k != out_data_dims-1){
-                    output_size_str += tos(out_data_size[k]) + "-";
+                    output_size_str += tos(out_data_size[k]) + ",";
                 }
                 else{
                     output_size_str += tos(out_data_size[k]);
