@@ -102,7 +102,7 @@ int main(int argc, char** argv){
         std::string input_size_str = "";
         for(int k=0; k<input_size.size(); ++k){
             if(k != input_size.size()-1){
-                input_size_str += tos(input_size[k]) + "-";
+                input_size_str += tos(input_size[k]) + ",";
             }
             else{
                 input_size_str += tos(input_size[k]);
