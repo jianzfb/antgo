@@ -261,24 +261,39 @@ class CosineAnnealingLrUpdaterHook(LrUpdaterHook):
             Default: None.
     """
 
-    def __init__(self, min_lr=None, min_lr_ratio=None, **kwargs):
+    def __init__(self, min_lr=None, begin=0, end=None, min_lr_ratio=None, **kwargs):
         assert (min_lr is None) ^ (min_lr_ratio is None)
         self.min_lr = min_lr
         self.min_lr_ratio = min_lr_ratio
+        self.begin = begin
+        self.end = end
         super(CosineAnnealingLrUpdaterHook, self).__init__(**kwargs)
 
     def get_lr(self, runner, base_lr):
         if self.by_epoch:
             progress = runner.epoch
-            max_progress = runner.max_epochs
+            max_progress = runner.max_epochs - self.begin
+            if self.end is not None:
+                max_progress = self.end - self.begin
         else:
             progress = runner.iter
-            max_progress = runner.max_iters
+            max_progress = runner.max_iters - self.begin
+            if self.end is not None:
+                max_progress = self.end - self.begin
 
+        if progress < self.begin:
+            return base_lr
+
+        progress = progress - self.begin
         if self.min_lr_ratio is not None:
             target_lr = base_lr * self.min_lr_ratio
         else:
             target_lr = self.min_lr
+
+        if self.end is not None:
+            if progress > self.end:
+                return target_lr
+
         return annealing_cos(base_lr, target_lr, progress / max_progress)
 
 

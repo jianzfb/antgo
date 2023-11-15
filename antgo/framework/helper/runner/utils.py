@@ -133,8 +133,7 @@ def auto_scale_lr(cfg, distributed, logger):
         logger (logging.Logger): Logger.
     """
     # Get flag from config
-    if ('auto_scale_lr' not in cfg) or \
-            (not cfg.auto_scale_lr.get('enable', False)):
+    if ('auto_scale_lr' not in cfg):
         logger.info('Automatic scaling of learning rate (LR)'
                     ' has been disabled.')
         return

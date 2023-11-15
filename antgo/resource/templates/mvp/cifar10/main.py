@@ -48,6 +48,7 @@ from models import *
 from metrics import *
 from dataset import *
 from hooks import *
+from preprocess import *
 
 # 4.step 定义shell参数
 # 4.1.step 自定义扩展参数
