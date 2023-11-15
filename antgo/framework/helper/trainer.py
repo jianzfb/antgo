@@ -353,16 +353,6 @@ class Trainer(BaseTrainer):
             self.runner.resume(resume_from)
         elif load_from:
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
-        else:
-            if self.distributed:
-                # 为了稳妥起见，把rank0的权重保存下来，其余进程进行加载保证所有卡的起始权重相同
-                checkpoint_path = os.path.join(tempfile.gettempdir(), "initial_weights.pt")
-                rank, _ = get_dist_info()
-                if rank == 0:
-                    torch.save(model.state_dict(), checkpoint_path)
-
-                dist.barrier()
-                self.runner.load_checkpoint(checkpoint_path)
 
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################

@@ -468,10 +468,11 @@ class UnSqueeze(BaseOperator):
 
 # FINISH FIX
 class KeepRatio(BaseOperator):
-    def __init__(self, aspect_ratio=1, focus_on_objects=False,inputs=None):
+    def __init__(self, aspect_ratio=1, focus_on_center=False, focus_on_objects=False,inputs=None):
         super(KeepRatio, self).__init__(inputs=inputs)
         self.aspect_ratio = aspect_ratio
         self.focus_on_objects = focus_on_objects
+        self.focus_on_center = focus_on_center
         if not isinstance(self.aspect_ratio, float):
             raise TypeError("{}: input type is invalid.".format(self.aspect_ratio))
 
@@ -497,32 +498,7 @@ class KeepRatio(BaseOperator):
             rwi = max_x - min_x
             rhi = max_y - min_y
 
-        # 随机裁切
-        left, right, top, bottom = 0,0,0,0
-        if cur_ratio < self.aspect_ratio:
-            dwi = width
-            dhi = int(dwi / self.aspect_ratio)
-            if dhi < rhi:
-                dhi = rhi
-                dwi = int(dhi * self.aspect_ratio)
-
-            left = np.random.randint(0, min_x + 1)
-            right = np.random.randint(min(max_x, min(width-1, dwi-1)), width)
-
-            top = np.random.randint(max(0, max_y - dhi), min_y+1)
-            bottom = min(top + dhi, height - 1)
-        else:
-            dhi = height
-            dwi = int(dhi * self.aspect_ratio)
-            if dwi < rwi:
-                dwi = rwi
-                dhi = int(dwi / self.aspect_ratio)
-
-            top = np.random.randint(0, min_y+1)
-            bottom = np.random.randint(min(max_y, min(height-1, dhi-1)), height)
-
-            left = np.random.randint(max(0, max_x - dwi), min_x+1)
-            right = min(left + dwi, width - 1)
+        left, right, top, bottom = min_x, max_x, min_y, max_y
 
         if len(gt_bbox) > 0:
             gt_bbox[:, [0,2]] = gt_bbox[:, [0,2]] - left
@@ -567,23 +543,33 @@ class KeepRatio(BaseOperator):
             bottom_padding = nhi - rhi
             if nhi > rhi:
                 top_padding = np.random.randint(0, nhi - rhi)
+                if self.focus_on_center:
+                    top_padding = (nhi - rhi) // 2
                 bottom_padding = (nhi - rhi) - top_padding
 
             left_padding = 0
             right_padding = nwi - rwi
             if nwi > rwi:
                 left_padding = np.random.randint(0, nwi - rwi)
+                if self.focus_on_center:
+                    left_padding = (nwi - rwi) // 2
                 right_padding = (nwi - rwi) - left_padding
 
             # 调整image
             image_new = cv2.copyMakeBorder(
-                image_new, top_padding, bottom_padding, left_padding, right_padding, cv2.BORDER_CONSTANT, value=(128, 128, 128))
+                image_new, 
+                top_padding, bottom_padding, left_padding, right_padding, 
+                cv2.BORDER_CONSTANT, value=0
+            )
 
             # 调整segments
             if 'segments' in sample and sample['segments'].size != 0:
                 # 无效位置填充255
                 sample['segments'] = cv2.copyMakeBorder(
-                sample['segments'], top_padding, bottom_padding, left_padding, right_padding, cv2.BORDER_CONSTANT, value=255)
+                    sample['segments'], 
+                    top_padding, bottom_padding, left_padding, right_padding, 
+                    cv2.BORDER_CONSTANT, value=255
+                )
 
             # 调整bbox
             if len(gt_bbox) > 0:
@@ -616,7 +602,6 @@ class KeepRatio(BaseOperator):
     def __call__(self, sample, context=None):
         im = sample['image']
         height, width = im.shape[:2]
-        np.random.seed(int(time.time()))
         cur_ratio = width / height
         if abs(cur_ratio - self.aspect_ratio) > 0.000001:
             sample = self._random_crop_or_padding_image(sample)
