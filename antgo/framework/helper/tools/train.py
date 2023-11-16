@@ -31,8 +31,7 @@ def main():
     cfg = Config.fromfile(args.config)
 
     if args.auto_scale_lr:
-        if 'auto_scale_lr' in cfg and \
-                'enable' in cfg.auto_scale_lr and \
+        if 'auto_scale_lr' in cfg and 
                 'base_batch_size' in cfg.auto_scale_lr:
             cfg.auto_scale_lr.enable = True
         else:
