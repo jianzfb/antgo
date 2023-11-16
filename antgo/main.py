@@ -612,7 +612,7 @@ def main():
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -623,7 +623,8 @@ def main():
           command_str += f' --max-epochs={args.max_epochs}'
         if args.find_unused_parameters:
           command_str += f' --find-unused-parameters'
-
+        if args.diff_seed:
+          command_str += f' --diff-seed'
         os.system(command_str)
     elif action_name == 'activelearning':
       # 为主动学习实验，创建存储root
