@@ -85,7 +85,6 @@ class TextLoggerHook(LoggerHook):
         self.file_client_args = file_client_args
         self.file_client = None
 
-    @master_only
     def before_run(self, runner):
         super(TextLoggerHook, self).before_run(runner)
 
@@ -235,7 +234,6 @@ class TextLoggerHook(LoggerHook):
         self._dump_log(log_dict, runner)
         return log_dict
 
-    @master_only
     def after_run(self, runner):
         # copy or upload logs to self.out_dir
         if self.out_dir is not None:
