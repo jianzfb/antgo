@@ -55,7 +55,6 @@ class EpochBasedRunner(BaseRunner):
         self._epoch += 1
         # 更新data_loader中dataset记录的epoch计数
         self.data_loader.dataset.epoch = self._epoch    # 仅在iterator dataset数据集有效
-        
 
     @torch.no_grad()
     def val(self, data_loader, **kwargs):

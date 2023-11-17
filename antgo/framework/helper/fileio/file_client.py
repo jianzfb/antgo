@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Iterable, Iterator, Optional, Tuple, Union
 from antgo.framework.helper.utils.path import is_filepath
 from antgo.ant import environment
+from filelock import FileLock
 import shutil
 import time
 
@@ -463,14 +464,15 @@ class HDFSBackend(BaseStorageBackend):
 class AliBackend(BaseStorageBackend):
     def __init__(self) -> None:
         super().__init__()
-        local_config_file = 'aligo.json'
-        if os.path.exists(local_config_file):
-            if not os.path.exists(Path.home().joinpath('.aligo')):
-                os.makedirs(Path.home().joinpath('.aligo'))
-                
-            shutil.copy(local_config_file, Path.home().joinpath('.aligo'))
 
-        self.ali = Aligo()  # 第一次使用，会弹出二维码，供扫描登录
+        with FileLock('alibackendauth.lock'):
+            local_config_file = './aligo.json'
+            if os.path.exists(local_config_file):
+                if not os.path.exists(Path.home().joinpath('.aligo')):
+                    os.makedirs(Path.home().joinpath('.aligo'))
+                shutil.copy(local_config_file, Path.home().joinpath('.aligo'))
+
+        self.ali = Aligo()
         self.prefix = 'ali://'
 
     def get(self, filepath) -> bytes:

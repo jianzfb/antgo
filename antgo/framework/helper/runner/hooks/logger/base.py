@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 import torch
-
+from ...dist_utils import master_only
 from ..hook import Hook
 
 
@@ -131,15 +131,18 @@ class LoggerHook(Hook):
         tags.update(self.get_momentum_tags(runner))
         return tags
 
+    @master_only
     def before_run(self, runner):
         for hook in runner.hooks[::-1]:
             if isinstance(hook, LoggerHook):
                 hook.reset_flag = True
                 break
 
+    @master_only
     def before_epoch(self, runner):
         runner.log_buffer.clear()  # clear logs of last epoch
-
+    
+    @master_only
     def after_train_iter(self, runner):
         if self.by_epoch and self.every_n_inner_iters(runner, self.interval):
             runner.log_buffer.average(self.interval)
@@ -154,12 +157,14 @@ class LoggerHook(Hook):
             if self.reset_flag:
                 runner.log_buffer.clear_output()
 
+    @master_only
     def after_train_epoch(self, runner):
         if runner.log_buffer.ready:
             self.log(runner)
             if self.reset_flag:
                 runner.log_buffer.clear_output()
 
+    @master_only
     def after_val_epoch(self, runner):
         runner.log_buffer.average()
         self.log(runner)
