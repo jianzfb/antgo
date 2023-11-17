@@ -66,6 +66,7 @@ class CheckpointHook(Hook):
         self.sync_buffer = sync_buffer
         self.file_client_args = file_client_args
 
+    @master_only
     def before_run(self, runner):
         if not self.out_dir:
             # 在out_dir没有被设置时，继承runner.work_dir的工作目录
@@ -85,6 +86,7 @@ class CheckpointHook(Hook):
         # allow to create a symlink
         self.args['create_symlink'] = False
 
+    @master_only
     def after_train_epoch(self, runner):
         if not self.by_epoch:
             return

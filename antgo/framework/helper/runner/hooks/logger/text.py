@@ -11,6 +11,7 @@ from antgo.framework.helper.fileio.file_client import FileClient
 from antgo.framework.helper.utils import is_tuple_of, scandir
 from ..hook import HOOKS
 from .base import LoggerHook
+from ...dist_utils import master_only
 import json
 
 
@@ -82,16 +83,14 @@ class TextLoggerHook(LoggerHook):
 
         self.keep_local = keep_local
         self.file_client_args = file_client_args
-        if self.out_dir is not None:
-            self.file_client = FileClient.infer_client(file_client_args,
-                                                       self.out_dir)
+        self.file_client = None
 
+    @master_only
     def before_run(self, runner):
         super(TextLoggerHook, self).before_run(runner)
 
         if self.out_dir is not None:
-            self.file_client = FileClient.infer_client(self.file_client_args,
-                                                       self.out_dir)
+            self.file_client = FileClient.infer_client(self.file_client_args, self.out_dir)
             # The final `self.out_dir` is the concatenation of `self.out_dir`
             # and the last level directory of `runner.work_dir`
             basename = osp.basename(runner.work_dir.rstrip(osp.sep))
@@ -236,6 +235,7 @@ class TextLoggerHook(LoggerHook):
         self._dump_log(log_dict, runner)
         return log_dict
 
+    @master_only
     def after_run(self, runner):
         # copy or upload logs to self.out_dir
         if self.out_dir is not None:
