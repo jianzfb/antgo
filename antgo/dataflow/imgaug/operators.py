@@ -411,11 +411,6 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         target, offset_x, offset_y, target_weight = \
             self._target_generator(joints2d, self.num_joints, self._feat_stride)
 
-        # 修正bbox
-        select_mask = joints_vis == 1
-        x1, y1, x2, y2 = [joints2d[select_mask, 0].min(), joints2d[select_mask, 1].min(), joints2d[select_mask, 0].max(), joints2d[select_mask, 1].max()]
-        bbox = [x1, y1, x2, y2]        
-
         # for joint_i, (x,y) in enumerate(joints2d):
         #     x, y = int(x), int(y)
         #     if joints_vis[joint_i]:
@@ -446,8 +441,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             'offset_y': offset_y,
             'heatmap_weight': target_weight,
             'joints_vis': joints_vis,
-            'joints2d': joints2d,
-            'bboxes': np.array(bbox)
+            'joints2d': joints2d
         })
         out_sample.update(sample)
         return out_sample
