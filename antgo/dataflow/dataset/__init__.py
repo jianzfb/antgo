@@ -24,7 +24,7 @@ from .halpe_dataset import HalpeDataset
 from .jhmdb_dataset import JhmdbDataset
 from .mpii_dataset import MpiiDataset
 from .ochuman_dataset import OCHumanDataset
-
+from .aic_dataset import AicDataset
 
 __all__ = [
   'Mnist', 
@@ -50,5 +50,6 @@ __all__ = [
   'HalpeDataset',
   'JhmdbDataset',
   'MpiiDataset',
-  'OCHumanDataset'
+  'OCHumanDataset',
+  'AicDataset'
 ]
