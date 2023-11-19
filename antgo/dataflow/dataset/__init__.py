@@ -18,7 +18,37 @@ from .ade20k import ADE20K
 from .lfw import LFW
 from .cityscape import Cityscape
 from .mpii import MPII
+from .coco_wholebody_dataset import CocoWholeBodyDataset
+from .crowdpose_dataset import CrowdPoseDataset
+from .halpe_dataset import HalpeDataset
+from .jhmdb_dataset import JhmdbDataset
+from .mpii_dataset import MpiiDataset
+from .ochuman_dataset import OCHumanDataset
+
 
 __all__ = [
-  'Mnist', 'Cifar10', 'Cifar100', 'ImageNet', 'Pascal2007', 'Pascal2012', 'COCO2017', 'InterHand26M', 'LSP', 'VisalSO', 'VGGFace', 'FLIC', 'LIP', 'ADE20K', 'LFW', 'Cityscape', 'MPII', 'Dataset'
+  'Mnist', 
+  'Cifar10', 
+  'Cifar100', 
+  'ImageNet', 
+  'Pascal2007',
+  'Pascal2012', 
+  'COCO2017',
+  'InterHand26M', 
+  'LSP', 
+  'VisalSO', 
+  'VGGFace', 
+  'FLIC', 
+  'LIP', 
+  'ADE20K', 
+  'LFW', 
+  'Cityscape', 
+  'MPII', 
+  'Dataset',
+  'CocoWholeBodyDataset',
+  'CrowdPoseDataset',
+  'HalpeDataset',
+  'JhmdbDataset',
+  'MpiiDataset',
+  'OCHumanDataset'
 ]

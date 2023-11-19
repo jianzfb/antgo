@@ -168,7 +168,7 @@ class Trainer(BaseTrainer):
             # re-set gpu_ids with distributed training mode
             _, world_size = get_dist_info()
             self.cfg.gpu_ids = range(world_size)
-        
+
         # set random seeds
         seed = init_random_seed(self.cfg.get('seed', 0), device=device)
         seed = seed + dist.get_rank() if diff_seed else seed
