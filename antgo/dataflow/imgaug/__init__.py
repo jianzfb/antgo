@@ -30,6 +30,11 @@ from .operators import (
   CorrectBoxes,
   RandomBlur)
 
+from .converting import (
+  KeypointConverter,
+  KeynameConvert
+)
+
 __all__ = [
   'DecodeImage', 
   'ResizeS',
@@ -56,5 +61,7 @@ __all__ = [
   'RGB2BGR',
   'CorrectBoxes',
   'Meta',
-  'RandomBlur'
+  'RandomBlur',
+  'KeypointConverter',
+  'KeynameConvert'
 ]

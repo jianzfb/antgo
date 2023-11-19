@@ -184,7 +184,7 @@ class Meta(BaseOperator):
 
 
 class ConvertRandomObjJointsAndOffset(BaseOperator):
-    def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.5, center_factor=0.25, rot_factor=30, skeleton=[], with_random=True, inputs=None):
+    def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.1, center_factor=0.25, rot_factor=30, skeleton=[], with_random=True, inputs=None):
         super().__init__(inputs=inputs)
         self.input_size = input_size
         self._heatmap_size = heatmap_size
@@ -373,8 +373,6 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
                 x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
                 bbox = [x1, y1, x2, y2]
 
-        # 动态扩展bbox
-        bbox = self.extend_bbox(bbox, image.shape[:2])
         xmin, ymin, xmax, ymax = bbox
         center, scale = self._box_to_center_scale(xmin, ymin, xmax - xmin, ymax - ymin, 1.0)
         if self.with_random:
@@ -392,7 +390,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         r = 0.0
         if self.with_random:
             rf = self._rot_factor
-            r = np.clip(np.random.randn() * rf, -rf * 2, rf * 2) if np.random.uniform(0, 1) <= 0.7 else 0
+            r = np.clip(np.random.randn() * rf, -rf * 2, rf * 2) if np.random.uniform(0, 1) <= 0.5 else 0
 
         inp_h, inp_w = self.input_size
         trans = self.get_affine_transform(center, scale, r, [inp_w, inp_h])
@@ -414,7 +412,8 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             self._target_generator(joints2d, self.num_joints, self._feat_stride)
 
         # 修正bbox
-        x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
+        select_mask = joints_vis == 1
+        x1, y1, x2, y2 = [joints2d[select_mask, 0].min(), joints2d[select_mask, 1].min(), joints2d[select_mask, 0].max(), joints2d[select_mask, 1].max()]
         bbox = [x1, y1, x2, y2]        
 
         # for joint_i, (x,y) in enumerate(joints2d):

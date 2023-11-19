@@ -17,7 +17,6 @@ from pathlib import Path
 
 from addict import Dict
 from yapf.yapflib.yapf_api import FormatCode
-
 from .misc import import_modules_from_strings
 from .path import check_file_exist
 if platform.system() == 'Windows':

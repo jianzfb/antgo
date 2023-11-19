@@ -14,11 +14,13 @@ from antgo.framework.helper.utils import build_from_cfg
 
 def register(cls):
     class ProxyReader(Reader):
-        def __init__(self, train_or_test, dir='', params={}, pipeline=None, inputs_def=None, **kwargs):
+        def __init__(self, dir='', pipeline=None, inputs_def=None,weak_pipeline=None, strong_pipeline=None, **kwargs):
             super().__init__(
-                cls(train_or_test, dir, params),
+                cls(dir=dir, **kwargs),
                 pipeline=pipeline,
                 inputs_def=inputs_def,
+                weak_pipeline=weak_pipeline,
+                strong_pipeline=strong_pipeline
             )
     from antgo.framework.helper.dataset.builder import DATASETS
     DATASETS.register_module(name=cls.__name__)(ProxyReader)   
@@ -183,8 +185,8 @@ class Reader(torch.utils.data.Dataset):
                     fail_count += 1
                     if fail_count > 10:
                         logging.warn(f'Fail find correct sample and exceed count {fail_count}.')
-        except:
-            print(f'sample error {idx}')
+        except Exception as e:
+            traceback.print_exc()
 
         weak_sample = None
         strong_sample = None
@@ -321,9 +323,9 @@ class TVReader(torch.utils.data.Dataset):
                 sample = temp
             else:
                 sample = {self._alias[0]: sample}
-        except:
-            print(f'sample error {idx}')
-        
+        except Exception as e:
+            traceback.print_exc()
+
         weak_sample = None
         strong_sample = None
         if len(self.weak_pipeline) > 0 or len(self.strong_pipeline) > 0:

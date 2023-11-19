@@ -19,6 +19,7 @@ import zipfile
 from antgo import config
 import subprocess
 from antgo.utils.serialize import *
+from antgo.dataflow.dataset.parse_metainfo import parse_pose_metainfo
 import copy
 import cv2
 try:
@@ -45,9 +46,9 @@ def imresize(image, size):
 class Dataset(BaseNode):
   _BASE_DATASET = True
 
-  def __init__(self, train_or_test="train", dir=None, ext_params=None, name=None):
+  def __init__(self, train_or_test="train", dir=None, name=None, **kwargs):
     super(Dataset, self).__init__(name)
-    assert(train_or_test in ["train", "val", "test", "sample", 'unlabeled'])
+    assert(train_or_test in ["train", "val", "test", "sample", 'unlabeled', "unkown"])
 
     # for random episodes
     self.nb_samples = 0
@@ -60,14 +61,12 @@ class Dataset(BaseNode):
     self._dataset_type = 'IMAGE'
     # config extent params
     # included, excluded, transform(cls->id)
-    self.ext_params = ext_params
-    if ext_params is not None:
-      for k, v in ext_params.items():
-        if k != 'self':
-          setattr(self, k, v)
-
+    for k, v in kwargs.items():
+      if k != 'self':
+        setattr(self, k, v)
     self.data_rng = None
-
+    self._metainfo = self._load_metainfo(kwargs.get('metainfo', None))
+  
     self.epochs = None
     self._epoch = 0
     self.data_generator = None
@@ -85,6 +84,14 @@ class Dataset(BaseNode):
   def init(self, *args, **kwargs):
     pass
   
+  def _rand_another(self) -> int:
+      """Get random index.
+
+      Returns:
+          int: Random index from 0 to ``len(self)-1``
+      """
+      return np.random.randint(0, self.size)
+
   def close(self):
     pass
 
@@ -354,7 +361,7 @@ class Dataset(BaseNode):
     return self.size
 
   def __getitem__(self, index):
-    return self.at(index)
+    return self.sample(index)
 
   def at(self, id):
     raise NotImplementedError
@@ -365,6 +372,28 @@ class Dataset(BaseNode):
   def get_cat_ids(self, idx):
     raise NotImplementedError
   
+  @classmethod
+  def _load_metainfo(cls, metainfo: dict = None) -> dict:
+      """Collect meta information from the dictionary of meta.
+
+      Args:
+          metainfo (dict): Raw data of pose meta information.
+
+      Returns:
+          dict: Parsed meta information.
+      """
+      if metainfo is None:
+          metainfo = copy.deepcopy(cls.METAINFO)
+
+      if not isinstance(metainfo, dict):
+          raise TypeError(
+              f'metainfo should be a dict, but got {type(metainfo)}')
+
+      # parse pose metainfo if it has been assigned
+      if metainfo:
+          metainfo = parse_pose_metainfo(metainfo)
+      return metainfo
+
   def sample(self, id):
     image, annotation = self.at(id)
     if image is None:
