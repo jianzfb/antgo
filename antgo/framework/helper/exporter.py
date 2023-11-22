@@ -83,7 +83,7 @@ class Exporter(object):
         )
 
         # 基于目标引擎，转换onnx模型
-        if self.cfg.get('deploy', None):
+        if self.cfg.export.get('deploy', None):
             # deploy=dict(
             #     engine='rknn',      # rknn,snpe,tensorrt,tnn
             #     device='rk3568',    # rk3568/rk3588,qualcomm,nvidia,mobile
@@ -94,18 +94,22 @@ class Exporter(object):
             #     quantize=False,                 # is quantize
             #     calibration=dict(...)           # calibration dataset config
             # )
-            target_engine = self.cfg.deploy.engine  # rknn,snpe,tensorrt,tnn
+            target_engine = self.cfg.export.deploy.engine  # rknn,snpe,tensorrt,tnn
 
             if target_engine == 'rknn':
-                target_device = self.cfg.deploy.device  # rk3568/rk3588
-                mean_values = self.cfg.deploy.preprocess.mean_values        # 0,0,0
-                std_values = self.cfg.deploy.preprocess.std_values          # 255,255,255
+                target_device = self.cfg.export.deploy.device  # rk3568/rk3588
+                mean_values = self.cfg.export.deploy.preprocess.mean_values        # 0,0,0
+                std_values = self.cfg.export.deploy.preprocess.std_values          # 255,255,255
+                if isinstance(mean_values, list) or isinstance(mean_values, tuple):
+                    mean_values = ','.join(f'{value}' for value in mean_values)
+                if isinstance(std_values, list) or isinstance(std_values, tuple):
+                    std_values = ','.join(f'{value}' for value in std_values)
                 print(f'using mean_values {mean_values}, std_values {std_values}')
-                if self.cfg.deploy.quantize:
+                if self.cfg.export.deploy.quantize:
                     # int8
                     # 生成校准数据
                     if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
-                        dataset = build_dataset(self.cfg.deploy.calibration)
+                        dataset = build_dataset(self.cfg.export.deploy.calibration)
                         os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
 
                         count = 0
@@ -119,8 +123,8 @@ class Exporter(object):
                             cv2.imwrite(os.path.join(self.work_dir, 'calibration-images', f'{count}.png'), image)
                             count += 1
 
-                            if self.cfg.deploy.get('calibration_size', -1) > 0:
-                                if count > self.cfg.deploy.calibration_size:
+                            if self.cfg.export.deploy.get('calibration_size', -1) > 0:
+                                if count > self.cfg.export.deploy.calibration_size:
                                     break
 
                     # 开始转模型
@@ -137,9 +141,9 @@ class Exporter(object):
                     os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={target_device} --mean-values={mean_values} --std-values={std_values}')
                     os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
             elif target_engine == 'snpe':
-                if self.cfg.deploy.quantize:
+                if self.cfg.export.deploy.quantize:
                     # 生成校准数据
-                    dataset = build_dataset(self.cfg.deploy.calibration)
+                    dataset = build_dataset(self.cfg.export.deploy.calibration)
                     if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
                         os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
 
@@ -167,9 +171,9 @@ class Exporter(object):
                     os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
                     os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} ; rm -rf /tmp/onnx/')
             elif target_engine == 'tensorrt':
-                if self.cfg.deploy.quantize:
+                if self.cfg.export.deploy.quantize:
                     # 生成校准数据
-                    dataset = build_dataset(self.cfg.deploy.calibration)
+                    dataset = build_dataset(self.cfg.export.deploy.calibration)
                     if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
                         os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
 

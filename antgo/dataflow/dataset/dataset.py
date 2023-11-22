@@ -45,6 +45,7 @@ def imresize(image, size):
 
 class Dataset(BaseNode):
   _BASE_DATASET = True
+  METAINFO: dict = dict()
 
   def __init__(self, train_or_test="train", dir=None, name=None, **kwargs):
     super(Dataset, self).__init__(name)
