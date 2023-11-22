@@ -88,3 +88,11 @@ sudo docker run --rm -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tm
         ```
         sudo service docker restart
         ```
+5. 遇到opencv ImportError: libGL.so.1: cannot open shared object file: No such file or directory错误
+
+    * 卸载 opencv-python
+        pip uninstall opencv-python
+    * 重新安装 opencv-python
+        pip install opencv-python
+    * 安装 opencv-python-headless
+        pip install opencv-python-headless
