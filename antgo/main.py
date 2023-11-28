@@ -173,7 +173,7 @@ def main():
     if not (args.ssh or args.k8s):
       logging.info("Use default backend (SSH)")
       args.ssh = True
-    
+
     tools.operate_on_running_status(action_name, args)
     return
 
