@@ -115,8 +115,12 @@ def _iterator_analyze_data_list(data):
         return all_data_list
     
     all_data_list = []
-    data_name = data.dir.split('/')[-1]
-    all_data_list.append(data_name)
+    if 'dir' in data:
+        data_name = data.dir.split('/')[-1]
+        all_data_list.append(data_name)
+    elif 'data_folder' in data:
+        data_name = data.data_folder.split('/')[-1]
+        all_data_list.append(data_name)
     return all_data_list
 
 
