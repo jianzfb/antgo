@@ -21,6 +21,7 @@ from antgo import tools
 from antgo.script import *
 import yaml
 from pathlib import Path
+from filelock import FileLock
 from aligo import Aligo
 
 
@@ -35,20 +36,21 @@ DEFINE_string('project', '', 'set project name')
 DEFINE_string('git', None, '')
 DEFINE_string('branch', None, '')
 DEFINE_string('commit', None, '')
-DEFINE_string('image', '', '')      # 镜像
+DEFINE_string('image', '', '')                  # 镜像
 DEFINE_int('cpu', 0, 'set cpu number')          # cpu 数
 DEFINE_int('gpu', 0, 'set gpu number')          # gpu 数
 DEFINE_int('memory', 0, 'set memory size (M)')  # 内存大小（单位M）
-DEFINE_string('name', None, '')     # 名字
-DEFINE_string('type', None, '')     # 类型
+DEFINE_string('name', None, '')                 # 名字
+DEFINE_string('type', None, '')                 # 类型
 DEFINE_string("address", None, "")
-DEFINE_indicator("auto", True, '')  # 是否项目自动优化
-DEFINE_indicator("finetune", True, '')  # 是否启用finetune模式
+DEFINE_indicator("auto", True, '')              # 是否项目自动优化
+DEFINE_indicator("finetune", True, '')          # 是否启用finetune模式
 DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
 DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
+DEFINE_indicator('data', True, '')
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -296,27 +298,44 @@ def main():
 
     if sub_action_name == 'add':
       if args.ssh:
-        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
-        if not os.path.exists(ssh_submit_config_file):
-            logging.error('No ssh submit config.')
-            logging.error('Please run antgo submitter update --config= --ssh')
-            return False
+        if args.ip == '':
+          for file_name in os.listdir(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+            register_ip = ''
+            if file_name.endswith('.yaml') and file_name.startswith('ssh'):
+                terms = file_name.split('-')
+                if len(terms) == 4:
+                    register_ip = terms[1]
+            else:
+                continue
 
-        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-            config_content = yaml.safe_load(fp)
+            if register_ip == '':
+                continue
+          
+            if args.ip == '':
+              args.ip = register_ip
+            else:
+              args.ip = f'{args.ip},{register_ip}'
 
-        user_name = config_content['config']['username']
-        remote_ip = config_content['config']['ip']
+        deploy_ip_list = args.ip.split(',')
+        print(f"Prepare deploy dataset to {deploy_ip_list}")
 
-        if args.src.endswith('.tar'):
-          os.system(f'scp {args.src} {user_name}@{remote_ip}:/data')
-          os.system(f'ssh {user_name}@{remote_ip} "tar -xf /data/{os.path.basename(args.src)} -C /data/ && rm /data/{os.path.basename(args.src)}"')
-        elif args.src.endswith('.zip'):
-          os.system(f'scp {args.src} {user_name}@{remote_ip}:/data')
-          os.system(f'ssh {user_name}@{remote_ip} "unzip -d /data/ /data/{os.path.basename(args.src)} && rm /data/{os.path.basename(args.src)}"')
-        else:
-          os.system(f'scp -r {args.src} {user_name}@{remote_ip}:/data')
-        print(f'Finish dataset {os.path.basename(args.src)} deploy.')
+        for deploy_ip in deploy_ip_list:
+          ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{deploy_ip}-submit-config.yaml')
+          with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+              ssh_config_info = yaml.safe_load(fp)
+
+          user_name = ssh_config_info['config']['username']
+          remote_ip = ssh_config_info['config']['ip']
+
+          if args.src.endswith('.tar'):
+            os.system(f'scp {args.src} {user_name}@{remote_ip}:/data')
+            os.system(f'ssh {user_name}@{remote_ip} "tar -xf /data/{os.path.basename(args.src)} -C /data/ && rm /data/{os.path.basename(args.src)}"')
+          elif args.src.endswith('.zip'):
+            os.system(f'scp {args.src} {user_name}@{remote_ip}:/data')
+            os.system(f'ssh {user_name}@{remote_ip} "unzip -d /data/ /data/{os.path.basename(args.src)} && rm /data/{os.path.basename(args.src)}"')
+          else:
+            os.system(f'scp -r {args.src} {user_name}@{remote_ip}:/data')
+          print(f'Finish dataset {os.path.basename(args.src)} deploy on IP {deploy_ip}.')
       else:
         logging.error("Now only support ssh remote control")
     elif sub_action_name == 'del':
@@ -325,7 +344,11 @@ def main():
         return
 
       if args.ssh:
-        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
+        if args.ip == '':
+          logging.error("Need set --ip=")
+          return
+
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
         if not os.path.exists(ssh_submit_config_file):
             logging.error('No ssh submit config.')
             logging.error('Please run antgo submitter update --config= --ssh')
@@ -337,23 +360,43 @@ def main():
         user_name = config_content['config']['username']
         remote_ip = config_content['config']['ip']
         os.system(f'ssh {user_name}@{remote_ip} "rm -rf /data/{args.src}"')
-        print(f'Finish dataset {args.src} delete.')
+        print(f'Finish dataset {args.src} delete On {args.ip}.')
       else:
         logging.error("Now only support ssh remote control")
     elif sub_action_name == 'ls':
       if args.ssh:
-        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
-        if not os.path.exists(ssh_submit_config_file):
-            logging.error('No ssh submit config.')
-            logging.error('Please run antgo submitter update --config= --ssh')
-            return False
+        if args.ip == '':
+          for file_name in os.listdir(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+            register_ip = ''
+            if file_name.endswith('.yaml') and file_name.startswith('ssh'):
+                terms = file_name.split('-')
+                if len(terms) == 4:
+                    register_ip = terms[1]
+            else:
+                continue
 
-        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-            config_content = yaml.safe_load(fp)
+            if register_ip == '':
+                continue
 
-        user_name = config_content['config']['username']
-        remote_ip = config_content['config']['ip']
-        os.system(f'ssh {user_name}@{remote_ip} "ls -lh /data/"')
+            if args.ip == '':
+              args.ip = register_ip
+            else:
+              args.ip = f'{args.ip},{register_ip}'
+
+        for register_ip in args.ip.split(','):
+          ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{register_ip}-submit-config.yaml')
+          if not os.path.exists(ssh_submit_config_file):
+              logging.error('No ssh submit config.')
+              logging.error('Please run antgo submitter update --config= --ssh')
+              return False
+
+          with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+              config_content = yaml.safe_load(fp)
+
+          user_name = config_content['config']['username']
+          remote_ip = config_content['config']['ip']
+          print(f"IP: {register_ip}")
+          os.system(f'ssh {user_name}@{remote_ip} "ls -lh /data/"')
       else:
         logging.error("Now only support ssh remote control")
     else:
@@ -396,172 +439,94 @@ def main():
   if action_name in action_level_1:
     if args.root.endswith('/'):
       args.root = args.root[:-1]
-  
-    # 基于实验名称和时间戳修改实验root
-    args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
 
-    # 远程提交任务
+    if not os.path.exists('./.project.json'):
+      shutil.copyfile(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project.json'), './.project.json')
+
     if args.ssh or args.k8s:
-      # 允许非标准项目远程提交
-      if args.project == '':
-        # 非标准项目模式
-        filter_sys_argv_cp = []
-        for t in sys_argv_cp:
-          if t.startswith('--project'):
-            continue
-          if t.startswith('--root'):
-            continue
-          filter_sys_argv_cp.append(t)
+      # 基于实验名称和时间戳修改实验root
+      now_time = time.time()
+      args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
 
-        sys_argv_cp = filter_sys_argv_cp
-        sys_argv_cp.append(f'--root={args.root}')
-        sys_argv_cmd = ' '.join(sys_argv_cp[1:])
-
-        # 直接进行任务提交
-        # step 1.1: 检查提交脚本配置
-        if args.ssh:
-          # ssh提交
-          sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
-          sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-          sys_argv_cmd = f'antgo {sys_argv_cmd}'        
-          ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
-        else:
-          # 自定义脚本提交
-          sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-          sys_argv_cmd = f'antgo {sys_argv_cmd}'          
-          custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)
-        return
-
-      # 标准项目模式（需要检查项目规范性）
-      # 检查项目环境
-      if not check_project_environment(args):
-        return
-
-      # 检查项目和实验是否存在
-      if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
-        logging.error(f'Project {args.project} hasnot create.')
-        return
-
-      project_info = {}      
-      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
+      with open('./.project.json', 'r') as fp:
         project_info = json.load(fp)
 
+      project_info['image'] = args.image      # 镜像名称
       if args.exp not in project_info['exp']:
-        logging.error(f'Exp {args.exp} not exist in project {args.project}.')
-        return
-
-      if not os.path.exists(args.exp):
-        logging.error(f'Exp code not found in current folder.')
-        return
-
-      # 检查任务提交功能
-      if args.ssh:
-        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
-        if not os.path.exists(ssh_submit_config_file):
-          logging.error('No ssh submit config.')
-          return
-
-      # 记录commit
-      rep = git.Repo('./')     
-      if not isinstance(project_info['exp'][args.exp], list):
         project_info['exp'][args.exp] = []
-      
-      exp_info = exp_basic_info()
-      exp_info['exp'] = args.exp
-      exp_info['id'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
-      exp_info['branch'] = rep.active_branch.name
-      exp_info['commit'] = rep.active_branch.commit.name_rev
-      exp_info['state'] = 'running'
-      exp_info['stage'] = args.stage
-      project_info['exp'][args.exp].append(
-        exp_info
-      )
 
-      # 创建项目文件
-      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
-        json.dump(project_info, fp)
+      # 配置新增实验信息
+      project_info['exp'][args.exp].append({
+        'id': '',
+        'ip': '',
+        'create_time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)),
+        'config': args.config,
+        'root': args.root
+      })
+      with open('./.project.json', 'w') as fp:
+        json.dump(project_info,fp)
 
-      # 创建脚本命令
-      sys_argv_cp.append(f'--id={exp_info["id"]}')
       filter_sys_argv_cp = []
       for t in sys_argv_cp:
         if t.startswith('--project'):
           continue
         if t.startswith('--root'):
           continue
+        if t.startswith('--gpu-id'):
+          continue
         filter_sys_argv_cp.append(t)
 
       sys_argv_cp = filter_sys_argv_cp
-      sys_argv_cp.append(f'--root={args.root}/{args.project}')
-      sys_argv_cmd = ' '.join(sys_argv_cp[1:])      
+      sys_argv_cp.append(f'--root={args.root}')
+      sys_argv_cmd = ' '.join(sys_argv_cp[1:])
 
+      # 直接进行任务提交
       # step 1.1: 检查提交脚本配置
       if args.ssh:
         # ssh提交
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'        
-        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)  
+        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
       else:
         # 自定义脚本提交
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'          
-        custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory)
+        custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
       return
 
-    # 本地任务执行
-    elif args.project != '':
-      # 场景：本地直接任务执行
-      # 标准项目需要检查任务规范性
-      # 检查项目环境
-      if not check_project_environment(args):
-        return
+    if args.exp not in args.root:
+      # root需要将exp加入点到root中
+      args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
 
-      # 检查项目和实验是否存在
-      if not os.path.exists(os.path.join(config.AntConfig.task_factory,f'{args.project}.json')):
-        logging.error(f'Project {args.project} hasnot create.')
-        return
+    # 实验依赖资源（允许远程存储）
+    if args.checkpoint is None:
+      args.checkpoint = ''
+    if args.resume_from is None:
+      args.resume_from = ''
 
-      project_info = {}      
-      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'r') as fp:
-        project_info = json.load(fp)
+    # 下载依赖checkpoint
+    if args.checkpoint != '':
+      if not os.path.exists(args.checkpoint):
+        # 非本地有效路径
+        if not os.path.exists('./checkpoint'):
+          os.makedirs('./checkpoint')
+        with FileLock('download.lock'):
+          checkpoint_name = args.checkpoint.split('/')[-1]
+          if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+            file_client_get(args.checkpoint, './checkpoint')
+          args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
 
-      if args.exp not in project_info['exp']:
-        logging.error(f'Exp {args.exp} not exist in project {args.project}.')
-        return
-
-      if not os.path.exists(args.exp):
-        logging.error(f'Exp code not found in current folder.')
-        return
-
-      # 记录commit
-      rep = git.Repo('./')             
-      if not isinstance(project_info['exp'][args.exp], list):
-        project_info['exp'][args.exp] = []
-
-      exp_info = exp_basic_info()
-      exp_info['exp'] = args.exp
-      exp_info['id'] = time.strftime('%Y-%m-%dx%H-%M-%S',time.localtime(time.time()))
-      exp_info['branch'] = rep.active_branch.name
-      exp_info['commit'] = rep.active_branch.commit.name_rev
-      exp_info['state'] = 'running'
-      exp_info['stage'] = args.stage
-      project_info['exp'][args.exp].append(
-        exp_info
-      )
-
-      # 创建项目文件
-      with open(os.path.join(config.AntConfig.task_factory,f'{args.project}.json'), 'w') as fp:
-        json.dump(project_info, fp)
-
-      # exp, exp:id
-      args.id = exp_info['id']
-
-    # 检查后端存储功能
-    if args.root is not None and args.root != '':
-      status = FileClient.infer_client(uri=args.root)
-      if status is None:
-        logging.error(f"Fail check backend storage {args.root}")
+    if args.resume_from != '':
+      if not os.path.exists(args.resume_from):
+        # 非本地有效路径
+        if not os.path.exists('./checkpoint'):
+          os.makedirs('./checkpoint')
+        with FileLock('download.lock'):
+          checkpoint_name = args.resume_from.split('/')[-1]
+          if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+            file_client_get(args.resume_from, './checkpoint')
+          args.resume_from = os.path.join('./checkpoint', checkpoint_name)
 
     # 执行任务
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
@@ -569,11 +534,6 @@ def main():
     if action_name == 'train':
       # 为训练实验，创建存储root
       file_client_mkdir(args.root)
-
-      if args.checkpoint is None:
-        args.checkpoint = ''
-      if args.resume_from is None:
-        args.resume_from = ''
 
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
@@ -628,9 +588,6 @@ def main():
         os.system(command_str)
     elif action_name == 'activelearning':
       # 为主动学习实验，创建存储root
-      if args.checkpoint is None:
-        args.checkpoint = ''
-
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
@@ -677,7 +634,7 @@ def main():
         os.system(command_str)
     elif action_name == 'eval':
       # 为评估实验，创建存储root
-      if args.checkpoint is None:
+      if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
         return
 
@@ -703,9 +660,10 @@ def main():
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
     elif action_name == 'export':
-      if args.checkpoint is None:
+      if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
         return
+  
       os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config}')
   else:
     if action_name == 'create':
