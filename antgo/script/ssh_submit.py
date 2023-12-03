@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, '/workspace/antgo')
 import logging
 import os
 import time
@@ -6,32 +8,217 @@ import shutil
 import yaml 
 import json
 from antgo import config
+from antgo.framework.helper.utils import Config
 from antgo.script.base import *
+import subprocess
+import re
 
 
 # 提交任务运行
-def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size, task_name=None):   
+def remote_gpu_running_info(username, ip):
+    ret = subprocess.Popen(f'ssh {username}@{ip} nvidia-smi', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    content = ret.stdout.read()
+    content = content.decode('utf-8')
+
+    driver_version = re.findall('(?<=Driver Version: )[\d.]+', content)[0]
+    gpu_basic_info = re.findall('(?<=\|)[ ]+\d+%[ ]+\d+C[]+\w+\d+W / /d+W[ ]+(?=\|)', content)
+    is_plan_b = False
+    if len(gpu_basic_info) == 0:
+        gpu_basic_info = re.findall('(?<=\|)[ ]+N/A[ ]+\d+C[]+\w+\d+W / /d+W[ ]+(?=\|)', content)
+        is_plan_b = True
+    
+    gpu_num = len(gpu_basic_info)
+    gpus=[]
+
+    for gpu_index in range(gpu_num):
+        result = re.split('\s+', gpu_basic_info[gpu_index].strip())
+        gpus.append(result[2])
+
+    gpu_pwr_info = re.findall('\d+W / \d+W',content)
+    gpu_pwr_usage=[]
+    gpu_pwr_cap=[]
+    for gpu_index in range(gpu_num):
+        result = re.split('/',gpu_pwr_info[gpu_index])
+        pwr_usage = re.findall('\d+',result[0])[0]
+        pwr_cap = re.findall('\d+',result[1])[0]
+        gpu_pwr_usage.append(int(pwr_usage))
+        gpu_pwr_cap.append(int(pwr_cap))
+
+    gpu_mem_info = re.findall('\d+MiB / +\d+MiB',content)
+    gpu_mem_usage=[]
+    gpu_mem_max=[]
+    for gpu_index in range(gpu_num):
+        result = re.split('/',gpu_mem_info[gpu_index])
+        mem_usage = re.findall('\d+',result[0])[0]
+        mem_max = re.findall('\d+',result[1])[0]
+        gpu_mem_usage.append(int(mem_usage))
+        gpu_mem_max.append(int(mem_max))
+
+    gpu_util = re.findall('\d+(?=%)',content)
+    gpu_util = [int(util) for util in gpu_util]
+    if not is_plan_b:
+        gpu_util = [int(util) for id, util in enumerate(gpu_util) if id % 2 == 1]
+
+    occupy_gpus = list(range(len(gpus)))
+
+    free_gpus = []
+    count = 0
+    for line in content.split('\n'):
+        if line.startswith("|======="):
+            count += 1
+            continue
+        
+        if line == '':
+            continue
+        if 'No running processes found' in line:
+            continue
+
+        if count == 2 and not line.startswith('+-------'):
+            line = re.sub(r'\s+', ' ', line)            
+            free_gpus.append(int(line.split(' ')[1]))
+    
+    free_gpus = [gpu_i for gpu_i in range(gpu_num) if gpu_i not in free_gpus]
+
+    return {'gpus': gpus,
+            'driver-version': driver_version,
+            'gpu_pwr_usage': gpu_pwr_usage,
+            'gpu_pwr_cap': gpu_pwr_cap,
+            'gpu_mem_usage': gpu_mem_usage,
+            'gpu_mem_max': gpu_mem_max,
+            'gpu_util': gpu_util,
+            'occupy_gpus': occupy_gpus,
+            'free_gpus': free_gpus}
+
+
+def check_data_is_exist(username, ip, data_list):
+    ret = subprocess.Popen(f'ssh {username}@{ip} "ls -lh /data/"', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    content = ret.stdout.read()
+    content = content.decode('utf-8')
+    remote_existed_data_list = content.split('\n')
+
+    is_all_exist = True
+    for check_data_name in data_list:
+        if check_data_name not in remote_existed_data_list:
+            is_all_exist = False
+            break
+        pass
+    
+    return is_all_exist
+
+
+def _iterator_analyze_data_list(data):
+    if isinstance(data, list) or isinstance(data, tuple):
+        all_data_list = []
+        for sub_data in data:
+            all_data_list.extend(_iterator_analyze_data_list(sub_data))
+
+        return all_data_list
+    
+    all_data_list = []
+    data_name = data.dir.split('/')[-1]
+    all_data_list.append(data_name)
+    return all_data_list
+
+
+def analyze_all_dependent_data(config_file_path):
+    cfg = Config.fromfile(config_file_path)
+    
+    dependent_data_list = []
+    # train, val, test
+    if 'train' in cfg.data:
+        dependent_data_list.extend(_iterator_analyze_data_list(cfg.data.train))
+    if 'val' in cfg.data:
+        dependent_data_list.extend(_iterator_analyze_data_list(cfg.data.val))
+    if 'test' in cfg.data:
+        dependent_data_list.extend(_iterator_analyze_data_list(cfg.data.test))
+    
+    return dependent_data_list
+
+def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False):   
     # 前提假设，调用此函数前当前目录下需要存在项目代码
-    # step1: 加载ssh配置文件
-    ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
-    if not os.path.exists(ssh_submit_config_file):
-        logging.error('No ssh submit config.')
-        return False
+    # 遍历所有注册的设备，找到每个设备的空闲GPU
+    with open('./.project.json', 'r') as fp:
+        project_info = json.load(fp)
 
-    with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-        config_content = yaml.safe_load(fp)
+    dependent_data_list= []
+    if check_data:
+        exp_info = project_info['exp'][exp][-1]
+        exp_config_file = exp_info['config']
+        exp_config_path = exp_config_file
+        if not os.path.exists(exp_config_path):
+            exp_config_path = os.path.join(exp, 'configs', exp_config_file)
+        
+        dependent_data_list = analyze_all_dependent_data(exp_config_path)
+        
+    free_gpus = []
+    username = ''
+    password = ''
+    ssh_config_info = None
+    logging.info("Analyze cluster environment.")
+    if ip == '':
+        for file_name in os.listdir(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+            register_ip = ''
+            if file_name.endswith('.yaml') and file_name.startswith('ssh'):
+                terms = file_name.split('-')
+                if len(terms) == 4:
+                    register_ip = terms[1]
+            else:
+                continue
 
-    username = config_content['config']['username']
-    password = config_content['config']['password']
-    ip = config_content['config']['ip']
+            if register_ip == '':
+                continue
+
+            ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', file_name)
+            with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+                ssh_config_info = yaml.safe_load(fp)
+
+            # 检查GPU占用情况
+            logging.info(f'Analyze IP: {register_ip}')
+            info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
+            if len(info['free_gpus']) >= gpu_num:
+                if check_data:
+                    has_local_data = check_data_is_exist(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"], dependent_data_list)
+                    if not has_local_data:
+                        continue
+
+                ip = ssh_config_info["config"]["ip"]
+                username = ssh_config_info["config"]["username"]
+                password = ssh_config_info["config"]["password"]
+                free_gpus = info['free_gpus']
+                break
+
+    if len(free_gpus) == 0 and ip != '':
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{ip}-submit-config.yaml')
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
+
+        # 检查GPU占用情况
+        info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
+        if len(info['free_gpus']) < gpu_num:
+            logging.error(f"No enough gpu in {ip}.")
+            return
+
+        has_local_data = True
+        if check_data:
+            has_local_data = check_data_is_exist(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"], dependent_data_list)
+            if not has_local_data:
+                logging.error(f'Dont exist data in remote {ip}')
+
+        if has_local_data:
+            free_gpus = info['free_gpus']
+            username = ssh_config_info["config"]["username"]
+            password = ssh_config_info["config"]["password"]
+
+    if len(free_gpus) == 0:
+        logging.error('Dont have satisfy resource (gpu num or data)')
+        return
+
+    apply_gpu_id = [str(free_gpus[i]) for i in range(gpu_num)]
+    apply_gpu_id = ','.join(apply_gpu_id)
+    logging.info(f"Apply running resource {apply_gpu_id} GPU on {ip}")
+    sys_argv = f'{sys_argv} --gpu-id={apply_gpu_id}'
+
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
-
-    project_info = {}
-    if project_name != '':
-        with open(os.path.join(config.AntConfig.task_factory,f'{project_name}.json'), 'r') as fp:
-            project_info = json.load(fp)
-
-
     # 添加扩展配置:保存到当前目录下并一同提交
     if task_name is not None and len(project_info) > 0:
         extra_config = prepare_extra_config(task_name, project_info)
@@ -46,12 +233,12 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
     if password == '':
         password = 'default'
 
-    launch_script = config_content['script']
+    launch_script = ssh_config_info['script']
     if launch_script != '':
         sys_argv = launch_script
 
     image_name = 'antgo-env:latest' # 基础镜像
-    launch_image = config_content['image']
+    launch_image = ssh_config_info['image']
     if launch_image != '':
         image_name = launch_image
     if 'image' in project_info and project_info['image'] != '':
@@ -59,7 +246,19 @@ def ssh_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_siz
 
     remote_local_folder_name = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
     submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {remote_local_folder_name}'
-    os.system(submit_cmd)
+    # 解析提交后的输出，并解析出container id
+    ret = subprocess.Popen(submit_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    content = ret.stdout.read()
+    content = content.decode('utf-8')
+    print(content)
+
+    # 获得container id
+    with open('./.project.json', 'r') as fp:
+        project_info = json.load(fp)
+    project_info['exp'][exp][-1]['id'] = content.split('\n')[-2]
+    project_info['exp'][exp][-1]['ip'] = ip
+    with open('./.project.json', 'w') as fp:
+        json.dump(project_info,fp)
 
     # 删除临时配置:
     if os.path.exists('./extra-config.py'):
