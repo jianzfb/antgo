@@ -410,12 +410,6 @@ def main():
     print('Using default root address ali:///exp')
     args.root = "ali:///exp"
 
-  if args.root.startswith('ali:'):
-    # 尝试进行认证，从而保证当前路径下生成认证信息
-    # do nothing
-    ali = Aligo()
-    shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
-
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
     os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
@@ -444,6 +438,11 @@ def main():
       shutil.copyfile(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project.json'), './.project.json')
 
     if args.ssh or args.k8s:
+      if args.root.startswith('ali:'):
+        # 尝试进行认证，从而保证当前路径下生成认证信息
+        ali = Aligo()
+        shutil.copy(os.path.join(Path.home().joinpath('.aligo'), 'aligo.json'),'./')
+
       # 基于实验名称和时间戳修改实验root
       now_time = time.time()
       args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
@@ -493,7 +492,19 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'          
         custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+
+      # 清理临时存储信息
+      if os.path.exists('./aligo.json'):
+        os.remove('./aligo.json')
       return
+
+    if args.root.startswith('ali:'):
+      # 尝试使用缓存的信息，进行认证
+      if os.path.exists("./aligo.json"):
+        if not os.path.exists(Path.home().joinpath('.aligo')):
+          os.makedirs(Path.home().joinpath('.aligo'))
+        shutil.copy('./aligo.json', Path.home().joinpath('.aligo'))
+      ali = Aligo()
 
     if args.exp not in args.root:
       # root需要将exp加入点到root中
