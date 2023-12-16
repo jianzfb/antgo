@@ -142,7 +142,7 @@ def log_ssh_running(action_name, id):
 
             container_info = running_info[i].split(' ')
             container_id = container_info[0]
-            if id == container_id:
+            if id.startswith(container_id):
                 os.system(f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} docker logs -f {id}')
                 return
 

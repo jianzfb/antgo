@@ -9,6 +9,7 @@ import numpy as np
 from . import glue
 from .internal.dtype import DType, CStruct, TemplateType, UnknownCType
 from .building.build_utils import config
+import copy
 
 
 def get_func_idcode(func_name, arg_types):
@@ -495,5 +496,5 @@ def bind(functions):
         if k in _binded_functions:
             warnings.warn('Duplicated function name {}'.format(k))
         func = AntgoFunc(k, func)
-        globals()[k] = func
+        globals()[k] = lambda : copy.deepcopy(func)
         _binded_functions[k] = func

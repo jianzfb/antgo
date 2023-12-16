@@ -74,12 +74,22 @@ class condition_op(object):
 
 
 @register
-class const_op(object):
-    def __init__(self, init_val):
-        self.val = init_val
+class state_op(object):
+    def __init__(self, init_val=0, mode='resident'):
+        assert(mode in ['resident', 'once'])
+        self.val = np.array([init_val], dtype=np.int32)
+        self.first_call = True
+        self.mode = mode
 
     def __call__(self):
-        return self.val
+        if self.mode == 'resident':
+            if self.first_call:
+                self.first_call = False
+                return self.val
+
+            return NoUpdate()
+        else:
+            return self.val
 
 
 @register
@@ -102,10 +112,105 @@ class ifelseend_op(object):
         self.true_func = op(func_obj.replace('_','-'), kwargs=func_args)
         func_obj, func_args = false_func
         self.false_func = op(func_obj.replace('_','-'), kwargs=func_args)
-    
+
     def __call__(self, *args):
         condition_val = args[0]
         if condition_val:
             return self.true_func(*args[1:])
         else:
             return self.false_func(*args[1:])
+
+
+@register
+class switch_op(object):
+    def __init__(self, stride=0):
+        self.stride = stride
+
+    def __call__(self, *args):
+        state_i = int(args[0])
+        if self.stride == 0:
+            return args[state_i+1]
+
+        return args[state_i+1::self.stride]
+
+
+@register
+class scalar_float64_op(object):
+    def __init__(self, init_val=0, is_placeholder=False):
+        self.init_val = np.array([init_val]).astype(np.float64)
+        self.is_placeholder = is_placeholder
+
+    def __call__(self, *args):
+        return self.init_val
+
+
+@register
+class scalar_float32_op(object):
+    def __init__(self, init_val=0, is_placeholder=False):
+        self.init_val = np.array([init_val]).astype(np.float64)
+        self.is_placeholder = is_placeholder
+
+    def __call__(self, *args):
+        return self.init_val
+
+
+@register
+class scalar_int32_op(object):
+    def __init__(self, init_val=0, is_placeholder=False):
+        self.init_val = np.array([init_val]).astype(np.int32)
+        self.is_placeholder = is_placeholder
+
+    def __call__(self, *args):
+        return self.init_val
+
+
+@register
+class bool_greater_compare_op(object):
+    def __init__(self, thres=0):
+        # bool value
+        self.thres = thres
+
+    def __call__(self, *args):
+        if len(args) == 1:
+            value = args[0]
+            return np.array([value[0] > self.thres], dtype=np.bool)
+        else:
+            a, b = args[:2]
+            return np.array([a[0] > b[0]], dtype=np.bool)
+
+
+@register
+class bool_greater_equal_compare_op(object):
+    def __init__(self, thres=0):
+        # bool value
+        self.thres = thres
+
+    def __call__(self, *args):
+        if len(args) == 1:
+            value = args[0]
+            return np.array([value[0] >= self.thres], dtype=np.bool)
+        else:
+            a, b = args[:2]
+            return np.array([a[0] >= b[0]], dtype=np.bool)
+
+
+@register
+class state_greater_equal_compare_op(object):
+    def __init__(self, thres_list=[]):
+        # thres_list: 有序值
+        self.thres_list = thres_list
+
+    def __call__(self, *args):
+        if len(args) == 1:
+            value = args[0]
+            for index in range(len(self.thres_list)-1):
+                if value >= self.thres_list[index] and value < self.thres_list[index+1]:
+                    return np.array([index], dtype=np.int32)
+
+            return np.array([0], dtype=np.int32)
+        else:
+            a, b = args[:2]
+            if float(a) >= float(b):
+                return np.array([1], dtype=np.int32)
+            else:
+                return np.array([0], dtype=np.int32)

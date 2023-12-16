@@ -24,12 +24,14 @@ struct CTensor {
   int64_t* dims;
   T* data;
   bool is_assign_inner;
+  double timestamp;
 
   CTensor(){
     this->dim_size = 0;
     this->dims = NULL;
     this->data = NULL;
     this->is_assign_inner = false;
+    this->timestamp = 0;
   }
   ~CTensor(){
     this->destroy();
@@ -71,7 +73,7 @@ struct CTensor {
     }
 
     this->dim_size = 1;
-    
+
     // dim
     if(is_assign_inner){
       delete[] this->dims;
@@ -100,13 +102,12 @@ struct CTensor {
         return;
       }
     }
-
     this->dim_size = 2;
 
     // dim
     if(is_assign_inner){
       delete[] this->dims;
-    }    
+    }
     this->dims = new int64_t[2];
     this->dims[0] = dim_0; this->dims[1] = dim_1; 
 
@@ -114,10 +115,11 @@ struct CTensor {
     if(is_assign_inner){
       delete[] this->data;
     }
+
     this->data = new T[dim_0*dim_1];
     if(dim_0*dim_1 > 0){
       memset(this->data, 0, sizeof(T)*dim_0*dim_1);
-    }    
+    }
     is_assign_inner = true;
   }
 
@@ -219,7 +221,6 @@ struct CTensor {
     }
     is_assign_inner = true;
   }
-
 };
 
 typedef CTensor<double> CDTensor;

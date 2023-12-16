@@ -9,7 +9,7 @@ class CppOp(object):
     def __init__(self, *args, func_op_name, **kwargs):
         # get cpp func
         self.func_op_name = func_op_name
-        self.func = getattr(extent.func, func_op_name)
+        self.func = getattr(extent.func, func_op_name)()
         self.func_kind = self.func.func.func_kind
 
         # parameter
@@ -61,7 +61,7 @@ class CppOp(object):
         # 绑定输出数据（顺序绑定）
         output_i = 0
         for i, var_type in enumerate(self.func.func.arg_types):
-            if not var_type.is_const and func_args[i] is None and output_i < len(args):
+            if not var_type.is_const and func_args[i] is None:
                 func_args[i] = out_placeholders[output_i]
                 output_i += 1
 
