@@ -84,8 +84,43 @@ def video_dc(*args):
       print('Video dc neef (frame, frame_index) export')
       return
 
-    video_entity = Entity()
-    return DataFrame.read_video(*args).map(lambda x: video_entity(**{key: value for key,value in zip(index, x)}))
+    if len(args) == 1 and isinstance(args[0], str):
+      video_entity = Entity()
+      return DataFrame.read_video(*args).map(lambda x: video_entity(**{key: value for key,value in zip(index, x)}))
+
+    def inner():
+      source_iterator_list = []
+      for video_path in args:
+        source_iterator_list.append(
+          iter(DataFrame.read_video(video_path))
+        )
+
+      source_num = len(source_iterator_list)
+      frame_index = 0
+      global_entity = Entity()
+      while True:
+        source_data = []
+        none_num = 0
+        for source_i in range(source_num):
+          # for a in source_iterator_list[source_i]:
+          #   print(a)
+          try:
+            value = next(source_iterator_list[source_i])
+          except:
+            value = None
+            none_num += 1
+
+          source_data.append(value[0])
+        if none_num == source_num:
+          break
+        
+        source_data += [frame_index]
+        data_dict = {}
+        for ii,vv in zip(index, source_data):
+          data_dict[ii] = vv
+        yield global_entity(**data_dict)
+
+    return DataFrame(inner())
 
 
 @dynamic_dispatch
