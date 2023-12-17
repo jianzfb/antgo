@@ -55,6 +55,7 @@ DEFINE_indicator('data', True, '')
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
 DEFINE_indicator('k8s', True, '')     # k8s 提交
+DEFINE_indicator('a', True, '')       # 配合ls命令使用，例如非活跃的实例
 
 ############## global config ###############
 DEFINE_string('token', None, '')
@@ -257,24 +258,6 @@ def main():
             terms = file_name.split('-')
             if len(terms) == 4:
               pprint(f'{terms[1]}')
-      else:
-        logging.error("Only support ssh remote task submitter (--ssh)")
-    elif sub_action_name == 'activate':
-      # 将选定远程作为默认
-      if args.ssh:
-        if args.ip == '':
-          logging.error('Need set --ip=')
-          return
-        if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')):
-          logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml')
-          return
-
-        shutil.copy(
-          os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml'),
-          os.path.join(os.environ['HOME'], '.config', 'antgo', 'ssh-submit-config.yaml')
-        )
-
-        pprint(f'Activate {args.ip}')
       else:
         logging.error("Only support ssh remote task submitter (--ssh)")
     else:
@@ -523,10 +506,37 @@ def main():
         if not os.path.exists('./checkpoint'):
           os.makedirs('./checkpoint')
         with FileLock('download.lock'):
-          checkpoint_name = args.checkpoint.split('/')[-1]
-          if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
-            file_client_get(args.checkpoint, './checkpoint')
-          args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
+          if '/' in args.checkpoint:
+            # 如果传入的是路径，则尝试直接下载
+            checkpoint_name = args.checkpoint.split('/')[-1]
+            if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+              file_client_get(args.checkpoint, './checkpoint')
+            args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
+          else:
+            # 尝试从实验存储目录中，加载
+            if os.path.exists('./.project.json'):
+              with open('./.project.json', r) as fp:
+                project_info = json.load(fp)
+            
+            checkpoint_name = args.checkpoint
+            if args.exp in project_info['exp']:
+              found_exp_related_info_list = []
+              for exp_info in project_info['exp'][args.exp]:
+                if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
+                  found_exp_related_info_list.append(
+                    exp_info
+                  )
+
+              found_exp_info = None
+              if len(found_exp_related_info_list) > 0:
+                found_exp_info = found_exp_related_info_list[-1]
+
+              if found_exp_info is not None:
+                found_exp_root = found_exp_info['root']
+                file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
+                args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
+
+      logging.info(f'use checkpoint {args.checkpoint}')
 
     if args.resume_from != '':
       if not os.path.exists(args.resume_from):
@@ -534,10 +544,37 @@ def main():
         if not os.path.exists('./checkpoint'):
           os.makedirs('./checkpoint')
         with FileLock('download.lock'):
-          checkpoint_name = args.resume_from.split('/')[-1]
-          if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
-            file_client_get(args.resume_from, './checkpoint')
-          args.resume_from = os.path.join('./checkpoint', checkpoint_name)
+          if '/' in args.resume_from:
+            # 如果传入的是路径，则尝试直接下载
+            checkpoint_name = args.resume_from.split('/')[-1]
+            if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+              file_client_get(args.resume_from, './checkpoint')
+            args.resume_from = os.path.join('./checkpoint', checkpoint_name)
+          else:
+            # 尝试从实验存储目录中，加载
+            if os.path.exists('./.project.json'):
+              with open('./.project.json', r) as fp:
+                project_info = json.load(fp)
+            
+            checkpoint_name = args.resume_from
+            if args.exp in project_info['exp']:
+              found_exp_related_info_list = []
+              for exp_info in project_info['exp'][args.exp]:
+                if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
+                  found_exp_related_info_list.append(
+                    exp_info
+                  )
+
+              found_exp_info = None
+              if len(found_exp_related_info_list) > 0:
+                found_exp_info = found_exp_related_info_list[-1]
+
+              if found_exp_info is not None:
+                found_exp_root = found_exp_info['root']
+                file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
+                args.resume_from = os.path.join('./checkpoint', checkpoint_name)
+
+      logging.info(f'use resume_from {args.checkpoint}')
 
     # 执行任务
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
