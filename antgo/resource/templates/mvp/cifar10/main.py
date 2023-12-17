@@ -109,7 +109,7 @@ def main():
             for i in range(len(data_part_0.data_path_list)):
                 data_record_path = data_part_0.data_path_list[i]
                 if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
-                    try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
+                    try_local_path = f"dataset/{data_stage}/{data_record_path.split('/')[-1]}"
                     data_part_0.data_path_list[i] = try_local_path
 
             if not getattr(data_part_1, 'data_path_list', None):
@@ -117,7 +117,7 @@ def main():
             for i in range(len(data_part_1.data_path_list)):                
                 data_record_path = data_part_1.data_path_list[i]
                 if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
-                    try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
+                    try_local_path = f"dataset/{data_stage}/{data_record_path.split('/')[-1]}"
                     data_part_1.data_path_list[i] = try_local_path
         else:
             if not getattr(getattr(cfg.data, data_stage), 'data_path_list', None):
@@ -125,7 +125,7 @@ def main():
             for i in range(len(getattr(cfg.data, data_stage).data_path_list)):
                 data_record_path = getattr(cfg.data, data_stage).data_path_list[i]
                 if data_record_path.startswith('hdfs') or data_record_path.startswith('http'):
-                    try_local_path = f"dataset-storage/{data_stage}/{data_record_path.split('/')[-1]}"
+                    try_local_path = f"dataset/{data_stage}/{data_record_path.split('/')[-1]}"
                     getattr(cfg.data, data_stage).data_path_list[i] = try_local_path   
 
     # step3 检查补充配置
@@ -141,41 +141,41 @@ def main():
             pseudo_local_path_list = []
             unlabel_local_path_list = []
             cross_domain_local_path_list = []
-            if os.path.exists('dataset-storage'):
-                for sub_folder_name in os.listdir('dataset-storage'):
-                    if not os.path.isdir(os.path.join('dataset-storage', sub_folder_name)):
+            if os.path.exists('dataset'):
+                for sub_folder_name in os.listdir('dataset'):
+                    if not os.path.isdir(os.path.join('dataset', sub_folder_name)):
                         continue
 
                     if sub_folder_name == 'label':
                         file_list = []
-                        for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                        for data_record_file in os.listdir(os.path.join('dataset', sub_folder_name)):
                             # 同一个数据文件，存在*-index和*-tfrecord
                             finding_file = '-'.join(data_record_file.split('-')[:-1])
                             if finding_file not in file_list:
                                 file_list.append(finding_file)
                         
                         for data_record_file in file_list:
-                            label_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
+                            label_local_path_list.append(os.path.join('dataset', sub_folder_name, data_record_file))
                     elif sub_folder_name == 'pseudo-label':
                         file_list = []
-                        for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                        for data_record_file in os.listdir(os.path.join('dataset', sub_folder_name)):
                             # 同一个数据文件，存在*-index和*-tfrecord
                             finding_file = '-'.join(data_record_file.split('-')[:-1])
                             if finding_file not in file_list:
                                 file_list.append(finding_file)
 
                         for data_record_file in file_list:
-                            pseudo_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
+                            pseudo_local_path_list.append(os.path.join('dataset', sub_folder_name, data_record_file))
                     elif sub_folder_name == 'unlabel':
                         file_list = []
-                        for data_record_file in os.listdir(os.path.join('dataset-storage', sub_folder_name)):
+                        for data_record_file in os.listdir(os.path.join('dataset', sub_folder_name)):
                             # 同一个数据文件，存在*-index和*-tfrecord
                             finding_file = '-'.join(data_record_file.split('-')[:-1])
                             if finding_file not in file_list:
                                 file_list.append(finding_file)
 
                         for data_record_file in file_list:
-                            unlabel_local_path_list.append(os.path.join('dataset-storage', sub_folder_name, data_record_file))
+                            unlabel_local_path_list.append(os.path.join('dataset', sub_folder_name, data_record_file))
 
             # step3.2: 数据使用方式扩展
             existed_train_datalist = []
@@ -308,13 +308,13 @@ def main():
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':
         if not nn_args.checkpoint.startswith('/') and not nn_args.checkpoint.startswith('./'):
             checkpoint_file_name = nn_args.checkpoint.split('/')[-1]
-            nn_args.checkpoint = os.path.join('checkpoint-storage', checkpoint_file_name)
+            nn_args.checkpoint = os.path.join('checkpoint', checkpoint_file_name)
             if not os.path.exists(nn_args.checkpoint):
                 logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
     if nn_args.resume_from is not None and nn_args.resume_from != '':
         if not nn_args.resume_from.startswith('/') and not nn_args.resume_from.startswith('./'):
             checkpoint_file_name = nn_args.resume_from.split('/')[-1]
-            nn_args.resume_from = os.path.join('checkpoint-storage', checkpoint_file_name)
+            nn_args.resume_from = os.path.join('checkpoint', checkpoint_file_name)
             if not os.path.exists(nn_args.resume_from):
                 logging.error(f'Checkpoint {nn_args.resume_from} not in local.')
 

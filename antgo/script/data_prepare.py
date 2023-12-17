@@ -26,9 +26,9 @@ def main():
         extra_dataset_train_pseudo_label = extra_config['source'].get('pseudo-label', [])
         extra_dataset_train_unlabel = extra_config['source'].get('unlabel', [])
 
-        # 创建dataset-storage文件夹
-        if not os.path.exists('dataset-storage'):
-            os.mkdir('dataset-storage')
+        # 创建dataset文件夹
+        if not os.path.exists('dataset'):
+            os.mkdir('dataset')
 
         # 有标签数据下载，伪标签数据下载，无标签数据下载
         for data_stage, data_info_list in zip(
@@ -36,15 +36,15 @@ def main():
             [extra_dataset_train_label, extra_dataset_train_pseudo_label, extra_dataset_train_unlabel]):
 
             # 下载相关数据，到训练集群
-            if not os.path.exists(f"dataset-storage/{data_stage}/"):
-                os.makedirs(f"dataset-storage/{data_stage}/")
+            if not os.path.exists(f"dataset/{data_stage}/"):
+                os.makedirs(f"dataset/{data_stage}/")
 
             for data_info in data_info_list:
                 if data_info['status'] and data_info['address'] != '':
                     if data_info['address'].startswith('/'):
                         # 本地路径
                         data_folder = os.path.dirname(data_info['address'])
-                        target_data_folder = f"dataset-storage/{data_stage}"
+                        target_data_folder = f"dataset/{data_stage}"
 
                         check_prefix = data_info['address'].split('/')[-1]
                         for file_name in os.listdir(data_folder):
@@ -57,7 +57,7 @@ def main():
                     else:
                         check_prefix = data_info['address'].split('/')[-1]
                         is_existed = False
-                        for file_name in os.listdir(f"dataset-storage/{data_stage}"):
+                        for file_name in os.listdir(f"dataset/{data_stage}"):
                             if file_name.startswith(check_prefix):
                                 is_existed = True
                                 break
@@ -67,7 +67,7 @@ def main():
 
                         if not data_info['address'].endswith('*'):
                             data_info['address'] += '*'
-                        status = file_client_get(data_info['address'], f"dataset-storage/{data_stage}")
+                        status = file_client_get(data_info['address'], f"dataset/{data_stage}")
                         if not status:
                             logging.error(f'Download {data_info["address"]} error.')
 
@@ -86,9 +86,9 @@ def main():
         nn_args.config = config_file_path
 
     if os.path.exists(nn_args.config):
-        # 创建dataset-storage文件夹
-        if not os.path.exists('dataset-storage'):
-            os.mkdir('dataset-storage')
+        # 创建dataset文件夹
+        if not os.path.exists('dataset'):
+            os.mkdir('dataset')
 
         cfg = Config.fromfile(nn_args.config)
         for data_stage in ['train', 'val', 'test']:
@@ -97,14 +97,14 @@ def main():
             if getattr(getattr(cfg.data, data_stage), 'data_path_list', None) is None:
                 continue
 
-            if not os.path.exists(f"dataset-storage/{data_stage}/"):
-                os.makedirs(f"dataset-storage/{data_stage}/")
+            if not os.path.exists(f"dataset/{data_stage}/"):
+                os.makedirs(f"dataset/{data_stage}/")
 
             for data_record_path in getattr(cfg.data, data_stage).data_path_list:
                 if data_record_path.startswith('/') or data_record_path.startswith('./'):
                     # 本地路径
                     data_folder = os.path.dirname(data_record_path)
-                    target_data_folder = f"dataset-storage/{data_stage}"
+                    target_data_folder = f"dataset/{data_stage}"
 
                     check_prefix = data_record_path.split('/')[-1]
                     for file_name in os.listdir(data_folder):
@@ -117,7 +117,7 @@ def main():
                 else:
                     check_prefix = data_record_path.split('/')[-1]
                     is_existed = False
-                    for file_name in os.listdir(f"dataset-storage/{data_stage}"):
+                    for file_name in os.listdir(f"dataset/{data_stage}"):
                         if file_name.startswith(check_prefix):
                             is_existed = True
                             break
@@ -127,30 +127,30 @@ def main():
 
                     if not data_record_path.endswith('*'):
                         data_record_path += '*'
-                    status = file_client_get(data_record_path, f"dataset-storage/{data_stage}")
+                    status = file_client_get(data_record_path, f"dataset/{data_stage}")
                     if not status:
                         logging.error(f'Download {data_record_path} error.')
 
-    # 检查dataset-storage是否为空
-    if os.listdir('dataset-storage') == 0:
-        os.system('rm -rf dataset-storage')
+    # 检查dataset是否为空
+    if os.listdir('dataset') == 0:
+        os.system('rm -rf dataset')
 
     # 下载checkpoint到本地
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':
-        if not os.path.exists('checkpoint-storage'):
-            os.mkdir('checkpoint-storage')
+        if not os.path.exists('checkpoint'):
+            os.mkdir('checkpoint')
 
         if not nn_args.checkpoint.startswith('/') and not nn_args.checkpoint.startswith('./'):
-            status = file_client_get(nn_args.checkpoint, f"checkpoint-storage")
+            status = file_client_get(nn_args.checkpoint, f"checkpoint")
             if not status:
                 logging.error(f'Download checkpoint fail.')
 
     if nn_args.resume_from is not None and nn_args.resume_from != '':
-        if not os.path.exists('checkpoint-storage'):
-            os.mkdir('checkpoint-storage')
+        if not os.path.exists('checkpoint'):
+            os.mkdir('checkpoint')
 
         if not nn_args.checkpoint.startswith('/') and not  nn_args.checkpoint.startswith('./'):
-            status = file_client_get(nn_args.resume_from, f"checkpoint-storage")
+            status = file_client_get(nn_args.resume_from, f"checkpoint")
             if not status:
                 logging.error(f'Download checkpoint fail.')
 

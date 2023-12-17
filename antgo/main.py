@@ -501,23 +501,27 @@ def main():
 
     # 下载依赖checkpoint
     if args.checkpoint != '':
+      print(args.checkpoint)
       if not os.path.exists(args.checkpoint):
         # 非本地有效路径
         if not os.path.exists('./checkpoint'):
           os.makedirs('./checkpoint')
+
         with FileLock('download.lock'):
           if '/' in args.checkpoint:
             # 如果传入的是路径，则尝试直接下载
             checkpoint_name = args.checkpoint.split('/')[-1]
             if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+              logging.info('downling checkpoint...')
+              logging.info(args.checkpoint)              
               file_client_get(args.checkpoint, './checkpoint')
             args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
           else:
             # 尝试从实验存储目录中，加载
             if os.path.exists('./.project.json'):
-              with open('./.project.json', r) as fp:
+              with open('./.project.json', 'r') as fp:
                 project_info = json.load(fp)
-            
+
             checkpoint_name = args.checkpoint
             if args.exp in project_info['exp']:
               found_exp_related_info_list = []
@@ -533,10 +537,15 @@ def main():
 
               if found_exp_info is not None:
                 found_exp_root = found_exp_info['root']
+                logging.info('downling checkpoint...')
+                logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
                 file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
                 args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
 
       logging.info(f'use checkpoint {args.checkpoint}')
+      if not os.path.exists(args.checkpoint):
+        logging.error(f'Dont exist {args.checkpoint}, exit.')
+        return
 
     if args.resume_from != '':
       if not os.path.exists(args.resume_from):
@@ -548,14 +557,16 @@ def main():
             # 如果传入的是路径，则尝试直接下载
             checkpoint_name = args.resume_from.split('/')[-1]
             if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+              logging.info('downling checkpoint...')
+              logging.info(args.resume_from)              
               file_client_get(args.resume_from, './checkpoint')
             args.resume_from = os.path.join('./checkpoint', checkpoint_name)
           else:
             # 尝试从实验存储目录中，加载
             if os.path.exists('./.project.json'):
-              with open('./.project.json', r) as fp:
+              with open('./.project.json', 'r') as fp:
                 project_info = json.load(fp)
-            
+
             checkpoint_name = args.resume_from
             if args.exp in project_info['exp']:
               found_exp_related_info_list = []
@@ -571,10 +582,15 @@ def main():
 
               if found_exp_info is not None:
                 found_exp_root = found_exp_info['root']
+                logging.info('downling checkpoint...')
+                logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
                 file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
                 args.resume_from = os.path.join('./checkpoint', checkpoint_name)
 
-      logging.info(f'use resume_from {args.checkpoint}')
+      logging.info(f'use resume_from {args.resume_from}')
+      if not os.path.exists(args.resume_from):
+        logging.error(f'Dont exist {args.resume_from}, exit.')
+        return
 
     # 执行任务
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
