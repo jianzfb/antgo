@@ -9,5 +9,3 @@ project=$7
 
 # 执行
 docker run --rm -d --shm-size="50G" -w /tiger -v /home/${username}/${project}:/tiger -v /data:/dataset --gpus all --privileged ${image} sh -c "cd /tiger && $command"
-# 清理
-# rm -rf /home/${username}/${project}

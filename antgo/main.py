@@ -118,7 +118,7 @@ def main():
     if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
       os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
-	# 位置优先选择/data/, /HOME/
+	  # 位置优先选择/data/, /HOME/
     config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
     if not os.path.exists('/data'):
       config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
@@ -469,12 +469,12 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'        
-        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+        ssh_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
       else:
         # 自定义脚本提交
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'          
-        custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+        custom_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
 
       # 清理临时存储信息
       if os.path.exists('./aligo.json'):
@@ -537,9 +537,11 @@ def main():
 
               if found_exp_info is not None:
                 found_exp_root = found_exp_info['root']
-                logging.info('downling checkpoint...')
-                logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
-                file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
+                if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+                  logging.info('downling checkpoint...')
+                  logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
+                  file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
+
                 args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
 
       logging.info(f'use checkpoint {args.checkpoint}')
