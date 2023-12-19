@@ -18,7 +18,7 @@ from filelock import FileLock
 __all__ = ['LFW']
 
 class LFW(Dataset):
-  def __init__(self, train_or_test, dir=None, ext_params=None):
+  def __init__(self, train_or_test, dir=None, ext_params=None, **kwargs):
     super(LFW, self).__init__(train_or_test, dir, ext_params)
     assert(train_or_test in ['train', 'val', 'test'])
     lock = FileLock('DATASET.lock')
@@ -44,6 +44,9 @@ class LFW(Dataset):
 
     # 1.step data folder (wild or align)
     self._data_folder = os.path.join(self.dir, 'lfw-deepfunneled')
+
+    # 扩展size
+    self.ext_size = kwargs.get('ext_size', 70)
 
     # 2.step data files
     self._persons_list = []
@@ -153,14 +156,15 @@ class LFW(Dataset):
 
       cx = same_person_a_image.shape[1]/2
       cy = same_person_a_image.shape[0]/2
-      left_t_x = int(cx - 80)
-      left_t_y = int(cy - 80)
-      
-      right_b_x = int(cx + 80)
-      right_b_y = int(cy + 80)
-      
-      crop_a_image = same_person_a_image[left_t_y:right_b_y, left_t_x:right_b_x]
-      crop_b_image = same_person_b_image[left_t_y:right_b_y, left_t_x:right_b_x]
+      left_t_x = int(cx - self.ext_size)
+      left_t_y = int(cy - self.ext_size)
+
+      right_b_x = int(cx + self.ext_size)
+      right_b_y = int(cy + self.ext_size)
+
+      crop_a_image = same_person_a_image[left_t_y:right_b_y, left_t_x:right_b_x].copy()
+      crop_b_image = same_person_b_image[left_t_y:right_b_y, left_t_x:right_b_x].copy()
+
       return crop_a_image, {
         'issame': 1,
         'image_2': crop_b_image,
@@ -178,14 +182,14 @@ class LFW(Dataset):
 
       cx = diff_person_a_image.shape[1]/2
       cy = diff_person_a_image.shape[0]/2
-      left_t_x = int(cx - 80)
-      left_t_y = int(cy - 80)
-      
-      right_b_x = int(cx + 80)
-      right_b_y = int(cy + 80)
-      
-      crop_a_image = diff_person_a_image[left_t_y:right_b_y, left_t_x:right_b_x]
-      crop_b_image = diff_person_b_image[left_t_y:right_b_y, left_t_x:right_b_x]      
+      left_t_x = int(cx - self.ext_size)
+      left_t_y = int(cy - self.ext_size)
+
+      right_b_x = int(cx + self.ext_size)
+      right_b_y = int(cy + self.ext_size)
+
+      crop_a_image = diff_person_a_image[left_t_y:right_b_y, left_t_x:right_b_x].copy()
+      crop_b_image = diff_person_b_image[left_t_y:right_b_y, left_t_x:right_b_x].copy()
       return crop_a_image, {
         'issame': 0,
         'image_2': crop_b_image,

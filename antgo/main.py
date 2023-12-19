@@ -118,7 +118,7 @@ def main():
     if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
       os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
 
-	# 位置优先选择/data/, /HOME/
+	  # 位置优先选择/data/, /HOME/
     config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
     if not os.path.exists('/data'):
       config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
@@ -469,12 +469,12 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'        
-        ssh_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+        ssh_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
       else:
         # 自定义脚本提交
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'          
-        custom_submit_process_func(args.project, sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+        custom_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
 
       # 清理临时存储信息
       if os.path.exists('./aligo.json'):
@@ -501,23 +501,27 @@ def main():
 
     # 下载依赖checkpoint
     if args.checkpoint != '':
+      print(args.checkpoint)
       if not os.path.exists(args.checkpoint):
         # 非本地有效路径
         if not os.path.exists('./checkpoint'):
           os.makedirs('./checkpoint')
+
         with FileLock('download.lock'):
           if '/' in args.checkpoint:
             # 如果传入的是路径，则尝试直接下载
             checkpoint_name = args.checkpoint.split('/')[-1]
             if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+              logging.info('downling checkpoint...')
+              logging.info(args.checkpoint)              
               file_client_get(args.checkpoint, './checkpoint')
             args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
           else:
             # 尝试从实验存储目录中，加载
             if os.path.exists('./.project.json'):
-              with open('./.project.json', r) as fp:
+              with open('./.project.json', 'r') as fp:
                 project_info = json.load(fp)
-            
+
             checkpoint_name = args.checkpoint
             if args.exp in project_info['exp']:
               found_exp_related_info_list = []
@@ -533,10 +537,17 @@ def main():
 
               if found_exp_info is not None:
                 found_exp_root = found_exp_info['root']
-                file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
+                if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+                  logging.info('downling checkpoint...')
+                  logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
+                  file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
+
                 args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
 
       logging.info(f'use checkpoint {args.checkpoint}')
+      if not os.path.exists(args.checkpoint):
+        logging.error(f'Dont exist {args.checkpoint}, exit.')
+        return
 
     if args.resume_from != '':
       if not os.path.exists(args.resume_from):
@@ -548,14 +559,16 @@ def main():
             # 如果传入的是路径，则尝试直接下载
             checkpoint_name = args.resume_from.split('/')[-1]
             if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+              logging.info('downling checkpoint...')
+              logging.info(args.resume_from)              
               file_client_get(args.resume_from, './checkpoint')
             args.resume_from = os.path.join('./checkpoint', checkpoint_name)
           else:
             # 尝试从实验存储目录中，加载
             if os.path.exists('./.project.json'):
-              with open('./.project.json', r) as fp:
+              with open('./.project.json', 'r') as fp:
                 project_info = json.load(fp)
-            
+
             checkpoint_name = args.resume_from
             if args.exp in project_info['exp']:
               found_exp_related_info_list = []
@@ -571,10 +584,15 @@ def main():
 
               if found_exp_info is not None:
                 found_exp_root = found_exp_info['root']
+                logging.info('downling checkpoint...')
+                logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
                 file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
                 args.resume_from = os.path.join('./checkpoint', checkpoint_name)
 
-      logging.info(f'use resume_from {args.checkpoint}')
+      logging.info(f'use resume_from {args.resume_from}')
+      if not os.path.exists(args.resume_from):
+        logging.error(f'Dont exist {args.resume_from}, exit.')
+        return
 
     # 执行任务
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp

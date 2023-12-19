@@ -105,7 +105,7 @@ class Exporter(object):
                 if isinstance(std_values, list) or isinstance(std_values, tuple):
                     std_values = ','.join(f'{value}' for value in std_values)
                 print(f'using mean_values {mean_values}, std_values {std_values}')
-                if self.cfg.export.deploy.quantize:
+                if self.cfg.export.deploy.get('quantize', False):
                     # int8
                     # 生成校准数据
                     if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):

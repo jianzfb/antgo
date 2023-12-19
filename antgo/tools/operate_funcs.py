@@ -49,7 +49,6 @@ def stop_ssh_running(action_name, id):
 def ls_ssh_running(exp=None, is_a=False):
     if not os.path.exists('.project.json'):
         print('Not found .project.json')
-        return
 
     exp_run_info = []
     if os.path.exists('.project.json'):
