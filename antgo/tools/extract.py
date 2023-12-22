@@ -28,7 +28,7 @@ def extract_from_videos(video_folder, target_folder, frame_rate=10, max_size=0, 
 
     # 不支持多级目录
     # 抽帧过程
-    support_video_ext = ['mp4', 'avi', 'ts']
+    support_video_ext = ['mp4', 'avi', 'ts', 'mov']
     frame_height = 0
     frame_width = 0
     for video_file_name in os.listdir(video_folder):
