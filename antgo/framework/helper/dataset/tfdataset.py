@@ -51,10 +51,10 @@ def _sample_iterators(iterators, ratios, infinite, remain_sample_num):
     else:
         ext_iterators = [_cycle(iterator) for iterator in iterators]
         iterators = [iterator() for iterator in iterators]
-    
+
     ratios = np.array(ratios)
     ratios = ratios / ratios.sum()
-        
+
     in_remain_sample_mode = False
     while iterators or in_remain_sample_mode:
         try:
@@ -134,6 +134,12 @@ class TFDataset(torch.utils.data.IterableDataset):
         'gzip' or None.
 
     """
+    class _InnerWorkerInfo(object):
+        def __init__(self):
+            self.id = 0
+            self.num_workers = 1
+            self.seed = 0
+
     def __init__(self,
                  data_folder,
                  ratios: typing.Union[typing.List[float], None]=None,
@@ -305,7 +311,7 @@ class TFDataset(torch.utils.data.IterableDataset):
                 j -= data[i-1]
 
         return select_list
-    
+
     def _fair_select(self, num_samples_list, world_size):
         select_index_list_in_world = []
 
@@ -337,17 +343,17 @@ class TFDataset(torch.utils.data.IterableDataset):
     def _arrange(self, sample, fields, alias):
         if fields is None:
             return sample      
-          
+
         if type(fields[0]) == list or type(fields[0]) == tuple:
             warp_ins = []
             for alia, field in zip(alias, fields):
                 one_ins = {}
                 for aa, ff in zip(alia, field):
                     one_ins[aa] = sample[ff]
-                
+
                 warp_ins.append(one_ins)
             return warp_ins
-        
+
         warp_ins = {}
         for alia, field in zip(alias, fields):
             warp_ins[alia] = sample[field]
@@ -415,6 +421,8 @@ class TFDataset(torch.utils.data.IterableDataset):
     def __iter__(self):
         # 获得线程信息
         worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            worker_info = TFDataset._InnerWorkerInfo()
 
         # 每个epoch后，会重新调用__iter__
         # WARN: 对于多卡训练环境，在每次epoch时，重新编排数据文件的分配
@@ -433,7 +441,7 @@ class TFDataset(torch.utils.data.IterableDataset):
             # 每个线程，应该拥有相同的shuffle
             select_index_list = copy.deepcopy(local_select_index_list_in_world[self.rank])
             np.random.shuffle(select_index_list)
-            
+
             # 基于选择的索引，获得具体样本数量列表
             use_data_path_num_list = [self.num_samples_list[i] for i in select_index_list]
             real_num_samples = np.sum(use_data_path_num_list)
@@ -456,17 +464,19 @@ class TFDataset(torch.utils.data.IterableDataset):
             shard = worker_info.id, worker_info.num_workers
             np.random.seed(worker_info.seed % np.iinfo(np.uint32).max)
             if worker_info.num_workers != 1:
-                expect_target_num = \
-                    self.num_samples * (worker_info.id+1) // worker_info.num_workers - \
-                    self.num_samples * (worker_info.id) // worker_info.num_workers
-
-                real_target_num = real_num_samples * (worker_info.id+1) // worker_info.num_workers - \
-                    real_num_samples * (worker_info.id) // worker_info.num_workers
-
+                expect_target_num = ((int)(self.num_samples) + (int)(2*worker_info.num_workers - 1))//worker_info.num_workers
+                real_target_num = 0
+                for select_i in select_index_list:
+                    select_num_sample = self.num_samples_list[select_i]
+                    real_target_num += \
+                        (select_num_sample * (worker_info.id+1)) // worker_info.num_workers - \
+                            (select_num_sample * (worker_info.id)) // worker_info.num_workers
                 remain_sample_num = expect_target_num - real_target_num
+            else:
+                remain_sample_num = self.num_samples - real_num_samples
 
             # debug
-            pprint(f'Rank {self.rank} thread {worker_info.id} face remain sample_num {remain_sample_num}')
+            pprint(f'Rank {self.rank} thread {worker_info.id} face remain sample_num {remain_sample_num} (expect target num {expect_target_num})')
         else:
             shard = None
 
@@ -585,15 +595,30 @@ class TFDataset(torch.utils.data.IterableDataset):
 
 # print('sdf')
 
-# abcd = TFDataset(data_path_list=[
-#     '/root/workspace/dataset/hand-cls/yongchun_hand_gesture-00000-of-00003-tfrecord',
-#     '/root/workspace/dataset/hand-cls/yongchun_hand_gesture-00001-of-00003-tfrecord',
-#     '/root/workspace/dataset/hand-cls/yongchun_hand_gesture-00002-of-00003-tfrecord',
-#     '/root/workspace/dataset/hand-cls/yongchun-cls-23-00000-of-00001-tfrecord']
+# abcd = TFDataset(
+#     data_folder=[
+# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
+# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
+# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
+# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
+# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
+#             "/workspace/dataset/beta-office-pole-priv",
+#             "/workspace/dataset/beta-office-pole-priv",
+#             "/workspace/dataset/beta-office-pole-priv",
+#             "/workspace/dataset/beta-office-pole-priv",
+#             "/workspace/dataset/beta-office-pole-priv"
+#         ],
+#     description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
+#     inputs_def=dict(
+#         fields = ["image", 'bboxes', 'labels', 'image_meta']
+#     ),
+#     shuffle_queue_size=4096
 # )
-# print('sd')
-# select_all = abcd._fair_select([2,4,6,7,8,5], 3)
-# print(select_all)
+# # print('sd')
+# # select_all = abcd._fair_select([2,4,6,7,8,5], 3)
+# # print(select_all)
 
-# for ii in select_all:
-#     print(np.sum(np.array([2,4,6,7,8,5])[ii]))
+# count = 0
+# for ii in abcd:
+#     count += 1
+#     print(count)
