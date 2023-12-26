@@ -3,6 +3,7 @@ import logging
 import subprocess
 import yaml
 import json
+import pandas as pd
 
 
 def stop_ssh_running(action_name, id):
@@ -56,7 +57,7 @@ def ls_ssh_running(exp=None, is_a=False):
             project_info = json.load(fp)
 
         for exp_name, exp_info_list in project_info['exp'].items():
-            exp_run_info.extend([(info['id'], exp_name, info['ip'], info['root'], info['create_time']) for info in exp_info_list])
+            exp_run_info.extend([(info['id'], exp_name, info['ip'], info['root'], info['create_time'], info['config']) for info in exp_info_list])
 
     display_info = {}
     for file_name in os.listdir(os.path.join(os.environ['HOME'], '.config', 'antgo')):
@@ -102,12 +103,14 @@ def ls_ssh_running(exp=None, is_a=False):
             exp_name = ''
             exp_root = ''
             exp_create_time = ''
+            exp_config = ''
             for exp_run_id_and_name in exp_run_info:
                 if (exp_run_id_and_name[2] == register_ip) and (exp_run_id_and_name[0].startswith(container_id)):
                     is_found = True
                     exp_name = exp_run_id_and_name[1]
                     exp_root = exp_run_id_and_name[3]
                     exp_create_time = exp_run_id_and_name[4]
+                    exp_config = exp_run_id_and_name[5]
                     break
 
             if is_found:
@@ -117,7 +120,8 @@ def ls_ssh_running(exp=None, is_a=False):
                         'container_id': container_id,
                         'name': exp_name,
                         'create_time': exp_create_time,
-                        'root': exp_root
+                        'root': exp_root,
+                        'config': exp_config
                     }
                 )
 
@@ -143,7 +147,8 @@ def ls_ssh_running(exp=None, is_a=False):
                             'container_id': exp_run_id_and_name[0],
                             'name': exp_run_id_and_name[1],
                             'create_time': exp_run_id_and_name[4],
-                            'root': exp_run_id_and_name[3]
+                            'root': exp_run_id_and_name[3],
+                            'config': exp_run_id_and_name[5]
                         }
                     )
 
@@ -153,13 +158,33 @@ def ls_ssh_running(exp=None, is_a=False):
 
         # 时间排序
         sorted(record_info, key=lambda ff: ff['create_time']) 
+        
+        if len(record_info) == 0:
+            continue
 
         # 显示
+        display_info_format = {
+            "status": [],
+            "id": [],
+            "name": [],
+            "config": [],
+            "create_time": [],
+            "root": []
+        }
+
         for exp_info in record_info:
+            display_info_format['id'].append(exp_info["container_id"])
+            display_info_format['name'].append(exp_info["name"])
+            display_info_format['config'].append(exp_info["config"])
+            display_info_format['create_time'].append(exp_info["create_time"])
+            display_info_format['root'].append(exp_info["root"])            
             if exp_info['status'] == 'running':
-                print(f'  (*)id {exp_info["container_id"]}, name {exp_info["name"]}, create_time {exp_info["create_time"]}, root {exp_info["root"]}')
+                display_info_format['status'].append('*')
             else:
-                print(f'  id {exp_info["container_id"]}, name {exp_info["name"]}, create_time {exp_info["create_time"]}, root {exp_info["root"]}')
+                display_info_format['status'].append('-')
+
+        df = pd.DataFrame(display_info_format)
+        print(df.to_string(index=False))
 
 
 def log_ssh_running(action_name, id):

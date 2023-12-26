@@ -13,12 +13,12 @@ class SegMIOU(object):
     
     def keys(self):
         return {'pred': ['pred_segments'], 'gt':['segments']}
-    
+
     def _fast_hist(self, label_pred, label_true):
         # 找出标签中需要计算的类别,去掉了背景
         mask = (label_true >= 0) & (label_true < self.class_num) & (label_true != self.ignore_val)
 
-        # # np.bincount计算了从0到n**2-1这n**2个数中每个数出现的次数，返回值形状(n, n)
+        # np.bincount计算了从0到n**2-1这n**2个数中每个数出现的次数，返回值形状(n, n)
         hist = np.bincount(
             self.class_num * label_true[mask].astype(np.int) +
             label_pred[mask].astype(np.int), minlength=self.class_num ** 2).reshape(self.class_num, self.class_num)

@@ -106,9 +106,6 @@ class Tester(object):
                 broadcast_buffers=False)
 
     def evaluate(self):
-        # 添加运行标记
-        running_flag(self.cfg.get('root', None))
-
         rank, _ = get_dist_info()        
         json_file = './result.json'
         if self.work_dir is not None and rank == 0:
@@ -152,6 +149,3 @@ class Tester(object):
             if self.work_dir is not None and rank == 0:
                 with open(json_file, 'w') as fp:
                     json.dump(metric_dict, fp)
-
-        # 添加完成标记
-        finish_flag(self.cfg.get('root', None))
