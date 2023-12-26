@@ -308,15 +308,17 @@ def main():
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':
         if not nn_args.checkpoint.startswith('/') and not nn_args.checkpoint.startswith('./'):
             checkpoint_file_name = nn_args.checkpoint.split('/')[-1]
-            nn_args.checkpoint = os.path.join('checkpoint', checkpoint_file_name)
             if not os.path.exists(nn_args.checkpoint):
-                logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
+                nn_args.checkpoint = os.path.join('checkpoint', checkpoint_file_name)
+                if not os.path.exists(nn_args.checkpoint):
+                    logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
     if nn_args.resume_from is not None and nn_args.resume_from != '':
         if not nn_args.resume_from.startswith('/') and not nn_args.resume_from.startswith('./'):
             checkpoint_file_name = nn_args.resume_from.split('/')[-1]
-            nn_args.resume_from = os.path.join('checkpoint', checkpoint_file_name)
             if not os.path.exists(nn_args.resume_from):
-                logging.error(f'Checkpoint {nn_args.resume_from} not in local.')
+                nn_args.resume_from = os.path.join('checkpoint', checkpoint_file_name)
+                if not os.path.exists(nn_args.resume_from):
+                    logging.error(f'Checkpoint {nn_args.resume_from} not in local.')
 
     # step5 添加root (运行时，输出结果保存的根目录地址)
     cfg.root = nn_args.root if nn_args.root != '' else './output/'

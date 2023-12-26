@@ -86,6 +86,7 @@ DEFINE_int("max-size", 0, "")
 DEFINE_float("ext-ratio", 0.35, "")
 DEFINE_int("ext-size", 0, "")
 DEFINE_indicator("ignore-incomplete", True, "")
+DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使用）
 
 #############################################
 DEFINE_nn_args()
@@ -468,7 +469,8 @@ def main():
         # ssh提交
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-        sys_argv_cmd = f'antgo {sys_argv_cmd}'        
+        sys_argv_cmd = f'antgo {sys_argv_cmd}'
+
         ssh_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
       else:
         # 自定义脚本提交
@@ -652,6 +654,9 @@ def main():
         if args.diff_seed:
           command_str += f' --diff-seed'
         os.system(command_str)
+
+      if args.clear:
+        os.system("rm -rf ./")
     elif action_name == 'activelearning':
       # 为主动学习实验，创建存储root
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
@@ -698,6 +703,9 @@ def main():
           command_str += f' --max-epochs={args.max_epochs}'
 
         os.system(command_str)
+
+      if args.clear:
+        os.system("rm -rf ./")
     elif action_name == 'eval':
       # 为评估实验，创建存储root
       if args.checkpoint is None or args.checkpoint == '':
@@ -725,12 +733,18 @@ def main():
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
+
+      if args.clear:
+        os.system("rm -rf ./")
     elif action_name == 'export':
       if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
         return
   
       os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config}')
+
+      if args.clear:
+        os.system("rm -rf ./")
   else:
     if action_name == 'create':
       if sub_action_name == 'project':

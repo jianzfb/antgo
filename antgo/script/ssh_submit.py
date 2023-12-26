@@ -232,25 +232,31 @@ def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_nu
         with open('./extra-config.py', 'w') as fp:
             json.dump(extra_config, fp)    
         sys_argv += " --extra-config=./extra-config.py"
+    
+    # 自动添加清理命令
+    sys_argv += "--clear"
 
     # 执行提交命令
     if password == '':
         password = 'default'
 
-    launch_script = ssh_config_info['script']
+    launch_script = ssh_config_info['script'] if 'script' in ssh_config_info else ''
     if launch_script != '':
         sys_argv = launch_script
 
     image_name = 'antgo-env:latest' # 基础镜像
-    launch_image = ssh_config_info['image']
+    launch_image = ssh_config_info['image'] if 'image' in ssh_config_info else ''
     if launch_image != '':
         image_name = launch_image
     if 'image' in project_info and project_info['image'] != '':
         image_name = project_info['image']
 
+    print(f'Use image {image_name}')
     remote_local_folder_name = create_time
     submit_cmd = f'bash {submit_script} {username} {password} {ip} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {remote_local_folder_name}'
+
     # 解析提交后的输出，并解析出container id
+    print(submit_cmd)
     ret = subprocess.Popen(submit_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     content = ret.stdout.read()
     content = content.decode('utf-8')
