@@ -92,7 +92,7 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 DEFINE_nn_args()
 
 action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web']
-action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric']
 
 
 def main():
@@ -101,6 +101,9 @@ def main():
   
   # 备份脚本参数
   sys_argv_cp = sys.argv
+  if len(sys.argv) < 2:
+    print('Use antgo help, show help list.')
+    return
 
   # 解析参数
   action_name = sys.argv[1]
@@ -111,6 +114,9 @@ def main():
     sub_action_name = sys.argv[2]
     sys.argv = [sys.argv[0]] + sys.argv[3:]
   args = parse_args()
+
+  if args.ip != '':
+    args.ssh = True
 
   ######################################### 配置文件操作 ################################################
   # 检查配置文件是否存在
@@ -389,6 +395,42 @@ def main():
 
     return
 
+  #####################################   支持评估结果 ls  #############################################
+  if action_name == 'metric':
+    from antgo.tools.display_funcs import table_show
+    if sub_action_name == 'ls':
+      if os.path.exists('./.project.json'):
+        with open('./.project.json', 'r') as fp:
+          project_info = json.load(fp)
+
+      logging.info(f'list model metric for {args.config}')
+      show_exp_metric_list = []
+      for exp_name, exp_info_list in project_info['exp'].items():
+        for exp_info in exp_info_list:
+          if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
+            if 'metric' in exp_info:
+              for metric_info in exp_info['metric']:
+                show_exp_metric_list.append(
+                  {
+                    'name': exp_name,
+                    'create_time': exp_info['create_time'],
+                    'eval_time': metric_info['time'],
+                    'root': exp_info['root'],
+                    'checkpoint': metric_info['checkpoint'].split('/')[-1],
+                    'metric': str(metric_info['metric'])
+                  }
+                )
+
+      if len(show_exp_metric_list) == 0:
+        logging.warn("Dont have exp metric")
+        return
+
+      table_show(show_exp_metric_list, ['name', 'create_time', 'eval_time', 'root', 'checkpoint', 'metric'])
+    else:
+      logging.error("Only support metric ls")
+
+    return
+
   ######################################### ROOT 设置 #################################################
   if args.root is None or args.root == '':
     print('Using default root address ali:///exp')
@@ -429,25 +471,54 @@ def main():
 
       # 基于实验名称和时间戳修改实验root
       now_time = time.time()
-      args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
 
       with open('./.project.json', 'r') as fp:
         project_info = json.load(fp)
 
-      project_info['image'] = args.image      # 镜像名称
-      if args.exp not in project_info['exp']:
-        project_info['exp'][args.exp] = []
+      if action_name in ['train', 'activelearning']:
+        # train, activelearning
+        # 项目基本信息
+        project_info['image'] = args.image      # 镜像名称
+        if args.exp not in project_info['exp']:
+          project_info['exp'][args.exp] = []
 
-      # 配置新增实验信息
-      project_info['exp'][args.exp].append({
-        'id': '',
-        'ip': '',
-        'create_time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)),
-        'config': args.config,
-        'root': args.root
-      })
-      with open('./.project.json', 'w') as fp:
-        json.dump(project_info,fp)
+        # root 地址
+        args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
+
+        # 配置新增实验信息
+        project_info['exp'][args.exp].append({
+          'id': '',
+          'ip': '',
+          'create_time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)),
+          'config': args.config,
+          'root': args.root
+        })
+        with open('./.project.json', 'w') as fp:
+          json.dump(project_info,fp)
+      else:
+        # eval, export
+        # 匹配实验记录（exp, config）
+        # (1) root 匹配
+        # (2) 默认匹配最新实验
+        if args.exp not in project_info['exp']:
+          logging.error(f'{args.exp} not in project')
+          return
+
+        if len(project_info['exp'][args.exp]) == 0:
+          logging.error(f'{args.exp} dont have any record in project')
+          return
+
+        found_exp_info = None
+        for exp_info in project_info['exp'][args.exp]:
+          if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
+            continue
+
+          if exp_info['root'] == args.root:
+            found_exp_info = exp_info
+            break
+
+        if found_exp_info is None:
+          args.root = project_info['exp'][args.exp][-1]['root']
 
       filter_sys_argv_cp = []
       for t in sys_argv_cp:
@@ -491,10 +562,7 @@ def main():
         shutil.copy('./aligo.json', Path.home().joinpath('.aligo'))
       ali = Aligo()
 
-    if args.exp not in args.root:
-      # root需要将exp加入点到root中
-      args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
-
+    now_time = time.time()
     # 实验依赖资源（允许远程存储）
     if args.checkpoint is None:
       args.checkpoint = ''
@@ -600,9 +668,30 @@ def main():
     auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
     script_folder = os.path.join(os.path.dirname(__file__), 'script')
     if action_name == 'train':
+      if args.exp not in args.root:
+        # root需要将exp加入点到root中
+        args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
+
       # 为训练实验，创建存储root
       file_client_mkdir(args.root)
 
+      # 配置工程文件
+      with open('./.project.json', 'r') as fp:
+        project_info = json.load(fp)
+      if args.exp not in project_info['exp']:
+        project_info['exp'][args.exp] = []
+      project_info['exp'][args.exp].append({
+        'id': '',
+        'ip': '',
+        'create_time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)),
+        'config': args.config,
+        'root': args.root
+      })
+
+      with open('./.project.json', 'w') as fp:
+        json.dump(project_info,fp)
+
+      # 训练过程
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
@@ -658,6 +747,10 @@ def main():
       if args.clear:
         os.system("rm -rf ./")
     elif action_name == 'activelearning':
+      if args.exp not in args.root:
+        # root需要将exp加入点到root中
+        args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
+
       # 为主动学习实验，创建存储root
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
@@ -707,32 +800,85 @@ def main():
       if args.clear:
         os.system("rm -rf ./")
     elif action_name == 'eval':
-      # 为评估实验，创建存储root
       if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
         return
 
+      # 获得实验root
+      if args.exp not in args.root:
+        with open('./.project.json', 'r') as fp:
+          project_info = json.load(fp)
+        if args.exp not in project_info['exp']:
+          logging.error(f'{args.exp} not in project')
+          return
+
+        if len(project_info['exp'][args.exp]) == 0:
+          logging.error(f'{args.exp} dont have any record in project')
+          return
+
+        found_exp_info = None
+        for exp_info in project_info['exp'][args.exp]:
+          if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
+            continue
+
+          if exp_info['root'] == args.root:
+            found_exp_info = exp_info
+            break
+
+        if found_exp_info is None:
+          args.root = project_info['exp'][args.exp][-1]['root']
+
       # (1)安装;(2)数据准备;(3)运行
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       elif len(args.gpu_id.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       else:
         # multi gpu run
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
+
+      # 记录评估结果
+      with open('./.project.json', 'r') as fp:
+        project_info = json.load(fp)
+
+      # 评估结果记录到项目信息中
+      if args.exp in project_info['exp']:
+          for exp_info in project_info['exp'][args.exp]:
+            if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
+              if 'metric' not in exp_info:
+                exp_info['metric'] = []
+              
+              # {'checkpoint': '', 'metric': {}, 'time': ''}
+              if not os.path.exists('./evalresult.json'):
+                logging.error("Not found eval result file.")
+              else:
+                with open("./evalresult.json", 'r') as fp:
+                  metric_info = json.load(fp)
+                
+              exp_info['metric'].append(
+                {
+                  'checkpoint': args.checkpoint,
+                  'time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time())),
+                  'metric': metric_info['metric']
+                }
+              )
+              break
+
+      with open('./.project.json', 'w') as fp:
+        json.dump(project_info, fp)
 
       if args.clear:
         os.system("rm -rf ./")
@@ -740,7 +886,31 @@ def main():
       if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
         return
-  
+
+      # 获得实验root
+      if args.exp not in args.root:
+        with open('./.project.json', 'r') as fp:
+          project_info = json.load(fp)
+        if args.exp not in project_info['exp']:
+          logging.error(f'{args.exp} not in project')
+          return
+
+        if len(project_info['exp'][args.exp]) == 0:
+          logging.error(f'{args.exp} dont have any record in project')
+          return
+
+        found_exp_info = None
+        for exp_info in project_info['exp'][args.exp]:
+          if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
+            continue
+
+          if exp_info['root'] == args.root:
+            found_exp_info = exp_info
+            break
+
+        if found_exp_info is None:
+          args.root = project_info['exp'][args.exp][-1]['root']
+
       os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config}')
 
       if args.clear:

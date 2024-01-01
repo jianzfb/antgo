@@ -68,7 +68,7 @@ def ls_ssh_running(exp=None, is_a=False):
                 register_ip = terms[1]
         else:
             continue
-        
+
         if register_ip == '':
             continue
 
@@ -152,6 +152,27 @@ def ls_ssh_running(exp=None, is_a=False):
                         }
                     )
 
+    # 补充本地执行记录
+    
+    for exp_run_id_and_name in exp_run_info:
+        if exp_run_id_and_name[2] == '':
+            if 'local' not in display_info:
+                display_info['local'] = []
+
+            exp_name = exp_run_id_and_name[1]
+            exp_root = exp_run_id_and_name[3]
+            exp_create_time = exp_run_id_and_name[4]
+            exp_config = exp_run_id_and_name[5]
+
+            display_info['local'].append({
+                'status': 'unkown',
+                'container_id': '',
+                'name': exp_name,
+                'create_time': exp_create_time,
+                'root': exp_root,
+                'config': exp_config
+            })
+
     for record_ip, record_info in display_info.items():
         print('')
         print(f'IP: {record_ip}')
@@ -229,14 +250,17 @@ def log_ssh_running(action_name, id):
 
 
 def operate_on_running_status(action_name, args):
-    if args.ssh:
+    if action_name not in ['stop', 'ls', 'log']:
+        logging.error("Only support stop/ls/log")
+        return
+
+    if args.k8s:
+        pass
+    else:
+        # ssh 远程
         if action_name == 'stop':
             stop_ssh_running(action_name, args.id)
         elif action_name == 'ls':
             ls_ssh_running(args.exp, args.a)
         elif action_name == 'log':
             log_ssh_running(action_name, args.id)
-        else:
-            logging.error("Only support stop/ls/log")
-    else:
-        logging.error("Only support operate for ssh task")

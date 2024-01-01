@@ -105,10 +105,9 @@ class Tester(object):
                 device_ids=[int(os.environ['LOCAL_RANK'])],
                 broadcast_buffers=False)
 
-    def evaluate(self):
+    def evaluate(self, json_file=None):
         rank, _ = get_dist_info()        
-        json_file = './result.json'
-        if self.work_dir is not None and rank == 0:
+        if json_file is None and self.work_dir is not None and rank == 0:
             if not os.path.exists(osp.abspath(self.work_dir)):
                 os.makedirs(osp.abspath(self.work_dir))
             timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
