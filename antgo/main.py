@@ -528,6 +528,8 @@ def main():
           continue
         if t.startswith('--gpu-id'):
           continue
+        if t.startswith('--ip'):
+          continue
         filter_sys_argv_cp.append(t)
 
       sys_argv_cp = filter_sys_argv_cp
@@ -745,7 +747,7 @@ def main():
         os.system(command_str)
 
       if args.clear:
-        os.system("rm -rf ./")
+        os.system("rm -rf /tiger")
     elif action_name == 'activelearning':
       if args.exp not in args.root:
         # root需要将exp加入点到root中
@@ -798,7 +800,7 @@ def main():
         os.system(command_str)
 
       if args.clear:
-        os.system("rm -rf ./")
+        os.system("rm -rf /tiger")
     elif action_name == 'eval':
       if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
@@ -881,7 +883,7 @@ def main():
         json.dump(project_info, fp)
 
       if args.clear:
-        os.system("rm -rf ./")
+        os.system("rm -rf /tiger")
     elif action_name == 'export':
       if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
@@ -914,7 +916,7 @@ def main():
       os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config}')
 
       if args.clear:
-        os.system("rm -rf ./")
+        os.system("rm -rf /tiger")
   else:
     if action_name == 'create':
       if sub_action_name == 'project':
