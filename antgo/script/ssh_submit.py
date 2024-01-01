@@ -234,7 +234,7 @@ def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_nu
         sys_argv += " --extra-config=./extra-config.py"
     
     # 自动添加清理命令
-    sys_argv += "--clear"
+    sys_argv += " --clear"
 
     # 执行提交命令
     if password == '':

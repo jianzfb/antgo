@@ -197,7 +197,7 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
 
 
 def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_folder):
-    func = getattr(extent.func, op_name)
+    func = getattr(extent.func, op_name)()
     input_ctx, output_ctx = op_index
     if isinstance(input_ctx, str):
         input_ctx = [input_ctx]
@@ -419,7 +419,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
 
 
 def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_folder):
-    func = getattr(extent.func, op_name)
+    func = getattr(extent.func, op_name)()
     input_ctx, output_ctx = op_index
     if isinstance(input_ctx, str):
         input_ctx = [input_ctx]
@@ -657,7 +657,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
 
 
 def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder):
-    func = getattr(extent.func, op_name)
+    func = getattr(extent.func, op_name)()
     if func.func.func_kind == 3:
         # class
         result = generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_folder)

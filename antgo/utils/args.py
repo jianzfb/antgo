@@ -109,7 +109,13 @@ def DEFINE_nn_args():
         type=str,
         default=None,
         help='checkpoint'
-    ) 
+    )
+    parser.add_argument(
+        '--json',
+        type=str,
+        default=None,
+        help='json file'   
+    )
     parser.add_argument(
         '--process',
         choices=['train', 'test', 'export', 'activelearning'],

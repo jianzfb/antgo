@@ -75,14 +75,14 @@ class condition_op(object):
 
 @register
 class state_op(object):
-    def __init__(self, init_val=0, mode='resident'):
+    def __init__(self, init_val=0, is_mutable=True):
         assert(mode in ['resident', 'once'])
         self.val = np.array([init_val], dtype=np.int32)
         self.first_call = True
-        self.mode = mode
+        self.is_mutable = is_mutable
 
     def __call__(self):
-        if self.mode == 'resident':
+        if self.is_mutable:
             if self.first_call:
                 self.first_call = False
                 return self.val
@@ -128,6 +128,7 @@ class switch_op(object):
 
     def __call__(self, *args):
         state_i = int(args[0])
+        print(f'state_i {state_i}')
         if self.stride == 0:
             return args[state_i+1]
 
@@ -136,32 +137,59 @@ class switch_op(object):
 
 @register
 class scalar_float64_op(object):
-    def __init__(self, init_val=0, is_placeholder=False):
+    def __init__(self, init_val=0, is_placeholder=False, is_mutable=True):
         self.init_val = np.array([init_val]).astype(np.float64)
         self.is_placeholder = is_placeholder
+        self.first_call = True
+        self.is_mutable = is_mutable
 
     def __call__(self, *args):
-        return self.init_val
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
 
 
 @register
 class scalar_float32_op(object):
-    def __init__(self, init_val=0, is_placeholder=False):
+    def __init__(self, init_val=0, is_placeholder=False, is_mutable=True):
         self.init_val = np.array([init_val]).astype(np.float64)
         self.is_placeholder = is_placeholder
+        self.is_mutable = is_mutable
+        self.first_call = True
 
     def __call__(self, *args):
-        return self.init_val
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
 
 
 @register
 class scalar_int32_op(object):
-    def __init__(self, init_val=0, is_placeholder=False):
+    def __init__(self, init_val=0, is_placeholder=False, is_mutable=True):
         self.init_val = np.array([init_val]).astype(np.int32)
         self.is_placeholder = is_placeholder
+        self.is_mutable = is_mutable
+        self.first_call = True
 
     def __call__(self, *args):
-        return self.init_val
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
 
 
 @register

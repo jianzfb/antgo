@@ -357,8 +357,8 @@ def main():
             './',
             int(nn_args.gpu_id), # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed)
-        tester.config_model(checkpoint=nn_args.checkpoint)
-        tester.evaluate()
+        tester.config_model(checkpoint=nn_args.checkpoint, strict=False)
+        tester.evaluate(nn_args.json)
     elif nn_args.process == 'activelearning':
         # 创建主动学习过程,挑选等待标注样本
         print(f'nn_args.distributed {nn_args.distributed}')
@@ -376,7 +376,7 @@ def main():
             input_name_list=cfg.export.input_name_list, 
             output_name_list=cfg.export.output_name_list, 
             checkpoint=nn_args.checkpoint, 
-            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model')
+            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model', strict=False)
 
 
 if __name__ == "__main__":
