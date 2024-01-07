@@ -682,8 +682,9 @@ def main():
         project_info = json.load(fp)
       if args.exp not in project_info['exp']:
         project_info['exp'][args.exp] = []
+      
       project_info['exp'][args.exp].append({
-        'id': '',
+        'id': f'{os.getpid()}',
         'ip': '',
         'create_time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)),
         'config': args.config,

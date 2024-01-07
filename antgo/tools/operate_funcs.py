@@ -3,6 +3,7 @@ import logging
 import subprocess
 import yaml
 import json
+import psutil
 import pandas as pd
 
 
@@ -153,25 +154,36 @@ def ls_ssh_running(exp=None, is_a=False):
                     )
 
     # 补充本地执行记录
-    
     for exp_run_id_and_name in exp_run_info:
         if exp_run_id_and_name[2] == '':
-            if 'local' not in display_info:
-                display_info['local'] = []
+            if '127.0.0.1' not in display_info:
+                display_info['127.0.0.1'] = []
 
             exp_name = exp_run_id_and_name[1]
             exp_root = exp_run_id_and_name[3]
             exp_create_time = exp_run_id_and_name[4]
             exp_config = exp_run_id_and_name[5]
 
-            display_info['local'].append({
-                'status': 'unkown',
-                'container_id': '',
+            exp_pid = exp_run_id_and_name[0]
+            exp_is_running = False
+            for process in psutil.process_iter(['name']):
+                if exp_pid == f'{process.pid}':
+                    exp_is_running = True
+                    break
+            
+            if not exp_is_running and not is_a:
+                continue
+
+            display_info['127.0.0.1'].append({
+                'status': 'running' if exp_is_running else 'stop',
+                'container_id': '-',
                 'name': exp_name,
                 'create_time': exp_create_time,
                 'root': exp_root,
                 'config': exp_config
             })
+
+
 
     for record_ip, record_info in display_info.items():
         print('')

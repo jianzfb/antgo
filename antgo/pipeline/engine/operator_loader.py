@@ -156,7 +156,6 @@ class OperatorLoader:
         })
         return self.instance_operator(op, arg, kws) if op is not None else None
 
-
     def load_operator_from_packages(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         try:
             if len(function.split('/')) > 2:
@@ -177,6 +176,81 @@ class OperatorLoader:
         except Exception:  # pylint: disable=broad-except
             traceback.print_exc()
             return None
+
+    def split_function(self, function_key_name_list):
+        # eagleeye
+        # mm
+        # mp
+        # deploy
+        function_list = []
+        while len(function_key_name_list) != 0:
+            if function_key_name_list[0].startswith('eagleeye'):
+                function_list.append('/'.join(function_key_name_list[:3]))
+                function_key_name_list = function_key_name_list[3:]
+            elif function_key_name_list[0].startswith('mm'):
+                function_list.append('/'.join(function_key_name_list[:2]))
+                function_key_name_list = function_key_name_list[2:]
+            elif function_key_name_list[0].startswith('mp'):
+                function_list.append('/'.join(function_key_name_list[:2]))
+                function_key_name_list = function_key_name_list[2:]
+            elif function_key_name_list[0].startswith('deploy'):
+                function_list.append('/'.join(function_key_name_list[:2]))
+                function_key_name_list = function_key_name_list[2:]
+            else:
+                function_list.append(function_key_name_list[0])
+                function_key_name_list = function_key_name_list[1:]
+        return function_list
+
+    def load_operator_from_control(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
+        if not function.startswith('control'):
+            return None
+
+        info = function.split('/')
+        control_op_name = info[1]
+        if control_op_name == 'For':
+            function_op_name_list = self.split_function(info[2:])
+            function_op_name = function_op_name_list[0]
+            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            assert(function_op is not None)
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.for_op'), 'For', None)
+            return self.instance_operator(control_op_cls, [], dict(func=function_op))
+        elif control_op_name == 'If':
+            true_func_index = info.index('true-func')
+            false_func_index = info.index('false-func')
+            function_op_name_list = self.split_function(info[true_func_index+1:false_func_index])
+            true_func_name = function_op_name_list[0]
+
+            function_op_name_list = self.split_function(info[false_func_index+1:])
+            false_func_name = function_op_name_list[0]
+
+            true_func_op = self.load_operator(true_func_name, [], kws.get('true_func', dict()), tag)
+            false_func_op = self.load_operator(false_func_name, [], kws.get('false_func', dict()), tag)
+
+            assert(true_func_op is not None)
+            assert(false_func_op is not None)
+
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.if_op'), 'If', None)
+            return self.instance_operator(control_op_cls, [], dict(true_func=true_func_op, false_func=false_func_op))
+        elif control_op_name == 'Interval':
+            function_op_name_list = self.split_function(info[2:])
+            function_op_name = function_op_name_list[0]
+
+            interval = 1
+            if 'interval' in kws:
+                interval = kws.pop('interval')
+            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            assert(function_op is not None)
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.interval_op'), 'Interval', None)
+            return self.instance_operator(control_op_cls, [], dict(func=function_op, interval=interval))
+        elif control_op_name == 'Once':
+            function_op_name_list = self.split_function(info[2:])
+            function_op_name = function_op_name_list[0]
+
+            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            assert(function_op is not None)
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.once_op'), 'Once', None)
+            return self.instance_operator(control_op_cls, [], dict(func=function_op))
+        return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
         # 使用云端API
@@ -202,7 +276,8 @@ class OperatorLoader:
                         self.load_operator_from_remote,
                         self.load_operator_from_packages,
                         self.load_operator_from_eagleeye,
-                        self.load_operator_from_deploy]:
+                        self.load_operator_from_deploy,
+                        self.load_operator_from_control]:
             op = factory(function, arg, kws, tag)
             if op is not None:
                 return op

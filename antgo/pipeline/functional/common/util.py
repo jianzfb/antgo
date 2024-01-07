@@ -128,7 +128,6 @@ class switch_op(object):
 
     def __call__(self, *args):
         state_i = int(args[0])
-        print(f'state_i {state_i}')
         if self.stride == 0:
             return args[state_i+1]
 
