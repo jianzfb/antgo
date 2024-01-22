@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from .brick_wrappers import AdaptiveAvgPool2d, adaptive_avg_pool2d
 from .builder import build_linear_layer, build_transformer
 from .ckpt_convert import pvt_convert

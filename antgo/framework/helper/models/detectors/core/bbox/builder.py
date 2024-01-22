@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from antgo.framework.helper.utils import Registry, build_from_cfg
 
 BBOX_ASSIGNERS = Registry('bbox_assigner')

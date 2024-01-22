@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import torch
 from torch.nn.parallel._functions import _get_stream
 

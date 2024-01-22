@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from .dist_utils import (DistOptimizerHook, all_reduce_dict, allreduce_grads,
                          reduce_mean)
 from .misc import (center_of_mass, filter_scores_and_topk, flip_tensor,

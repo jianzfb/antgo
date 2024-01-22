@@ -249,6 +249,18 @@ def package_to_kv(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs):
     # 创建writer 实例
     kvw = KVDataWriter(prefix, tgt_folder, -1)
 
+    json_file_list = [src_file]
+    if os.path.isdir(src_file):
+        json_file_list = []
+        for json_file in os.listdir(src_file):
+            if json_file[0] == '.':
+                continue
+            if not json_file.endswith('json'):
+                continue
+
+            json_file_list.append(os.path.join(src_file, json_file))
+    json_file_list = ','.join(json_file_list)
+
     # 写数据
     kvw.write(__SampleDataGenerator(src_file, thread_num=kwargs.get('thread_num', 10), mode=kwargs.get('mode', 'json')))
 
@@ -263,8 +275,20 @@ def package_to_tfrecord(src_file, tgt_folder, prefix, size_in_shard=-1, **kwargs
         size_in_shard = 100000
     tfw = TFDataWriter(prefix, tgt_folder, size_in_shard)
 
+    json_file_list = [src_file]
+    if os.path.isdir(src_file):
+        json_file_list = []
+        for json_file in os.listdir(src_file):
+            if json_file[0] == '.':
+                continue
+            if not json_file.endswith('json'):
+                continue
+
+            json_file_list.append(os.path.join(src_file, json_file))
+    json_file_list = ','.join(json_file_list)
+
     # 写数据
-    tfw.write(__SampleDataGenerator(src_file, thread_num=kwargs.get('thread_num', 10), mode=kwargs.get('mode', 'json')))
+    tfw.write(__SampleDataGenerator(json_file_list, thread_num=kwargs.get('thread_num', 10), mode=kwargs.get('mode', 'json')))
 
 
 # test tfrecord

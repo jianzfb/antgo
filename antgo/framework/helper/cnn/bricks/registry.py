@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from antgo.framework.helper.utils import Registry
 
 CONV_LAYERS = Registry('conv layer')

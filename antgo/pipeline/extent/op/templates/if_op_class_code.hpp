@@ -28,7 +28,11 @@ public:
         ${false_func_init}
     }
     virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){return 0;};
-    virtual int init(std::map<std::string, std::vector<std::string>> params){return 0;};
+    virtual int init(std::map<std::string, std::vector<std::string>> params){
+        m_true_func->init(params);
+        m_false_func->init(params);
+        return 0;
+    };
 
     virtual int runOnCpu(const std::vector<Tensor>& input){
         Tensor true_or_false_tensor = input[0];
@@ -50,6 +54,8 @@ public:
                 this->m_outputs[i]= this->m_false_func->getOutput(i);
             }            
         }
+
+        return 0;
     }
     virtual int runOnGpu(const std::vector<Tensor>& input){
         return 0;

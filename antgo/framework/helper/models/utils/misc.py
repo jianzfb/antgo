@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from torch.autograd import Function
 from torch.nn import functional as F
 

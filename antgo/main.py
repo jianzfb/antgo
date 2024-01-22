@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
+sys.path.insert(0, '/workspace/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *

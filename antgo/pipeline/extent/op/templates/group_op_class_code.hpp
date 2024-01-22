@@ -29,9 +29,12 @@ public:
     }
     virtual ~${op_name}(){}
 
-    virtual int init(std::map<std::string, std::vector<float>> params){}
+    virtual int init(std::map<std::string, std::vector<float>> params){return 0;}
     virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){return 0;};
-    virtual int init(std::map<std::string, std::vector<std::string>> params){return 0;};
+    virtual int init(std::map<std::string, std::vector<std::string>> params){
+        GroupOp<${input_num}, ${output_num}>::init(params);
+        return 0;
+    };
     virtual int init(std::map<std::string, void*> params){return 0;}    
 };
 }

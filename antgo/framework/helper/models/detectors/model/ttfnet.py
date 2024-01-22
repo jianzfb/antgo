@@ -14,10 +14,9 @@ class TTFNet(SingleStageDetector):
                  bbox_head,
                  train_cfg=None,
                  test_cfg=None,
-                 pretrained=None,
                  init_cfg=None):
         super(TTFNet, self).__init__(backbone, neck, bbox_head,
-                                     train_cfg, test_cfg, pretrained, init_cfg)
+                                     train_cfg, test_cfg, init_cfg)
 
     def simple_test(self, image, image_meta, rescale=True, **kwargs):
         """Test function without test-time augmentation.

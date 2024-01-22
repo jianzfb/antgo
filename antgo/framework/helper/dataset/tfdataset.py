@@ -473,6 +473,7 @@ class TFDataset(torch.utils.data.IterableDataset):
                             (select_num_sample * (worker_info.id)) // worker_info.num_workers
                 remain_sample_num = expect_target_num - real_target_num
             else:
+                expect_target_num = 0
                 remain_sample_num = self.num_samples - real_num_samples
 
             # debug

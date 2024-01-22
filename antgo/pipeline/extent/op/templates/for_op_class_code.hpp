@@ -24,7 +24,10 @@ public:
         ${func_init}
     }
     virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){return 0;};
-    virtual int init(std::map<std::string, std::vector<std::string>> params){return 0;};
+    virtual int init(std::map<std::string, std::vector<std::string>> params){
+        m_func->init(params);
+        return 0;
+    };
 
     virtual int runOnCpu(const std::vector<Tensor>& input){
         int loop_num = input[0].dims()[0];

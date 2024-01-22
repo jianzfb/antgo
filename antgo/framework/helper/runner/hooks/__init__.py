@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from .checkpoint import CheckpointHook
 from .closure import ClosureHook
 from .ema import EMAHook

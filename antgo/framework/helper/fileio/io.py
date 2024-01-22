@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from io import BytesIO, StringIO
 from pathlib import Path
 

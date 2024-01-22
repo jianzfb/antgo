@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import json
 import os.path as osp
 from typing import Callable, List, Optional, Sequence, Tuple, Union

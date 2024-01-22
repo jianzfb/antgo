@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from antgo.framework.helper.cnn import build_conv_layer, build_norm_layer
 from antgo.framework.helper.base_module import BaseModule, Sequential
 from torch import nn as nn

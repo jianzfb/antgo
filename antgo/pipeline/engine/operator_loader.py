@@ -210,7 +210,7 @@ class OperatorLoader:
         if control_op_name == 'For':
             function_op_name_list = self.split_function(info[2:])
             function_op_name = function_op_name_list[0]
-            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name, {}), tag)
             assert(function_op is not None)
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.for_op'), 'For', None)
             return self.instance_operator(control_op_cls, [], dict(func=function_op))
@@ -238,18 +238,22 @@ class OperatorLoader:
             interval = 1
             if 'interval' in kws:
                 interval = kws.pop('interval')
-            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name, {}), tag)
             assert(function_op is not None)
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.interval_op'), 'Interval', None)
             return self.instance_operator(control_op_cls, [], dict(func=function_op, interval=interval))
-        elif control_op_name == 'Once':
+        elif control_op_name == 'Cache':
             function_op_name_list = self.split_function(info[2:])
             function_op_name = function_op_name_list[0]
 
-            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name, {}), tag)
             assert(function_op is not None)
-            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.once_op'), 'Once', None)
-            return self.instance_operator(control_op_cls, [], dict(func=function_op))
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.cache_op'), 'Cache', None)
+            cache_kwargs = dict(func=function_op)
+            if function_op_name in kws:
+                kws.pop(function_op_name)
+            cache_kwargs.update(kws)
+            return self.instance_operator(control_op_cls, [], cache_kwargs)
         return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:

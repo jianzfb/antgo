@@ -657,7 +657,13 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
 
 
 # ---------------------------- control op ----------------------------------- #
-def prepare_cplusplus_code(func_name, func_kwargs, output_folder, core_op_set):
+def prepare_cplusplus_code(func_name, func_index, func_kwargs, output_folder, core_op_set, platform, abi, project_name):
+    input_ctx, output_ctx = func_index
+    if not isinstance(input_ctx, tuple):
+        input_ctx = (input_ctx,)
+    if not isinstance(output_ctx, tuple):
+        output_ctx = (output_ctx,)
+
     if func_name.startswith('eagleeye'):
         op_name = func_name[12:]
         if op_name.endswith('_op'):
@@ -670,21 +676,22 @@ def prepare_cplusplus_code(func_name, func_kwargs, output_folder, core_op_set):
         # op_args， 包含scalar, numpy, list类型，转换成std::vector<float>类型
         op_info = {
             'type': op_name,
-            'input': (),
-            'output': (),
+            'input': input_ctx,
+            'output': output_ctx,
             'args': convert_args_eagleeye_op_args([], func_kwargs),
-            'include': core_op_set[op_name]['include']
+            'include': core_op_set[op_name]['include'],
+            'src': ''
         }
     elif func_name.startswith('deploy'):
         op_name = func_name[7:]
-        op_info = auto_generate_eagleeye_op(op_name, [(),()], [], func_kwargs, output_folder)
+        op_info = auto_generate_eagleeye_op(op_name, func_index, [], func_kwargs, output_folder)
     else:
         # eagleey核心算子 （op级别算子）
         op_name = func_name
         if op_name.startswith('inference_onnx_op'):
             # 算子转换为平台预测引擎算子
             engine_op_name, template_args, op_args, include_path = \
-                convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder, platform, abi, project_name=project_name)
+                convert_onnx_to_platform_engine(op_name, func_index, None, func_kwargs, output_folder, platform, abi, project_name=project_name)
 
             op_info = {
                 'type': engine_op_name,
@@ -692,8 +699,13 @@ def prepare_cplusplus_code(func_name, func_kwargs, output_folder, core_op_set):
                 'input': input_ctx,
                 'output': output_ctx,
                 'args': op_args,
-                'include': include_path
+                'include': include_path,
+                'src': ''
             }
+        elif op_name in GroupDefMap:
+            # 创建group平台代码
+            group_op = GroupDefMap[op_name]
+            op_info = auto_generate_control_group_op(op_name, func_index, group_op.op_name_list, group_op.op_args_list, group_op.op_relation, output_folder, core_op_set, platform, abi, project_name)
         else:
             if op_name.endswith('_op'):
                 op_name = op_name.capitalize()
@@ -702,27 +714,35 @@ def prepare_cplusplus_code(func_name, func_kwargs, output_folder, core_op_set):
                 for i in range(1, len(kk)):
                     op_name += kk[i].capitalize()
 
+            if op_name.startswith('Switch'):
+                op_name = f'Switch{len(input_ctx)}Op'
+            elif op_name.startswith('BoolEqualCompare'):
+                op_name = f'BoolEqualCompare{len(input_ctx)}Op'
+            elif op_name.startswith('Empty'):
+                op_name = f'Empty{len(output_ctx)}Op'
+
             # op_args， 包含scalar, numpy, list类型，转换成std::vector<float>类型
             op_info = {
                 'type': op_name,
-                'input': [],
-                'output': [],
+                'input': input_ctx,
+                'output': output_ctx,
                 'args': convert_args_eagleeye_op_args([], func_kwargs),
-                'include': core_op_set[op_name]['include']
+                'include': core_op_set[op_name]['include'],
+                'src': ''
             }
 
     return op_info
 
 
-def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, false_func_name, false_kwargs, output_folder, core_op_set):
-    true_op_info = prepare_cplusplus_code(true_func_name, true_kwargs, output_folder, core_op_set)
-    false_op_info = prepare_cplusplus_code(false_func_name, false_kwargs, output_folder, core_op_set)
-
+def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, false_func_name, false_kwargs, output_folder, core_op_set, platform, abi, project_name):
     input_ctx, output_ctx = op_index
     if isinstance(input_ctx, str):
         input_ctx = [input_ctx]
     if isinstance(output_ctx, str):
         output_ctx = [output_ctx]
+
+    true_op_info = prepare_cplusplus_code(true_func_name, (input_ctx[1:], output_ctx), true_kwargs, output_folder, core_op_set, platform, abi, project_name)
+    false_op_info = prepare_cplusplus_code(false_func_name, (input_ctx[1:], output_ctx), false_kwargs, output_folder, core_op_set, platform, abi, project_name)
 
     init_info_list= []
     name_list = ['m_true_func', 'm_false_func']
@@ -755,8 +775,8 @@ def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, 
             op_name=f"{op_name.replace('_','').capitalize()}Op",
             input_num=len(input_ctx),
             output_num=len(output_ctx),
-            true_func_create=f"new {true_op_info['type']}();",
-            false_func_create=f"new {false_op_info['type']}();",
+            true_func_create=f"new {true_op_info['type']}();" if 'template' not in true_op_info else f"new {true_op_info['type']}{true_op_info['template']}();",
+            false_func_create=f"new {false_op_info['type']}();" if 'template' not in false_op_info else f"new {false_op_info['type']}{false_op_info['template']}();",
             true_func_init=init_info_list[0],
             false_func_init=init_info_list[1],
             true_func_include_dependent=true_op_info['include'],
@@ -779,8 +799,8 @@ def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, 
     return info
 
 
-def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set):
-    op_info = prepare_cplusplus_code(func_name, func_kwargs, output_folder, core_op_set)
+def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set, platform, abi, project_name):
+    op_info = prepare_cplusplus_code(func_name, op_index, func_kwargs.get(func_name, {}), output_folder, core_op_set, platform, abi, project_name)
 
     input_ctx, output_ctx = op_index
     if isinstance(input_ctx, str):
@@ -814,7 +834,7 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
             op_name=f"{op_name.replace('_','').capitalize()}Op",
             input_num=len(input_ctx),
             output_num=len(output_ctx),
-            func_create=f"new {op_info['type']}();",
+            func_create=f"new {op_info['type']}();" if 'template' not in op_info else f"new {op_info['type']}{op_info['template']}();",
             func_init=op_init_code,
             include_dependent=op_info['include']
         )
@@ -835,8 +855,66 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
     return info
 
 
-def auto_generate_control_interval_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set):
-    op_info = prepare_cplusplus_code(func_name, func_kwargs, output_folder, core_op_set)
+def auto_generate_control_cache_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set, platform, abi, project_name):
+    input_ctx, output_ctx = op_index
+    if isinstance(input_ctx, str):
+        input_ctx = [input_ctx]
+    if isinstance(output_ctx, str):
+        output_ctx = [output_ctx]
+
+    op_info = prepare_cplusplus_code(func_name, (input_ctx[1:], output_ctx), func_kwargs.get(func_name, {}), output_folder, core_op_set, platform, abi, project_name)
+
+    arg_code = ''
+    op_init_code = ''
+    for deploy_arg_name, deploy_arg_list in op_info['args'].items():
+        if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+            op_init_code += f'{deploy_arg_list}\n'
+            if arg_code == '':
+                arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+            else:
+                arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+            continue
+
+        if deploy_arg_name != 'c++_type':
+            if arg_code == '':
+                arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+            else:
+                arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+    if 'c++_type' in op_info['args']:
+        args_init_code = op_info['args']['c++_type']+'({'+arg_code+'})'
+        op_init_code += f'm_func->init({args_init_code});\n\n'
+
+    warp_cpp_code_content = \
+        gen_code('./templates/cache_op_class_code.hpp')(
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            input_num=len(input_ctx),
+            output_num=len(output_ctx),
+            func_create=f"new {op_info['type']}();" if 'template' not in op_info else f"new {op_info['type']}{op_info['template']}();",
+            func_init=op_init_code,
+            include_dependent=op_info['include'],
+            file_prefix=func_kwargs.get('prefix', 'cache'),
+            check_empty_at_index=func_kwargs.get('check_empty_at_index', 0)
+        )
+
+    src_folder = os.path.join(output_folder, 'extent', 'include')
+    os.makedirs(src_folder, exist_ok=True)
+    with open(os.path.join(src_folder, f'{op_name}.hpp'), 'w') as fp:
+        fp.write(warp_cpp_code_content)
+
+    info = {
+        'type': f"{op_name.replace('_','').capitalize()}Op",
+        'input': input_ctx,
+        'output': output_ctx,
+        'args': {},
+        'include': os.path.join('extent/include/', f'{op_name}.hpp'),
+        'src': op_info['src'],
+    }
+    return info
+
+
+def auto_generate_control_interval_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set, platform, abi, project_name):
+    op_info = prepare_cplusplus_code(func_name, op_index, func_kwargs.get(func_name, {}), output_folder, core_op_set, platform, abi, project_name)
 
     input_ctx, output_ctx = op_index
     if isinstance(input_ctx, str):
@@ -870,7 +948,7 @@ def auto_generate_control_interval_op(op_name, op_index, func_name, func_kwargs,
             op_name=f"{op_name.replace('_','').capitalize()}Op",
             input_num=len(input_ctx),
             output_num=len(output_ctx),
-            func_create=f"new {op_info['type']}();",
+            func_create=f"new {op_info['type']}();" if 'template' not in op_info else f"new {op_info['type']}{op_info['template']}();",
             func_init=op_init_code,
             include_dependent=op_info['include']
         )
@@ -891,10 +969,10 @@ def auto_generate_control_interval_op(op_name, op_index, func_name, func_kwargs,
     return info
 
 
-def auto_generate_control_group_op(op_name, op_index, group_op_name_list, group_op_args_list, group_op_relation, output_folder, core_op_set):
+def auto_generate_control_group_op(op_name, op_index, group_op_name_list, group_op_args_list, group_op_relation, output_folder, core_op_set, platform, abi, project_name):
     op_info_list = []
-    for in_op_name, in_op_args in zip(group_op_name_list, group_op_args_list):
-        op_info = prepare_cplusplus_code(in_op_name, in_op_args, output_folder, core_op_set)
+    for in_op_i, (in_op_name, in_op_args) in enumerate(zip(group_op_name_list, group_op_args_list)):
+        op_info = prepare_cplusplus_code(in_op_name, group_op_relation[in_op_i], in_op_args, output_folder, core_op_set, platform, abi, project_name)
         op_info_list.append(op_info)
 
     input_ctx, output_ctx = op_index
@@ -907,33 +985,38 @@ def auto_generate_control_group_op(op_name, op_index, group_op_name_list, group_
     op_create_code = ''
     for op_i, op_info in enumerate(op_info_list):
         if op_i == 0:
-            op_create_code = f'new {op_info["type"]}()'
+            op_create_code = f'new {op_info["type"]}()' if 'template' not in op_info else f'new {op_info["type"]}{op_info["template"]}()'
         else:
-            op_create_code += f',new {op_info["type"]}()'
+            op_create_code += f',new {op_info["type"]}()' if 'template' not in op_info else f',new {op_info["type"]}{op_info["template"]}()'
 
     op_init_code = ''
     op_include_code = ''
     src_info_list = []
     for op_i, op_info in enumerate(op_info_list):
-        arg_code = ''
-        for deploy_arg_name, deploy_arg_list in op_info['args'].items():
-            if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
-                op_init_code += f'{deploy_arg_list}\n'
-                if arg_code == '':
-                    arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                else:
-                    arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                continue
+        op_info_args_tuple = op_info['args']
+        if isinstance(op_info_args_tuple, dict):
+            op_info_args_tuple = (op_info_args_tuple,)
 
-            if deploy_arg_name != 'c++_type':
-                if arg_code == '':
-                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
-                else:
-                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+        for op_info_args in op_info_args_tuple:
+            arg_code = ''
+            for deploy_arg_name, deploy_arg_list in op_info_args.items():
+                if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                    op_init_code += f'{deploy_arg_list}\n'
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    continue
 
-        if 'c++_type' in op_info['args']:
-            args_init_code = op_info['args']['c++_type']+'({'+arg_code+'})'
-            op_init_code += f'm_ops[{op_i}]->init({args_init_code});\n'
+                if deploy_arg_name != 'c++_type':
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+            if 'c++_type' in op_info_args:
+                args_init_code = op_info_args['c++_type']+'({'+arg_code+'})'
+                op_init_code += f'm_ops[{op_i}]->init({args_init_code});\n\n'
 
         if 'src' in op_info:
             src_info_list.append(op_info['src'])
@@ -1037,7 +1120,8 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
 
         elif isinstance(arg_info, np.ndarray):
             # numpy
-            converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
+            if arg_info.size > 0:
+                converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
         elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
             # list
             converted_op_args[arg_name] = np.array(arg_info).flatten().astype(np.float32)
@@ -1359,6 +1443,7 @@ def split_function(function_key_name_list):
             function_key_name_list = function_key_name_list[1:]
     return function_list
 
+
 def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True):    
     project_name = project_config["name"]
     pipeline_name = project_name
@@ -1419,7 +1504,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
                 op_name_count[op_name] += 1
 
-                op_info = auto_generate_control_if_op(op_name, op_index, true_func_name, op_kwargs.get('true_func', dict()), false_func_name, op_kwargs.get('false_func', dict()), output_folder, core_op_set)
+                op_info = auto_generate_control_if_op(op_name, op_index, true_func_name, op_kwargs.get('true_func', dict()), false_func_name, op_kwargs.get('false_func', dict()), output_folder, core_op_set, platform, abi, project_name)
                 deploy_graph_info[op_unique_name] = op_info
             elif function_key_list[1] == 'For':
                 function_op_name_list = split_function(function_key_list[2:])
@@ -1431,10 +1516,20 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
                 op_name_count[op_name] += 1
 
-                op_info = auto_generate_control_for_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set)
+                op_info = auto_generate_control_for_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
                 deploy_graph_info[op_unique_name] = op_info           
-            elif function_key_list[1] == 'Once':
-                pass
+            elif function_key_list[1] == 'Cache':
+                function_op_name_list = split_function(function_key_list[2:])
+                func_op_name = function_op_name_list[0]
+
+                op_name = f'{function_key_list[1]}_{func_op_name}'
+                if op_name not in op_name_count:
+                    op_name_count[op_name] = 0
+                op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+                op_name_count[op_name] += 1
+
+                op_info = auto_generate_control_cache_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                deploy_graph_info[op_unique_name] = op_info
             elif function_key_list[1] == 'Interval':
                 function_op_name_list = split_function(function_key_list[2:])
                 func_op_name = function_op_name_list[0]
@@ -1445,7 +1540,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
                 op_name_count[op_name] += 1
 
-                op_info = auto_generate_control_interval_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set)
+                op_info = auto_generate_control_interval_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
                 deploy_graph_info[op_unique_name] = op_info
             else:
                 raise NotImplementedError
@@ -1498,7 +1593,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             if op_name in GroupDefMap:
                 # group 动态生成的算子
                 group_op = GroupDefMap[op_name]
-                op_info = auto_generate_control_group_op(op_name, op_index, group_op.op_name_list, group_op.op_args_list, group_op.op_relation, output_folder, core_op_set)
+                op_info = auto_generate_control_group_op(op_name, op_index, group_op.op_name_list, group_op.op_args_list, group_op.op_relation, output_folder, core_op_set, platform, abi, project_name)
                 deploy_graph_info[op_unique_name] = op_info
 
                 order_graph_op_list.append(op_unique_name)
@@ -1548,6 +1643,13 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 for i in range(1, len(kk)):
                     op_name += kk[i].capitalize()
 
+            if op_name.startswith('Switch'):
+                op_name = f'Switch{len(input_ctx)-1}Op'
+            elif op_name.startswith('BoolEqualCompare'):
+                op_name = f'BoolEqualCompare{len(input_ctx)}Op'
+            elif op_name.startswith('Empty'):
+                op_name = f'Empty{len(output_ctx)}Op'
+
             # 检查是否在核心集中
             if op_name not in core_op_set:
                 print(f'{op_name} not support')
@@ -1563,10 +1665,10 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 'include': core_op_set[op_name]['include']
             }
 
-            if op_name == 'IfelseendOp':
-                deploy_graph_info[op_unique_name].update({
-                    'template': f'<{len(input_ctx)},{len(output_ctx)}>'
-                })
+            # if op_name == 'IfelseendOp':
+            #     deploy_graph_info[op_unique_name].update({
+            #         'template': f'<{len(input_ctx)},{len(output_ctx)}>'
+            #     })
 
         # parse ext graph info
         order_graph_op_list.append(op_unique_name)

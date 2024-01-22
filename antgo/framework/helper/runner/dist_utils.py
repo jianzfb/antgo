@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import functools
 import os
