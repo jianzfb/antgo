@@ -86,10 +86,6 @@ def DEFINE_nn_args():
         help='whether to set deterministic options for CUDNN backend.')        
     parser.add_argument('--local-rank', type=int, default=0)
     parser.add_argument(
-        '--auto-scale-lr',
-        action='store_true',
-        help='enable automatically scaling LR.')
-    parser.add_argument(
         '--distributed',
         action='store_true',
         help='is distributed.')        

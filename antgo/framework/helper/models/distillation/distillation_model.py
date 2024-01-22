@@ -28,20 +28,19 @@ class ABF(nn.Module):
         nn.init.kaiming_uniform_(self.conv1[0].weight, a=1)  # pyre-ignore
         nn.init.kaiming_uniform_(self.conv2[0].weight, a=1)  # pyre-ignore
 
-    def forward(self, x, y=None, shape=None, out_shape=None):
+    def forward(self, x, y=None, shape=None):
         n,_,h,w = x.shape
         # transform student features
         x = self.conv1(x)
         if self.att_conv is not None:
             # upsample residual features
-            y = F.interpolate(y, (shape,shape), mode="nearest")
+            shape = x.shape[-2:]
+            y = F.interpolate(y, shape, mode="nearest")
             # fusion
             z = torch.cat([x, y], dim=1)
             z = self.att_conv(z)
             x = (x * z[:,0].view(n,1,h,w) + y * z[:,1].view(n,1,h,w))
         # output 
-        if x.shape[-1] != out_shape:
-            x = F.interpolate(x, (out_shape, out_shape), mode="nearest")
         y = self.conv2(x)
         return y, x
 
@@ -71,14 +70,15 @@ class ReviewKD(MultiSteamModule):
         self.teacher_cfg = train_cfg.get('teacher')
 
         self.student_in_channels = self.student_cfg.get('channels', [96, 128, 160])      # KeyNetF的后三个stage channels
-        self.student_shapes = self.student_cfg.get('shapes', [16,8,4])[::-1]                # KetNetF的后三个stage shape
+        # self.student_shapes = self.student_cfg.get('shapes', [16,8,4])[::-1]                # KetNetF的后三个stage shape
 
         # resnet50
         self.teacher_out_channels = self.teacher_cfg.get('channels', [512, 1024, 2048]) # resnet50的后三个stage channels
-        self.teacher_shapes = self.teacher_cfg.get('shapes', [16,8,4])[::-1]                # resnet50的后三个stage shape
+        # self.teacher_shapes = self.teacher_cfg.get('shapes', [16,8,4])[::-1]                # resnet50的后三个stage shape
 
         # align module
         self.align_module = train_cfg.get('align', 'backbone')
+        self.mid_channel = train_cfg.get('mid_channel', 256)
 
         # 蒸馏损失
         self.distill_loss = build_loss(dict(type='HCL'))
@@ -87,17 +87,16 @@ class ReviewKD(MultiSteamModule):
         self.kd_warm_up = train_cfg.get('kd_warm_up', 20.0)
 
         abfs = nn.ModuleList()
-        mid_channel = min(512, self.student_in_channels[-1])
         for idx, in_channel in enumerate(self.student_in_channels):
-            abfs.append(ABF(in_channel, mid_channel, self.teacher_out_channels[idx], idx < len(self.student_in_channels)-1))
+            abfs.append(ABF(in_channel, self.mid_channel, self.teacher_out_channels[idx], idx < len(self.student_in_channels)-1))
         self.abfs = abfs[::-1]
 
     def forward_train(self, image, image_meta, **kwargs):
         align_module_proxy = getattr(getattr(self.student, self.align_module), 'forward', None)
-        out = {}
+        student_out = {}
         def align_student_module_func(x):
             x = align_module_proxy(x)
-            out.update({
+            student_out.update({
                 'feature': x
             })
             return x
@@ -107,20 +106,20 @@ class ReviewKD(MultiSteamModule):
         # 恢复原来forward函数
         setattr(getattr(self.student, self.align_module), 'forward', align_module_proxy)        
 
-        x = out['feature'][::-1]
+        x = student_out['feature'][::-1]
         s_features = []
-        out_features, res_features = self.abfs[0](x[0], out_shape=self.teacher_shapes[0])
+        out_features, res_features = self.abfs[0](x[0])
         s_features.append(out_features)
-        for features, abf, shape, out_shape in zip(x[1:], self.abfs[1:], self.student_shapes[1:], self.teacher_shapes[1:]):
-            out_features, res_features = abf(features, res_features, shape, out_shape)
+        for features, abf in zip(x[1:], self.abfs[1:]):
+            out_features, res_features = abf(features, res_features)
             s_features.insert(0, out_features)
 
         # 仅计算特征，忽略head计算
         align_module_proxy = getattr(getattr(self.teacher, self.align_module), 'forward', None)
-        out = {}
+        teacher_out = {}
         def align_teacher_module_func(x):
             x = align_module_proxy(x)
-            out.update({
+            teacher_out.update({
                 'feature': x
             })
             return x
@@ -129,7 +128,7 @@ class ReviewKD(MultiSteamModule):
         self.teacher.forward_test(image, image_meta)
         # 恢复原来forward函数
         setattr(getattr(self.teacher, self.align_module), 'forward', align_module_proxy)   
-        t_features = out['feature']
+        t_features = teacher_out['feature']
 
         # 计算蒸馏损失
         feature_kd_loss = self.distill_loss(s_features, t_features)
@@ -137,8 +136,34 @@ class ReviewKD(MultiSteamModule):
         # 任务损失
         losses = student_loss
         # 蒸馏损失
-        losses['review_kd_loss'] = feature_kd_loss * min(1, kwargs.get('epoch')/self.kd_warm_up) * self.kd_loss_weight
+        losses['review_kd_loss'] = feature_kd_loss * min(1, (kwargs.get('epoch')+1)/self.kd_warm_up) * self.kd_loss_weight
         return losses
 
     def simple_test(self, image, image_meta, rescale=True, **kwargs):
         return self.student.simple_test(image, image_meta, rescale, **kwargs)
+
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs):
+        if not any(["student" in key or "teacher" in key for key in state_dict.keys()]):
+            key_list = list(state_dict.keys())
+            for k in key_list:
+                v = state_dict.pop(k)
+                state_dict[f'teacher.{k}'] = v
+
+        # 蒸馏训练后模型加载（student, teacher均在模型文件中）
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )

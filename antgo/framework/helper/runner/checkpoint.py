@@ -69,11 +69,11 @@ def load_state_dict(module, state_dict, strict=False, logger=None):
         # complicated structure, e.g., nn.Module(nn.Module(DDP))
         if is_module_wrapper(module):
             module = module.module
-        local_metadata = {} if metadata is None else metadata.get(
-            prefix[:-1], {})
+        local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         module._load_from_state_dict(state_dict, prefix, local_metadata, True,
                                      all_missing_keys, unexpected_keys,
                                      err_msg)
+
         for name, child in module._modules.items():
             if child is not None:
                 load(child, prefix + name + '.')
