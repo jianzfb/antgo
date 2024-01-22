@@ -105,7 +105,7 @@ class DecodeImage(BaseOperator):
                 im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)               
         else:
             im = Image.open(BytesIO(im))
-        
+
         sample['image'] = im
         if 'height' not in sample:
             sample['height'] = im.shape[0]

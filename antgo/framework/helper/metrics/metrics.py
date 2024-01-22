@@ -7,6 +7,7 @@ import copy
 import json
 import numpy as np
 import time
+import cv2
 
 
 class COCOWarp(COCO):
@@ -59,6 +60,7 @@ class COCOCompatibleEval(object):
         bbox_id = 0
         for image_id, gt in enumerate(gts):
             image_file = gt['image_meta']['image_file'] if 'image_file' in gt['image_meta'] else ''
+
             bboxes = [[box[0], box[1], box[2]-box[0], box[3]-box[1]] for box in gt['bboxes'].tolist()]
             areas = [box[2]*box[3] for box in bboxes]
             category_ids = [l for l in gt['labels'].tolist()]
@@ -103,6 +105,7 @@ class COCOCompatibleEval(object):
             pred_bboxes = pred['box'][:,:4]
             pred_probs = pred['box'][:,4]
             pred_labels = pred['label']
+
             for _, (pred_bbox, pred_prob, pred_label) in enumerate(zip(pred_bboxes, pred_probs, pred_labels)):
                 if pred_prob < self.prob_thres:
                     # ignore low prob pred
