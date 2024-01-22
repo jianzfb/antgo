@@ -113,12 +113,13 @@ def video_dc(*args):
           source_data.append(value[0])
         if none_num == source_num:
           break
-        
+
         source_data += [frame_index]
         data_dict = {}
         for ii,vv in zip(index, source_data):
           data_dict[ii] = vv
         yield global_entity(**data_dict)
+        frame_index += 1
 
     return DataFrame(inner())
 

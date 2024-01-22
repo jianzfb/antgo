@@ -2013,11 +2013,38 @@ class BboxXYXY2XYWH(BaseOperator):
 
     def __call__(self, sample, context=None):
         assert 'bboxes' in sample
+        if sample['bboxes'].shape[0] == 0:
+            return sample
+
         bbox = sample['bboxes']
         bbox[:, 2:4] = bbox[:, 2:4] - bbox[:, :2]
         bbox[:, :2] = bbox[:, :2] + bbox[:, 2:4] / 2.
         sample['bboxes'] = bbox
         return sample
+
+
+class YoloBboxFormat(BaseOperator):
+    """
+    Convert bbox XYXY format to XYWH format.
+    """
+
+    def __init__(self, inputs=None):
+        super(YoloBboxFormat, self).__init__(inputs=inputs)
+
+    def __call__(self, sample, context=None):
+        assert 'bboxes' in sample
+        if sample['bboxes'].shape[0] == 0:
+            sample['bboxes'] = np.empty((0, 5), dtype=np.float32)
+            sample.pop('labels')
+            return sample
+
+        bbox = sample['bboxes']
+        bbox[:, 2:4] = bbox[:, 2:4] - bbox[:, :2]
+        bbox[:, :2] = bbox[:, :2] + bbox[:, 2:4] / 2.
+
+        sample['bboxes'] = np.concatenate([sample['labels'][:, np.newaxis], bbox], -1)
+        sample.pop('labels')
+        return sample   
 
 
 class CornerTarget(BaseOperator):

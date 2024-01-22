@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import os.path as osp
 from typing import Optional
 import numpy as np

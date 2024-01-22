@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import torch.nn.functional as F
 from antgo.framework.helper.cnn import ConvModule
 from antgo.framework.helper.base_module import BaseModule, ModuleList

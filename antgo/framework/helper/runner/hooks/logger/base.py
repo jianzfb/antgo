@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import numbers
 from abc import ABCMeta, abstractmethod
 

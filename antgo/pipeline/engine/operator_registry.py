@@ -50,13 +50,12 @@ class OperatorRegistry:
             output_schema=None,
             flag=None):
         """
-        Register a class, function, or callable as a towhee operators.
+        Register a class, function, or callable as a operators.
 
         Examples:
 
         1. register a function as operators
 
-        >>> from towhee import register
         >>> @register
         ... def foo(x, y):
         ...     return x+y
@@ -71,9 +70,6 @@ class OperatorRegistry:
         ...         return self.x + y
 
         By default, function/class name is used as operators name,
-        which is used by the operators factory `towhee.ops` to invoke the operators.
-
-        >>> from towhee import ops
         >>> op = ops.foo()
         >>> op(1, 2)
         3
@@ -107,34 +103,6 @@ class OperatorRegistry:
         ...     return x+y
         >>> ops.my_namespace.my_foo()(1,2)
         3
-
-        Output Schema:
-
-        >>> @register(name='my_foo', output_schema='value')
-        ... def foo(x, y):
-        ...     return x+y
-        >>> from towhee.hparam import param_scope
-        >>> with param_scope('towhee.need_schema=1'):
-        ...     ops.my_foo()(1,2)
-        Output(value=3)
-
-        Flag: Each operators type, for example: NNOperator and PyOperator, has their own default `flag`:
-
-        >>> from towhee.operators.base import Operator, NNOperator, PyOperator
-        >>> from towhee.operators.base import OperatorFlag
-        >>> @register
-        ... class foo(NNOperator):
-        ...     pass
-        >>> foo().flag
-        <OperatorFlag.REUSEABLE|STATELESS: 6>
-
-        The default flag can be override by `register(flag=someflag)`:
-
-        >>> @register(flag=OperatorFlag.EMPTYFLAG)
-        ... class foo(NNOperator):
-        ...     pass
-        >>> foo().flag
-        <OperatorFlag.EMPTYFLAG: 1>
 
         Args:
             name (str, optional): operators name, will use the class/function name if None.

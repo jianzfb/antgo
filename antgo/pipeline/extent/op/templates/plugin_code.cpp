@@ -118,6 +118,10 @@ for(size_t i=0; i<in_port_list.size(); ++i){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_POINT);
         }
     }
+    else if(type_str == "EAGLEEYE_SIGNAL_TIMESTAMP"){
+        input_node = new Placeholder<ImageSignal<double>>();
+        input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_TIMESTAMP);
+    }
     else{
         EAGLEEYE_LOGE("Dont support signal type %s.", type_str.c_str());
     }

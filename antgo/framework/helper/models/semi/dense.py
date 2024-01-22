@@ -24,7 +24,7 @@ class DenseTeacher(MultiSteamModule):
             test_cfg=test_cfg,
         )
         self.freeze("teacher")
-        self.key = train_cfg.get('key', 0)                                  # 挑选model进入loss前的featuremap list中的哪个作为半监督信号
+        self.semi_sup_key = train_cfg.get('semi_sup_key', None)             # 选择一个目标进行半监督损失
         self.use_sigmoid = train_cfg.get('use_sigmoid', True)               # 是否将挑选出来的featuremap 使用sigmoid 
 
         self.label_batch_size = train_cfg.get('label_batch_size', 5)        # 有标签数据量 在一个batch里
@@ -34,59 +34,73 @@ class DenseTeacher(MultiSteamModule):
         self.heatmap_n_thr = train_cfg.get('heatmap_n_thr', 0.25)           # heatmap中，小于此值视为绝对负样本，其余位置通过半监督信号监督
         self.semi_loss_w = train_cfg.get('semi_loss_w', 1.0)                # 半监督损失的权重
 
-    def _get_unsup_dense_loss(self, student_heatmap_, teacher_heatmap_):
+    def _get_unsup_dense_loss(self, student_heatmap_list, teacher_heatmap_list):
         # student_heatmap_: N,C,H,W
         # teacher_heatmap_: N,C,H,W
-        num_classes = student_heatmap_.shape[1]
-        student_heatmap = student_heatmap_.permute(0, 2, 3, 1).reshape(-1, num_classes)
-        teacher_heatmap = teacher_heatmap_.permute(0, 2, 3, 1).reshape(-1, num_classes)
-        if self.use_sigmoid:
-            student_heatmap = student_heatmap.sigmoid()
-            teacher_heatmap = teacher_heatmap.sigmoid()
 
-        with torch.no_grad():
-            max_vals = torch.max(teacher_heatmap, 1)[0]
-            count_num = int(teacher_heatmap.size(0) * self.semi_ratio)
-            sorted_vals, sorted_inds = torch.topk(max_vals, teacher_heatmap.size(0))
+        if isinstance(student_heatmap_list, torch.Tensor):
+            student_heatmap_list = [student_heatmap_list]
+            teacher_heatmap_list = [teacher_heatmap_list]
 
-            for sorted_n in range(count_num):
-                if sorted_vals[sorted_n] < self.heatmap_n_thr:
-                    count_num = max(1, sorted_n)
-                    break
+        loss_heatmap = 0
+        for student_heatmap_, teacher_heatmap_ in zip(student_heatmap_list, teacher_heatmap_list):
+            num_classes = student_heatmap_.shape[1]
+            student_heatmap = student_heatmap_.permute(0, 2, 3, 1).reshape(-1, num_classes)
+            teacher_heatmap = teacher_heatmap_.permute(0, 2, 3, 1).reshape(-1, num_classes)
+            if self.use_sigmoid:
+                student_heatmap = student_heatmap.sigmoid()
+                teacher_heatmap = teacher_heatmap.sigmoid()
 
-            mask = torch.zeros_like(max_vals)
-            mask[sorted_inds[:count_num]] = 1.0
-            fg_num = sorted_vals[:count_num].sum()
+            with torch.no_grad():
+                max_vals = torch.max(teacher_heatmap, 1)[0]
+                count_num = int(teacher_heatmap.size(0) * self.semi_ratio)
+                sorted_vals, sorted_inds = torch.topk(max_vals, teacher_heatmap.size(0))
 
-        loss_heatmap = (
-            QualityFocalLoss(
-                student_heatmap,
-                teacher_heatmap,
-                weight=mask,
-                reduction="mean",
+                for sorted_n in range(count_num):
+                    if sorted_vals[sorted_n] < self.heatmap_n_thr:
+                        count_num = max(1, sorted_n)
+                        break
+
+                mask = torch.zeros_like(max_vals)
+                mask[sorted_inds[:count_num]] = 1.0
+                fg_num = sorted_vals[:count_num].sum()
+
+            loss = (
+                QualityFocalLoss(
+                    student_heatmap,
+                    teacher_heatmap,
+                    weight=mask,
+                    reduction="mean",
+                )
             )
-        )
+            loss_heatmap += loss
 
+        loss_heatmap /= len(student_heatmap_list)
         return {"loss_heatmap": loss_heatmap}
 
     def forward_train(self, image, image_meta, **kwargs):
-        label_images, unlabel_weak_strong_images = \
-            torch.split(image, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
+        if isinstance(image, torch.Tensor):
+            label_images, unlabel_weak_strong_images = \
+                torch.split(image, [self.label_batch_size, self.unlabel_batch_size+self.unlabel_batch_size],dim=0) 
+            unlabel_weak_images = torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
+            unlabel_strong_images = torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
+        else:
+            label_images = image[:self.label_batch_size]
+            unlabel_weak_strong_images = image[self.label_batch_size:]
+            unlabel_weak_images = [unlabel_weak_strong_images[i] for i in range(0, 2*self.unlabel_batch_size, 2)]
+            unlabel_strong_images = [unlabel_weak_strong_images[i] for i in range(1, 2*self.unlabel_batch_size, 2)]
+
         label_metas = image_meta[:self.label_batch_size]
-
-        unlabel_weak_images=torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
-        unlabel_strong_images=torch.index_select(unlabel_weak_strong_images,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
-
         unlabel_weak_strong_metas = image_meta[self.label_batch_size:]
         unlabel_weak_metas = [unlabel_weak_strong_metas[i] for i in range(0, 2*self.unlabel_batch_size, 2)]
         unlabel_strong_metas = [unlabel_weak_strong_metas[i] for i in range(1, 2*self.unlabel_batch_size, 2)]
-        
+
         # ignore epoch,iter key in kwargs
         if 'epoch' in kwargs:
             kwargs.pop('epoch')
         if 'iter' in kwargs:
             kwargs.pop('iter')
-        
+
         label_kwargs = {}
         unlabel_weak_kwargs = {}
         unlabel_strong_kwargs = {}
@@ -104,12 +118,12 @@ class DenseTeacher(MultiSteamModule):
             label_kwargs[k] = v_label_kwargs
 
             if isinstance(v, torch.Tensor):
-                v_unlabel_weak_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
-                v_unlabel_strong_kwargs=torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
+                v_unlabel_weak_kwargs = torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(0,2*self.unlabel_batch_size,2)]))
+                v_unlabel_strong_kwargs = torch.index_select(v_unlabel_weak_strong_kwargs,dim=0,index=torch.tensor([i for i in range(1,2*self.unlabel_batch_size,2)]))
             else:
-                v_unlabel_weak_kwargs = v_unlabel_weak_strong_kwargs[:self.unlabel_batch_size]
-                v_unlabel_strong_kwargs = v_unlabel_weak_strong_kwargs[self.unlabel_batch_size:]
-            
+                v_unlabel_weak_kwargs = [v_unlabel_weak_strong_kwargs[i] for i in range(0, 2*self.unlabel_batch_size, 2)]
+                v_unlabel_strong_kwargs = [v_unlabel_weak_strong_kwargs[i] for i in range(1, 2*self.unlabel_batch_size, 2)]
+
             unlabel_weak_kwargs[k] = v_unlabel_weak_kwargs
             unlabel_strong_kwargs[k] = v_unlabel_strong_kwargs
 
@@ -127,20 +141,23 @@ class DenseTeacher(MultiSteamModule):
             unlabel_weak_kwargs[k] = None
 
         output_unsup_strong = self.student.forward_train(unlabel_strong_images, unlabel_strong_metas, **unlabel_strong_kwargs)
-        strong_heatmap = None
-        if isinstance(output_unsup_strong, dict):
-            strong_heatmap = output_unsup_strong[self.key]
-        else:
-            strong_heatmap = output_unsup_strong[int(self.key)]
+
+        strong_heatmap = output_unsup_strong
+        if self.semi_sup_key is not None:
+            if isinstance(output_unsup_strong, dict):
+                strong_heatmap = output_unsup_strong[self.semi_sup_key]
+            else:
+                strong_heatmap = output_unsup_strong[int(self.semi_sup_key)]
 
         # 应该返回 heatmap
         self.teacher.eval()
         output_unsup_weak = self.teacher.forward_train(unlabel_weak_images, unlabel_weak_metas, **unlabel_weak_kwargs)
-        weak_heatmap = None
-        if isinstance(output_unsup_weak, dict):
-            weak_heatmap = output_unsup_weak[self.key]
-        else:
-            weak_heatmap = output_unsup_weak[int(self.key)]
+        weak_heatmap = output_unsup_weak
+        if self.semi_sup_key is not None:
+            if isinstance(output_unsup_weak, dict):
+                weak_heatmap = output_unsup_weak[self.semi_sup_key]
+            else:
+                weak_heatmap = output_unsup_weak[int(self.semi_sup_key)]
 
         unsup_loss = self._get_unsup_dense_loss(
             strong_heatmap,

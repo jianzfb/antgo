@@ -105,30 +105,12 @@ class filepath_parse(object):
 
 
 @register
-class ifelseend_op(object):
-    def __init__(self, true_func, false_func):
-        from antgo.pipeline.engine.factory import op
-        func_obj, func_args = true_func
-        self.true_func = op(func_obj.replace('_','-'), kwargs=func_args)
-        func_obj, func_args = false_func
-        self.false_func = op(func_obj.replace('_','-'), kwargs=func_args)
-
-    def __call__(self, *args):
-        condition_val = args[0]
-        if condition_val:
-            return self.true_func(*args[1:])
-        else:
-            return self.false_func(*args[1:])
-
-
-@register
 class switch_op(object):
     def __init__(self, stride=0):
         self.stride = stride
 
     def __call__(self, *args):
         state_i = int(args[0])
-        print(f'state_i {state_i}')
         if self.stride == 0:
             return args[state_i+1]
 
@@ -193,6 +175,65 @@ class scalar_int32_op(object):
 
 
 @register
+class tensor_int32_op(object):
+    def __init__(self, init_val, is_placeholder=False, is_mutable=True):
+        assert(init_val.dtype == np.int32)
+        self.init_val = init_val
+        self.is_placeholder = is_placeholder
+        self.is_mutable = is_mutable
+        self.first_call = True
+
+    def __call__(self, *args):
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
+
+@register
+class tensor_float32_op(object):
+    def __init__(self, init_val, is_placeholder=False, is_mutable=True):
+        assert(init_val.dtype == np.float32)
+        self.init_val = init_val
+        self.is_placeholder = is_placeholder
+        self.is_mutable = is_mutable
+        self.first_call = True
+
+    def __call__(self, *args):
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
+
+
+@register
+class tensor_float64_op(object):
+    def __init__(self, init_val, is_placeholder=False, is_mutable=True):
+        assert(init_val.dtype == np.float64)
+        self.init_val = init_val
+        self.is_placeholder = is_placeholder
+        self.is_mutable = is_mutable
+        self.first_call = True
+
+    def __call__(self, *args):
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
+
+
+@register
 class bool_greater_compare_op(object):
     def __init__(self, thres=0):
         # bool value
@@ -223,22 +264,49 @@ class bool_greater_equal_compare_op(object):
 
 
 @register
-class state_greater_equal_compare_op(object):
-    def __init__(self, thres_list=[]):
-        # thres_list: 有序值
-        self.thres_list = thres_list
+class bool_equal_compare_op(object):
+    def __init__(self, init_val=0):
+        # bool value
+        self.init_val = init_val
 
     def __call__(self, *args):
         if len(args) == 1:
             value = args[0]
-            for index in range(len(self.thres_list)-1):
-                if value >= self.thres_list[index] and value < self.thres_list[index+1]:
-                    return np.array([index], dtype=np.int32)
-
-            return np.array([0], dtype=np.int32)
+            return np.array([value[0] == self.init_val], dtype=np.bool)
         else:
             a, b = args[:2]
-            if float(a) >= float(b):
-                return np.array([1], dtype=np.int32)
-            else:
-                return np.array([0], dtype=np.int32)
+            return np.array([a[0] == b[0]], dtype=np.bool)
+
+
+@register
+class empty_op(object):
+    def __call__(self, *args):
+        return np.empty((0), dtype=np.float32)
+
+
+@register
+class state_static_select_op(object):
+    def __init__(self, thres_list=[]):
+        # thres_list: 有序值(从小到打)
+        self.thres_list = thres_list
+
+    def __call__(self, *args):
+        value = args[0]
+        if value < self.thres_list[index]:
+            return np.array([0], dtype=np.int32)
+
+        for index in range(len(self.thres_list)-1):
+            if value >= self.thres_list[index] and value < self.thres_list[index+1]:
+                return np.array([index], dtype=np.int32)
+
+        return np.array([len(self.thres_list)-1], dtype=np.int32)
+
+
+@register
+class state_dynamic_select_op(object):
+    def __call__(self, *args):
+        a, b = args[:2]
+        if float(a) >= float(b):
+            return np.array([1], dtype=np.int32)
+        else:
+            return np.array([0], dtype=np.int32)

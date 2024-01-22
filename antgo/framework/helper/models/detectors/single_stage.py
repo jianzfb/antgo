@@ -90,10 +90,6 @@ class SingleStageDetector(BaseDetector):
                  pretrained=None,
                  init_cfg=None):
         super(SingleStageDetector, self).__init__(init_cfg)
-        # if pretrained:
-        #     warnings.warn('DeprecationWarning: pretrained is deprecated, '
-        #                   'please use "init_cfg" instead')
-        #     backbone.pretrained = pretrained
         if backbone is not None:
             self.backbone = build_backbone(backbone)
         if neck is not None:

@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from typing import Optional, Sequence, Union
 from antgo.dataflow.dataset.cusdomcls import *
 

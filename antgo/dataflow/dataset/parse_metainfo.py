@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import os.path as osp
 import warnings
 from antgo.framework.helper.utils.config import Config

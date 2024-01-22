@@ -28,7 +28,8 @@ from .operators import (
   RGB2BGR,
   FixedCrop,
   CorrectBoxes,
-  RandomBlur)
+  RandomBlur,
+  YoloBboxFormat)
 
 from .converting import (
   KeypointConverter,
@@ -63,5 +64,6 @@ __all__ = [
   'Meta',
   'RandomBlur',
   'KeypointConverter',
-  'KeynameConvert'
+  'KeynameConvert',
+  'YoloBboxFormat'
 ]

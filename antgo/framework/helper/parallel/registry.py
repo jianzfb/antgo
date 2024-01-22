@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from torch.nn.parallel import DataParallel, DistributedDataParallel
 
 from antgo.framework.helper.utils import Registry

@@ -2,6 +2,9 @@
 optimizer = dict(type='SGD', lr=0.01,  weight_decay=5e-4, momentum=0.01, nesterov=True)
 optimizer_config = dict(grad_clip=dict(max_norm=10))
 
+label_batch_size = 2
+unlabel_batch_size = 2
+
 # 学习率调度配置
 lr_config = dict(
     policy='CosineAnnealing',
@@ -20,10 +23,10 @@ log_config = dict(
 model = dict(
     type='DenseTeacher',
     train_cfg=dict(
-        key=0,
+        semi_sup_key=0,                                  # 半监督监控对象
         use_sigmoid=True,
-        label_batch_size=128,
-        unlabel_batch_size=16,
+        label_batch_size=label_batch_size,
+        unlabel_batch_size=unlabel_batch_size,
         semi_ratio=0.5,
         heatmap_n_thr=0.25,
         semi_loss_w=1.0
@@ -79,7 +82,7 @@ data=dict(
         ),            
     ],
     train_dataloader=dict(
-        samples_per_gpu=[128,16], 
+        samples_per_gpu=[label_batch_size, unlabel_batch_size], 
         workers_per_gpu=4,
         drop_last=True,
         shuffle=True,

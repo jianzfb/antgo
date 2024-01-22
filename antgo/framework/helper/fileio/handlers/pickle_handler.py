@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import pickle
 
 from .base import BaseFileHandler

@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 
 # This script consists of several convert functions which
 # can modify the weights of model in original repo to be

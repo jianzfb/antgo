@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from antgo.dataflow.dataset.base_coco_style_dataset import BaseCocoStyleDataset
 
 

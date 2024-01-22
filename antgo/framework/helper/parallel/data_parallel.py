@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from itertools import chain
 
 from torch.nn.parallel import DataParallel

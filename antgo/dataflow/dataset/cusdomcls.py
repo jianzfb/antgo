@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
