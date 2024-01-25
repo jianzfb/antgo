@@ -358,6 +358,8 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         if len(joints2d.shape) == 3:
             obj_num = joints2d.shape[0]
             obj_i = np.random.randint(0, obj_num)
+            if not self.with_random:
+                obj_i = 0
             joints2d = joints2d[obj_i]
             joints_vis = joints_vis[obj_i]
 
@@ -404,6 +406,21 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         for i in range(self.num_joints):
             joints2d[i, 0:2] = self.affine_transform(joints2d[i, 0:2], trans)
 
+        # 转换BBOX
+        bbox_corner_x0, bbox_corner_y0 = self.affine_transform([bbox[0], bbox[1]], trans)
+        bbox_corner_x1, bbox_corner_y1 = self.affine_transform([bbox[2], bbox[3]], trans)
+        bbox_corner_x2, bbox_corner_y2 = self.affine_transform([bbox[0], bbox[3]], trans)
+        bbox_corner_x3, bbox_corner_y3 = self.affine_transform([bbox[2], bbox[1]], trans)
+
+        bbox_left_upper_x = np.min([bbox_corner_x0, bbox_corner_x1, bbox_corner_x2, bbox_corner_x3])
+        bbox_left_upper_y = np.min([bbox_corner_y0, bbox_corner_y1, bbox_corner_y2, bbox_corner_y3])
+        bbox_right_bottom_x = np.max([bbox_corner_x0, bbox_corner_x1, bbox_corner_x2, bbox_corner_x3])
+        bbot_right_bottom_y = np.max([bbox_corner_y0, bbox_corner_y1, bbox_corner_y2, bbox_corner_y3])
+
+        bbox = np.array([bbox_left_upper_x, bbox_left_upper_y, bbox_right_bottom_x, bbot_right_bottom_y])
+        bbox[0::2] = np.clip(bbox[0::2], 0, inp_w)
+        bbox[1::2] = np.clip(bbox[1::2], 0, inp_h)
+
         check_mask = (joints2d[:,0] >= 0) * (joints2d[:, 0] < inp_w) * (joints2d[:,1] >= 0) * (joints2d[:, 1] < inp_h)
         joints_vis[np.where(check_mask == False)] = 0
 
@@ -434,6 +451,8 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         sample.pop('image')
         sample.pop('joints2d')
         sample.pop('joints_vis')
+
+        out_sample.update(sample)
         out_sample.update({
             'image': image,
             'heatmap': target,
@@ -441,9 +460,9 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             'offset_y': offset_y,
             'heatmap_weight': target_weight,
             'joints_vis': joints_vis,
-            'joints2d': joints2d
+            'joints2d': joints2d,
+            'bboxes': bbox
         })
-        out_sample.update(sample)
         return out_sample
 
 

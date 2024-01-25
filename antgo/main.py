@@ -6,7 +6,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 import sys
-sys.path.insert(0, '/workspace/antgo')
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
@@ -808,6 +807,10 @@ def main():
         logging.error('Must set --checkpoint=')
         return
 
+      # 删除存在的历史评估缓存结果
+      if os.path.exists('./evalresult.json'):
+        os.remove('./evalresult.json')
+
       # 获得实验root
       if args.exp not in args.root:
         with open('./.project.json', 'r') as fp:
@@ -864,14 +867,14 @@ def main():
             if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
               if 'metric' not in exp_info:
                 exp_info['metric'] = []
-              
+
               # {'checkpoint': '', 'metric': {}, 'time': ''}
               if not os.path.exists('./evalresult.json'):
                 logging.error("Not found eval result file.")
               else:
                 with open("./evalresult.json", 'r') as fp:
                   metric_info = json.load(fp)
-                
+
               exp_info['metric'].append(
                 {
                   'checkpoint': args.checkpoint,
@@ -883,6 +886,10 @@ def main():
 
       with open('./.project.json', 'w') as fp:
         json.dump(project_info, fp)
+
+      # 删除评估缓存结果
+      if os.path.exists('./evalresult.json'):
+        os.remove('./evalresult.json')
 
       if args.clear:
         os.system("rm -rf /tiger/*")

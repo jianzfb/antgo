@@ -154,7 +154,7 @@ class COCOCompatibleEval(object):
 
         tag_and_value = {}
         for tag, value in zip(tags, coco_eval.stats.tolist()):
-            tag_and_value[tag] = value
+            tag_and_value[tag] = float(value)
 
         return tag_and_value
 

@@ -57,7 +57,7 @@ class PWWaterFall(nn.Module):
         return x
 
 class ConvWaterFall(nn.Module):
-    def __init__(self, in_channels, middle_channels=32, out_channels=32, out_relu=False):
+    def __init__(self, in_channels, middle_channels=32, out_channels=32, with_relu=False):
         super().__init__()
         self.block_root = ConvModule(
             (int)(in_channels),
@@ -95,7 +95,7 @@ class ConvWaterFall(nn.Module):
             act_cfg=dict(type='ReLU')
         )
 
-        if out_relu:
+        if with_relu:
             self.block_fuse = ConvModule(
                 in_channels=(middle_channels*4),
                 out_channels=out_channels,
@@ -124,7 +124,7 @@ class ConvWaterFall(nn.Module):
         return x
 
 class ConvWaterFallV2(nn.Module):
-    def __init__(self, in_channels, middle_channels=32, out_channels=32):
+    def __init__(self, in_channels, middle_channels=32, out_channels=32, with_relu=False):
         super().__init__()
         self.block_root = ConvModule(
             (int)(in_channels),
@@ -133,7 +133,7 @@ class ConvWaterFallV2(nn.Module):
             padding=0,
             norm_cfg=dict(type='BN'),
             act_cfg=dict(type='ReLU')
-        )                
+        )
 
         self.block_0 = ConvModule(
             in_channels=(int)(in_channels),
@@ -162,14 +162,24 @@ class ConvWaterFallV2(nn.Module):
             act_cfg=dict(type='ReLU')
         )
 
-        self.block_fuse = ConvModule(
-            in_channels=(middle_channels*4),
-            out_channels=out_channels,
-            kernel_size=3,
-            padding=1,
-            norm_cfg=dict(type='BN'),
-            act_cfg=dict(type='ReLU')
-        )     
+        if with_relu:
+            self.block_fuse = ConvModule(
+                in_channels=(middle_channels*4),
+                out_channels=out_channels,
+                kernel_size=3,
+                padding=1,
+                norm_cfg=dict(type='BN'),
+                act_cfg=dict(type='ReLU')
+            )
+        else:
+            self.block_fuse = ConvModule(
+                in_channels=(middle_channels*4),
+                out_channels=out_channels,
+                kernel_size=3,
+                padding=1,
+                norm_cfg=dict(type='BN'),
+                act_cfg=None
+            )
 
     def forward(self, x):
         x_root = self.block_root(x)
