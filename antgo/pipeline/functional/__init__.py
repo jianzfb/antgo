@@ -16,6 +16,8 @@ from antgo.pipeline.hparam import dynamic_dispatch
 from antgo.pipeline.functional.common.config import *
 import numpy as np
 import json
+import os
+import cv2
 
 read_camera = DataCollection.read_camera
 read_video = DataCollection.read_video
@@ -133,6 +135,32 @@ def camera_dc(*args):
 
     camera_entity = Entity()
     return DataFrame.read_video(*args).map(lambda x: camera_entity(**{key: value for key,value in zip(index, x)}))
+
+
+@dynamic_dispatch
+def imread_dc(*args):
+  index = param_scope()._index
+  assert(args[0], str)
+  assert(os.path.exists(args[0]))
+  image = cv2.imread(args[0])
+
+  def inner():
+    yield Entity()(**{index: image})
+
+  return DataFrame(inner())
+
+
+@dynamic_dispatch
+def serial_imread_dc(*args):
+  index = param_scope()._index
+  assert(args[0], str)
+
+  def inner():
+    for image_path in args:
+      image = cv2.imread(args[0])
+      yield Entity()(**{index: image})
+
+  return DataFrame(inner())
 
 
 def _api(name='serve'):

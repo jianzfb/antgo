@@ -458,6 +458,8 @@ class TFDataset(torch.utils.data.IterableDataset):
             pprint(f'Rank {self.rank} (TOTAL NUM {real_num_samples} TARGET NUM {self.num_samples})')
             pprint(f'Rank {self.rank} local-index {local_select_index_list_in_world}')
             pprint(f'Rank {self.rank} thread id {worker_info.id} use index {select_index_list} and data path list {data_path_list}')
+        else:
+            select_index_list = list(range(len(self.num_samples_list)))
 
         remain_sample_num = 0
         if worker_info is not None:
