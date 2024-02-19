@@ -567,6 +567,19 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
                 arg_type = arg_type.cname.replace('const', '')
                 ext_cont_init += f'{arg_type} {arg_name}={str(arg_value).lower()};\n'
 
+    args_run_names = func.func.loader_kwargs['construct_arg_names']
+    args_run_types = func.func.loader_kwargs['construct_arg_types']
+    for args_run_name, args_run_type in zip(args_run_names, args_run_types):
+        const_define += f'{args_run_type} {args_run_name};\n'
+        const_val_default = op_kwargs[args_run_name]
+        if isinstance(const_val_default, bool):
+            const_val_default = 'true' if const_val_default else 'false'
+        elif isinstance(const_val_default, str) and const_val_default == '':
+            const_val_default = '\"\"'
+
+        const_init += f'this->{args_run_name}={const_val_default};\n'
+        const_init += f'if(params.find("{args_run_name}") != params.end())'+'{'+f'this->{args_run_name}={args_run_type}(params["{args_run_name}"][0]);'+'}\n'
+
     # 创建header文件
     eagleeye_warp_h_code_content = \
         gen_code('./templates/op_class_code.h')(            
@@ -595,21 +608,22 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         else:
             args_run += f',{arg_name}'
 
-    args_run_names = func.func.loader_kwargs['construct_arg_names']
     depedent_src = func.func.loader_kwargs.get('depedent_src', [])
     # args_init = ','.join([f'{op_kwargs[n]}' for n in args_run_names])
-    args_init = ''
-    for n in args_run_names:
-        value = op_kwargs[n]
-        if isinstance(value, bool):
-            value = 'true' if value else 'false'
-        elif isinstance(value, str) and value == '':
-            value = '\"\"'
+    # args_init = ''
+    # for n in args_run_names:
+    #     value = op_kwargs[n]
+    #     if isinstance(value, bool):
+    #         value = 'true' if value else 'false'
+    #     elif isinstance(value, str) and value == '':
+    #         value = '\"\"'
 
-        args_init += f'{value},'
+    #     # args_init += f'{value},'
+    #     args_init += f'{n},'
+    args_init = ','.join(args_run_names)
 
-    if args_init.endswith(','):
-        args_init = args_init[:-1]
+    # if args_init.endswith(','):
+    #     args_init = args_init[:-1]
     eagleeye_warp_cpp_code_content = \
         gen_code('./templates/op_class_code.cpp')(
             op_name=f"{op_name.replace('_','').capitalize()}Op",
