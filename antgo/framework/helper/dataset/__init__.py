@@ -21,8 +21,8 @@ def register_antgo_dataset():
                 {   
                     'name': dataset_module_name,
                     '__doc__': f'{dataset_module_name} reader', 
-                    '__init__': lambda self, pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None, **kwargs: 
-                        Reader.__init__(self, getattr(local_dataset, self.name)(**kwargs), pipeline=pipeline, weak_pipeline=weak_pipeline, strong_pipeline=strong_pipeline, inputs_def=inputs_def)
+                    '__init__': lambda self, pipeline=None, pre_pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None, **kwargs: 
+                        Reader.__init__(self, getattr(local_dataset, self.name)(**kwargs), pipeline=pipeline, pre_pipeline=pre_pipeline, weak_pipeline=weak_pipeline, strong_pipeline=strong_pipeline, inputs_def=inputs_def)
                 }
             )
         DATASETS.register_module()(dataset_module_reader)
@@ -44,8 +44,8 @@ def register_torchvision_dataset():
                 {   
                     'name': dataset_module_name,
                     '__doc__': f'{dataset_module_name} reader', 
-                    '__init__': lambda self, pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None, **kwargs: 
-                        TVReader.__init__(self, getattr(torchvision.datasets, self.name)(**kwargs), pipeline=pipeline, weak_pipeline=weak_pipeline, strong_pipeline=strong_pipeline, inputs_def=inputs_def)
+                    '__init__': lambda self, pipeline=None, pre_pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None, **kwargs: 
+                        TVReader.__init__(self, getattr(torchvision.datasets, self.name)(**kwargs), pipeline=pipeline, pre_pipeline=pre_pipeline, weak_pipeline=weak_pipeline, strong_pipeline=strong_pipeline, inputs_def=inputs_def)
                 }
             )
         DATASETS.register_module()(dataset_module_reader)

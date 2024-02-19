@@ -228,13 +228,14 @@ class BaseCocoStyleDataset(Dataset):
             'img_path': img['img_path'],
             'bbox': bbox,
             'bbox_score': np.ones(1, dtype=np.float32),
+            'area': np.array((x2-x1)*(y2-y1)).reshape(1),
             'num_keypoints': num_keypoints,
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,
             'iscrowd': ann.get('iscrowd', 0),
             'segmentation': ann.get('segmentation', None),
             'id': ann['id'],
-            'category_id': ann['category_id'],
+            'category_id': np.array([ann['category_id']]),
             # store the raw annotation of the instance
             # it is useful for evaluation without providing ann_file
             'raw_ann_info': copy.deepcopy(ann),
@@ -313,19 +314,6 @@ class BaseCocoStyleDataset(Dataset):
             data_info_bu['invalid_segs'] = invalid_segs
 
             data_list_bu.append(data_info_bu)
-
-        # add images without instance for evaluation
-        if self.test_mode:
-            for img_info in image_list:
-                if img_info['img_id'] not in used_img_ids:
-                    data_info_bu = {
-                        'img_id': img_info['img_id'],
-                        'img_path': img_info['img_path'],
-                        'id': list(),
-                        'raw_ann_info': None,
-                    }
-                    data_list_bu.append(data_info_bu)
-
         return data_list_bu
 
     def _load_detection_results(self) -> List[dict]:
@@ -370,6 +358,7 @@ class BaseCocoStyleDataset(Dataset):
                 'img_shape': (img['height'], img['width']),
                 'bbox': bbox,
                 'bbox_score': bbox_score,
+                'area': np.array((bbox[2]-bbox[0])*(bbox[3]-bbox[1])).reshape(1),
                 'keypoints': keypoints,
                 'keypoints_visible': keypoints_visible,
                 'id': id_,
@@ -413,7 +402,6 @@ class BaseCocoStyleDataset(Dataset):
 
         # filter illegal data, such as data that has no annotations.
         self.data_list = self.filter_data()
-
 
     @property
     def size(self):

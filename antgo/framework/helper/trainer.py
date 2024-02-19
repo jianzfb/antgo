@@ -274,6 +274,12 @@ class Trainer(BaseTrainer):
         # build lr scheduler
         # 如果构造复合lr调度，则不在全局hook中注册
         lr_scheduler = {}
+        if isinstance(self.cfg.lr_config, list):
+            self.cfg.lr_config = dict(
+                policy= 'Composer',
+                lr_updater_list=self.cfg.lr_config
+            )
+
         if 'policy' not in self.cfg.lr_config:
             # lr schedule 复合，对多个子模块独立控制
             for submodule_name, lr_config in self.cfg.lr_config.items():

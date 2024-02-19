@@ -15,10 +15,11 @@ from antgo.framework.helper.utils import build_from_cfg
 
 def register(cls):
     class ProxyReader(Reader):
-        def __init__(self, dir='', pipeline=None, inputs_def=None,weak_pipeline=None, strong_pipeline=None, **kwargs):
+        def __init__(self, dir='', pipeline=None, pre_pipeline=None, inputs_def=None,weak_pipeline=None, strong_pipeline=None, **kwargs):
             super().__init__(
                 cls(dir=dir, **kwargs),
                 pipeline=pipeline,
+                pre_pipeline=pre_pipeline,
                 inputs_def=inputs_def,
                 weak_pipeline=weak_pipeline,
                 strong_pipeline=strong_pipeline
@@ -26,6 +27,23 @@ def register(cls):
     from antgo.framework.helper.dataset.builder import DATASETS
     DATASETS.register_module(name=cls.__name__)(ProxyReader)   
     return ProxyReader
+
+
+class DatasetWithPrePipeline(object):
+    def __init__(self, dataset, pre_pipeline=None):
+        self.dataset = dataset
+        self.pre_pipeline = pre_pipeline
+
+    def __len__(self):
+        return self.dataset.size
+
+    def __getitem__(self, idx):
+        sample = self.dataset[idx]
+        if self.pre_pipeline is not None:
+            for transform in self.pre_pipeline:
+                sample = transform(sample)
+
+        return sample
 
 
 class KVReaderBase(torch.utils.data.Dataset):
@@ -99,9 +117,10 @@ class KVReaderBase(torch.utils.data.Dataset):
 
 
 class Reader(torch.utils.data.Dataset):
-    def __init__(self, dataset, pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None):
+    def __init__(self, dataset, pipeline=None, pre_pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None):
         self.proxy_dataset = dataset
         self.pipeline = []
+        self.pre_pipeline = []
         self.pipeline_types = []
         self.weak_pipeline = []
         self.strong_pipeline = []        
@@ -114,6 +133,11 @@ class Reader(torch.utils.data.Dataset):
                     self.pipeline.append(transform)
                 else:
                     raise TypeError('pipeline must be a dict')
+
+            if pre_pipeline is not None:
+                for transform in pre_pipeline:
+                    transform = build_from_cfg(transform, PIPELINES)
+                    self.pre_pipeline.append(transform)
 
             if weak_pipeline is not None and strong_pipeline is not None:
                 for transform in weak_pipeline:
@@ -189,6 +213,10 @@ class Reader(torch.utils.data.Dataset):
         except Exception as e:
             traceback.print_exc()
 
+        if self.pre_pipeline is not None:
+            for transform in self.pre_pipeline:
+                sample = transform(sample)
+
         weak_sample = None
         strong_sample = None
         if len(self.weak_pipeline) > 0 or len(self.strong_pipeline) > 0:
@@ -200,9 +228,12 @@ class Reader(torch.utils.data.Dataset):
                 strong_sample = transform(strong_sample)
 
         if weak_sample is not None and strong_sample is not None:
+            # 帮助样本可以访问到全局数据集，mixup等增强算子使用
+            weak_sample['dataset'] = DatasetWithPrePipeline(self.proxy_dataset, self.pre_pipeline)
             for transform in self.pipeline:
                 weak_sample = transform(weak_sample)
 
+            strong_sample['dataset'] = DatasetWithPrePipeline(self.proxy_dataset, self.pre_pipeline)
             for transform in self.pipeline:
                 strong_sample = transform(strong_sample)
 
@@ -210,7 +241,9 @@ class Reader(torch.utils.data.Dataset):
             weak_sample = self._arrange(weak_sample, self._fields, self._alias)
             strong_sample = self._arrange(strong_sample, self._fields, self._alias)
             return [weak_sample, strong_sample]
-        else:    
+        else:
+            # 帮助样本可以访问到全局数据集，mixup等增强算子使用
+            sample['dataset'] = DatasetWithPrePipeline(self.proxy_dataset, self.pre_pipeline)
             for transform in self.pipeline:
                 sample = transform(sample)
 
@@ -229,9 +262,10 @@ class Reader(torch.utils.data.Dataset):
 
 
 class TVReader(torch.utils.data.Dataset):
-    def __init__(self, dataset, pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None):
+    def __init__(self, dataset, pipeline=None, pre_pipeline=None, weak_pipeline=None, strong_pipeline=None, inputs_def=None):
         self.proxy_dataset = dataset
         self.pipeline = []
+        self.pre_pipeline = []
         self.pipeline_types = []
         self.weak_pipeline = []
         self.strong_pipeline = []        
@@ -244,6 +278,11 @@ class TVReader(torch.utils.data.Dataset):
                     self.pipeline.append(transform)
                 else:
                     raise TypeError('pipeline must be a dict')
+
+            if pre_pipeline is not None:
+                for transform in pre_pipeline:
+                    transform = build_from_cfg(transform, PIPELINES)
+                    self.pre_pipeline.append(transform)
 
             if weak_pipeline is not None and strong_pipeline is not None:
                 for transform in weak_pipeline:
@@ -327,6 +366,10 @@ class TVReader(torch.utils.data.Dataset):
         except Exception as e:
             traceback.print_exc()
 
+        if self.pre_pipeline is not None:
+            for transform in self.pre_pipeline:
+                sample = transform(sample)
+
         weak_sample = None
         strong_sample = None
         if len(self.weak_pipeline) > 0 or len(self.strong_pipeline) > 0:
@@ -338,9 +381,11 @@ class TVReader(torch.utils.data.Dataset):
                 strong_sample = transform(strong_sample)
 
         if weak_sample is not None and strong_sample is not None:
+            weak_sample['dataset'] = DatasetWithPrePipeline(self.proxy_dataset, self.pre_pipeline)
             for transform in self.pipeline:
                 weak_sample = transform(weak_sample)
 
+            strong_sample['dataset'] = DatasetWithPrePipeline(self.proxy_dataset, self.pre_pipeline)
             for transform in self.pipeline:
                 strong_sample = transform(strong_sample)
 
@@ -349,6 +394,7 @@ class TVReader(torch.utils.data.Dataset):
             strong_sample = self._arrange(strong_sample, self._fields, self._alias)
             return [weak_sample, strong_sample]
         else:
+            sample['dataset'] = DatasetWithPrePipeline(self.proxy_dataset, self.pre_pipeline)
             for transform in self.pipeline:
                 sample = transform(sample)
 

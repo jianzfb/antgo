@@ -12,7 +12,7 @@ from .wrappers import Linear
 from .activation import build_activation_layer
 from .conv import build_conv_layer
 from .norm import build_norm_layer
-from antgo.framework.helper.base_module import BaseModule, ModuleList, Sequential
+from antgo.framework.helper.base_module import BaseModule
 from antgo.framework.helper.utils import (ConfigDict, build_from_cfg, deprecated_api_warning,
                         to_2tuple)
 from .drop import build_dropout
@@ -605,13 +605,13 @@ class FFN(BaseModule):
         in_channels = embed_dims
         for _ in range(num_fcs - 1):
             layers.append(
-                Sequential(
+                nn.Sequential(
                     Linear(in_channels, feedforward_channels), self.activate,
                     nn.Dropout(ffn_drop)))
             in_channels = feedforward_channels
         layers.append(Linear(feedforward_channels, embed_dims))
         layers.append(nn.Dropout(ffn_drop))
-        self.layers = Sequential(*layers)
+        self.layers = nn.Sequential(*layers)
         self.dropout_layer = build_dropout(
             dropout_layer) if dropout_layer else torch.nn.Identity()
         self.add_identity = add_identity
@@ -721,7 +721,7 @@ class BaseTransformerLayer(BaseModule):
         self.operation_order = operation_order
         self.norm_cfg = norm_cfg
         self.pre_norm = operation_order[0] == 'norm'
-        self.attentions = ModuleList()
+        self.attentions = nn.ModuleList()
 
         index = 0
         for operation_name in operation_order:
@@ -739,7 +739,7 @@ class BaseTransformerLayer(BaseModule):
 
         self.embed_dims = self.attentions[0].embed_dims
 
-        self.ffns = ModuleList()
+        self.ffns = nn.ModuleList()
         num_ffns = operation_order.count('ffn')
         if isinstance(ffn_cfgs, dict):
             ffn_cfgs = ConfigDict(ffn_cfgs)
@@ -755,7 +755,7 @@ class BaseTransformerLayer(BaseModule):
                 build_feedforward_network(ffn_cfgs[ffn_index],
                                           dict(type='FFN')))
 
-        self.norms = ModuleList()
+        self.norms = nn.ModuleList()
         num_norms = operation_order.count('norm')
         for _ in range(num_norms):
             self.norms.append(build_norm_layer(norm_cfg, self.embed_dims)[1])
@@ -891,7 +891,7 @@ class TransformerLayerSequence(BaseModule):
             assert isinstance(transformerlayers, list) and \
                    len(transformerlayers) == num_layers
         self.num_layers = num_layers
-        self.layers = ModuleList()
+        self.layers = nn.ModuleList()
         for i in range(num_layers):
             self.layers.append(build_transformer_layer(transformerlayers[i]))
         self.embed_dims = self.layers[0].embed_dims
