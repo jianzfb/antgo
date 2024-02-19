@@ -133,8 +133,8 @@ class LrUpdaterHook(Hook):
         self._set_lr(runner, self.regular_lr)
 
     def before_train_iter(self, runner):
-        cur_iter = runner.iter
         if not self.by_epoch:
+            cur_iter = runner.iter
             self.regular_lr = self.get_regular_lr(runner)
             if self.warmup is None or cur_iter >= self.warmup_iters:
                 self._set_lr(runner, self.regular_lr)
@@ -142,6 +142,7 @@ class LrUpdaterHook(Hook):
                 warmup_lr = self.get_warmup_lr(cur_iter)
                 self._set_lr(runner, warmup_lr)
         elif self.by_epoch:
+            cur_iter = runner.epoch
             if self.warmup is None or cur_iter > self.warmup_iters:
                 return
             elif cur_iter == self.warmup_iters:
@@ -799,9 +800,6 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
         self.lr_updater_list[self.cur_policy_i].before_train_epoch(runner)
 
     def before_train_iter(self, runner):
-        if self.by_epoch:
-            return
-
         for policy_i in range(len(self.lr_updater_list)):
             if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter < self.lr_updater_cfg[policy_i]['end']:
                 if self.cur_policy_i != policy_i:
