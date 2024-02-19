@@ -3,7 +3,8 @@ from .anchor_generator import (AnchorGenerator, LegacyAnchorGenerator,
                                YOLOAnchorGenerator)
 from .builder import (ANCHOR_GENERATORS, PRIOR_GENERATORS,
                       build_anchor_generator, build_prior_generator)
-from .point_generator import MlvlPointGenerator, PointGenerator
+from .point_generator import PointGenerator
+from .prior_generator import MlvlPointGenerator
 from .utils import anchor_inside_flags, calc_region, images_to_levels
 
 __all__ = [

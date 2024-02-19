@@ -2,9 +2,12 @@
 import warnings
 import numpy as np
 import torch
+from torch import Tensor
 from torch.nn.modules.utils import _pair
-
+from typing import List, Tuple, Union
 from .builder import PRIOR_GENERATORS
+
+DeviceType = Union[str, torch.device]
 
 
 @PRIOR_GENERATORS.register_module()

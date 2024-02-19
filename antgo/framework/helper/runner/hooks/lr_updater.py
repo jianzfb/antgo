@@ -1,6 +1,7 @@
 import numbers
 from math import cos, pi
 from .hook import HOOKS, Hook
+from antgo.framework.helper.utils import build_from_cfg
 
 
 class LrUpdaterHook(Hook):
@@ -24,7 +25,7 @@ class LrUpdaterHook(Hook):
                  warmup=None,
                  warmup_iters=0,
                  warmup_ratio=0.1,
-                 warmup_by_epoch=False):
+                 warmup_by_epoch=False, **kwargs):
         # validate the "warmup" argument
         if warmup is not None:
             if warmup not in ['constant', 'linear', 'exp']:
@@ -49,8 +50,8 @@ class LrUpdaterHook(Hook):
         else:
             self.warmup_epochs = None
 
-        self.base_lr = []  # initial lr for all param groups
-        self.regular_lr = []  # expected lr if no warming up is performed
+        self.base_lr = []       # initial lr for all param groups
+        self.regular_lr = []    # expected lr if no warming up is performed
 
     def _set_lr(self, runner, lr_groups):
         if isinstance(runner.optimizer, dict):
@@ -151,13 +152,23 @@ class LrUpdaterHook(Hook):
 
 
 @HOOKS.register_module()
-class FixedLrUpdaterHook(LrUpdaterHook):
-
+class WarmupLrUpdaterHook(LrUpdaterHook):
     def __init__(self, **kwargs):
-        super(FixedLrUpdaterHook, self).__init__(**kwargs)
-
+        super(WarmupLrUpdaterHook, self).__init__(**kwargs)
+    
     def get_lr(self, runner, base_lr):
         return base_lr
+
+
+@HOOKS.register_module()
+class FixedLrUpdaterHook(LrUpdaterHook):
+
+    def __init__(self, factor=1, **kwargs):
+        super(FixedLrUpdaterHook, self).__init__(**kwargs)
+        self.factor = factor
+
+    def get_lr(self, runner, base_lr):
+        return base_lr * self.factor
 
 
 @HOOKS.register_module()
@@ -739,3 +750,63 @@ def format_param(name, optim, param):
         if name not in param:
             raise KeyError(f'{name} is not found in {param.keys()}')
         return param[name]
+
+
+@HOOKS.register_module()
+class ComposerLrUpdaterHook(LrUpdaterHook):
+    def __init__(self, lr_updater_list, **kwargs):
+        # no warmup
+        kwargs['warmup'] = None
+        super(ComposerLrUpdaterHook, self).__init__(**kwargs)
+        self.lr_updater_list = []
+        self.lr_updater_cfg = []
+        begin = 0
+        for lr_config in lr_updater_list:
+            policy_type = lr_config.pop('policy')
+            if policy_type == 'ComposerLr':
+                continue
+
+            hook_type = policy_type + 'LrUpdaterHook'
+            lr_config['type'] = hook_type
+            hook = build_from_cfg(lr_config, HOOKS)
+            assert('begin' in lr_config and 'end' in lr_config)
+            assert(begin == lr_config['begin'])
+            begin = lr_config['end']
+            self.lr_updater_cfg.append(lr_config)
+            self.lr_updater_list.append(hook)
+
+        self.by_epoch = self.lr_updater_list[0].by_epoch
+        self.cur_policy_i = 0
+
+    def get_lr(self, runner, base_lr):
+        return 0
+
+    def before_run(self, runner):
+        super(ComposerLrUpdaterHook, self).before_run(runner)
+        self.lr_updater_list[self.cur_policy_i].base_lr = self.base_lr
+
+    def before_train_epoch(self, runner):
+        if not self.by_epoch:
+            return
+
+        for policy_i in range(len(self.lr_updater_list)):
+            if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch < self.lr_updater_cfg[policy_i]['end']:
+                if self.cur_policy_i != policy_i:
+                    self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
+                    self.cur_policy_i = policy_i
+                break
+
+        self.lr_updater_list[self.cur_policy_i].before_train_epoch(runner)
+
+    def before_train_iter(self, runner):
+        if self.by_epoch:
+            return
+
+        for policy_i in range(len(self.lr_updater_list)):
+            if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter < self.lr_updater_cfg[policy_i]['end']:
+                if self.cur_policy_i != policy_i:
+                    self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
+                    self.cur_policy_i = policy_i
+                break
+
+        self.lr_updater_list[self.cur_policy_i].before_train_iter(runner)

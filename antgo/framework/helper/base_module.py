@@ -278,6 +278,16 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
     def forward_test(self, image, **kwargs):
         raise NotImplementedError
 
+    def switch_to_deploy(self):
+        """Switch the sub-modules to deploy mode."""
+        for name, layer in self.named_modules():
+            if layer == self:
+                continue
+            if callable(getattr(layer, 'switch_to_deploy', None)):
+                print_log(f'module {name} has been switched to deploy mode',
+                          'current')
+                layer.switch_to_deploy(self.test_cfg)
+
     def __repr__(self):
         s = super().__repr__()
         if self.init_cfg:

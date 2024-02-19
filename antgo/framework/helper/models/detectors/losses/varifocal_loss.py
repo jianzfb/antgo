@@ -1,131 +1,83 @@
 import torch.nn as nn
 import torch.nn.functional as F
+import torch
 
 from antgo.framework.helper.models.builder import LOSSES
 from .utils import weight_reduce_loss
 
 
-def varifocal_loss(pred,
-                   target,
-                   weight=None,
-                   alpha=0.75,
-                   gamma=2.0,
-                   iou_weighted=True,
-                   reduction='mean',
-                   avg_factor=None):
-    """`Varifocal Loss <https://arxiv.org/abs/2008.13367>`_
+@LOSSES.register_module()
+class VariFocalLoss(nn.Module):
+    """Varifocal loss.
 
     Args:
-        pred (torch.Tensor): The prediction with shape (N, C), C is the
-            number of classes
-        target (torch.Tensor): The learning target of the iou-aware
-            classification score with shape (N, C), C is the number of classes.
-        weight (torch.Tensor, optional): The weight of loss for each
-            prediction. Defaults to None.
-        alpha (float, optional): A balance factor for the negative part of
-            Varifocal Loss, which is different from the alpha of Focal Loss.
-            Defaults to 0.75.
-        gamma (float, optional): The gamma for calculating the modulating
-            factor. Defaults to 2.0.
-        iou_weighted (bool, optional): Whether to weight the loss of the
-            positive example with the iou target. Defaults to True.
-        reduction (str, optional): The method used to reduce the loss into
-            a scalar. Defaults to 'mean'. Options are "none", "mean" and
-            "sum".
-        avg_factor (int, optional): Average factor that is used to average
-            the loss. Defaults to None.
+        use_target_weight (bool): Option to use weighted loss.
+            Different joint types may have different target weights.
+        reduction (str): Options are "none", "mean" and "sum".
+        loss_weight (float): Weight of the loss. Default: 1.0.
+        alpha (float): A balancing factor for the negative part of
+            Varifocal Loss. Defaults to 0.75.
+        gamma (float): Gamma parameter for the modulating factor.
+            Defaults to 2.0.
     """
-    # pred and target should be of the same size
-    assert pred.size() == target.size()
-    pred_sigmoid = pred.sigmoid()
-    target = target.type_as(pred)
-    if iou_weighted:
-        focal_weight = target * (target > 0.0).float() + \
-            alpha * (pred_sigmoid - target).abs().pow(gamma) * \
-            (target <= 0.0).float()
-    else:
-        focal_weight = (target > 0.0).float() + \
-            alpha * (pred_sigmoid - target).abs().pow(gamma) * \
-            (target <= 0.0).float()
-    loss = F.binary_cross_entropy_with_logits(
-        pred, target, reduction='none') * focal_weight
-    loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
-    return loss
-
-
-@LOSSES.register_module()
-class VarifocalLoss(nn.Module):
 
     def __init__(self,
-                 use_sigmoid=True,
-                 alpha=0.75,
-                 gamma=2.0,
-                 iou_weighted=True,
+                 use_target_weight=False,
+                 loss_weight=1.,
                  reduction='mean',
-                 loss_weight=1.0):
-        """`Varifocal Loss <https://arxiv.org/abs/2008.13367>`_
+                 alpha=0.75,
+                 gamma=2.0):
+        super().__init__()
 
-        Args:
-            use_sigmoid (bool, optional): Whether the prediction is
-                used for sigmoid or softmax. Defaults to True.
-            alpha (float, optional): A balance factor for the negative part of
-                Varifocal Loss, which is different from the alpha of Focal
-                Loss. Defaults to 0.75.
-            gamma (float, optional): The gamma for calculating the modulating
-                factor. Defaults to 2.0.
-            iou_weighted (bool, optional): Whether to weight the loss of the
-                positive examples with the iou target. Defaults to True.
-            reduction (str, optional): The method used to reduce the loss into
-                a scalar. Defaults to 'mean'. Options are "none", "mean" and
-                "sum".
-            loss_weight (float, optional): Weight of loss. Defaults to 1.0.
-        """
-        super(VarifocalLoss, self).__init__()
-        assert use_sigmoid is True, \
-            'Only sigmoid varifocal loss supported now.'
-        assert alpha >= 0.0
-        self.use_sigmoid = use_sigmoid
+        assert reduction in ('mean', 'sum', 'none'), f'the argument ' \
+            f'`reduction` should be either \'mean\', \'sum\' or \'none\', ' \
+            f'but got {reduction}'
+
+        self.reduction = reduction
+        self.use_target_weight = use_target_weight
+        self.loss_weight = loss_weight
         self.alpha = alpha
         self.gamma = gamma
-        self.iou_weighted = iou_weighted
-        self.reduction = reduction
-        self.loss_weight = loss_weight
 
-    def forward(self,
-                pred,
-                target,
-                weight=None,
-                avg_factor=None,
-                reduction_override=None):
+    def criterion(self, output, target):
+        label = (target > 1e-4).to(target)
+        weight = self.alpha * output.sigmoid().pow(
+            self.gamma) * (1 - label) + target
+        output = output.clip(min=-10, max=10)
+        vfl = (
+            F.binary_cross_entropy_with_logits(
+                output, target, reduction='none') * weight)
+        return vfl
+
+    def forward(self, output, target, target_weight=None):
         """Forward function.
 
-        Args:
-            pred (torch.Tensor): The prediction.
-            target (torch.Tensor): The learning target of the prediction.
-            weight (torch.Tensor, optional): The weight of loss for each
-                prediction. Defaults to None.
-            avg_factor (int, optional): Average factor that is used to average
-                the loss. Defaults to None.
-            reduction_override (str, optional): The reduction method used to
-                override the original reduction method of the loss.
-                Options are "none", "mean" and "sum".
+        Note:
+            - batch_size: N
+            - num_labels: K
 
-        Returns:
-            torch.Tensor: The calculated loss
+        Args:
+            output (torch.Tensor[N, K]): Output classification.
+            target (torch.Tensor[N, K]): Target classification.
+            target_weight (torch.Tensor[N, K] or torch.Tensor[N]):
+                Weights across different labels.
         """
-        assert reduction_override in (None, 'none', 'mean', 'sum')
-        reduction = (
-            reduction_override if reduction_override else self.reduction)
-        if self.use_sigmoid:
-            loss_cls = self.loss_weight * varifocal_loss(
-                pred,
-                target,
-                weight,
-                alpha=self.alpha,
-                gamma=self.gamma,
-                iou_weighted=self.iou_weighted,
-                reduction=reduction,
-                avg_factor=avg_factor)
+
+        if self.use_target_weight:
+            assert target_weight is not None
+            loss = self.criterion(output, target)
+            if target_weight.dim() == 1:
+                target_weight = target_weight.unsqueeze(1)
+            loss = (loss * target_weight)
         else:
-            raise NotImplementedError
-        return loss_cls
+            loss = self.criterion(output, target)
+
+        loss[torch.isinf(loss)] = 0.0
+        loss[torch.isnan(loss)] = 0.0
+
+        if self.reduction == 'sum':
+            loss = loss.sum()
+        elif self.reduction == 'mean':
+            loss = loss.mean()
+
+        return loss * self.loss_weight

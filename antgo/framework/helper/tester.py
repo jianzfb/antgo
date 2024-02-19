@@ -57,9 +57,21 @@ class Tester(object):
             _, world_size = get_dist_info()
             self.cfg.gpu_ids = range(world_size)
 
-        if self.cfg.data.get('test', None):
-            # build the dataloader
-            self.dataset = build_dataset(self.cfg.data.test)
+
+        assert(self.cfg.data.get('test', None) is not None)
+        assert(self.cfg.get('evaluation', None) is not None)
+
+        if not isinstance(self.cfg.data.test, list):
+            self.cfg.data.test = [self.cfg.data.test]
+        if not isinstance(self.cfg.evaluation, list):
+            self.cfg.evaluation = [self.cfg.evaluation]
+
+        assert(len(self.cfg.data.test) == len(self.cfg.evaluation))
+
+        self.dataset = []
+        self.data_loader = []
+        for data_cfg, eval_cfg in zip(self.cfg.data.test, self.cfg.evaluation):
+            dataset = build_dataset(data_cfg)
             test_dataloader_default_args = dict(
                 samples_per_gpu=1, workers_per_gpu=2, dist=distributed, shuffle=False)
 
@@ -67,14 +79,17 @@ class Tester(object):
                 **test_dataloader_default_args,
                 **self.cfg.data.get('test_dataloader', {})
             }        
-            
+
             assert(not test_loader_cfg['shuffle'])
-            if getattr(self.dataset, 'is_kv', False):
-                self.data_loader = build_kv_dataloader(self.dataset, **test_loader_cfg)
-            elif isinstance(self.dataset, torch.utils.data.IterableDataset):
-                self.data_loader = build_iter_dataloader(self.dataset, **test_loader_cfg)
+            if getattr(dataset, 'is_kv', False):
+                data_loader = build_kv_dataloader(dataset, **test_loader_cfg)
+            elif isinstance(dataset, torch.utils.data.IterableDataset):
+                data_loader = build_iter_dataloader(dataset, **test_loader_cfg)
             else:
-                self.data_loader = build_dataloader(self.dataset, **test_loader_cfg)
+                data_loader = build_dataloader(dataset, **test_loader_cfg)
+
+            self.dataset.append(dataset)
+            self.data_loader.append(data_loader)
 
     def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False, strict=True):
         # build the model and load checkpoint
@@ -113,38 +128,41 @@ class Tester(object):
             timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())
             json_file = osp.join(self.work_dir, f'eval_{timestamp}.json')
 
-        eval_cfg = self.cfg.get('evaluation', {}).copy()
-        metric_func = None
-        if 'metric' in eval_cfg:
-            metric_func = build_measure(eval_cfg['metric'])         
+        all_metric = []
+        for dataset, data_loader, eval_cfg in zip(self.dataset, self.data_loader, self.cfg.evaluation):
+            eval_cfg = eval_cfg.copy()
+            metric_func = None
+            if 'metric' in eval_cfg:
+                metric_func = build_measure(eval_cfg['metric'])         
 
-        needed_info = []
-        if metric_func is not None:
-            needed_info = metric_func.keys()['gt']
+            needed_info = []
+            if metric_func is not None:
+                needed_info = metric_func.keys()['gt']
 
-        if not self.distributed:
-            outputs = single_gpu_test(self.model, self.data_loader, needed_info=needed_info)
-        else:
-            outputs = multi_gpu_test(self.model, self.data_loader, needed_info=needed_info)
-
-        if rank == 0:
-            if metric_func is None:
-                metric = self.dataset.evaluate(
-                    outputs, **eval_cfg)
+            if not self.distributed:
+                outputs = single_gpu_test(self.model, data_loader, needed_info=needed_info)
             else:
-                gts = []
-                for sample in outputs:
-                    gt = {}
-                    for k in needed_info:
-                        v = sample[k]
-                        gt[k] = v
-                        sample.pop(k)
-                    gts.append(gt)
+                outputs = multi_gpu_test(self.model, data_loader, needed_info=needed_info)
 
-                metric = metric_func(outputs, gts)
+            if rank == 0:
+                if metric_func is None:
+                    metric = dataset.evaluate(outputs, **eval_cfg)
+                else:
+                    gts = []
+                    for sample in outputs:
+                        gt = {}
+                        for k in needed_info:
+                            v = sample[k]
+                            gt[k] = v
+                            sample.pop(k)
+                        gts.append(gt)
 
-            print(metric)
-            metric_dict = dict(metric=metric)
-            if self.work_dir is not None and rank == 0:
-                with open(json_file, 'w') as fp:
-                    json.dump(metric_dict, fp)
+                    metric = metric_func(outputs, gts)
+
+                metric_dict = dict(metric=metric)
+                all_metric.append(metric_dict)
+
+        if self.work_dir is not None and rank == 0:
+            with open(json_file, 'w') as fp:
+                json.dump(all_metric[0] if len(all_metric) == 1 else all_metric, fp)
+        print(all_metric)

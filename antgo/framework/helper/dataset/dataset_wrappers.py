@@ -163,7 +163,6 @@ class IterConcatDataset(torch.utils.data.ChainDataset):
         return total
 
 
-
 @DATASETS.register_module()
 class RepeatDataset:
     """A wrapper of repeated dataset.

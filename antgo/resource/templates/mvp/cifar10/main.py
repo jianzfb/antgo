@@ -86,7 +86,11 @@ def main():
     if 'checkpoint_config' in cfg:
         cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
     if 'evaluation' in cfg:
-        cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
+        if isinstance(cfg.evaluation, dict):
+            cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
+        else:
+            for eval_cfg in cfg.evaluation:
+                eval_cfg['out_dir'] = os.path.join(eval_cfg['out_dir'], nn_args.exp)
 
     for data_stage in ['train', 'val', 'test']:
         # 实验默认的训练，验证，测试数据
@@ -325,7 +329,11 @@ def main():
     # step5.1 添加root地址（影响checkpoint_config, evaluation）
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
-        cfg.evaluation.out_dir = cfg.root
+        if isinstance(cfg.evaluation, dict):
+            cfg.evaluation.out_dir = cfg.root
+        else:
+            for eval_cfg in cfg.evaluation:
+                eval_cfg.out_dir = cfg.root
 
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
