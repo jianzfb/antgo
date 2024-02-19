@@ -1852,6 +1852,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
         json.dump(project_config, fp)
 
+    # 编译生成项目
     if 'python' in project_config.get('compile', []):
         pymodel_code_content = gen_code('./templates/pypipelinemodel_code.cpp')(
             project=project_name
@@ -1883,8 +1884,11 @@ def load_eagleeye_op_set(eagleeye_path):
     return op_set
 
 
-def prepare_eagleeye_environment(system_platform, abi_platform):
+def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=None):
     print('Check eagleeye environment')
+    if eagleeye_config is None:
+        eagleeye_config = {}
+
     os.makedirs(ANTGO_DEPEND_ROOT, exist_ok=True)
     if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')) or len(os.listdir(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye'))) == 0:
         print('Download eagleeye git')
@@ -1898,19 +1902,36 @@ def prepare_eagleeye_environment(system_platform, abi_platform):
     eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_platform}-install'
     if not os.path.exists(eagleeye_path):
         print('Compile eagleeye core sdk')
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {system_platform.lower()}_build.sh ; mv install {system_platform}-install')
+        compile_props = ['app', 'ffmpeg', 'rk']
+        compile_param_suffix = ''
+        compile_script_prefix = f'{system_platform.lower()}_build' if len(eagleeye_config) == 0 else f'{system_platform.lower()}_build_with'
+
+        for compile_prop_key in compile_props:
+            if compile_prop_key in eagleeye_config:
+                compile_prop_val = eagleeye_config[compile_prop_key]
+                if compile_prop_key == 'app':
+                    compile_param_suffix += ' app'
+                else:
+                    compile_param_suffix += f' {compile_prop_val}'
+                    compile_script_prefix += f'_{compile_prop_key}'
+
+        compile_script = f'{compile_script_prefix}.sh'
+        if compile_param_suffix != '':
+            compile_script += compile_param_suffix
+
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ; mv install {system_platform}-install')
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path
 
 
 class DeployMixin:
-    def build(self, platform='android/arm64-v8a', output_folder='./deploy', project_config=None):
+    def build(self, platform='android/arm64-v8a', output_folder='./deploy', project_config=None, eagleeye_config=None):
         # android/arm64-v8a, linux/x86-64
         assert(platform in ['android/arm64-v8a', 'linux/x86-64'])
         system_platform, abi_platform = platform.split('/')
 
         # 准备eagleeye集成环境
-        eagleeye_path = prepare_eagleeye_environment(system_platform, abi_platform)
+        eagleeye_path = prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config)
 
         # 创建工程
         project_name = project_config["name"]
