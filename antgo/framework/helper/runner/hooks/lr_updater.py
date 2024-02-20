@@ -800,11 +800,18 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
         self.lr_updater_list[self.cur_policy_i].before_train_epoch(runner)
 
     def before_train_iter(self, runner):
-        for policy_i in range(len(self.lr_updater_list)):
-            if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter < self.lr_updater_cfg[policy_i]['end']:
-                if self.cur_policy_i != policy_i:
-                    self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
-                    self.cur_policy_i = policy_i
-                break
-
+        if not self.by_epoch:
+            for policy_i in range(len(self.lr_updater_list)):
+                if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter < self.lr_updater_cfg[policy_i]['end']:
+                    if self.cur_policy_i != policy_i:
+                        self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
+                        self.cur_policy_i = policy_i
+                    break
+        else:
+            for policy_i in range(len(self.lr_updater_list)):
+                if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch < self.lr_updater_cfg[policy_i]['end']:
+                    if self.cur_policy_i != policy_i:
+                        self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
+                        self.cur_policy_i = policy_i
+                    break
         self.lr_updater_list[self.cur_policy_i].before_train_iter(runner)
