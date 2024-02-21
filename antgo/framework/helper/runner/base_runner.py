@@ -55,7 +55,7 @@ class BaseRunner(metaclass=ABCMeta):
                  logger=None,
                  meta=None,
                  max_iters=None,
-                 max_epochs=None, lr_scheduler=None):
+                 max_epochs=None, lr_scheduler=None, cfg=None):
         # check the type of `optimizer`
         if isinstance(optimizer, dict):
             for name, optim in optimizer.items():
@@ -106,6 +106,7 @@ class BaseRunner(metaclass=ABCMeta):
         self._epoch = 0
         self._iter = 0
         self._inner_iter = 0
+        self._cfg = cfg
 
         if max_epochs is not None and max_iters is not None:
             raise ValueError(
@@ -161,6 +162,10 @@ class BaseRunner(metaclass=ABCMeta):
     def max_iters(self):
         """int: Maximum training iterations."""
         return self._max_iters
+
+    @property
+    def cfg(self):
+        return self.cfg
 
     @abstractmethod
     def train(self):

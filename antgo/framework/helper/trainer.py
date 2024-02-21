@@ -151,11 +151,12 @@ class Trainer(BaseTrainer):
         self.data_loaders = None
         self.runner = None
         self.work_dir = work_dir
-        self.train_generator = None
-        self.val_dataloader = None
         self.distributed = distributed
         self.find_unused_parameters = find_unused_parameters
         self.meta = {}
+
+        self.train_generator_cfg = []
+        self.val_dataloader = None
 
         # set multi-process settings
         setup_multi_processes(self.cfg)
@@ -178,10 +179,6 @@ class Trainer(BaseTrainer):
         self.device = device
 
     def config_dataloader(self, with_validate=False):
-        # 创建数据集
-        dataset = build_dataset(self.cfg.data.train)
-
-        # 创建数据集加载器
         train_dataloader_default_args = dict(
             samples_per_gpu=2,
             workers_per_gpu=2,
@@ -197,12 +194,28 @@ class Trainer(BaseTrainer):
             **self.cfg.data.get('train_dataloader', {})
         }
 
-        if getattr(dataset, 'is_kv', False):
-            self.train_generator = build_kv_dataloader(dataset, **train_loader_cfg)
-        elif isinstance(dataset, torch.utils.data.IterableDataset):
-            self.train_generator = build_iter_dataloader(dataset, **train_loader_cfg)
-        else:
-            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
+        self.train_generator_cfg = [
+            {
+                'epochs': -1,
+                'dataset': self.cfg.data.train,
+                'dataloader': train_loader_cfg
+            }
+        ]
+
+        if self.cfg.data.get('train_schedule', None):
+            train_schedule = self.cfg.data.train_schedule
+            for schedule_info in train_schedule:
+                schedule_epochs, schedule_change = schedule_info
+
+                base_generator_cfg = {
+                    'epochs': schedule_epochs,
+                    'dataset': copy.deepcopy(self.cfg.data.train),
+                    'dataloader': copy.deepcopy(train_loader_cfg)
+                }
+                for change_key, change_info in schedule_change.items():
+                    assert(change_key in base_generator_cfg['dataset'])
+                    base_generator_cfg['dataset'][change_key] = change_info
+                self.train_generator_cfg.append(base_generator_cfg)
 
         if with_validate:
             val_dataloader_default_args = dict(
@@ -308,7 +321,8 @@ class Trainer(BaseTrainer):
                 work_dir=self.work_dir,
                 logger=logger,
                 meta=self.meta,
-                lr_scheduler=lr_scheduler))
+                lr_scheduler=lr_scheduler,
+                cfg=self.cfg))
 
         # an ugly workaround to make .log and .log.json filenames the same
         self.runner.timestamp = time.strftime('%Y-%m-%dx%H-%M-%S', time.localtime())

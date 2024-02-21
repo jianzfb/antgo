@@ -62,6 +62,7 @@ class EpochBasedRunner(BaseRunner):
         self.mode = 'val'
         self.data_loader = data_loader
         self.call_hook('before_val_epoch')
+
         time.sleep(2)  # Prevent possible deadlock during epoch transition
         for i, data_batch in enumerate(self.data_loader):
             self._inner_iter = i
@@ -107,6 +108,17 @@ class EpochBasedRunner(BaseRunner):
                     raise TypeError(
                         'mode in workflow must be a str, but got {}'.format(
                             type(mode)))
+
+                if isinstance(data_loaders[i], dict):
+                    dataset = build_dataset(data_loaders[i]['dataset'])
+                    train_loader_cfg = data_loaders[i]['dataloader']
+
+                    if getattr(dataset, 'is_kv', False):
+                        data_loaders[i] = build_kv_dataloader(dataset, **train_loader_cfg)
+                    elif isinstance(dataset, torch.utils.data.IterableDataset):
+                        data_loaders[i] = build_iter_dataloader(dataset, **train_loader_cfg)
+                    else:
+                        data_loaders[i] = build_dataloader(dataset, **train_loader_cfg)
 
                 for _ in range(epochs):
                     if mode == 'train' and self.epoch >= self._max_epochs:
