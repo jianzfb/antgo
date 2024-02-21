@@ -110,6 +110,8 @@ class EpochBasedRunner(BaseRunner):
                             type(mode)))
 
                 if isinstance(data_loaders[i], dict):
+                    from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader, build_iter_dataloader)
+
                     dataset = build_dataset(data_loaders[i]['dataset'])
                     train_loader_cfg = data_loaders[i]['dataloader']
 
