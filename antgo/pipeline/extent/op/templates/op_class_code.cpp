@@ -27,6 +27,12 @@ int ${op_name}::init(std::map<std::string, std::vector<float>> params){
     return 0;
 }
 
+int ${op_name}::init(std::map<std::string, std::vector<std::string>> params){
+    // ignore
+    ${const_string_init}
+    return 0;
+}
+
 int ${op_name}::runOnCpu(const std::vector<Tensor>& input){
 if(m_${cls_name} == NULL){
     m_${cls_name} = new ${cls_name}(${args_init});

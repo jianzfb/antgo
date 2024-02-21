@@ -528,6 +528,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
     const_default = ''
     const_delete = ''
     const_init = ''
+    const_string_init = ''
     ext_cont_init = ''
     for arg in func_args:
         flag, arg_name, arg_type, arg_value = arg
@@ -569,16 +570,28 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
 
     args_run_names = func.func.loader_kwargs['construct_arg_names']
     args_run_types = func.func.loader_kwargs['construct_arg_types']
+    args_init = []
     for args_run_name, args_run_type in zip(args_run_names, args_run_types):
-        const_define += f'{args_run_type} {args_run_name};\n'
         const_val_default = op_kwargs[args_run_name]
+
+        if isinstance(const_val_default, str):
+            const_define += f'std::string {args_run_name};\n'
+            args_init.append(f'{args_run_name}.c_str()')
+        else:
+            const_define += f'{args_run_type} {args_run_name};\n'
+            args_init.append(args_run_name)
+
         if isinstance(const_val_default, bool):
             const_val_default = 'true' if const_val_default else 'false'
-        elif isinstance(const_val_default, str) and const_val_default == '':
-            const_val_default = '\"\"'
+        elif isinstance(const_val_default, str):
+            const_val_default = f'\"{const_val_default}\"'
 
-        const_init += f'this->{args_run_name}={const_val_default};\n'
-        const_init += f'if(params.find("{args_run_name}") != params.end())'+'{'+f'this->{args_run_name}={args_run_type}(params["{args_run_name}"][0]);'+'}\n'
+        if isinstance(const_val_default, str):
+            const_string_init += f'this->{args_run_name}={const_val_default};\n'
+            const_string_init += f'if(params.find("{args_run_name}") != params.end())'+'{'+f'this->{args_run_name}=params["{args_run_name}"][0];'+'}\n'
+        else:
+            const_init += f'this->{args_run_name}={const_val_default};\n'
+            const_init += f'if(params.find("{args_run_name}") != params.end())'+'{'+f'this->{args_run_name}={args_run_type}(params["{args_run_name}"][0]);'+'}\n'
 
     # 创建header文件
     eagleeye_warp_h_code_content = \
@@ -601,29 +614,10 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
     with open(os.path.join(include_folder, f'{op_name}_op_warp.h'), 'w') as fp:
         fp.write(eagleeye_warp_h_code_content)
 
-    args_run = ''
+    args_run = []
     for _, arg_name, _, _ in func_args:
-        if args_run == '':
-            args_run = f'{arg_name}'
-        else:
-            args_run += f',{arg_name}'
-
+        args_run.append(arg_name)
     depedent_src = func.func.loader_kwargs.get('depedent_src', [])
-    # args_init = ','.join([f'{op_kwargs[n]}' for n in args_run_names])
-    # args_init = ''
-    # for n in args_run_names:
-    #     value = op_kwargs[n]
-    #     if isinstance(value, bool):
-    #         value = 'true' if value else 'false'
-    #     elif isinstance(value, str) and value == '':
-    #         value = '\"\"'
-
-    #     # args_init += f'{value},'
-    #     args_init += f'{n},'
-    args_init = ','.join(args_run_names)
-
-    # if args_init.endswith(','):
-    #     args_init = args_init[:-1]
     eagleeye_warp_cpp_code_content = \
         gen_code('./templates/op_class_code.cpp')(
             op_name=f"{op_name.replace('_','').capitalize()}Op",
@@ -631,8 +625,8 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
             inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
             inc_fname2=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
             cls_name=func.func.func_name,
-            args_init=args_init,
-            args_run=args_run,
+            args_init=','.join(args_init),
+            args_run=','.join(args_run),
             return_statement='',
 
             input_default=input_default,
@@ -650,6 +644,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
             const_default=const_default,
             const_delete=const_delete,
             const_init=const_init,
+            const_string_init=const_string_init,
             ext_cont_init=ext_cont_init
         )
 
