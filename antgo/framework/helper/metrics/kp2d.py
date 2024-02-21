@@ -29,7 +29,7 @@ class OKS(object):
             gt_joints_vis = gt['joints_vis']        # N
             if np.sum(gt_joints_vis) == 0:
                 continue
-            
+
             if gt_joints2d.ndim == 2:
                 # 单目标预测
                 pred_joints2d = pred_joints2d[np.newaxis, :, :]
@@ -39,7 +39,7 @@ class OKS(object):
 
             # area: Nx1
             area = (gt_bboxes[:,2] - gt_bboxes[:,0])*(gt_bboxes[:,3] - gt_bboxes[:,1])
-            area = area[np.newaxis, :]
+            area = area[:, np.newaxis]
 
             # dist: Nx33
             dist = np.sqrt(np.sum(np.power(pred_joints2d[:,:,:2]-gt_joints2d, 2.0), -1))
