@@ -228,7 +228,7 @@ class BaseCocoStyleDataset(Dataset):
             'img_path': img['img_path'],
             'bbox': bbox,
             'bbox_score': np.ones(1, dtype=np.float32),
-            'area': np.array((x2-x1)*(y2-y1)).reshape(1),
+            'area': np.array((x2-x1)*(y2-y1)).reshape(1).astype(np.float64),
             'num_keypoints': num_keypoints,
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,

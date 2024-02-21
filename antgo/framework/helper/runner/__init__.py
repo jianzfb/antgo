@@ -16,7 +16,7 @@ from .hooks import (HOOKS, CheckpointHook, ClosureHook,
                     GradientCumulativeFp16OptimizerHook,
                     GradientCumulativeOptimizerHook, Hook, IterTimerHook,
                     LoggerHook, NeptuneLoggerHook,
-                    OptimizerHook, SyncBuffersHook, TextLoggerHook)
+                    OptimizerHook, SyncBuffersHook, TextLoggerHook, rsetattr, rgetattr)
 from .hooks.lr_updater import StepLrUpdaterHook  # noqa
 from .hooks.lr_updater import (CosineAnnealingLrUpdaterHook,
                                CosineRestartLrUpdaterHook, CyclicLrUpdaterHook,
@@ -44,7 +44,7 @@ from .utils import get_host_info, get_time_str, obj_from_dict, set_random_seed
 
 __all__ = [
     'BaseRunner', 'EpochBasedRunner', 'IterBasedRunner', 'LogBuffer',
-    'HOOKS', 'Hook', 'CheckpointHook', 'ClosureHook', 'LrUpdaterHook',
+    'HOOKS', 'Hook', 'rsetattr', 'rgetattr', 'CheckpointHook', 'ClosureHook', 'LrUpdaterHook',
     'FixedLrUpdaterHook', 'StepLrUpdaterHook', 'ExpLrUpdaterHook',
     'PolyLrUpdaterHook', 'InvLrUpdaterHook', 'CosineAnnealingLrUpdaterHook',
     'FlatCosineAnnealingLrUpdaterHook', 'CosineRestartLrUpdaterHook',

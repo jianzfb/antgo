@@ -48,7 +48,7 @@ class BaseTrainer(object):
         self.data_loaders = None
         self.runner = None
         self.work_dir = work_dir
-        self.train_generator = None
+        self.train_generator_cfg = []
         self.val_dataloader = None
         self.distributed = distributed
         self.meta = {}
@@ -75,10 +75,6 @@ class BaseTrainer(object):
         self.submodule_optimizer_config = {}
 
     def config_dataloader(self, with_validate=False):
-        # 创建数据集
-        dataset = build_dataset(self.cfg.data.train)
-
-        # 创建数据集加载器
         train_dataloader_default_args = dict(
             samples_per_gpu=2,
             workers_per_gpu=2,
@@ -93,12 +89,29 @@ class BaseTrainer(object):
             **train_dataloader_default_args,
             **self.cfg.data.get('train_dataloader', {})
         }
-        if getattr(dataset, 'is_kv', False):
-            self.train_generator = build_kv_dataloader(dataset, **train_loader_cfg)
-        elif isinstance(dataset, torch.utils.data.IterableDataset):
-            self.train_generator = build_iter_dataloader(dataset, **train_loader_cfg)
-        else:
-            self.train_generator = build_dataloader(dataset, **train_loader_cfg)
+
+        self.train_generator_cfg = [
+            {
+                'epoch': -1,
+                'dataset': self.cfg.data.train,
+                'dataloader': train_loader_cfg
+            }
+        ]
+
+        if self.cfg.data.get('train_schedule', None):
+            train_schedule = self.cfg.data.train_schedule
+            for schedule_info in train_schedule:
+                schedule_epochs, schedule_change = schedule_info
+
+                base_generator_cfg = {
+                    'epoch': schedule_epochs,
+                    'dataset': copy.deepcopy(self.cfg.data.train),
+                    'dataloader': copy.deepcopy(train_loader_cfg)
+                }
+                for change_key, change_info in schedule_change.items():
+                    assert(change_key in base_generator_cfg['dataset'])
+                    base_generator_cfg['dataset'][change_key] = change_info
+                self.train_generator_cfg.append(base_generator_cfg)
 
         if with_validate:
             val_dataloader_default_args = dict(
@@ -214,8 +227,33 @@ class BaseTrainer(object):
 
     def start_train(self, max_epochs, **kwargs):
         try:
+            # 运行开始标记
             running_flag(self.cfg.get('root', None))
-            self.runner.run([self.train_generator], [('train', max_epochs)], max_epochs)
+
+            # 训练策略
+            remain_epoches = max_epochs
+            for schedule_i in range(len(self.train_generator_cfg)-1, 0, -1):
+                temp = self.train_generator_cfg[schedule_i]['epochs']
+                self.train_generator_cfg[schedule_i]['epochs'] = max(remain_epoches - self.train_generator_cfg[schedule_i]['epochs'], 0)
+                remain_epoches = temp
+            self.train_generator_cfg[0]['epochs'] = remain_epoches
+
+            data_loaders = []
+            workflow = []
+            for schedule_i in range(len(self.train_generator_cfg)):
+                data_loaders.append(
+                    {
+                        'dataset': self.train_generator_cfg[schedule_i]['dataset'],
+                        'dataloader': self.train_generator_cfg[schedule_i]['dataloader']
+                    }
+                )
+                workflow.append(
+                    ('train', self.train_generator_cfg[schedule_i]['epochs'])
+                )
+
+            self.runner.run(data_loaders, workflow, max_epochs)
+
+            # 运行结束标记
             finish_flag(self.cfg.get('root', None))
         except Exception:
             stop_flag(self.cfg.get('root', None))
@@ -224,7 +262,7 @@ class BaseTrainer(object):
     def start_eval(self, **kwargs):
         try:
             running_flag(self.cfg.get('root', None))
-            self.runner.run([self.train_generator], [('val', 1)], 1)
+            self.runner.run([self.val_dataloader], [('val', 1)], 1)
             finish_flag(self.cfg.get('root', None))
         except:
             stop_flag(self.cfg.get('root', None))

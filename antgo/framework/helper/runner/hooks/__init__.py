@@ -4,7 +4,7 @@ from .closure import ClosureHook
 from .ema import EMAHook
 from .evaluation import DistEvalHook, EvalHook
 from .submodules_evaluation import SubModulesDistEvalHook, SubModulesEvalHook
-from .hook import HOOKS, Hook
+from .hook import HOOKS, Hook, rsetattr, rgetattr
 from .iter_timer import IterTimerHook
 from .logger import ( LoggerHook, NeptuneLoggerHook, TextLoggerHook)
 from .lr_updater import (CosineAnnealingLrUpdaterHook,
@@ -29,7 +29,7 @@ from .sync_buffer import SyncBuffersHook
 from .weight_adjust import Weighter
 
 __all__ = [
-    'HOOKS', 'Hook', 'CheckpointHook', 'ClosureHook', 'LrUpdaterHook',
+    'HOOKS', 'Hook', 'rsetattr', 'rgetattr', 'CheckpointHook', 'ClosureHook', 'LrUpdaterHook',
     'FixedLrUpdaterHook', 'StepLrUpdaterHook', 'ExpLrUpdaterHook',
     'PolyLrUpdaterHook', 'InvLrUpdaterHook', 'CosineAnnealingLrUpdaterHook',
     'FlatCosineAnnealingLrUpdaterHook', 'CosineRestartLrUpdaterHook',
