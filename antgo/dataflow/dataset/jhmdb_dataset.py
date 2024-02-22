@@ -3,7 +3,7 @@ import os.path as osp
 from typing import Optional
 import numpy as np
 from antgo.dataflow.dataset.base_coco_style_dataset import BaseCocoStyleDataset
-
+import copy
 
 __all__ = ['JhmdbDataset']
 class JhmdbDataset(BaseCocoStyleDataset):
