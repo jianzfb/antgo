@@ -12,6 +12,16 @@ from torch.utils.data.dataset import ConcatDataset as _ConcatDataset
 from .builder import DATASETS, PIPELINES
 
 
+class InnerProxyDataset(object):
+    def __init__(self, obj):
+        self.obj = obj
+    
+    def __len__(self):
+        return len(self.obj)
+
+    def __getitem__(self, idx):
+        return self.obj._get_data(idx)
+
 @DATASETS.register_module()
 class ConcatDataset(_ConcatDataset):
     """A wrapper of concatenated dataset.
@@ -23,7 +33,7 @@ class ConcatDataset(_ConcatDataset):
         datasets (list[:obj:`Dataset`]): A list of datasets.
     """
 
-    def __init__(self, datasets):
+    def __init__(self, datasets, pipeline=None, inputs_def=None):
         super(ConcatDataset, self).__init__(datasets)
         self.CLASSES = getattr(datasets[0], 'CLASSES', None)
         self.PALETTE = getattr(datasets[0], 'PALETTE', None)
@@ -33,9 +43,50 @@ class ConcatDataset(_ConcatDataset):
             self.flag.append(np.ones(len(dataset), dtype=np.int64) * index)
         self.flag = np.concatenate(self.flag)
 
-    def __getitem__(self, idx):
+        self.pipeline = []
+        if pipeline is not None:
+            from antgo.framework.helper.dataset import PIPELINES
+            for transform in pipeline:
+                if isinstance(transform, dict):
+                    transform = build_from_cfg(transform, PIPELINES)
+                    self.pipeline.append(transform)
+                else:
+                    raise TypeError('pipeline must be a dict')
+
+        self._fields = None
+        self._alias = None
+        if inputs_def is not None:
+            self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
+            self._alias = None
+            if self._fields is not None and 'alias' in inputs_def:
+                self._alias = copy.deepcopy(inputs_def['alias'])
+            
+            if self._fields is not None:
+                if self._alias is None:
+                    self._alias = copy.deepcopy(self._fields)
+
+    def _arrange(self, sample, fields, alias):
+        if fields is None:
+            return sample      
+          
+        if type(fields[0]) == list or type(fields[0]) == tuple:
+            warp_ins = []
+            for alia, field in zip(alias, fields):
+                one_ins = {}
+                for aa, ff in zip(alia, field):
+                    one_ins[aa] = sample[ff]
+                
+                warp_ins.append(one_ins)
+            return warp_ins
+        
+        warp_ins = {}
+        for alia, field in zip(alias, fields):
+            warp_ins[alia] = sample[field]
+
+        return warp_ins
+
+    def _get_data(self, idx):
         if type(idx) == list:
-            # 聚合到每个数据集
             d_i_map = {}
             for i in idx:
                 if i < 0:
@@ -56,11 +107,12 @@ class ConcatDataset(_ConcatDataset):
 
             sample_list = []
             for dataset_idx, sample_idxs in d_i_map.items():
-                sample_list.extend(self.datasets[dataset_idx][sample_idxs])
-            
+                sample = self.datasets[dataset_idx][sample_idxs]
+                if 'dataset' in sample:
+                    sample.pop('dataset')
+                sample_list.extend(sample)
             return sample_list
         else:
-            # 
             if idx < 0:
                 if -idx > len(self):
                     raise ValueError("absolute value of index should not exceed dataset length")
@@ -70,7 +122,34 @@ class ConcatDataset(_ConcatDataset):
                 sample_idx = idx
             else:
                 sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
-            return self.datasets[dataset_idx][sample_idx]
+            sample = self.datasets[dataset_idx][sample_idx]
+            if 'dataset' in sample:
+                sample.pop('dataset')
+            return sample
+
+    def __getitem__(self, idx):
+        sample_list = self._get_data(idx)
+        if not isinstance(sample_list, list):
+            sample_list = [sample_list]
+
+        processed_sample_list = []
+        for sample in sample_list:
+            print(sample['bbox'].shape)
+            # 使用pipeline处理样本
+            sample['dataset'] = InnerProxyDataset(self)
+            for tranform in self.pipeline:
+                sample = tranform(sample)
+
+            # 字段重命名
+            if self._fields is not None:
+                # arange warp
+                sample = self._arrange(sample, self._fields, self._alias)
+
+            processed_sample_list.append(sample)
+
+        if isinstance(idx, list):
+            return processed_sample_list
+        return processed_sample_list[0]
 
     def get_cat_ids(self, idx):
         """Get category ids of concatenated dataset by index.
@@ -120,6 +199,7 @@ class ConcatDataset(_ConcatDataset):
         for dataset in self.datasets:
             if getattr(dataset, 'worker_init_fn', None):
                 dataset.worker_init_fn(*args, **kwargs)
+
     @property
     def is_kv(self):
         return getattr(self.datasets[0], 'is_kv', False)
