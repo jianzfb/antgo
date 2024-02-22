@@ -124,6 +124,13 @@ class Reader(torch.utils.data.Dataset):
         self.pipeline_types = []
         self.weak_pipeline = []
         self.strong_pipeline = []        
+
+        if pre_pipeline is not None:
+            from antgo.framework.helper.dataset import PIPELINES
+            for transform in pre_pipeline:
+                transform = build_from_cfg(transform, PIPELINES)
+                self.pre_pipeline.append(transform)
+
         if pipeline is not None:
             from antgo.framework.helper.dataset import PIPELINES
             for transform in pipeline:
@@ -133,11 +140,6 @@ class Reader(torch.utils.data.Dataset):
                     self.pipeline.append(transform)
                 else:
                     raise TypeError('pipeline must be a dict')
-
-            if pre_pipeline is not None:
-                for transform in pre_pipeline:
-                    transform = build_from_cfg(transform, PIPELINES)
-                    self.pre_pipeline.append(transform)
 
             if weak_pipeline is not None and strong_pipeline is not None:
                 for transform in weak_pipeline:
@@ -269,6 +271,13 @@ class TVReader(torch.utils.data.Dataset):
         self.pipeline_types = []
         self.weak_pipeline = []
         self.strong_pipeline = []        
+
+        if pre_pipeline is not None:
+            from antgo.framework.helper.dataset import PIPELINES
+            for transform in pre_pipeline:
+                transform = build_from_cfg(transform, PIPELINES)
+                self.pre_pipeline.append(transform)
+
         if pipeline is not None:
             from antgo.framework.helper.dataset import PIPELINES
             for transform in pipeline:
@@ -278,11 +287,6 @@ class TVReader(torch.utils.data.Dataset):
                     self.pipeline.append(transform)
                 else:
                     raise TypeError('pipeline must be a dict')
-
-            if pre_pipeline is not None:
-                for transform in pre_pipeline:
-                    transform = build_from_cfg(transform, PIPELINES)
-                    self.pre_pipeline.append(transform)
 
             if weak_pipeline is not None and strong_pipeline is not None:
                 for transform in weak_pipeline:
