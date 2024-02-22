@@ -134,7 +134,6 @@ class ConcatDataset(_ConcatDataset):
 
         processed_sample_list = []
         for sample in sample_list:
-            print(sample['bbox'].shape)
             # 使用pipeline处理样本
             sample['dataset'] = InnerProxyDataset(self)
             for tranform in self.pipeline:
