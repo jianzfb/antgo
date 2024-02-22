@@ -107,13 +107,14 @@ class CocoWholeBodyDataset(BaseCocoStyleDataset):
             'img_path': img_path,
             'bbox': bbox,
             'bbox_score': np.ones(1, dtype=np.float32),
+            'area': np.array((x2-x1)*(y2-y1)).reshape(1).astype(np.float64),
             'num_keypoints': num_keypoints,
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,
-            'iscrowd': ann['iscrowd'],
+            'iscrowd': ann.get('iscrowd', 0),
             'segmentation': ann['segmentation'],
             'id': ann['id'],
-            'category_id': ann['category_id'],
+            'category_id': np.array([ann.get('category_id', 1)]),
             # store the raw annotation of the instance
             # it is useful for evaluation without providing ann_file
             'raw_ann_info': copy.deepcopy(ann),

@@ -239,7 +239,7 @@ class BaseCocoStyleDataset(Dataset):
             'iscrowd': ann.get('iscrowd', 0),
             'segmentation': ann.get('segmentation', None),
             'id': ann['id'],
-            'category_id': np.array([ann['category_id']]),
+            'category_id': np.array([ann.get('category_id',1)]),
             # store the raw annotation of the instance
             # it is useful for evaluation without providing ann_file
             'raw_ann_info': copy.deepcopy(ann),

@@ -121,12 +121,15 @@ class JhmdbDataset(BaseCocoStyleDataset):
             'img_path': img_path,
             'bbox': bbox,
             'bbox_score': np.ones(1, dtype=np.float32),
+            'area': np.array((x2-x1)*(y2-y1)).reshape(1).astype(np.float64),
             'num_keypoints': num_keypoints,
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,
             'iscrowd': ann.get('iscrowd', 0),
             'segmentation': ann.get('segmentation', None),
             'id': ann['id'],
+            'category_id': np.array([ann.get('category_id', 1)]),
+            'raw_ann_info': copy.deepcopy(ann),
         }
 
         return data_info

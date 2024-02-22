@@ -179,8 +179,11 @@ class MpiiDataset(BaseCocoStyleDataset):
                 'bbox_scale': scale,
                 'bbox': bbox,
                 'bbox_score': np.ones(1, dtype=np.float32),
+                'area': np.array((bbox[2]-bbox[0])*(bbox[3]-bbox[1])).reshape(1).astype(np.float64),
                 'keypoints': keypoints,
                 'keypoints_visible': keypoints_visible,
+                'iscrowd': 0,
+                'category_id': np.array([1]),
             }
 
             if self.headbox_file:
