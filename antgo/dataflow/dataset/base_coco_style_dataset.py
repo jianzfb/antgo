@@ -175,6 +175,10 @@ class BaseCocoStyleDataset(Dataset):
                 # skip invalid instance annotation.
                 if not instance_info:
                     continue
+                
+                # skip crowd instance
+                if int(instance_info['iscrowd']):
+                    continue
 
                 instance_list.append(instance_info)
         return instance_list, image_list
