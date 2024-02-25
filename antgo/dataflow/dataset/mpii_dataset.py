@@ -183,6 +183,7 @@ class MpiiDataset(BaseCocoStyleDataset):
                 'keypoints': keypoints,
                 'keypoints_visible': keypoints_visible,
                 'iscrowd': 0,
+                'iscrowd': ann.get('iscrowd', 0),
                 'category_id': np.array([1]),
             }
 

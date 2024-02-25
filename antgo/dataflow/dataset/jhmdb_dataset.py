@@ -91,6 +91,9 @@ class JhmdbDataset(BaseCocoStyleDataset):
         img = raw_data_info['raw_img_info']
 
         img_path = osp.join(self.data_prefix['img'], img['file_name'])
+
+        # width, height not accuracy
+        # couldnt use width, height to clip
         img_w, img_h = img['width'], img['height']
 
         # get bbox in shape [1, 4], formatted as xywh
@@ -99,11 +102,12 @@ class JhmdbDataset(BaseCocoStyleDataset):
         # we should first convert to 0-based index
         x -= 1
         y -= 1
-        x1 = np.clip(x, 0, img_w - 1)
-        y1 = np.clip(y, 0, img_h - 1)
-        x2 = np.clip(x + w, 0, img_w - 1)
-        y2 = np.clip(y + h, 0, img_h - 1)
-
+        # x1 = np.clip(x, 0, img_w - 1)
+        # y1 = np.clip(y, 0, img_h - 1)
+        # x2 = np.clip(x + w, 0, img_w - 1)
+        # y2 = np.clip(y + h, 0, img_h - 1)
+        x1, y1 ,x2, y2 = x, y, x+w, y+h
+    
         bbox = np.array([x1, y1, x2, y2], dtype=np.float32).reshape(1, 4)
 
         # keypoints in shape [1, K, 2] and keypoints_visible in [1, K]
