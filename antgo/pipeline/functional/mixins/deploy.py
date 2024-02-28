@@ -1169,7 +1169,7 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
 
         if f'set({project_name}_SRC' in line:
             is_start_add_src_code = True
-        
+
         # 添加扩展c++代码
         if line.startswith('include_directories') and not is_found_include_directories_insert:
             extent_cpp_include_folder = os.path.dirname(os.path.realpath(__file__))

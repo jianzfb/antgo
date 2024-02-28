@@ -142,11 +142,17 @@ class BaseRunner(metaclass=ABCMeta):
     def epoch(self):
         """int: Current epoch."""
         return self._epoch
+    @epoch.setter
+    def epoch(self, val):
+        self._epoch = val
 
     @property
     def iter(self):
         """int: Current iteration."""
         return self._iter
+    @iter.setter
+    def iter(self, val):
+        self._iter = val
 
     @property
     def inner_iter(self):
