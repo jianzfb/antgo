@@ -785,6 +785,30 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
     def before_run(self, runner):
         super(ComposerLrUpdaterHook, self).before_run(runner)
         self.lr_updater_list[self.cur_policy_i].base_lr = self.base_lr
+        self.lr_updater_list[self.cur_policy_i].regular_lr = self.base_lr
+
+        # 记录原始epoch, iter
+        cur_epoch = runner.epoch
+        cur_iter = runner.iter
+        iter_num_in_one_epoch = cur_iter // cur_epoch
+        if cur_epoch != 0 or cur_iter != 0:
+            # 模型训练，从checkpoint恢复，发现正确学习率
+            runner.epoch = 0
+            runner.iter = 0
+            for policy_i in range(len(self.lr_updater_list)-1):
+                if cur_epoch >= self.lr_updater_cfg[policy_i]['begin'] and cur_epoch < self.lr_updater_cfg[policy_i]['end']:
+                    self.cur_policy_i = policy_i
+                    break
+
+                runner.epoch = self.lr_updater_cfg[policy_i]['end'] - 1
+                runner.iter = runner.epoch * iter_num_in_one_epoch
+                self.lr_updater_list[policy_i].before_train_epoch(runner)
+                self.lr_updater_list[policy_i].before_train_iter(runner)
+                self.lr_updater_list[policy_i+1].base_lr = self.lr_updater_list[policy_i].regular_lr
+
+        # 恢复原始epoch, iter
+        runner.epoch = cur_epoch
+        runner.iter = cur_iter
 
     def before_train_epoch(self, runner):
         if not self.by_epoch:

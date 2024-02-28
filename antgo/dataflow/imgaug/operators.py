@@ -885,11 +885,11 @@ class CorrectBoxes(BaseOperator):
     def __init__(self, is_normalized=False, inputs=None):
         super().__init__(inputs=inputs)
         self.is_normalized = is_normalized
-    
+
     def __call__(self, sample, context=None):
         if 'bboxes' not in sample:
             return sample
-        
+
         if sample['bboxes'].shape[0] == 0:
             return sample
 
@@ -899,7 +899,7 @@ class CorrectBoxes(BaseOperator):
         max_x = np.maximum(sample['bboxes'][:,0:1], sample['bboxes'][:,2:3])
         max_y = np.maximum(sample['bboxes'][:,1:2], sample['bboxes'][:,3:4])
         sample['bboxes'] = np.concatenate([min_x, min_y, max_x, max_y], -1)
-        
+
         if self.is_normalized:
             sample['bboxes'] = np.clip(sample['bboxes'], 0, 1)
         else:
