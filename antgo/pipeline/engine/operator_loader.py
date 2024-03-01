@@ -254,6 +254,19 @@ class OperatorLoader:
                 kws.pop(function_op_name)
             cache_kwargs.update(kws)
             return self.instance_operator(control_op_cls, [], cache_kwargs)
+        elif control_op_name == 'DetectOrTracking':
+            function_op_name_list = self.split_function(info[2:])
+            function_op_name = function_op_name_list[0]
+
+            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name, {}), tag)
+            assert(function_op is not None)
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.detect_or_tracking_op'), 'DetectOrTracking', None)
+            detect_or_tracking_kwargs = dict(func=function_op)
+            if function_op_name in kws:
+                kws.pop(function_op_name)
+            detect_or_tracking_kwargs.update(kws)
+            return self.instance_operator(control_op_cls, [], detect_or_tracking_kwargs)
+
         return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:

@@ -310,3 +310,14 @@ class state_dynamic_select_op(object):
             return np.array([1], dtype=np.int32)
         else:
             return np.array([0], dtype=np.int32)
+
+
+@register
+class init_op(object):
+    def __init__(self):
+        self.value = None
+
+    def __call__(self, *args):
+        if self.value is None:
+            self.value = args
+        return self.value if len(self.value) > 1 else self.value[0]

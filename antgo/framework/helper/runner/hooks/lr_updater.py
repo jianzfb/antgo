@@ -790,8 +790,8 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
         # 记录原始epoch, iter
         cur_epoch = runner.epoch
         cur_iter = runner.iter
-        iter_num_in_one_epoch = cur_iter // cur_epoch
         if cur_epoch != 0 or cur_iter != 0:
+            iter_num_in_one_epoch = cur_iter // cur_epoch
             # 模型训练，从checkpoint恢复，发现正确学习率
             runner.epoch = 0
             runner.iter = 0

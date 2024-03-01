@@ -76,7 +76,7 @@ class GroupDef(object):
         else:
             op_cls_gen = getattr(importlib.import_module('antgo.pipeline.eagleeye.exe_op'), 'Exe', None)
         op_params.update({
-            'func_op_name': fname.replace('-', '_')
+            'func_op_name': name.replace('-', '_')
         })
         return op_cls_gen(**op_params)
 
@@ -113,7 +113,6 @@ class GroupDef(object):
             # 生成op
             op = self.op_creator_map[op_category](op_name, op_param)
             group_op_list.append(op)
-
 
         # 动态创建类
         group_name = self.name

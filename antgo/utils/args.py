@@ -97,7 +97,7 @@ def DEFINE_nn_args():
     parser.add_argument(
         '--work-dir',
         type=str,
-        default='',
+        default='./',
         help='work dir'
     )    
     parser.add_argument(

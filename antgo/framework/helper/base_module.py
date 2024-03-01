@@ -286,7 +286,7 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
             if callable(getattr(layer, 'switch_to_deploy', None)):
                 print_log(f'module {name} has been switched to deploy mode',
                           'current')
-                layer.switch_to_deploy(self.test_cfg)
+                layer.switch_to_deploy()
 
     def __repr__(self):
         s = super().__repr__()

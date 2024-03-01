@@ -922,7 +922,7 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config}')
+      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config} --work-dir={args.work_dir}')
 
       if args.clear:
         os.system("rm -rf /tiger/*")
