@@ -141,6 +141,7 @@ class ComputerVisionMixin:
     """
     assert(width is not None and height is not None)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 用于mp4格式的生成的参数
+    # fourcc = cv2.VideoWriter_fourcc(*'XVID')    
     output_folder = os.path.dirname(output_path)
     if not os.path.exists(output_folder):
       os.makedirs(output_folder)

@@ -16,7 +16,7 @@ class BaseExecution:
     def __apply__(self, *arg, **kws):
         # Multi inputs.
         if isinstance(self._index[0], tuple):
-            args = [getattr(arg[0], x) for x in self._index[0]]
+            args = [getattr(arg[0], x) if hasattr(arg[0], x) else None for x in self._index[0]]
         # Single input or No input.
         else:
             if isinstance(self._index, str) or len(self._index) == 1:
@@ -24,7 +24,7 @@ class BaseExecution:
                 args = []
             else:
                 # single input
-                args = [getattr(arg[0], self._index[0])]
+                args = [getattr(arg[0], self._index[0]) if hasattr(arg[0], self._index[0]) else None]
         
         return self._op(*args, **kws)
 
