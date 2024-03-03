@@ -378,8 +378,8 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         gen_code('./templates/op_func_code.cpp')(
             op_name=f"{op_name.replace('_','').capitalize()}Op",
             func_name=op_name,
-            inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
-            inc_fname2=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
+            inc_fname1=os.path.relpath(os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')), output_folder),
+            inc_fname2=os.path.relpath(os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname), output_folder),
             # args_convert=args_convert,
             args_inst=args_inst,
             return_statement='',
@@ -622,8 +622,8 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         gen_code('./templates/op_class_code.cpp')(
             op_name=f"{op_name.replace('_','').capitalize()}Op",
             func_name=op_name,
-            inc_fname1=os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')),
-            inc_fname2=os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname),
+            inc_fname1=os.path.relpath(os.path.abspath(os.path.join(output_folder, 'extent', 'include', f'{op_name}_op_warp.h')), os.path.abspath(output_folder)),
+            inc_fname2=os.path.relpath(os.path.abspath(func.func.loader_kwargs['cpp_info'].cpp_fname), os.path.abspath(output_folder)),
             cls_name=func.func.func_name,
             args_init=','.join(args_init),
             args_run=','.join(args_run),
@@ -1072,6 +1072,82 @@ def auto_generate_control_group_op(op_name, op_index, group_op_name_list, group_
         'src': '\n'.join(src_info_list),
     }
     return info
+
+
+def auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_name, def_func_op_kwargs, tracking_func_op_name, tracking_func_op_kwargs, op_kwargs, output_folder, core_op_set, platform, abi, project_name):
+    input_ctx, output_ctx = op_index
+    if isinstance(input_ctx, str):
+        input_ctx = (input_ctx,)
+    if isinstance(output_ctx, str):
+        output_ctx = (output_ctx,)
+    input_num = len(input_ctx)
+    output_num = len(output_ctx)
+    
+    res_output_ctx = tuple([f'res_{_}' for _ in output_ctx])
+    update_output_ctx = tuple([f'update_{_}' for _ in output_ctx])
+    det_op_info = prepare_cplusplus_code(det_func_op_name, (input_ctx[:(input_num-output_num)], output_ctx), def_func_op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+    tracking_op_info = None
+    if tracking_func_op_name is not None:
+        tracking_op_info = prepare_cplusplus_code(tracking_func_op_name, (input_ctx[:(input_num-output_num)]+res_output_ctx+update_output_ctx, output_ctx), tracking_func_op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+
+    init_info_list= []
+    name_list = ['m_det_func', 'm_tracking_func']
+    for deploy_op_i, deploy_op_args in enumerate([det_op_info['args'], tracking_op_info['args']]):
+        if deploy_op_args is None:
+            continue
+
+        arg_code = ''
+        op_init_code = ''
+        for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
+            if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                op_init_code += f'{deploy_arg_list}\n'
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                continue
+
+            if deploy_arg_name != 'c++_type':
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+        if 'c++_type' in deploy_op_args:
+            args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
+            op_init_code += f'{name_list[deploy_op_i]}->init({args_init_code});\n\n'
+
+        init_info_list.append(op_init_code)
+
+    warp_cpp_code_content = \
+        gen_code('./templates/det_or_tracking_op_class_code.hpp')(
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            input_num=len(input_ctx),
+            output_num=len(output_ctx),
+            det_func_create=f"new {det_op_info['type']}();" if 'template' not in det_op_info else f"new {det_op_info['type']}{det_op_info['template']}();",
+            tracking_func_create=f"new {tracking_op_info['type']}();" if 'template' not in tracking_op_info else f"new {tracking_op_info['type']}{tracking_op_info['template']}();" if tracking_op_info is not None else "NULL;",
+            det_func_init=init_info_list[0],
+            tracking_func_init=init_info_list[1] if len(init_info_list) > 1 else '\n',
+            det_func_include_dependent=det_op_info['include'],
+            tracking_func_include_dependent=tracking_op_info['include'] if tracking_op_info is not None else "<string>"
+        )
+
+    src_folder = os.path.join(output_folder, 'extent', 'include')
+    os.makedirs(src_folder, exist_ok=True)
+    with open(os.path.join(src_folder, f'{op_name}.hpp'), 'w') as fp:
+        fp.write(warp_cpp_code_content)
+
+    info = {
+        'type': f"{op_name.replace('_','').capitalize()}Op",
+        'input': input_ctx,
+        'output': output_ctx,
+        'args': {},
+        'include': os.path.join('extent/include/', f'{op_name}.hpp'),
+        'src': '\n'.join([det_op_info['src'], tracking_op_info['src']]) if tracking_op_info is not None else det_op_info['src'],
+    }
+    return info
+
+
 
 # --------------------------------------------------------------------------- #
 
@@ -1550,6 +1626,33 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_name_count[op_name] += 1
 
                 op_info = auto_generate_control_interval_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                deploy_graph_info[op_unique_name] = op_info
+            elif function_key_list[1] == 'DetectOrTracking':
+                function_op_name_list = split_function(function_key_list[2:])
+                det_func_op_name = function_op_name_list[0]
+                
+                def_func_op_kwargs = dict()
+                det_func_op_name_simple = det_func_op_name.split('/')[-1]
+                if det_func_op_name_simple in op_kwargs:
+                    def_func_op_kwargs = op_kwargs[det_func_op_name_simple]
+                    op_kwargs.pop(det_func_op_name_simple)
+
+                op_name = f'detecortracking_{det_func_op_name_simple}'
+                tracking_func_op_name = None
+                tracking_func_op_kwargs = dict()
+                if len(function_op_name_list) > 1:
+                    tracking_func_op_name = function_op_name_list[1]
+                    tracking_func_op_name_simple = tracking_func_op_name.split('/')[-1]
+                    op_name += f'_{tracking_func_op_name_simple}'
+                    if tracking_func_op_name_simple in op_kwargs:
+                        tracking_func_op_kwargs = op_kwargs[tracking_func_op_name_simple]
+                        op_kwargs.pop(tracking_func_op_name_simple)
+
+                if op_name not in op_name_count:
+                    op_name_count[op_name] = 0
+                op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+
+                op_info = auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_name, def_func_op_kwargs, tracking_func_op_name, tracking_func_op_kwargs, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
                 deploy_graph_info[op_unique_name] = op_info
             else:
                 raise NotImplementedError
