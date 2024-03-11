@@ -256,14 +256,26 @@ class OperatorLoader:
             return self.instance_operator(control_op_cls, [], cache_kwargs)
         elif control_op_name == 'DetectOrTracking':
             function_op_name_list = self.split_function(info[2:])
-            function_op_name = function_op_name_list[0]
+            det_function_op_name = function_op_name_list[0]
+            tracking_function_op_name = None
+            if len(function_op_name_list) > 1:
+                tracking_function_op_name = function_op_name_list[1]
 
-            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name, {}), tag)
-            assert(function_op is not None)
+            det_function_op = self.load_operator(det_function_op_name, arg, kws.get(det_function_op_name, {}), tag)
+            assert(det_function_op is not None)
+            tracking_function_op = None
+            if tracking_function_op_name is not None:
+                tracking_function_op = self.load_operator(tracking_function_op_name, arg, kws.get(tracking_function_op_name, {}), tag)
+                assert(tracking_function_op is not None)
+
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.detect_or_tracking_op'), 'DetectOrTracking', None)
-            detect_or_tracking_kwargs = dict(func=function_op)
-            if function_op_name in kws:
-                kws.pop(function_op_name)
+            detect_or_tracking_kwargs = dict(det_func=det_function_op, tracking_func=tracking_function_op)
+            if det_function_op_name in kws:
+                kws.pop(det_function_op_name)
+            if tracking_function_op_name is not None:
+                if tracking_function_op_name in kws:
+                    kws.pop(tracking_function_op_name)
+
             detect_or_tracking_kwargs.update(kws)
             return self.instance_operator(control_op_cls, [], detect_or_tracking_kwargs)
 

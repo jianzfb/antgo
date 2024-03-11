@@ -12,6 +12,7 @@ import shutil
 import threading
 import concurrent.futures
 import uuid
+import imagesize
 
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
@@ -59,8 +60,17 @@ class DemoMixin:
        'output_selection_types': output_selection_types,
        'input_config': input_config,
        'title': title,
-       'description': description
+       'description': description,
+       'interactive': {}
 	})
+
+    for b in input_selection:
+        if b in InteractiveMixin.interactive_elements:
+            DemoMixin.pipeline_info[api._name]['interactive'][b] = {
+				'mode': InteractiveMixin.interactive_elements[b]['mode'],
+				'num': InteractiveMixin.interactive_elements[b]['num']
+			}
+
     dump_folder = './dump'
     if not os.path.exists(dump_folder):
       os.makedirs(dump_folder)
@@ -77,8 +87,11 @@ class DemoMixin:
       shutil.rmtree(static_folder)
     shutil.copytree(os.path.join(resource_dir, 'resource', 'app'), static_folder)
 
-    if not os.path.exists(os.path.join(static_folder, 'image')):
-      os.makedirs(os.path.join(static_folder, 'image'))
+    if not os.path.exists(os.path.join(static_folder, 'image', 'query')):
+      os.makedirs(os.path.join(static_folder, 'image', 'query'))
+
+    if not os.path.exists(os.path.join(static_folder, 'image', 'response')):
+      os.makedirs(os.path.join(static_folder, 'image', 'response'))
 
     DemoMixin.app.add_middleware(
       CORSMiddleware,
@@ -101,7 +114,7 @@ class DemoMixin:
     async def wrapper(req: Request):        
         req = await _decode_content(req)
         req = json.loads(req['query'])
-        
+
         demo_name = ''
         if 'demo' in req:
            demo_name = req['demo']
@@ -114,9 +127,17 @@ class DemoMixin:
         input_req = req['input']
         element_req = req['element']
         input_selection_types = DemoMixin.pipeline_info[demo_name]['input_selection_types']
+        # image: 文件
+        # video: 文件
+        query_folder = os.path.join(static_folder, 'image', 'query')
         for i, b in enumerate(input_selection_types):
             if b in ['image', 'video', 'file']:
-                input_req[i] = os.path.join(dump_folder, input_req[i])
+                if b == 'image':
+                   input_req[i] = '/'.join(input_req[i].split('/')[2:])
+                   input_req[i] = cv2.imread(f'{query_folder}/{input_req[i]}')
+                else:
+                   input_req[i] = '/'.join(input_req[i].split('/')[2:])
+                   input_req[i] = f'{query_folder}/{input_req[i]}'
             if b == 'checkbox':
                 input_req[i] = bool(input_req[i])
 
@@ -152,42 +173,49 @@ class DemoMixin:
                 value = rsp_value.__dict__[b]
                 image_width, image_height = 0, 0
                 
-                if type(value) == str:
-                    shutil.copyfile(value, os.path.join(static_folder, 'image'))
-                    image_width, image_height = imagesize.get(os.path.join(static_folder, 'image'))
-                    file_name = value.split('/')[-1]
-                    value = f'image/{file_name}'
-                else:
-                    if value.dtype == np.uint8:
-                        transfer_result = value
-                    else:
-                        data_min = np.min(value)
-                        data_max = np.max(value)
-                        transfer_result = ((value - data_min) / (data_max - data_min) * 255).astype(np.uint8)
-
-                    if len(value.shape) == 3:
-                        assert (value.shape[2] == 3 or value.shape[2] == 4)
-
-                    assert (len(value.shape) == 2 or len(value.shape) == 3)
-                    file_name = f'{uuid.uuid4()}.png'
-                    cv2.imwrite(os.path.join(static_folder, 'image', file_name), transfer_result)
-                    image_width, image_height = imagesize.get(os.path.join(static_folder, 'image', file_name))
-                    value = f'image/{file_name}'
-                    
-                output_info[b] = {
-					'type': output_selection_types[i],
-					'name': b,
-					'value': value,
-               		'height': image_height,
-                    'width': image_width
-                }
                 if output_selection_types[i] == 'image':
+                    if type(value) == str:
+                        shutil.copyfile(value, os.path.join(static_folder, 'image', 'response'))
+                        image_width, image_height = imagesize.get(value)
+                        file_name = value.split('/')[-1]
+                        value = f'image/response/{file_name}'
+                    else:
+                        if value.dtype == np.uint8:
+                            transfer_result = value
+                        else:
+                            data_min = np.min(value)
+                            data_max = np.max(value)
+                            transfer_result = ((value - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+
+                        if len(value.shape) == 3:
+                            assert (value.shape[2] == 3 or value.shape[2] == 4)
+
+                        assert (len(value.shape) == 2 or len(value.shape) == 3)
+                        file_name = f'{uuid.uuid4()}.png'
+                        cv2.imwrite(os.path.join(static_folder, 'image', 'response', file_name), transfer_result)
+                        image_width, image_height = imagesize.get(os.path.join(static_folder, 'image', 'response', file_name))
+                        value = f'image/response/{file_name}'
+
+                    output_info[b] = {
+                        'type': output_selection_types[i],
+                        'name': b,
+                        'value': value,
+                        'height': image_height,
+                        'width': image_width
+                    }
                     if b in InteractiveMixin.interactive_elements:
                         output_info[b]['interactive'] = True
                         output_info[b]['element'] = {
 						    'mode': InteractiveMixin.interactive_elements[b]['mode'],
 							'num': InteractiveMixin.interactive_elements[b]['num']
                         }
+                else:
+                    shutil.copyfile(value, os.path.join(static_folder, 'image', 'response', value.split('/')[-1]))
+                    output_info[b] = {
+                        'type': output_selection_types[i],
+                        'name': b,
+                        'value': 'image/response/'+value.split('/')[-1]
+                    }
             else:
                 output_info[b] = {
 					'type': output_selection_types[i],
@@ -214,33 +242,49 @@ class DemoMixin:
 
     @DemoMixin.app.get('/antgo/api/user/info/')
     async def user_info():
-      return {
-        'status': 'OK',
-        'message': '',
-        'content': {
-          'user_name': 'ANTGO',
-          'short_name': 'A',
-          'task_name': 'DEFAULT',
-          'task_type': 'DEFAULT',
-          'project_type': 'DEMO',
+        return {
+            'status': 'OK',
+            'message': '',
+            'content': {
+                'user_name': 'ANTGO',
+                'short_name': 'A',
+                'task_name': 'DEFAULT',
+                'task_type': 'DEFAULT',
+                'project_type': 'DEMO',
+            }
         }
-      }
 
     @DemoMixin.app.post('/antgo/api/demo/upload/')
     async def upload(file: UploadFile = File(...)):
-      try:
-        contents = file.file.read()
-        with open(os.path.join(dump_folder, file.filename), 'wb') as f:
-          f.write(contents)
-      except Exception:
-        return {"message": "There was an error uploading the file"}
-      finally:
-        file.file.close()
+        response = {}
+        try:
+            contents = file.file.read()
+            filename = file.filename
+            query_folder = os.path.join(static_folder, 'image', 'query')
+            
+            random_id = str(uuid.uuid4())
+            with open(os.path.join(query_folder, f'{random_id}_{filename}'), 'wb') as f:
+                f.write(contents)
+
+            image_path = os.path.join(query_folder, f'{random_id}_{filename}')
+            response['path'] = f'image/query/{random_id}_{filename}'
+            response['width'] = 0
+            response['height'] = 0
+
+            if image_path.split('.')[-1].lower() in ['jpg', 'jpeg', 'png']:
+               image_width, image_height = imagesize.get(image_path)
+               response['width'] = image_width
+               response['height'] = image_height
+        except Exception:
+            return {"message": "There was an error uploading the file"}
+        finally:
+            file.file.close()
+
+        return response
+
 
     @DemoMixin.app.get('/antgo/api/demo/query_config/')
     async def query_config(req: Request):
-    #   req = await _decode_content(req)
-    #   req = json.loads(req['query'])
       demo_name = ''
       if req.query_params['demo'] != '':
          demo_name = req.query_params['demo']
@@ -256,12 +300,16 @@ class DemoMixin:
       input_config = DemoMixin.pipeline_info[demo_name]['input_config']
       title = DemoMixin.pipeline_info[demo_name]['title']
       description = DemoMixin.pipeline_info[demo_name]['description']
+      interactive = DemoMixin.pipeline_info[demo_name]['interactive']
+
       input_info = []
       for k, v, config in zip(input_selection, input_selection_types, input_config):
         info = {
           'type': v,
           'name': k,
-          'value': ''
+          'value': '',
+          'interactive': {},
+          'ready': False
         }
         if v == 'text':
           info['value'] = config.get('value', '')
@@ -278,13 +326,15 @@ class DemoMixin:
           value_list = [option['value'] for option in info['options']]
           assert(info['value'] in value_list)
 
+        if k in interactive:
+             info['interactive'] = interactive[k]
         input_info.append(info)
 
       info = {
         'input': input_info,
         'title': title,
         'description': description
-	  }	
+	  }
       return info
 
     # static resource

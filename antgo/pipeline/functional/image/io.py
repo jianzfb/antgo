@@ -20,7 +20,7 @@ import imagesize
 class image_decode(object):
   def __init__(self, to_rgb=False) -> None:
     self.to_rgb = to_rgb
-  
+
   def __call__(self, x):
     image = cv2.imread(x)
     if self.to_rgb:
@@ -53,7 +53,8 @@ def image_download(image_url):
   pic = requests.get(image_url, timeout=20)
   image = cv2.imdecode(np.frombuffer(pic.content, np.uint8), cv2.IMREAD_COLOR)  
   return image
-  
+
+
 @register
 def serialize_numpy(*args):
   serialize_result = []
@@ -64,6 +65,7 @@ def serialize_numpy(*args):
       serialize_result.append(v)
 
   return tuple(serialize_result)
+
 
 @register
 class image_save(object):
