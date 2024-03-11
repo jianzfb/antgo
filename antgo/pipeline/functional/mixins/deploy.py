@@ -41,6 +41,7 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
     # step3: 生成cmake代码片段
     snpe_cmake_code_snippet = ''
     snpe_cmake_code_snippet += f'set(SNPE_LIB_DIR {snpe_path}/lib/aarch64-android-clang8.0)\n'
+    snpe_cmake_code_snippet += 'add_definitions(-DSNPE_NN_ENGINE)\n'
     snpe_cmake_code_snippet += f'set(SNPE_INCLUDE_DIR {snpe_path}/include/zdl)\n'
     snpe_cmake_code_snippet += 'include_directories(${SNPE_INCLUDE_DIR})\n'
     snpe_cmake_code_snippet += 'add_library(libSNPE SHARED IMPORTED)\n'
@@ -76,6 +77,7 @@ def tnn_import_config(output_folder, project_name, platform, abi, device=''):
 
     # step3: 生成cmake代码片段 (include, so)
     tnn_cmake_code_snippet = f'include_directories({TNN_ROOT_PATH}/include)\n'
+    tnn_cmake_code_snippet += 'add_definitions(-DTNN_NN_ENGINE)\n'
     tnn_cmake_code_snippet += f'add_library(libtnn SHARED IMPORTED)\n'
     tnn_cmake_code_snippet += f'set_target_properties(libtnn PROPERTIES IMPORTED_LOCATION {TNN_ROOT_PATH}/{abi}/libTNN.so)\n'
     tnn_cmake_code_snippet += f'target_link_libraries({project_name} libtnn)\n'
@@ -116,12 +118,13 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
 
     # step3: 生成cmake代码片段
     rknn_cmake_code_snippet = f'set(RKNN_API_PATH {RKNN_API_PATH})\n'
+    rknn_cmake_code_snippet += 'add_definitions(-DRKNN_NN_ENGINE)\n'
     rknn_cmake_code_snippet += f'include_directories({RKNN_API_PATH}/include)\n'
     rknn_cmake_code_snippet += f'set(RKNN_RT_LIB {RKNN_API_PATH}/{abi}/librknnrt.so)\n'
     rknn_cmake_code_snippet += 'add_library(librknnrt SHARED IMPORTED)\n'
     rknn_cmake_code_snippet += 'set_target_properties(librknnrt PROPERTIES IMPORTED_LOCATION ${RKNN_RT_LIB})\n'
     rknn_cmake_code_snippet += f'target_link_libraries({project_name} librknnrt)\n'
-
+ 
     code_line_list = []
     for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
         if len(code_line_list) > 0 and code_line_list[-1].strip() == '# model engine' and line == '\n':
@@ -152,12 +155,19 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
         else:
             os.system(f'cd {root_folder} ; tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
 
+        so_path = os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive', 'lib')
+        os.system(f'echo "{so_path}" >> /etc/ld.so.conf && ldconfig')
+
     if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6')):
         print('download tensorrt')
         if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')):
             os.system(f'cd {root_folder} ; wget http://files.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
         else:
             os.system(f'cd {root_folder} ; tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+        
+        so_path = os.path.join(root_folder, 'TensorRT-8.6.1.6', 'lib')
+        os.system(f'echo "{so_path}" >> /etc/ld.so.conf && ldconfig')
+        os.system(f'cp {so_path}/libnvinfer_builder_resource.so.8.6.1 /usr/lib/')
 
     cudnn_path = os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')
     tensorrt_path = os.path.join(root_folder, 'TensorRT-8.6.1.6')
@@ -167,6 +177,7 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
 
     # step3: 生成cmake代码片段
     tensorrt_cmake_code_snippet = f'set(TensorRT_DIR {tensorrt_path})\n'
+    tensorrt_cmake_code_snippet += 'add_definitions(-DTENSORRT_NN_ENGINE)\n'
     tensorrt_cmake_code_snippet += 'set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda)\n'
     tensorrt_cmake_code_snippet += 'find_package(TensorRT REQUIRED)\n'
     tensorrt_cmake_code_snippet += 'find_package(CUDA REQUIRED)\n'
@@ -582,7 +593,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
             args_init.append(args_run_name)
 
         if isinstance(const_val_default, bool):
-            const_val_default = 'true' if const_val_default else 'false'
+            const_val_default = 1 if const_val_default else 0
         elif isinstance(const_val_default, str):
             const_val_default = f'\"{const_val_default}\"'
 
@@ -1223,17 +1234,18 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
     info = []
     is_found_include_directories_insert = False
     is_start_add_src_code = False
+    has_finish_found = False
     pipeline_plugin_flag = []
     src_op_warp_flag = [0 for _ in range(len(src_op_warp_list))]
     for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
-        if is_start_add_src_code and not line.strip().endswith(')'):
+        if not has_finish_found and is_start_add_src_code and not line.strip().endswith(')'):
             for src_op_warp_file_i, src_op_warp_file in enumerate(src_op_warp_list):
                 if src_op_warp_file == line.strip():
                     src_op_warp_flag[src_op_warp_file_i] = 1
                     break
             pipeline_plugin_flag.append(line.strip())
 
-        if is_start_add_src_code and line.strip().endswith(')'):
+        if not has_finish_found and is_start_add_src_code and line.strip().endswith(')'):
             if f'./{pipeline_name}_plugin.cpp' not in pipeline_plugin_flag:
                 info.append(f'./{pipeline_name}_plugin.cpp\n')
 
@@ -1242,8 +1254,9 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
                     info.append(f'{src_op_warp_list[src_op_warp_file_i]}\n')
 
             is_start_add_src_code = False
+            has_finish_found = True
 
-        if f'set({project_name}_SRC' in line:
+        if not has_finish_found and f'set({project_name}_SRC' in line:
             is_start_add_src_code = True
 
         # 添加扩展c++代码
@@ -1500,9 +1513,9 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
         op_args[-1]['std'] = ['{'+','.join(str(m) for m in op_kwargs['std'])+'}']
         op_args[-1]['reverse_channel'] = ['{1}'] if op_kwargs.get('reverse_channel', False) else ['{0}']
 
-    include_path = f'eagleeye/engine/nano/op/{platform_engine.lower()}_op.hpp'
-
-    return f'{platform_engine.capitalize()}Op', template_args, op_args, include_path
+    # include_path = f'eagleeye/engine/nano/op/{platform_engine.lower()}_op.hpp'
+    include_path = 'eagleeye/engine/nano/op/nn_op.hpp'
+    return 'NNOp', template_args, op_args, include_path
 
 def split_function(function_key_name_list):
     # eagleeye
@@ -2015,6 +2028,76 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
     if not os.path.exists(eagleeye_path):
         print('Compile eagleeye core sdk')
         compile_props = ['app', 'ffmpeg', 'rk']
+        if system_platform.lower().startswith('linux'):
+            compile_props = ['app', 'ffmpeg', 'rk', 'cuda', 'grpc', 'minio']
+
+        # 检测需要的第三方依赖，并准备环境
+        for compile_prop_key, compile_prop_val in eagleeye_config.items():
+            if compile_prop_key == 'rk':
+                if compile_prop_val != '':
+                    print('Exist rk dependent, dont need download and compile')
+                    continue
+
+                root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
+                os.makedirs(root_folder, exist_ok=True)
+                if os.path.exists(os.path.join(root_folder, 'rk')):
+                    print('Exist rk dependent, dont need download and compile')
+                    continue
+                os.makedirs(os.path.join(root_folder, 'rk'), exist_ok=True)
+                rk_root_folder = os.path.join(root_folder, 'rk')
+                # librga, mpp
+                os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
+                os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git')
+                eagleeye_config[compile_prop_key] = rk_root_folder
+            elif compile_prop_key == 'ffmpeg':
+                if compile_prop_val != '':
+                    print('Exist ffmpeg dependent, dont need download and compile')
+                    continue
+
+                # 需要修改源码（libavformat/rtsp.h, libavformat/rtspcodes.h）
+                root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
+                os.makedirs(root_folder, exist_ok=True)
+                if os.path.exists(os.path.join(root_folder, 'ffmpeg')):
+                    print('Exist ffmpeg dependent, dont need download and compile')
+                    continue
+
+                os.makedirs(os.path.join(root_folder, 'ffmpeg'), exist_ok=True)
+                ffmpeg_folder = os.path.join(root_folder, 'ffmpeg')
+                if system_platform.lower().startswith('linux'):
+                    if 'cuda' in eagleeye_config:
+                        os.system(f'cd {ffmpeg_folder} ; git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
+                        os.system(f'cd {ffmpeg_folder}/nv-codec-headers && make install && cd -')
+                        os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                        # 修改部分源码
+                        os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
+                        os.system('apt-get install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
+                        # 安装到系统目录
+                        os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
+                        eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
+                elif system_platform.lower().startswith('android'):
+                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    # 修改部分源码
+                    os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
+                    ARCH='arm64'
+                    CPU='armv8-a'
+                    API=21
+                    ANDROID_NDK_HOME=os.environ['ANDROID_NDK_HOME']
+                    TOOLCHAIN=f'{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64'
+                    CC=f'{TOOLCHAIN}/bin/aarch64-linux-android{API}-clang'
+                    CXX=f'{TOOLCHAIN}/bin/aarch64-linux-android{API}-clang++'
+                    SYSROOT=f'{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
+                    CROSS_PREFIX=f'{TOOLCHAIN}/bin/aarch64-linux-android-'
+                    PREFIX='./install'
+                    os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix={PREFIX} --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
+                    eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
+            elif compile_prop_key == 'grpc':
+                # 提供网络服务
+                pass
+            elif compile_prop_key == 'minio':
+                # 提供对象存储上传/下载
+                pass
+        
+        # 获得eagleeye编译脚本
         compile_param_suffix = ''
         compile_script_prefix = f'{system_platform.lower()}_build' if len(eagleeye_config) == 0 else f'{system_platform.lower()}_build_with'
 
@@ -2031,7 +2114,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         if compile_param_suffix != '':
             compile_script += compile_param_suffix
 
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ; mv install {system_platform}-install')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path
 
