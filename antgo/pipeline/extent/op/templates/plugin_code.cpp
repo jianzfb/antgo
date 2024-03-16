@@ -1,3 +1,4 @@
+// >>>>>>>>>>>>>>>>>>>>>>AUTOGENERATE PLUGIN HEADER>>>>>>>>>>>>>>>>>>>>>>
 #include "eagleeye/common/EagleeyeMacro.h"
 #include "eagleeye/framework/pipeline/AnyNode.h"
 #include "eagleeye/framework/pipeline/SignalFactory.h"
@@ -7,6 +8,9 @@ ${include_list}
 #include "${project}_plugin.h"
 #include "eagleeye/processnode/NNNode.h"
 #include "eagleeye/framework/pipeline/DynamicPipelineCreater.h"
+// >>>>>>>>>>>>>>>>>>>>>>AUTOGENERATE PLUGIN HEADER>>>>>>>>>>>>>>>>>>>>>>
+
+// DEVELOPER WRITE HEADER HERE
 
 namespace eagleeye{
 using namespace dataflow;
@@ -22,6 +26,7 @@ EAGLEEYE_PIPELINE_REGISTER(${project}, ${version}, ${signature});
  * 
  */
 EAGLEEYE_BEGIN_PIPELINE_INITIALIZE(${project})
+// >>>>>>>>>>>>>>>>>>>>>>AUTOGENERATE PLUGIN SOURCE>>>>>>>>>>>>>>>>>>>>>>
 // 1.step build datasource node
 std::vector<int> in_port_list = std::vector<int>(${in_port});
 std::vector<std::string> in_signal_list = std::vector<std::string>(${in_signal});
@@ -153,6 +158,9 @@ for(size_t i=0; i<nnnode->getOpGraphIn(); ++i){
     std::string placeholer_i_name = formatString("placeholder_%d", i);
     ${project}->bind(placeholer_i_name.c_str(), 0, "nnnode", i);
 }
+// >>>>>>>>>>>>>>>>>>>>>>AUTOGENERATE PLUGIN SOURCE>>>>>>>>>>>>>>>>>>>>>>
+
+// DEVELOPER WRITE SOURCE HERE
 
 EAGLEEYE_END_PIPELINE_INITIALIZE(${project})
 }
