@@ -93,7 +93,7 @@ class KeypointConverter(BaseOperator):
         num_instances = results['keypoints'].shape[0]
 
         keypoints = np.zeros((num_instances, self.num_keypoints, 2))
-        keypoints_visible = np.zeros((num_instances, self.num_keypoints))
+        keypoints_visible = np.zeros((num_instances, self.num_keypoints, 2))
 
         # When paired source_indexes are input,
         # perform interpolation with self.source_index and self.source_index2
@@ -102,15 +102,14 @@ class KeypointConverter(BaseOperator):
                 results['keypoints'][:, self.source_index] +
                 results['keypoints'][:, self.source_index2])
 
-            keypoints_visible[:, self.target_index] = results[
+            keypoints_visible[:, self.target_index, 0] = results[
                 'keypoints_visible'][:, self.source_index] * \
                 results['keypoints_visible'][:, self.source_index2]
         else:
-            keypoints[:,
-                      self.target_index] = results['keypoints'][:, self.
-                                                                source_index]
-            keypoints_visible[:, self.target_index] = results[
+            keypoints[:, self.target_index] = results['keypoints'][:, self.source_index]
+            keypoints_visible[:, self.target_index, 0] = results[
                 'keypoints_visible'][:, self.source_index]
+        keypoints_visible[:, self.target_index, 1] = 1
 
         results['keypoints'] = keypoints
         results['keypoints_visible'] = keypoints_visible
