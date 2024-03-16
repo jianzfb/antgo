@@ -166,7 +166,10 @@ def main():
   if action_name == 'web':
     if args.port == 0:
       args.port = 8000
-    os.system(f'uvicorn {args.main} --reload --port {args.port}')
+    
+    if args.ip == "":
+      args.ip = '0.0.0.0'
+    os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
     return
 
   # 查看运行设备（本地/远程）

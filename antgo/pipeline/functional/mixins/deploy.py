@@ -1218,6 +1218,7 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
             # numpy
             if arg_info.size > 0:
                 converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
+                converted_op_args[arg_name.replace('val', 'shape')] = [float(shape_v) for shape_v in arg_info.shape]
         elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
             # list
             converted_op_args[arg_name] = np.array(arg_info).flatten().astype(np.float32)
@@ -1894,8 +1895,76 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             op_graph=op_graph_code
         )
 
-    with open(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp'), 'w') as fp:
-        fp.write(eagleeye_plugin_code_content)
+
+    # TODO，如何解决之前生成的插件代码，完全冲掉问题（可能已经让开发者添加了部分代码）？
+    # 替换AUTOGENERATE PLUGIN HEADER，AUTOGENERATE PLUGIN SOURCE之间的代码块
+    if os.path.exists(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp')):
+        # 仅替换，局部代码，保留用户补充代码片段
+        # 解析 eagleeye_plugin_code_content
+        eagleeye_plugin_code_content = eagleeye_plugin_code_content.split('\n')
+        is_found_start = False
+        plugin_header_code_content = ''
+        for code_line_content in eagleeye_plugin_code_content:
+            if 'AUTOGENERATE PLUGIN HEADER' in code_line_content:
+                if not is_found_start:
+                    is_found_start = True
+                    continue
+                break
+
+            if is_found_start:
+                plugin_header_code_content += f'{code_line_content}\n'
+        
+        is_found_start = False
+        plugin_source_code_content = ''
+        for code_line_content in eagleeye_plugin_code_content:
+            if 'AUTOGENERATE PLUGIN SOURCE' in code_line_content:
+                if not is_found_start:
+                    is_found_start = True
+                    continue
+                break
+
+            if is_found_start:
+                plugin_source_code_content += f'{code_line_content}\n'
+        
+        # 解析已存在文件
+        existed_plugin_content = ''
+        is_found_plugin_header_start = False
+        is_found_plugin_header_stop = False
+        is_found_plugin_source_start = False
+        is_found_plugin_source_stop = False
+
+        update_plugin_code_content = ''
+        with open(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp'), 'r') as fp:
+            for code_line_content in fp:
+                if 'AUTOGENERATE PLUGIN HEADER' in code_line_content:
+                    if not is_found_plugin_header_start:
+                       is_found_plugin_header_start = True
+                       update_plugin_code_content += code_line_content
+                       update_plugin_code_content += plugin_header_code_content
+                       continue
+                    is_found_plugin_header_stop = True
+
+                if is_found_plugin_header_start and not is_found_plugin_header_stop:
+                    continue
+
+                if 'AUTOGENERATE PLUGIN SOURCE' in code_line_content:
+                    if not is_found_plugin_source_start:
+                        is_found_plugin_source_start = True
+                        update_plugin_code_content += code_line_content
+                        update_plugin_code_content += plugin_source_code_content
+                        continue
+                    is_found_plugin_source_stop = True                    
+
+                if is_found_plugin_source_start and not is_found_plugin_source_stop:
+                    continue
+
+                update_plugin_code_content += code_line_content
+        
+        with open(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp'), 'w') as fp:
+            fp.write(update_plugin_code_content)
+    else:
+        with open(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp'), 'w') as fp:
+            fp.write(eagleeye_plugin_code_content)
 
     eagleeye_plugin_header_content = \
         gen_code('./templates/plugin_code.h')(project=pipeline_name)
@@ -2139,6 +2208,11 @@ class DeployMixin:
                 os.system(f'cd {output_folder} ; git clone {project_config["git"]}')
             else:
                 os.system(f'cd {output_folder} ; eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
+        
+            # 删除现存plugin_code.cpp
+            if os.path.exists(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp')):
+                os.remove(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp'))
+
         output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
         # 编译
