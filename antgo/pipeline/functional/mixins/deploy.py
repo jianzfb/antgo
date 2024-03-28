@@ -668,7 +668,14 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': ({
+                'c++_type': 'std::map<std::string, std::vector<std::string>>'
+            },{
+                'c++_type': 'std::map<std::string, std::vector<std::vector<float>>>'
+            },{
+                'c++_type': 'std::map<std::string, std::vector<float>>'
+            }
+        ),
         'include': os.path.join('extent','include', f'{op_name}_op_warp.h'),
         'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp'),
         'depedent_src': depedent_src
