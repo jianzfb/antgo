@@ -93,6 +93,12 @@ def DEFINE_nn_args():
         default='127.0.0.1',
         help='master ip addr'
     )
+    parser.add_argument(
+        '--env-version',
+        type=str,
+        default='master',
+         help='needed antgo version'
+    )
     parser.add_argument('--seed', type=int, default=None, help='random seed')
     parser.add_argument(
         '--diff-seed',

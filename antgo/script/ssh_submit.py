@@ -138,7 +138,7 @@ def analyze_all_dependent_data(config_file_path):
     
     return dependent_data_list
 
-def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False):   
+def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False, env_version='master'):   
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
@@ -269,7 +269,7 @@ def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_nu
 
     target_machine_ips = ','.join([v['ip'] for v in target_machine_info_list])
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
-    submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {remote_local_folder_name}'
+    submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {remote_local_folder_name} {env_version}'
 
     # 解析提交后的输出，并解析出container id
     print(submit_cmd)

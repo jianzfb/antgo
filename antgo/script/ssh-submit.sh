@@ -8,6 +8,8 @@ memory=$6
 command=$7
 image=$8
 project=$9
+env_version=${10}
+
 
 # 打包项目工程代码
 # tar code 
@@ -40,6 +42,6 @@ do
     echo remote image ${image}
     echo remote workspace /home/${username}/${project}
     echo remote running config cpu: ${cpu_num} memory: ${memory} gpu: ${gpu_num}
-    ssh ${username}@${target_ip} 'bash -s' < ${script_folder}/ssh-launch.sh ${username} ${cpu_num} ${memory} ${gpu_num} \"${target_command}\" ${image} ${project}
+    ssh ${username}@${target_ip} 'bash -s' < ${script_folder}/ssh-launch.sh ${username} ${cpu_num} ${memory} ${gpu_num} \"${target_command}\" ${image} ${project} ${env_version}
     node_rank=$(expr $node_rank + 1)
 done
