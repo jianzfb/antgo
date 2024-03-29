@@ -94,9 +94,9 @@ def DEFINE_nn_args():
         help='master ip addr'
     )
     parser.add_argument(
-        '--env-version',
+        '--version',
         type=str,
-        default='master',
+        default='-',
          help='needed antgo version'
     )
     parser.add_argument('--seed', type=int, default=None, help='random seed')

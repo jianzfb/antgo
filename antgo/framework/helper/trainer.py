@@ -372,16 +372,16 @@ class Trainer(BaseTrainer):
             self.runner.resume(resume_from)
         elif load_from:
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
-        else:
-            # 确保参数初始化一致
-            if self.distributed:
-                checkpoint_path = os.path.join(tempfile.gettempdir(), "initial_weights.pt")
-                rank, _ = get_dist_info()
-                if rank == 0:
-                    torch.save(model.state_dict(), checkpoint_path)
+        # else:
+        #     # 确保参数初始化一致
+        #     if self.distributed:
+        #         checkpoint_path = os.path.join(tempfile.gettempdir(), "initial_weights.pt")
+        #         rank, world_size = get_dist_info()
+        #         if rank % world_size == 0:
+        #             torch.save(model.state_dict(), checkpoint_path)
 
-                dist.barrier()
-                self.runner.load_checkpoint(checkpoint_path)
+        #         dist.barrier()
+        #         self.runner.load_checkpoint(checkpoint_path)
 
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
