@@ -237,6 +237,7 @@ def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_nu
         if len(target_machine_info_list) == 1:
             sys_argv = f'{sys_argv} --master-addr=127.0.0.1'
         else:
+            # [0]作为master节点
             sys_argv = f'{sys_argv} --master-addr={target_machine_info_list[0]["ip"]}'
 
     # 添加扩展配置:保存到当前目录下并一同提交
@@ -281,10 +282,52 @@ def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_nu
     content = content.decode('utf-8')
     print(content)
 
+    # 检查返回的容器ID和机器IP对应关系
+    master_machine_info = target_machine_info_list[0]
+    container_id_list = content.split('\n')[(-1-len(target_machine_info_list)):-1]
+
+    master_container_id = ''
+    for container_id in container_id_list:
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{master_machine_info["ip"]}-submit-config.yaml')
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
+
+        cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} docker ps'
+        ret = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if ret.returncode:
+            logging.error("Couldnt get running info")
+            continue
+
+        running_info = ret.stdout.read()
+        running_info = running_info.decode('utf-8')
+        running_info = running_info.split('\n')
+        if len(running_info) <= 1:
+            logging.error(f"Couldnt parse container info on {master_machine_info['ip']}")
+            continue
+
+        is_found = False
+        for i in range(1, len(running_info)):
+            if running_info[i] == '':
+                continue
+
+            container_info = running_info[i].split(' ')
+            abs_container_id = container_info[0]
+            if container_id.startswith(abs_container_id):
+                is_found = True
+                break
+        
+        if is_found:
+            master_container_id = container_id
+            break
+
+    if master_container_id == '':
+        logging.error('Couldnt find task container id.')
+        return False
+
     # 获得container id
     with open('./.project.json', 'r') as fp:
         project_info = json.load(fp)
-    project_info['exp'][exp][-1]['id'] = content.split('\n')[-2]
+    project_info['exp'][exp][-1]['id'] = master_container_id
     project_info['exp'][exp][-1]['ip'] = target_machine_info_list[0]['ip']
     with open('./.project.json', 'w') as fp:
         json.dump(project_info,fp)
