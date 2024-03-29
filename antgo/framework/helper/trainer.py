@@ -372,7 +372,8 @@ class Trainer(BaseTrainer):
             self.runner.resume(resume_from)
         elif load_from:
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
-        # else:
+        
+        # TODO，需要验证是否所有卡初始化参数一致
         #     # 确保参数初始化一致
         #     if self.distributed:
         #         checkpoint_path = os.path.join(tempfile.gettempdir(), "initial_weights.pt")

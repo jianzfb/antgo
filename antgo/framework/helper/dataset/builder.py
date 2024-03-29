@@ -185,7 +185,7 @@ def build_dataloader(dataset,
         batch_sampler=batch_sampler,
         prefetch_factor=prefetch_factor,
         collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
-        pin_memory=kwargs.pop('pin_memory', True),
+        pin_memory=kwargs.pop('pin_memory', False),
         worker_init_fn=init_fn,
         **kwargs)
 
@@ -254,7 +254,7 @@ def build_kv_dataloader(dataset,
         num_workers=num_workers,
         prefetch_factor=prefetch_factor,
         batch_sampler=None,
-        pin_memory=kwargs.pop('pin_memory', True),
+        pin_memory=kwargs.pop('pin_memory', False),
         collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
         worker_init_fn=init_fn)
 
@@ -274,7 +274,7 @@ def build_iter_dataloader(dataset,
         batch_size=batch_size, 
         num_workers=workers_per_gpu,
         prefetch_factor=prefetch_factor,
-        pin_memory=kwargs.pop('pin_memory', True),
+        pin_memory=kwargs.pop('pin_memory', False),
         collate_fn=partial(collate, samples_per_gpu=batch_size, ignore_stack=ignore_stack),
         drop_last=kwargs.get('drop_last', True))
 
