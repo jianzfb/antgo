@@ -170,7 +170,7 @@ class Trainer(BaseTrainer):
             _, world_size = get_dist_info()
 
         # set random seeds
-        seed = init_random_seed(self.cfg.get('seed', 0), device=device)
+        seed = init_random_seed(self.cfg.get('seed', None), device=device)
         seed = seed + dist.get_rank() if diff_seed else seed
         set_random_seed(seed, deterministic=deterministic)
         self.cfg.seed = seed
@@ -371,17 +371,6 @@ class Trainer(BaseTrainer):
             self.runner.resume(resume_from)
         elif load_from:
             self.runner.load_checkpoint(load_from, revise_keys=revise_keys)
-        
-        # TODO，需要验证是否所有卡初始化参数一致
-        #     # 确保参数初始化一致
-        #     if self.distributed:
-        #         checkpoint_path = os.path.join(tempfile.gettempdir(), "initial_weights.pt")
-        #         rank, world_size = get_dist_info()
-        #         if rank % world_size == 0:
-        #             torch.save(model.state_dict(), checkpoint_path)
-
-        #         dist.barrier()
-        #         self.runner.load_checkpoint(checkpoint_path)
 
     def apply_ptq_quant(self, dummy_input, checkpoint, model_builder=None, path='./', prefix='quant'):
         ###############################     STEP - 0    ###############################
