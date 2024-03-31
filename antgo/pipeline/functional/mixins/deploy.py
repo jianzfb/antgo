@@ -195,15 +195,15 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
         for line in code_line_list:
             fp.write(line)
 
-    # step4: 更新run.sh片段
+    # step4: 更新setup.sh片段
     code_line_list = []
-    for line in open(os.path.join(output_folder, 'run.sh')):
+    for line in open(os.path.join(output_folder, 'setup.sh')):
         if 'export LD_LIBRARY_PATH=' in line:
             aa,bb,cc = line.split(';')
             bb = f'export LD_LIBRARY_PATH=.:{cudnn_path}/lib:{tensorrt_path}/lib'
             line = f'{aa}; {bb}; {cc}'
         code_line_list.append(line)
-    with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
+    with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
         for line in code_line_list:
             fp.write(line)
 
@@ -1438,12 +1438,12 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])          # 考虑将转好的模型放置的位置
     writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])           # 考虑到 设备可写权限位置(android)
 
-    # 更新run.sh（仅设备端运行时需要添加推送模型代码）
+    # 更新setup.sh（仅设备端运行时需要添加推送模型代码）
     if platform.lower() == 'android':
         run_shell_code_list = []
         is_found_model_push_line = False
         is_found_model_platform_folder = False
-        for line in open(os.path.join(output_folder, 'run.sh')):
+        for line in open(os.path.join(output_folder, 'setup.sh')):
             if '.tnnmodel' in line:
                 continue
             if line.startswith(f'adb push {platform_model_path}') and not is_found_model_push_line:
@@ -1462,15 +1462,13 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
             if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
                 # 插入
-                run_shell_code_list.append(f'if [ "$1"x = "reload"x ]; then\n')
                 run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
                 if platform_model_path.endswith('.tnnproto'):
                     run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
-                run_shell_code_list.append('fi\n')
 
             run_shell_code_list.append(line)
 
-        with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
+        with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
             for line in run_shell_code_list:
                 fp.write(line)
 
