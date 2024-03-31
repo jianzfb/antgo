@@ -2116,12 +2116,13 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 os.makedirs(root_folder, exist_ok=True)
                 if os.path.exists(os.path.join(root_folder, 'rk')):
                     print('Exist rk dependent, dont need download and compile')
+                    eagleeye_config[compile_prop_key] = os.path.join(root_folder, 'rk')
                     continue
                 os.makedirs(os.path.join(root_folder, 'rk'), exist_ok=True)
                 rk_root_folder = os.path.join(root_folder, 'rk')
                 # librga, mpp
                 os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
-                os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git')
+                os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
                 eagleeye_config[compile_prop_key] = rk_root_folder
             elif compile_prop_key == 'ffmpeg':
                 if compile_prop_val != '':
@@ -2133,21 +2134,22 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 os.makedirs(root_folder, exist_ok=True)
                 if os.path.exists(os.path.join(root_folder, 'ffmpeg')):
                     print('Exist ffmpeg dependent, dont need download and compile')
+                    eagleeye_config[compile_prop_key] = os.path.join(root_folder, 'ffmpeg', 'ffmpeg')
                     continue
 
                 os.makedirs(os.path.join(root_folder, 'ffmpeg'), exist_ok=True)
                 ffmpeg_folder = os.path.join(root_folder, 'ffmpeg')
                 if system_platform.lower().startswith('linux'):
-                    if 'cuda' in eagleeye_config:
-                        os.system(f'cd {ffmpeg_folder} ; git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
-                        os.system(f'cd {ffmpeg_folder}/nv-codec-headers && make install && cd -')
-                        os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
-                        # 修改部分源码
-                        os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
-                        os.system('apt-get install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
-                        # 安装到系统目录
-                        os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
-                        eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
+                    # 默认FFMPEG+CUDA
+                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
+                    os.system(f'cd {ffmpeg_folder}/nv-codec-headers && make install && cd -')
+                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    # 修改部分源码
+                    os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
+                    os.system('apt-get install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
+                    # 安装到系统目录
+                    os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix=./install --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
+                    eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
                 elif system_platform.lower().startswith('android'):
                     os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
                     # 修改部分源码
@@ -2161,8 +2163,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     CXX=f'{TOOLCHAIN}/bin/aarch64-linux-android{API}-clang++'
                     SYSROOT=f'{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
                     CROSS_PREFIX=f'{TOOLCHAIN}/bin/aarch64-linux-android-'
-                    PREFIX='./install'
-                    os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix={PREFIX} --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
+                    os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix=./install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
             elif compile_prop_key == 'grpc':
                 # 提供网络服务
@@ -2188,6 +2189,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         if compile_param_suffix != '':
             compile_script += compile_param_suffix
 
+        print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path
