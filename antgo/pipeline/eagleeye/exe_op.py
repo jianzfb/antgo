@@ -45,9 +45,6 @@ class Exe(object):
         os.makedirs(os.path.join(self.data_folder, 'data', 'input'), exist_ok=True)
         os.makedirs(os.path.join(self.data_folder, 'data', 'output'), exist_ok=True)
 
-        self.command = ''
-        if project_info['platform'] == 'linux':
-            self.command = f'{self.project_folder}/bin/X86-64/{self.plugin_name}_demo'
         self.proc = None
         self.readable_fds = None
         self.stdout_fd = None
@@ -88,7 +85,12 @@ class Exe(object):
                 run_args.append(f'placeholder_{arg_i}/{data_shape_code}/{data_type_code}')
 
         if self.proc is None:
-            self.proc = Popen([self.command] + ['stdinout'] + run_args, stdin=PIPE, stderr=PIPE, stdout=PIPE, text=False) # will have stdout=PIPE in final code
+            if self.project_platform_info == "linux":
+                command = f'{self.project_folder}/bin/X86-64/{self.plugin_name}_demo'
+                self.proc = Popen([command] + ['stdinout'] + run_args, stdin=PIPE, stderr=PIPE, stdout=PIPE, text=False)
+            elif self.project_platform_info == "android":
+                command = f'adb shell "cd /data/local/tmp/{self.plugin_name}; export LD_LIBRARY_PATH=.; ./{self.plugin_name}_demo stdinout '+' '.join(run_args)+'"'
+                self.proc = Popen([command], stdin=PIPE, stderr=PIPE, stdout=PIPE, text=False, shell=True)
 
             # 获取stdout的文件描述符
             self.stdout_fd = self.proc.stdout.fileno()
