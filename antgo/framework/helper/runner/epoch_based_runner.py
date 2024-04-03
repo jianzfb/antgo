@@ -110,7 +110,13 @@ class EpochBasedRunner(BaseRunner):
                             type(mode)))
 
                 if isinstance(data_loaders[i], dict):
-                    # 基于规则，动态创建
+                    # 清理之前数据集加载对象，释放资源
+                    if i > 0:
+                        obj = data_loaders[i-1]
+                        data_loaders[i-1] = None
+                        del obj
+
+                    # 基于规则，动态创建数据集加载对象
                     from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader, build_iter_dataloader)
 
                     dataset = build_dataset(data_loaders[i]['dataset'])
