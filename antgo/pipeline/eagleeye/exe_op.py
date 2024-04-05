@@ -137,6 +137,11 @@ class Exe(object):
                                     shape_list.append(t)
                                     packet_size *= t
 
+                                if np.prod(shape_list) == 0:
+                                    # 空, 需要创建empty
+                                    is_finish = True
+                                    break
+
                                 packet_size += 8*(2+data_dim_code)
                                 is_first_packet = False
                             
@@ -151,39 +156,60 @@ class Exe(object):
 
             if data_type_code == 0:
                 # int8
-                data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.int8)
-                data = data.reshape(shape_list)
-                out_list[out_i] = data
+                if np.prod(shape_list) == 0:
+                    out_list[out_i] = np.empty(shape_list, np.int8)
+                else:
+                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.int8)
+                    data = data.reshape(shape_list)
+                    out_list[out_i] = data
             elif data_type_code == 1 or data_type_code == 8 or data_type_code == 9:
                 # uint8
-                data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.uint8)
-                data = data.reshape(shape_list)
-                out_list[out_i] = data
+                if np.prod(shape_list) == 0:
+                    out_list[out_i] = np.empty(shape_list, np.uint8)
+                else:
+                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.uint8)
+                    data = data.reshape(shape_list)
+                    out_list[out_i] = data
             elif data_type_code == 4:
                 # int32
-                data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.int32)
-                data = data.reshape(shape_list)
-                out_list[out_i] = data
+                if np.prod(shape_list) == 0:
+                    out_list[out_i] = np.empty(shape_list, np.int32)
+                else:
+                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.int32)
+                    data = data.reshape(shape_list)
+                    out_list[out_i] = data
             elif data_type_code == 5:
                 # uint32
-                data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.uint32)
-                data = data.reshape(shape_list)
-                out_list[out_i] = data
+                if np.prod(shape_list) == 0:
+                    out_list[out_i] = np.empty(shape_list, np.uint32)
+                else:
+                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.uint32)
+                    data = data.reshape(shape_list)
+                    out_list[out_i] = data
             elif data_type_code == 6:
                 # float32
-                data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.float32)
-                data = data.reshape(shape_list)
-                out_list[out_i] = data
+                if np.prod(shape_list) == 0:
+                    out_list[out_i] = np.empty(shape_list, np.float32)
+                else:
+                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.float32)
+                    data = data.reshape(shape_list)
+                    out_list[out_i] = data
             elif data_type_code == 7:
                 # double
-                data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.float64)
-                data = data.reshape(shape_list)
-                out_list[out_i] = data
+                if np.prod(shape_list) == 0:
+                    out_list[out_i] = np.empty(shape_list, np.float64)
+                else:
+                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.float64)
+                    data = data.reshape(shape_list)
+                    out_list[out_i] = data
             elif data_type_code == 10:
                 # bool
-                data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.bool)
-                data = data.reshape(shape_list)
-                out_list[out_i] = data
+                if np.prod(shape_list) == 0:
+                    out_list[out_i] = np.empty(shape_list, np.bool)
+                else:
+                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.bool)
+                    data = data.reshape(shape_list)
+                    out_list[out_i] = data
 
             out_i += 1
             if out_i >= len(out_list):

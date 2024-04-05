@@ -37,7 +37,7 @@ class DemoMixin:
     api = _APIWrapper.tls.placeholder
     DemoMixin.pipeline_info[api._name] = {
        'exe': _PipeWrapper(self._iterable, api)
-	}
+	  }
 
     input_selection = [cc['data'] for cc in input]
     input_selection_types = [cc['type'] for cc in input]
@@ -61,7 +61,9 @@ class DemoMixin:
        'input_config': input_config,
        'title': title,
        'description': description,
-       'interactive': {}
+       'interactive': {},
+       'step_i': api.step_i,
+       'step_num': api.step_num
 	})
 
     for b in input_selection:
@@ -282,7 +284,6 @@ class DemoMixin:
 
         return response
 
-
     @DemoMixin.app.get('/antgo/api/demo/query_config/')
     async def query_config(req: Request):
       demo_name = ''
@@ -330,11 +331,26 @@ class DemoMixin:
              info['interactive'] = interactive[k]
         input_info.append(info)
 
+      step_i = DemoMixin.pipeline_info[demo_name]['step_i']
+      step_num = DemoMixin.pipeline_info[demo_name]['step_num']
+      pre_step = ''
+      next_step = ''
+      if step_i - 1 >= 0:
+        for pname, pinfo in DemoMixin.pipeline_info.items():
+          if pinfo['step_i'] == step_i - 1:
+            pre_step = pname
+      if step_i + 1 < len(DemoMixin.pipeline_info):
+        for pname, pinfo in DemoMixin.pipeline_info.items():
+          if pinfo['step_i'] == step_i + 1:
+            next_step = pname
+
       info = {
         'input': input_info,
         'title': title,
-        'description': description
-	  }
+        'description': description,
+        'pre_step': pre_step,
+        'next_step': next_step
+	    }
       return info
 
     # static resource
@@ -343,5 +359,5 @@ class DemoMixin:
     return DemoMixin.app
 
   @classmethod
-  def web(cls, index=None, name='demo'):
-    return _APIWrapper(index=index, cls=cls, name=name)
+  def web(cls, index=None, name='demo', **kwargs):
+    return _APIWrapper(index=index, cls=cls, name=name, **kwargs)

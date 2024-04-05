@@ -204,7 +204,9 @@ int main(int argc, char** argv){
                     t = out_data_dims;
                     fwrite(&t, sizeof(size_t), 1, stdout);
                     fwrite(out_data_size, sizeof(size_t), out_data_dims, stdout);
-                    fwrite(out_data, sizeof(char), data_byte_size, stdout);
+                    if(data_byte_size > 0){
+                        fwrite(out_data, sizeof(char), data_byte_size, stdout);
+                    }
                     fflush(stdout);
 
                     // 关闭stdout
