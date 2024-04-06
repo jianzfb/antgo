@@ -95,9 +95,22 @@ class EpochBasedRunner(BaseRunner):
         self.logger.info('workflow: %s, max: %d epochs', workflow, self._max_epochs)
         self.call_hook('before_run')
 
+        init_workflow_i = 0
+        offset = 0
+        for i, (mode, epochs) in enumerate(workflow):
+            if mode == 'train':
+                if self.epoch >= offset and self.epoch < offset + epochs:
+                    init_workflow_i = i
+                    break
+                offset + epochs
+
         while self.epoch < self._max_epochs:
             for i, flow in enumerate(workflow):
+                if i < init_workflow_i:
+                    continue
+
                 mode, epochs = flow
+                self.logger.info(f"current workflow {i} ({mode} {epochs})")
                 if isinstance(mode, str):  # self.train()
                     if not hasattr(self, mode):
                         raise ValueError(
