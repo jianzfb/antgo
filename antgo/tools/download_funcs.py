@@ -21,7 +21,7 @@ def download_from_baidu(target_folder, keys, src_path=None, target_num=10000):
     datasource_type = ''
     datasource_keyword = ''
     
-    # key:image,keyword:k/k/,
+    # type:image,keyword:k/k/,
     for p in keys.split(','):
         k,v = p.split(":")     
         if k == 'type':
@@ -46,13 +46,11 @@ def download_from_baidu(target_folder, keys, src_path=None, target_num=10000):
     if target_folder is None:
         target_folder = './'
 
-    time_stamp = (int)(time.time())
-    if not os.path.exists(os.path.join(target_folder, 'spider_%d'%(time_stamp))):
-        os.makedirs(os.path.join(target_folder, 'spider_%d'%(time_stamp)))
+    os.makedirs(target_folder, exist_ok=True)
     baidu_download(
         datasource_keyword,
         {'download_data_type': datasource_type}, 
-        os.path.join(target_folder, 'spider_%d'%(time_stamp)), target_num=target_num)
+        target_folder, target_num=target_num)
 
 
 def download_from_bing(target_folder, keys, src_path=None, target_num=10000):
@@ -80,13 +78,11 @@ def download_from_bing(target_folder, keys, src_path=None, target_num=10000):
         logger.error('Must set keyword')
         return
 
-    time_stamp = (int)(time.time())
-    if not os.path.exists(os.path.join(target_folder, 'spider_%d'%(time_stamp))):
-        os.makedirs(os.path.join(target_folder, 'spider_%d'%(time_stamp)))        
+    os.makedirs(target_folder, exist_ok=True)  
     bing_download(
         datasource_keyword,
         {'download_data_type': datasource_type}, 
-        os.path.join(target_folder, 'spider_%d'%(time_stamp)), target_num=target_num)
+        target_folder, target_num=target_num)
 
 
 def download_from_google(target_folder, keys, src_path=None, target_num=10000):
@@ -120,13 +116,11 @@ def download_from_vcg(target_folder, keys, src_path=None, target_num=10000):
         logger.error('Must set keyword')
         return
 
-    time_stamp = (int)(time.time())
-    if not os.path.exists(os.path.join(target_folder, 'spider_%d'%(time_stamp))):
-        os.makedirs(os.path.join(target_folder, 'spider_%d'%(time_stamp))) 
+    os.makedirs(target_folder, exist_ok=True)  
     vcg_download(
         datasource_keyword, 
         {'download_data_type': datasource_type}, 
-        os.path.join(target_folder, 'spider_%d'%(time_stamp)), target_num=target_num)
+        target_folder, target_num=target_num)
 
 
 def download_from_aliyun(target_folder, keys=None, src_path=None, **kwargs):
