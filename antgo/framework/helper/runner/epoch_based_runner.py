@@ -102,7 +102,7 @@ class EpochBasedRunner(BaseRunner):
                 if self.epoch >= offset and self.epoch < offset + epochs:
                     init_workflow_i = i
                     break
-                offset + epochs
+                offset += epochs
 
         while self.epoch < self._max_epochs:
             for i, flow in enumerate(workflow):
