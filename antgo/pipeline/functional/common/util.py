@@ -321,3 +321,12 @@ class init_op(object):
         if self.value is None:
             self.value = args
         return self.value if len(self.value) > 1 else self.value[0]
+
+
+@register
+class command_op(object):
+    def __init__(self, func=None):
+        self.func = func
+
+    def __call__(self, *args):
+        return self.func(*args)

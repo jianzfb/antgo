@@ -377,8 +377,8 @@ class ComputerVisionMixin:
             gt_info['bboxes3d_size'] = bboxes3d_size
             anno_info_list.append(gt_info)
 
-        with open(os.path.join(folder, f'ann_{prefix}.json'), 'w') as fp:
+        with open(os.path.join(folder, f'{prefix}.json'), 'w') as fp:
             json.dump(anno_info_list, fp)
 
         if is_tfrecord:
-            package_to_tfrecord(os.path.join(folder, f'ann_{prefix}.json'), tfrecord_folder, prefix, size_in_shard=10000)
+            package_to_tfrecord(os.path.join(folder, f'{prefix}.json'), tfrecord_folder, prefix, size_in_shard=10000)

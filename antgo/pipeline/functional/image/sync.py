@@ -280,11 +280,11 @@ class sync_op(object):
         if self.layout_label_map is not None:
             for layout_id, layout_label in self.layout_label_map.items():
                 pos = np.where(sync_mask == layout_id)
-                min_y = np.min(pos[0])
-                min_x = np.min(pos[1])
+                min_y = int(np.min(pos[0]))
+                min_x = int(np.min(pos[1]))
 
-                max_y = np.max(pos[0])
-                max_x = np.max(pos[1])
+                max_y = int(np.max(pos[0]))
+                max_x = int(np.max(pos[1]))
 
                 bboxes.append([min_x, min_y, max_x, max_y])
                 labels.append(layout_label)

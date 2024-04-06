@@ -149,9 +149,8 @@ class DemoMixin:
             if b == 'image-search':
                 selected_image_list = []
                 for selected_filename in input_req[i]:
-                   selected_filename = f'{static_folder}/{selected_filename}'
-                   image = cv2.imread(selected_filename)
-                   selected_image_list.append(image)
+                   selected_filepath = f'{static_folder}/{selected_filename}'
+                   selected_image_list.append(selected_filepath)
                 input_req[i] = selected_image_list
 
         input_selection = DemoMixin.pipeline_info[demo_name]['input_selection']
