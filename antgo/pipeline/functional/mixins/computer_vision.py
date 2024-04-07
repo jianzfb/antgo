@@ -308,7 +308,7 @@ class ComputerVisionMixin:
             if 'segments' in keymap and keymap['segments'] in info:
                 segments = info[keymap['segments']]
                 mask_path = f'data/mask/{index}.png'
-                cv2.imwrite(mask_path, segments)
+                cv2.imwrite(os.path.join(data_folder, 'mask', f'{index}.png'), segments)
             gt_info['semantic_file'] = mask_path
 
             joints2d = []

@@ -129,7 +129,7 @@ class sync_layout_op(object):
             overlap_layout_image, overlap_layout_info = self.layout_gen[layout_i](image)
             overlap_layout_image, overlap_layout_mask, overlap_layout_points = self.extract(overlap_layout_image, overlap_layout_info, self.layout_id[layout_i])
             overlap_layout_h, overlap_layout_w = overlap_layout_image.shape[:2]
-            overlap_layout_min_size = min(overlap_layout_h, overlap_layout_w)
+            overlap_layout_min_size = max(overlap_layout_h, overlap_layout_w)
 
             # 随机叠加
             random_min_scale, random_max_scale = self.layout_gen[layout_i].scale()
