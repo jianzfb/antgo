@@ -68,10 +68,10 @@ class DemoMixin:
 	})
 
     for b in input_selection:
-        if b in InteractiveMixin.interactive_elements:
+        if f'{api._name}/{b}' in InteractiveMixin.interactive_elements:
             DemoMixin.pipeline_info[api._name]['interactive'][b] = {
-				'mode': InteractiveMixin.interactive_elements[b]['mode'],
-				'num': InteractiveMixin.interactive_elements[b]['num']
+				'mode': InteractiveMixin.interactive_elements[f'{api._name}/{b}']['mode'],
+				'num': InteractiveMixin.interactive_elements[f'{api._name}/{b}']['num']
 			}
 
     dump_folder = './dump'
@@ -164,8 +164,8 @@ class DemoMixin:
             for info in b['value']:
                data.append(info['data'])
             bind_name = b['name']
-            assert(bind_name in InteractiveMixin.interactive_elements)
-            interactive_info[InteractiveMixin.interactive_elements[bind_name]['target']] = data
+            assert(f'{demo_name}/{bind_name}' in InteractiveMixin.interactive_elements)
+            interactive_info[InteractiveMixin.interactive_elements[f'{demo_name}/{bind_name}']['target']] = data
 
         feed_info.update(interactive_info)
         rsp_value = DemoMixin.pipeline_info[demo_name]['exe'].execute(feed_info)
@@ -215,11 +215,11 @@ class DemoMixin:
                         'height': image_height,
                         'width': image_width
                     }
-                    if b in InteractiveMixin.interactive_elements:
+                    if f'{demo_name}/{b}' in InteractiveMixin.interactive_elements:
                         output_info[b]['interactive'] = True
                         output_info[b]['element'] = {
-						    'mode': InteractiveMixin.interactive_elements[b]['mode'],
-							'num': InteractiveMixin.interactive_elements[b]['num']
+                            'mode': InteractiveMixin.interactive_elements[f'{demo_name}/{b}']['mode'],
+                            'num': InteractiveMixin.interactive_elements[f'{demo_name}/{b}']['num']
                         }
                 else:
                     shutil.copyfile(value, os.path.join(static_folder, 'image', 'response', value.split('/')[-1]))
