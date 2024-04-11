@@ -678,9 +678,12 @@ class OKSLoss(nn.Module):
         else:
             raise NotImplementedError()
 
+        sample_weight = (target_weight.sum(dim=-1) > 0).to(torch.float32)
+        loss = loss * sample_weight
+
         if self.reduction == 'sum':
             loss = loss.sum()
         elif self.reduction == 'mean':
-            loss = loss.mean()
+            loss = loss.sum()/(sample_weight.sum()+1e-6)
 
         return loss * self.loss_weight
