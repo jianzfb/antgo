@@ -11,6 +11,8 @@ class CppOp(object):
         self.func_op_name = func_op_name
         self.func = getattr(extent.func, func_op_name)()
         self.func_kind = self.func.func.func_kind
+        # 上下游绑定名称
+        self._index = []
 
         # parameter
         self.kwargs = {}
@@ -66,6 +68,11 @@ class CppOp(object):
                 output_i += 1
 
         # 运行
+        for kname, kval in zip(self._index[0][input_i:], args[input_i:]):
+            self.kwargs.update({
+                kname: kval
+            })
+            
         output_data = self.func(*func_args, **self.kwargs)
 
         # 返回结果

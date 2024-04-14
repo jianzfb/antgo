@@ -7,6 +7,8 @@ from __future__ import unicode_literals
 from __future__ import print_function
 import traceback
 from antgo.pipeline.engine.execution.base_data import *
+from antgo.pipeline.deploy.cpp_op import CppOp
+from antgo.pipeline.control.ifnotnone_op import IfNotNone
 
 
 class BaseExecution:
@@ -25,7 +27,10 @@ class BaseExecution:
             else:
                 # single input
                 args = [getattr(arg[0], self._index[0]) if hasattr(arg[0], self._index[0]) else None]
-        
+        if isinstance(self._op, CppOp):
+            self._op._index = self._index
+        if isinstance(self._op, IfNotNone):
+            self._op._index = self._index
         return self._op(*args, **kws)
 
     def __call__(self, *arg, **kws):
@@ -55,6 +60,11 @@ class BaseExecution:
 
                 return arg[0]
             else:
+                if isinstance(self._op, CppOp):
+                    self._op._index = self._index  
+                if isinstance(self._op, IfNotNone):
+                    self._op._index = self._index
+   
                 res = self._op(*arg, **kws)
                 return res
         except Exception:

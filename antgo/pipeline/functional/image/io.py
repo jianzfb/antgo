@@ -54,6 +54,24 @@ def image_download(image_url):
   image = cv2.imdecode(np.frombuffer(pic.content, np.uint8), cv2.IMREAD_COLOR)  
   return image
 
+@register
+class snapeshot(object):
+  def __init__(self, after_frames=10):
+    self.after_frames = after_frames
+  
+  def __call__(self, path):
+    cap = cv2.VideoCapture(path)
+    frame_count = 0
+    while cap.isOpened():
+      ret, frame = cap.read()
+      if not ret:
+          break
+      frame_count += 1
+      if frame_count >= self.after_frames:
+        return frame
+
+    return None
+
 
 @register
 def serialize_numpy(*args):

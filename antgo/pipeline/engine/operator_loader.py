@@ -231,6 +231,14 @@ class OperatorLoader:
 
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.if_op'), 'If', None)
             return self.instance_operator(control_op_cls, [], dict(true_func=true_func_op, false_func=false_func_op))
+        elif control_op_name == 'IfNotNone':
+            function_op_name_list = self.split_function(info[2:])
+            function_op_name = function_op_name_list[0]
+            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            assert(function_op is not None)
+
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.ifnotnone_op'), 'IfNotNone', None)
+            return self.instance_operator(control_op_cls, [], dict(func=function_op))
         elif control_op_name == 'Interval':
             function_op_name_list = self.split_function(info[2:])
             function_op_name = function_op_name_list[0]
