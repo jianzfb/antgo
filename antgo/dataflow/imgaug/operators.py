@@ -1026,13 +1026,27 @@ class RandomFlipImage(BaseOperator):
 
                 sample['joints2d'] = gt_keypoints.copy()
 
+            if 'joints_vis' in sample.keys() and sample['joints_vis'].shape[0] > 0:
+                gt_keypoints_vis = sample['joints_vis']
+
+                # 更换keypoints位置 (图像水平翻转后，需要对调关键点位置)
+                # swap_k1 = [1,3,19,5,7,9,11,13,15]
+                # swap_k2 = [2,4,20,6,8,10,12,14,16] 
+                if len(self.swap_ids) > 0:
+                    swap_k1 = self.swap_ids[0]
+                    swap_k2 = self.swap_ids[1]
+                    temp = gt_keypoints_vis[:,swap_k1].copy()
+                    gt_keypoints_vis[:,swap_k1] = gt_keypoints_vis[:,swap_k2]
+                    gt_keypoints_vis[:,swap_k2] = temp
+
+                sample['joints_vis'] = gt_keypoints_vis.copy()
+
             if 'segments' in sample and sample['segments'].size > 0:
                 sample['segments'] = sample['segments'][:, ::-1].copy()
 
             if 'image_meta' in sample:
                 sample['image_meta']['flipped'] = True
             sample['image'] = im
-
         return sample
 
 
