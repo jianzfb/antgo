@@ -2141,9 +2141,9 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 ffmpeg_folder = os.path.join(root_folder, 'ffmpeg')
                 if system_platform.lower().startswith('linux'):
                     # 默认FFMPEG+CUDA
-                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
-                    os.system(f'cd {ffmpeg_folder}/nv-codec-headers && make install && cd -')
-                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    os.system(f'cd {ffmpeg_folder} ; git clone --recurse-submodules -b sdk/12.0 https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
+                    os.system(f'cd {ffmpeg_folder}/nv-codec-headers && make && make install && cd -')
+                    os.system(f'cd {ffmpeg_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
                     os.system('apt-get install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
@@ -2151,7 +2151,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix=./install --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
                 elif system_platform.lower().startswith('android'):
-                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    os.system(f'cd {ffmpeg_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
                     ARCH='arm64'
