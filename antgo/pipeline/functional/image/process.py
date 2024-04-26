@@ -36,8 +36,9 @@ class resize_op(object):
 
 @register
 class keep_ratio_op(object):
-    def __init__(self, aspect_ratio) -> None:
+    def __init__(self, aspect_ratio, fill_val=0) -> None:
         self.aspect_ratio = aspect_ratio
+        self.fill_val = fill_val
 
     def __call__(self, image):
         rhi, rwi = image.shape[:2]
@@ -62,7 +63,7 @@ class keep_ratio_op(object):
   
             # 调整image
             image = cv2.copyMakeBorder(image, top_padding, bottom_padding, left_padding, right_padding,
-                                            cv2.BORDER_CONSTANT, value=(0, 0, 0))
+                                            cv2.BORDER_CONSTANT, value=(self.fill_val, self.fill_val, self.fill_val))
 
         return image, [left_padding, top_padding, rwi, rhi]
 

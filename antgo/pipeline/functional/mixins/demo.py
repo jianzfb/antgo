@@ -16,6 +16,7 @@ import imagesize
 
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
+from antgo.tools.download_funcs import *
 from .interactive import *
 from .serve import _APIWrapper,_PipeWrapper, _decode_content
 from fastapi.staticfiles import StaticFiles
@@ -37,12 +38,12 @@ class DemoMixin:
     api = _APIWrapper.tls.placeholder
     DemoMixin.pipeline_info[api._name] = {
        'exe': _PipeWrapper(self._iterable, api)
-	}
+	  }
 
     input_selection = [cc['data'] for cc in input]
     input_selection_types = [cc['type'] for cc in input]
     for ui_type in input_selection_types:
-      assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select'])
+      assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search'])
 
     output_selection = [cc['data'] for cc in output]
     output_selection_types = [cc['type'] for cc in output]
@@ -61,14 +62,16 @@ class DemoMixin:
        'input_config': input_config,
        'title': title,
        'description': description,
-       'interactive': {}
+       'interactive': {},
+       'step_i': api.step_i,
+       'step_num': api.step_num
 	})
 
     for b in input_selection:
-        if b in InteractiveMixin.interactive_elements:
+        if f'{api._name}/{b}' in InteractiveMixin.interactive_elements:
             DemoMixin.pipeline_info[api._name]['interactive'][b] = {
-				'mode': InteractiveMixin.interactive_elements[b]['mode'],
-				'num': InteractiveMixin.interactive_elements[b]['num']
+				'mode': InteractiveMixin.interactive_elements[f'{api._name}/{b}']['mode'],
+				'num': InteractiveMixin.interactive_elements[f'{api._name}/{b}']['num']
 			}
 
     dump_folder = './dump'
@@ -133,13 +136,22 @@ class DemoMixin:
         for i, b in enumerate(input_selection_types):
             if b in ['image', 'video', 'file']:
                 if b == 'image':
-                   input_req[i] = '/'.join(input_req[i].split('/')[2:])
-                   input_req[i] = cv2.imread(f'{query_folder}/{input_req[i]}')
+                   if input_req[i] is not None:
+                    input_req[i] = '/'.join(input_req[i].split('/')[2:])
+                    input_req[i] = cv2.imread(f'{query_folder}/{input_req[i]}')
                 else:
-                   input_req[i] = '/'.join(input_req[i].split('/')[2:])
-                   input_req[i] = f'{query_folder}/{input_req[i]}'
+                   if input_req[i] is not None:
+                    input_req[i] = '/'.join(input_req[i].split('/')[2:])
+                    input_req[i] = f'{query_folder}/{input_req[i]}'
             if b == 'checkbox':
                 input_req[i] = bool(input_req[i])
+
+            if b == 'image-search':
+                selected_image_list = []
+                for selected_filename in input_req[i]:
+                   selected_filepath = f'{static_folder}/{selected_filename}'
+                   selected_image_list.append(selected_filepath)
+                input_req[i] = selected_image_list
 
         input_selection = DemoMixin.pipeline_info[demo_name]['input_selection']
         feed_info = {}
@@ -152,8 +164,8 @@ class DemoMixin:
             for info in b['value']:
                data.append(info['data'])
             bind_name = b['name']
-            assert(bind_name in InteractiveMixin.interactive_elements)
-            interactive_info[InteractiveMixin.interactive_elements[bind_name]['target']] = data
+            assert(f'{demo_name}/{bind_name}' in InteractiveMixin.interactive_elements)
+            interactive_info[InteractiveMixin.interactive_elements[f'{demo_name}/{bind_name}']['target']] = data
 
         feed_info.update(interactive_info)
         rsp_value = DemoMixin.pipeline_info[demo_name]['exe'].execute(feed_info)
@@ -203,11 +215,11 @@ class DemoMixin:
                         'height': image_height,
                         'width': image_width
                     }
-                    if b in InteractiveMixin.interactive_elements:
+                    if f'{demo_name}/{b}' in InteractiveMixin.interactive_elements:
                         output_info[b]['interactive'] = True
                         output_info[b]['element'] = {
-						    'mode': InteractiveMixin.interactive_elements[b]['mode'],
-							'num': InteractiveMixin.interactive_elements[b]['num']
+                            'mode': InteractiveMixin.interactive_elements[f'{demo_name}/{b}']['mode'],
+                            'num': InteractiveMixin.interactive_elements[f'{demo_name}/{b}']['num']
                         }
                 else:
                     shutil.copyfile(value, os.path.join(static_folder, 'image', 'response', value.split('/')[-1]))
@@ -282,7 +294,6 @@ class DemoMixin:
 
         return response
 
-
     @DemoMixin.app.get('/antgo/api/demo/query_config/')
     async def query_config(req: Request):
       demo_name = ''
@@ -330,12 +341,97 @@ class DemoMixin:
              info['interactive'] = interactive[k]
         input_info.append(info)
 
+      step_i = DemoMixin.pipeline_info[demo_name]['step_i']
+      step_num = DemoMixin.pipeline_info[demo_name]['step_num']
+      pre_step = ''
+      next_step = ''
+      if step_i - 1 >= 0:
+        for pname, pinfo in DemoMixin.pipeline_info.items():
+          if pinfo['step_i'] == step_i - 1:
+            pre_step = pname
+      if step_i + 1 < len(DemoMixin.pipeline_info):
+        for pname, pinfo in DemoMixin.pipeline_info.items():
+          if pinfo['step_i'] == step_i + 1:
+            next_step = pname
       info = {
         'input': input_info,
         'title': title,
-        'description': description
-	  }
+        'description': description,
+        'pre_step': pre_step,
+        'next_step': next_step,
+	    }
       return info
+
+    @DemoMixin.app.get('/antgo/api/demo/search/')
+    async def search(req: Request):
+      # 调用下载功能
+      demo_name = ''
+      if 'demo' in req.query_params and req.query_params['demo'] != '':
+         demo_name = req.query_params['demo']
+
+      if demo_name == '':
+         demo_name = list(DemoMixin.pipeline_info.keys())[0]
+
+      if demo_name not in DemoMixin.pipeline_info:
+         raise HTTPException(status_code=404, detail=f"{demo_name} not exist.")
+      
+      print(req.query_params)
+      search_engine = req.query_params['search_engine']
+      search_word = req.query_params['search_word']
+      
+      search_func = {
+         'baidu': download_from_baidu,
+         'bing': download_from_bing,
+         'vcg': download_from_vcg
+      }
+
+      search_word = search_word.replace(',','/')
+      search_word = search_word.replace(' ', '/')
+      keys = f'type:image,keyword:{search_word}'
+      print(keys)
+      timestamp = str(time.time())
+      target_folder = os.path.join(static_folder, 'image', 'download', demo_name, search_engine, timestamp)
+      os.makedirs(target_folder, exist_ok=True)
+
+      t = threading.Thread(target=search_func[search_engine], args=(target_folder, keys, None, 50))
+      t.start()
+
+
+    @DemoMixin.app.get('/antgo/api/demo/searchprocess/')
+    async def process(req: Request):
+        demo_name = ''
+        if 'demo' in req.query_params and req.query_params['demo'] != '':
+            demo_name = req.query_params['demo']
+
+        if demo_name == '':
+            demo_name = list(DemoMixin.pipeline_info.keys())[0]
+
+        if demo_name not in DemoMixin.pipeline_info:
+            raise HTTPException(status_code=404, detail=f"{demo_name} not exist.")
+
+        target_folder = os.path.join(static_folder, 'image', 'download', demo_name)
+        if not os.path.exists(target_folder):
+           return {'imagelist': []}
+
+        ready_file_list = []
+        for engine_name in os.listdir(target_folder):
+            if engine_name[0] == '.':
+               continue
+            for subfolder in os.listdir(os.path.join(target_folder, engine_name)):
+                if subfolder[0] == '.':
+                   continue
+                for filename in os.listdir(os.path.join(target_folder, engine_name, subfolder)):
+                    if filename[0] == '.':
+                       continue
+                    filepath = os.path.join(target_folder, engine_name, subfolder, filename)
+                    fileext = filepath.split('.')[-1]
+                    if fileext.lower() not in ['jpeg', 'jpg', 'png', 'webp']:
+                        continue
+                    ready_file_list.append(f'image/download/{demo_name}/{engine_name}/{subfolder}/{filename}')
+
+        return {
+           'imagelist': ready_file_list
+        }
 
     # static resource
     DemoMixin.app.mount("/", StaticFiles(directory=static_folder), name="static")
@@ -343,5 +439,5 @@ class DemoMixin:
     return DemoMixin.app
 
   @classmethod
-  def web(cls, index=None, name='demo'):
-    return _APIWrapper(index=index, cls=cls, name=name)
+  def web(cls, index=None, name='demo', **kwargs):
+    return _APIWrapper(index=index, cls=cls, name=name, **kwargs)

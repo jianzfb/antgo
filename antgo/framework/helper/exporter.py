@@ -47,7 +47,7 @@ class Exporter(object):
 
         # 获得浮点模型的 FLOPS、PARAMS
         model.eval()
-        model.switch_to_deploy()
+        model.switch_to_deploy(self.cfg.model.get('test_cfg', dict()))
         model.forward = model.onnx_export
         model = model.to('cpu')
         if isinstance(input_tensor_list, list):

@@ -95,9 +95,22 @@ class EpochBasedRunner(BaseRunner):
         self.logger.info('workflow: %s, max: %d epochs', workflow, self._max_epochs)
         self.call_hook('before_run')
 
+        init_workflow_i = 0
+        offset = 0
+        for i, (mode, epochs) in enumerate(workflow):
+            if mode == 'train':
+                if self.epoch >= offset and self.epoch < offset + epochs:
+                    init_workflow_i = i
+                    break
+                offset += epochs
+
         while self.epoch < self._max_epochs:
             for i, flow in enumerate(workflow):
+                if i < init_workflow_i:
+                    continue
+
                 mode, epochs = flow
+                self.logger.info(f"current workflow {i} ({mode} {epochs})")
                 if isinstance(mode, str):  # self.train()
                     if not hasattr(self, mode):
                         raise ValueError(
@@ -110,6 +123,13 @@ class EpochBasedRunner(BaseRunner):
                             type(mode)))
 
                 if isinstance(data_loaders[i], dict):
+                    # 清理之前数据集加载对象，释放资源
+                    if i > 0:
+                        obj = data_loaders[i-1]
+                        data_loaders[i-1] = None
+                        del obj
+
+                    # 基于规则，动态创建数据集加载对象
                     from antgo.framework.helper.dataset import (build_dataset, build_dataloader, build_kv_dataloader, build_iter_dataloader)
 
                     dataset = build_dataset(data_loaders[i]['dataset'])

@@ -9,6 +9,7 @@ import random
 from antgo.pipeline.engine import *
 from antgo.utils import colormap
 import cv2
+import numpy as np
 
 
 def plot_one_box(x, img, color=None, label=None, line_thickness=3):
@@ -98,3 +99,21 @@ class plot_text(object):
       text = self.label_map[int(text)]
     image = cv2.putText(image, text, pos, cv2.FONT_HERSHEY_COMPLEX, self.font_scale, color, self.thickness)
     return image
+
+
+@register
+class fillpoly(object):
+  def __init__(self, fill=1, is_overlap=False):
+    self.fill = fill
+    self.is_overlap = is_overlap
+  
+  def __call__(self, image, polygon_points):
+    if self.is_overlap:
+      image_cp = image.copy()
+      cv2.fillPoly(image_cp, polygon_points, self.fill)
+      return image_cp
+    else:
+      mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
+      mask = cv2.fillPoly(mask, np.array(polygon_points).astype(np.int32), self.fill)
+      image_with_mask = np.concatenate([image, np.expand_dims(mask, -1)], -1)
+      return image_with_mask

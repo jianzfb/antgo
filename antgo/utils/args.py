@@ -75,6 +75,30 @@ def DEFINE_nn_args():
         default='0',
         help='id of gpu to use '
         '(only applicable to non-distributed training)')
+    parser.add_argument(
+        '--nodes',
+        type=int,
+        default=1,
+        help='node number in cluster'
+    )
+    parser.add_argument(
+        '--node-rank',
+        type=int,
+        default=0,
+        help='node rank'
+    )
+    parser.add_argument(
+        '--master-addr',
+        type=str,
+        default='127.0.0.1',
+        help='master ip addr'
+    )
+    parser.add_argument(
+        '--version',
+        type=str,
+        default='-',
+         help='needed antgo version'
+    )
     parser.add_argument('--seed', type=int, default=None, help='random seed')
     parser.add_argument(
         '--diff-seed',

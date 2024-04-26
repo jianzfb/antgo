@@ -59,10 +59,7 @@ def baidu_download(keyward, download_params, save_dir, process_queue=None, targe
                         continue
                     else:
                         # 分配唯一文件标识
-                        file_folder = os.path.join(dir, 'test')
-                        if not os.path.exists(file_folder):
-                            os.makedirs(file_folder)
-                        
+                        file_folder = dir
                         file_path = os.path.join(file_folder, 'baidu_%s.jpg'%str(uuid.uuid4()))
                         with open(file_path, 'wb') as fp:
                             fp.write(pic.content)
@@ -123,10 +120,7 @@ def bing_download(keyward, download_params, save_dir, process_queue=None, target
                         continue
                     else:
                         # 分配唯一文件标识
-                        file_folder = os.path.join(dir, 'test')
-                        if not os.path.exists(file_folder):
-                            os.makedirs(file_folder)
-                        
+                        file_folder = dir
                         file_path = os.path.join(file_folder, 'bing_%s.jpg'%str(uuid.uuid4()))
                         with open(file_path, 'wb') as fp:
                             fp.write(pic.content)
@@ -318,13 +312,10 @@ def vcg_download(keyword, download_params, download_save_dir, process_queue=None
             waiting_process_queue.put(None)
 
     # 搜索和下载
-    if not os.path.exists(os.path.join(download_save_dir, 'test')):
-        os.makedirs(os.path.join(download_save_dir, 'test'))
-
     if process_queue is not None:
-        t = threading.Thread(target=__vcg_find_and_download, args=(process_queue, os.path.join(download_save_dir, 'test'), target_num))
+        t = threading.Thread(target=__vcg_find_and_download, args=(process_queue, download_save_dir, target_num))
         t.start()
     else:
-        __vcg_find_and_download(process_queue, os.path.join(download_save_dir, 'test'), target_num)
+        __vcg_find_and_download(process_queue, download_save_dir, target_num)
 
 

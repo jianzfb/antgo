@@ -54,6 +54,24 @@ def image_download(image_url):
   image = cv2.imdecode(np.frombuffer(pic.content, np.uint8), cv2.IMREAD_COLOR)  
   return image
 
+@register
+class snapeshot(object):
+  def __init__(self, after_frames=10):
+    self.after_frames = after_frames
+  
+  def __call__(self, path):
+    cap = cv2.VideoCapture(path)
+    frame_count = 0
+    while cap.isOpened():
+      ret, frame = cap.read()
+      if not ret:
+          break
+      frame_count += 1
+      if frame_count >= self.after_frames:
+        return frame
+
+    return None
+
 
 @register
 def serialize_numpy(*args):
@@ -134,3 +152,48 @@ class convert_gt_annos(object):
       for k, v in self.fill_constant_fields.items():
         gt_info[k] = v
     return gt_info
+
+
+@register
+class image_json_record(object):
+  def __init__(self, folder='./', prefix='package'):
+    self.filename = f'{prefix}.json'
+    self.folder = folder
+    os.makedirs(self.folder, exist_ok=True)
+
+  def __call__(self, info):
+    sgt = SampleGTTemplate()
+    if isinstance(info, str):
+      info = [info]
+
+    anno_info_list = []
+    if os.path.exists(os.path.join(self.folder, self.filename)):
+      with open(os.path.join(self.folder, self.filename), 'r') as fp:
+        anno_info_list = json.load(fp)
+
+    if isinstance(info, list):
+      # 图像文件路径列表
+      for file_path in info:
+        gt_info = sgt.get()
+        gt_info['image_file'] = file_path
+        image_width, image_height = imagesize.get(file_path)
+        gt_info['height'] = image_height
+        gt_info['width'] = image_width
+        anno_info_list.append(gt_info)
+    else:
+      # 图像
+      os.makedirs(os.path.join(self.folder, 'image'), exist_ok=True)
+      image_file_path = os.path.join(self.folder, 'image', f'{len(anno_info_list)}.png')
+      cv2.imwrite(image_file_path, info)
+      gt_info = sgt.get()
+      gt_info['image_file'] = image_file_path
+      image_width, image_height = imagesize.get(image_file_path)
+      gt_info['height'] = image_height
+      gt_info['width'] = image_width
+      anno_info_list.append(gt_info)
+
+    with open(os.path.join(self.folder, self.filename), 'w') as fp:
+      json.dump(anno_info_list, fp)
+
+    return len(anno_info_list), [s['image_file'] for s in anno_info_list], os.path.join(self.folder, self.filename)
+

@@ -22,7 +22,7 @@ class _APIWrapper:
     """
     tls = threading.local()
 
-    def __init__(self, index=None, cls=None, name='demo') -> None:
+    def __init__(self, index=None, cls=None, name='demo', **kwargs) -> None:
         self._queue = queue.Queue()
         self._cls = cls
         self._name = name
@@ -31,6 +31,9 @@ class _APIWrapper:
             self._index = index if isinstance(index, list) else [index]
         else:
             self._index = index
+
+        self.step_i = kwargs.get('step_i', 0)
+        self.step_num = kwargs.get('step_num', 0)
 
     def feed(self, x) -> None:
         entity = Entity(**x)

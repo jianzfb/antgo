@@ -533,6 +533,12 @@ def main():
           continue
         if t.startswith('--ip'):
           continue
+        if t.startswith('--node-rank'):
+          continue
+        if t.startswith('--nodes'):
+          continue
+        if t.startswith('--version'):
+          continue
         filter_sys_argv_cp.append(t)
 
       sys_argv_cp = filter_sys_argv_cp
@@ -547,7 +553,7 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
 
-        ssh_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+        ssh_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
       else:
         # 自定义脚本提交
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
@@ -735,7 +741,7 @@ def main():
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -749,9 +755,6 @@ def main():
         if args.diff_seed:
           command_str += f' --diff-seed'
         os.system(command_str)
-
-      if args.clear:
-        os.system("rm -rf /tiger/*")
     elif action_name == 'activelearning':
       if args.exp not in args.root:
         # root需要将exp加入点到root中
@@ -791,7 +794,7 @@ def main():
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name}  --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name}  --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -802,9 +805,6 @@ def main():
           command_str += f' --max-epochs={args.max_epochs}'
 
         os.system(command_str)
-
-      if args.clear:
-        os.system("rm -rf /tiger/*")
     elif action_name == 'eval':
       if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
@@ -855,7 +855,7 @@ def main():
       else:
         # multi gpu run
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -893,9 +893,6 @@ def main():
       # 删除评估缓存结果
       if os.path.exists('./evalresult.json'):
         os.remove('./evalresult.json')
-
-      if args.clear:
-        os.system("rm -rf /tiger/*")
     elif action_name == 'export':
       if args.checkpoint is None or args.checkpoint == '':
         logging.error('Must set --checkpoint=')
@@ -926,9 +923,6 @@ def main():
           args.root = project_info['exp'][args.exp][-1]['root']
 
       os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config} --work-dir={args.work_dir}')
-
-      if args.clear:
-        os.system("rm -rf /tiger/*")
   else:
     if action_name == 'create':
       if sub_action_name == 'project':

@@ -9,6 +9,7 @@ import random
 from typing import Any
 from antgo.pipeline.engine import *
 import cv2
+import json
 import numpy as np
 
 def perspective_transform(pt, t):
@@ -18,6 +19,70 @@ def perspective_transform(pt, t):
     return new_pt[:2]
 
 
+class LayoutTemplateGenerator:
+    def __init__(self, folder, min_scale=0.9, max_scale=1.0, ignore_prefix=None, keep_prefix=None, data_folder=None):
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+        self.template_image_path_list = []
+
+        if os.path.isdir(folder):
+            # 文件夹
+            for filename in os.listdir(folder):
+                if filename[0] == '.':
+                    continue
+                if ignore_prefix is not None:
+                    if filename.startswith(ignore_prefix):
+                        continue
+                
+                if keep_prefix is not None:
+                    if not filename.startswith(keep_prefix):
+                        continue
+                self.template_image_path_list.append(os.path.join(folder, filename))
+        else:
+            # label-studio标注
+            assert(data_folder is not None)
+            label_studio_file = folder
+            folder = '/'.join(label_studio_file.split('/')[:-1])
+            with open(label_studio_file, 'r') as fp:
+                sample_anno_list = json.load(fp)
+            for sample_i in range(len(sample_anno_list)):
+                for index in range(len(sample_anno_list[sample_i]['annotations'][0]['result'])):
+                    sample_anno_instance = sample_anno_list[sample_i]['annotations'][0]['result'][index]
+                    height = sample_anno_instance['original_height']
+                    width = sample_anno_instance['original_width']
+
+                    points = sample_anno_instance['value']['points']
+                    label_name = sample_anno_instance['value']['polygonlabels'][0]
+
+                    if ignore_prefix is not None:
+                        if label_name.startswith(ignore_prefix):
+                            continue
+                    
+                    if keep_prefix is not None:
+                        if not label_name.startswith(keep_prefix):
+                            continue
+                    points_array = np.array(points) 
+                    points_array[:, 0] = points_array[:, 0] / 100.0 * width
+                    points_array[:, 1] = points_array[:, 1] / 100.0 * height
+                    points_array = points_array.astype(np.int32)
+                    name = sample_anno_list[sample_i]['file_upload'].split('/')[-1][9:]
+
+                    image = cv2.imread(os.path.join(data_folder, name))
+                    mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
+                    mask = cv2.fillPoly(mask, [points_array], 255)
+                    cv2.imwrite(os.path.join(folder, name), np.concatenate([image, np.expand_dims(mask, -1)], -1))
+                    self.template_image_path_list.append(os.path.join(folder, name))
+
+    def scale(self):
+        return self.min_scale, self.max_scale
+    
+    def __call__(self, *args, **kwargs):
+        random_i = np.random.randint(0, len(self.template_image_path_list))
+        image_path = self.template_image_path_list[random_i]
+        image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+        return image, {}
+
+
 @register
 class sync_layout_op(object):
     def __init__(self, layout_gen, layout_id=1):
@@ -25,7 +90,7 @@ class sync_layout_op(object):
         if not isinstance(layout_id, list):
             layout_id = [layout_id]
         if len(layout_id) != len(self.layout_gen):
-            layout_id = [layout_id[0]] * len(self.layout_gen)
+            layout_id = list(range(1,len(self.layout_gen)+1))
         self.layout_id = layout_id
 
     def extract(self, layout_image, layout_info, layout_id):
@@ -55,17 +120,20 @@ class sync_layout_op(object):
         # layout_image: HxWx4
         # layout_info: {'points': [[],[]]}
         layout_image, layout_info = self.layout_gen[0](image)
+        layout_min_scale, layout_max_scale = self.layout_gen[0].scale()
         layout_image, layout_mask, layout_points = self.extract(layout_image, layout_info, self.layout_id[0])
         layout_h, layout_w = layout_image.shape[:2]
+        layout_min_size = min(layout_h, layout_w)
 
         for layout_i in range(1, len(self.layout_gen)):
             overlap_layout_image, overlap_layout_info = self.layout_gen[layout_i](image)
             overlap_layout_image, overlap_layout_mask, overlap_layout_points = self.extract(overlap_layout_image, overlap_layout_info, self.layout_id[layout_i])
             overlap_layout_h, overlap_layout_w = overlap_layout_image.shape[:2]
+            overlap_layout_min_size = max(overlap_layout_h, overlap_layout_w)
 
             # 随机叠加
             random_min_scale, random_max_scale = self.layout_gen[layout_i].scale()
-            scale_value = (layout_w * (random_min_scale + (random_max_scale-random_min_scale) * np.random.random()))/overlap_layout_w
+            scale_value = layout_min_size * (random_min_scale + (random_max_scale-random_min_scale) * np.random.random())/overlap_layout_min_size
             scaled_w = int(overlap_layout_w * scale_value)
             scaled_h = int(overlap_layout_h * scale_value)
             overlap_layout_image = cv2.resize(overlap_layout_image, (scaled_w, scaled_h))
@@ -92,17 +160,21 @@ class sync_layout_op(object):
         return {
             'layout_image': layout_image,
             'layout_mask': layout_mask,
-            'layout_points': layout_points
+            'layout_points': layout_points,
+            'layout_scale_range': (layout_min_scale, layout_max_scale)
         }
 
 
 @register
 class sync_op(object):
-    def __init__(self, min_scale=0.5, max_scale=0.8, border_fill=0, hard_paste=False):
+    def __init__(self, min_scale=0.5, max_scale=0.8, border_fill=0, hard_paste=False, auto_adjust_ratio=True, keep_layout=None, layout_label_map=None):
         self.min_scale = min_scale
         self.max_scale = max_scale
         self.border_fill = border_fill
         self.hard = hard_paste
+        self.auto_adjust_ratio = auto_adjust_ratio
+        self.keep_layout = keep_layout
+        self.layout_label_map = layout_label_map
 
     def __call__(self, image, *args):
         image = image.copy()
@@ -116,19 +188,20 @@ class sync_op(object):
             layout_image = layout_info['layout_image']
             layout_mask = layout_info['layout_mask']
             layout_points = layout_info['layout_points']
+            layout_scale_range = layout_info['layout_scale_range']
 
             object_image = layout_image
             obj_h, obj_w, _ = object_image.shape
 
-            min_size = max(image_w, image_h) * random_scale
-            obj_scale = min_size / max(obj_h, obj_w)
-
-            if obj_w * obj_scale > image_w * random_scale or obj_h * obj_scale > image_h * random_scale:
-                if obj_w * obj_scale > image_w * random_scale:
-                    obj_scale = image_w * random_scale / obj_w
-
-                if obj_h * obj_scale > image_h * random_scale:
-                    obj_scale = image_h * random_scale / obj_h
+            min_size = min(image_w, image_h) * random_scale
+            obj_scale = 1.0
+            if self.auto_adjust_ratio:
+                # 根据底层尺寸，自动调整obj大小，layout_scale_range表示需要占据底层尺寸的百分比
+                expect_obj_size = min_size * (np.random.random() * (layout_scale_range[1]-layout_scale_range[0]) + layout_scale_range[0])
+                obj_scale = expect_obj_size/max(obj_w, obj_h)
+            else:
+                # 忽略底层尺寸，自动调整obj大小，layout_scale_range表示obj大小调整比例
+                obj_scale = np.random.random() * (layout_scale_range[1]-layout_scale_range[0]) + layout_scale_range[0]
 
             object_image = cv2.resize(object_image, dsize=(int(obj_w * obj_scale), int(obj_h * obj_scale)))
             obj_h, obj_w = object_image.shape[:2]
@@ -153,7 +226,15 @@ class sync_op(object):
             p2 = np.array([tgt_p1, tgt_p2, tgt_p3, tgt_p4]).astype(np.float32)
             M = cv2.getPerspectiveTransform(p1, p2)
             object_image = cv2.warpPerspective(object_image, M, (obj_w, obj_h))
-            object_paste_mask = cv2. warpPerspective(object_paste_mask, M, (obj_w, obj_h))
+            object_paste_mask = \
+                cv2. warpPerspective(
+                    object_paste_mask, 
+                    M,
+                    (obj_w, obj_h), 
+                    borderMode=cv2.BORDER_CONSTANT, 
+                    borderValue=self.border_fill, 
+                    flags=cv2.INTER_NEAREST)
+
             if layout_points is not None:
                 for point_i in range(layout_points.shape[0]):
                     layout_points[point_i, :2] = perspective_transform(layout_points[point_i, :2], M)
@@ -194,8 +275,42 @@ class sync_op(object):
         if sync_points is not None:
             sync_points = np.concatenate(sync_points, 0)
 
-        return {
-            'layout_image': sync_image,
-            'layout_mask': sync_mask,
-            'layout_points': sync_points
+        bboxes = []
+        labels = []
+        if self.layout_label_map is not None:
+            for layout_id, layout_label in self.layout_label_map.items():
+                pos = np.where(sync_mask == layout_id)
+                min_y = int(np.min(pos[0]))
+                min_x = int(np.min(pos[1]))
+
+                max_y = int(np.max(pos[0]))
+                max_x = int(np.max(pos[1]))
+
+                bboxes.append([min_x, min_y, max_x, max_y])
+                labels.append(layout_label)
+
+        if self.keep_layout is not None:
+            keep_sync_mask = np.zeros(sync_mask.shape, dtype=np.uint8)
+            for layout_index, layout_id in enumerate(self.keep_layout):
+                keep_sync_mask[np.where(sync_mask == layout_id)] = layout_index+1
+            sync_mask = keep_sync_mask
+
+        # image, segments
+        sync_info = {
+            'image': sync_image,
+            'segments': sync_mask
         }
+
+        if len(bboxes) > 0 and len(labels) > 0:
+            sync_info.update({
+                'bboxes': bboxes, 
+                'labels': labels
+            })
+
+        # joints2d
+        if sync_points is not None:
+            sync_info.update({
+                'joints2d': sync_points
+            })
+
+        return sync_info

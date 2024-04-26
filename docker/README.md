@@ -23,14 +23,14 @@ sudo bash docker/build_dev.sh with-android-ndk with-vscode-server
 ### 创建运行环境容器
 可以直接以命令行方式，运行相关实验
 ```
-# sudo docker run -it --rm --name antgo-env-runtime --shm-size="20G" --gpus all --privileged antgo-env /bin/bash
+# sudo docker run -it --rm --name antgo-env-runtime --shm-size="20G" --gpus all,capabilities=video --privileged antgo-env /bin/bash
 
 ```
 
 ### 创建vscode-server服务
 在线IDE环境，运行后你可以访问http://IP:8080，开始在线开发吧
 ```
-sudo docker run --rm -d --name antgo-env-ide --shm-size="20G" -p 8080:8080 -e PASSWORD=123 -v /data:/dataset -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all --privileged antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
+sudo docker run --rm -d --name antgo-env-ide --shm-size="20G" -p 8080:8080 -e PASSWORD=123 -v /data:/dataset -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all,capabilities=video --privileged antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
 ```
 
 

@@ -63,6 +63,7 @@ def build_dataloader(dataset,
                      runner_type='EpochBasedRunner',
                      persistent_workers=False,
                      class_aware_sampler=None,
+                     prefetch_factor=10,                # 预加载prefetch_factor * num_workers samples prefetched across all workers
                      ignore_stack=[],
                      **kwargs):
     """Build PyTorch DataLoader.
@@ -182,6 +183,7 @@ def build_dataloader(dataset,
         sampler=sampler,
         num_workers=num_workers,
         batch_sampler=batch_sampler,
+        prefetch_factor=prefetch_factor,
         collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
         pin_memory=kwargs.pop('pin_memory', False),
         worker_init_fn=init_fn,
@@ -198,6 +200,7 @@ def build_kv_dataloader(dataset,
                      shuffle=True,
                      seed=0,
                      runner_type='EpochBasedRunner',
+                     prefetch_factor=10,                # 预加载prefetch_factor * num_workers samples prefetched across all workers
                      persistent_workers=False,
                      ignore_stack=[],
                      **kwargs):
@@ -249,6 +252,7 @@ def build_kv_dataloader(dataset,
         batch_size=None,
         sampler=sampler,
         num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
         batch_sampler=None,
         pin_memory=kwargs.pop('pin_memory', False),
         collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
@@ -261,6 +265,7 @@ def build_iter_dataloader(dataset,
                           samples_per_gpu,
                           workers_per_gpu,
                           ignore_stack=[],
+                          prefetch_factor=10,       # 预加载prefetch_factor * num_workers samples prefetched across all workers
                           **kwargs):
     batch_size = samples_per_gpu if not isinstance(samples_per_gpu, list) else int(np.sum(samples_per_gpu))
     dataset.samples_per_gpu = samples_per_gpu
@@ -268,6 +273,7 @@ def build_iter_dataloader(dataset,
         dataset, 
         batch_size=batch_size, 
         num_workers=workers_per_gpu,
+        prefetch_factor=prefetch_factor,
         pin_memory=kwargs.pop('pin_memory', False),
         collate_fn=partial(collate, samples_per_gpu=batch_size, ignore_stack=ignore_stack),
         drop_last=kwargs.get('drop_last', True))

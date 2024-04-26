@@ -195,15 +195,15 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
         for line in code_line_list:
             fp.write(line)
 
-    # step4: 更新run.sh片段
+    # step4: 更新setup.sh片段
     code_line_list = []
-    for line in open(os.path.join(output_folder, 'run.sh')):
+    for line in open(os.path.join(output_folder, 'setup.sh')):
         if 'export LD_LIBRARY_PATH=' in line:
             aa,bb,cc = line.split(';')
             bb = f'export LD_LIBRARY_PATH=.:{cudnn_path}/lib:{tensorrt_path}/lib'
             line = f'{aa}; {bb}; {cc}'
         code_line_list.append(line)
-    with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
+    with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
         for line in code_line_list:
             fp.write(line)
 
@@ -668,7 +668,14 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': ({
+                'c++_type': 'std::map<std::string, std::vector<std::string>>'
+            },{
+                'c++_type': 'std::map<std::string, std::vector<std::vector<float>>>'
+            },{
+                'c++_type': 'std::map<std::string, std::vector<float>>'
+            }
+        ),
         'include': os.path.join('extent','include', f'{op_name}_op_warp.h'),
         'src': os.path.join('./', 'extent', 'src', f'{op_name}_op_warp.cpp'),
         'depedent_src': depedent_src
@@ -1246,6 +1253,12 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
                     break
             pipeline_plugin_flag.append(line.strip())
 
+        if is_start_add_src_code:
+            if project_name != pipeline_name:
+                # 说明复合管线项目
+                if f'./{project_name}_plugin.cpp' == line.strip():
+                    continue
+
         if not has_finish_found and is_start_add_src_code and line.strip().endswith(')'):
             if f'./{pipeline_name}_plugin.cpp' not in pipeline_plugin_flag:
                 info.append(f'./{pipeline_name}_plugin.cpp\n')
@@ -1431,12 +1444,12 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])          # 考虑将转好的模型放置的位置
     writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else os.path.dirname(op_kwargs['onnx_path'])           # 考虑到 设备可写权限位置(android)
 
-    # 更新run.sh（仅设备端运行时需要添加推送模型代码）
+    # 更新setup.sh（仅设备端运行时需要添加推送模型代码）
     if platform.lower() == 'android':
         run_shell_code_list = []
         is_found_model_push_line = False
         is_found_model_platform_folder = False
-        for line in open(os.path.join(output_folder, 'run.sh')):
+        for line in open(os.path.join(output_folder, 'setup.sh')):
             if '.tnnmodel' in line:
                 continue
             if line.startswith(f'adb push {platform_model_path}') and not is_found_model_push_line:
@@ -1455,15 +1468,13 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
             if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
                 # 插入
-                run_shell_code_list.append(f'if [ "$1"x = "reload"x ]; then\n')
                 run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
                 if platform_model_path.endswith('.tnnproto'):
                     run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
-                run_shell_code_list.append('fi\n')
 
             run_shell_code_list.append(line)
 
-        with open(os.path.join(output_folder, 'run.sh'), 'w') as fp:
+        with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
             for line in run_shell_code_list:
                 fp.write(line)
 
@@ -1895,7 +1906,6 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             op_graph=op_graph_code
         )
 
-
     # TODO，如何解决之前生成的插件代码，完全冲掉问题（可能已经让开发者添加了部分代码）？
     # 替换AUTOGENERATE PLUGIN HEADER，AUTOGENERATE PLUGIN SOURCE之间的代码块
     if os.path.exists(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp')):
@@ -1987,7 +1997,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         plugin_input_size_list = ['{'+','.join([str(v) for v in shape])+'}' for shape in plugin_input_size_list]
         plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
         demo_code_content = gen_code(f'./templates/demo_code.cpp')(
-            project=project_name,
+            project=pipeline_name,
             # input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
             # input_size_list='{'+','.join(plugin_input_size_list)+'}',
             # input_type_list='{'+plugin_input_type_list+'}',
@@ -2111,12 +2121,13 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 os.makedirs(root_folder, exist_ok=True)
                 if os.path.exists(os.path.join(root_folder, 'rk')):
                     print('Exist rk dependent, dont need download and compile')
+                    eagleeye_config[compile_prop_key] = os.path.join(root_folder, 'rk')
                     continue
                 os.makedirs(os.path.join(root_folder, 'rk'), exist_ok=True)
                 rk_root_folder = os.path.join(root_folder, 'rk')
                 # librga, mpp
                 os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
-                os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git')
+                os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
                 eagleeye_config[compile_prop_key] = rk_root_folder
             elif compile_prop_key == 'ffmpeg':
                 if compile_prop_val != '':
@@ -2128,21 +2139,22 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 os.makedirs(root_folder, exist_ok=True)
                 if os.path.exists(os.path.join(root_folder, 'ffmpeg')):
                     print('Exist ffmpeg dependent, dont need download and compile')
+                    eagleeye_config[compile_prop_key] = os.path.join(root_folder, 'ffmpeg', 'ffmpeg')
                     continue
 
                 os.makedirs(os.path.join(root_folder, 'ffmpeg'), exist_ok=True)
                 ffmpeg_folder = os.path.join(root_folder, 'ffmpeg')
                 if system_platform.lower().startswith('linux'):
-                    if 'cuda' in eagleeye_config:
-                        os.system(f'cd {ffmpeg_folder} ; git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
-                        os.system(f'cd {ffmpeg_folder}/nv-codec-headers && make install && cd -')
-                        os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
-                        # 修改部分源码
-                        os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
-                        os.system('apt-get install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
-                        # 安装到系统目录
-                        os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
-                        eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
+                    # 默认FFMPEG+CUDA
+                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
+                    os.system(f'cd {ffmpeg_folder}/nv-codec-headers && make install && cd -')
+                    os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    # 修改部分源码
+                    os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/ffmpeg/libavformat/')
+                    os.system('apt-get install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
+                    # 安装到系统目录
+                    os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix=./install --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
+                    eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
                 elif system_platform.lower().startswith('android'):
                     os.system(f'cd {ffmpeg_folder} ; git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
                     # 修改部分源码
@@ -2156,8 +2168,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     CXX=f'{TOOLCHAIN}/bin/aarch64-linux-android{API}-clang++'
                     SYSROOT=f'{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
                     CROSS_PREFIX=f'{TOOLCHAIN}/bin/aarch64-linux-android-'
-                    PREFIX='./install'
-                    os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix={PREFIX} --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
+                    os.system(f'cd {ffmpeg_folder}/ffmpeg ; ./configure --prefix=./install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}/ffmpeg'
             elif compile_prop_key == 'grpc':
                 # 提供网络服务
@@ -2183,6 +2194,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         if compile_param_suffix != '':
             compile_script += compile_param_suffix
 
+        print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path
@@ -2212,6 +2224,7 @@ class DeployMixin:
             # 删除现存plugin_code.cpp
             if os.path.exists(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp')):
                 os.remove(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp'))
+                os.remove(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.h'))
 
         output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
@@ -2219,6 +2232,6 @@ class DeployMixin:
         package_build(
             output_folder, 
             eagleeye_path, 
-            project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=project_name==pipeline_name)
+            project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=True)
 
         return True

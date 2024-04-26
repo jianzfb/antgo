@@ -14,6 +14,8 @@ from antgo.pipeline.functional.mixins.dag import register_dag
 from antgo.pipeline.hparam import dynamic_dispatch
 from antgo.pipeline.functional.entity import Entity
 import traceback
+from antgo.utils.sample_gt import *
+from antgo.tools.package import *
 
 
 class ComputerVisionMixin:
@@ -242,3 +244,141 @@ class ComputerVisionMixin:
             os.makedirs(output_folder)
         with open(path, 'w') as fp:
             json.dump(total, fp)
+
+    def to_dataset(self, 
+        folder, 
+        prefix='train',
+        is_tfrecord=False, 
+        keymap=None):
+        # 生成模型训练/测试/验证集
+        # 主要用于创建感知模型（目标检测2D\3D、目标分割、深度估计、关键点2D\3D、图像分类）数据集
+        if keymap is None:
+            keymap={
+                'image': 'image', 
+                'segments': 'segments', 
+                'joints2d': 'joints2d', 
+                'joints3d': 'joints3d',
+                'joints_vis': 'joints_vis',
+                'labels': 'labels',
+                'bboxes': 'bboxes', 
+                'image_label': 'image_label',
+                'clip_tag': 'clip_tag',
+                'timestamp': 'timestamp',
+                'bboxes3d_trans': 'bboxes3d_trans',
+                'bboxes3d_rotation': 'bboxes3d_rotation',
+                'bboxes3d_size': 'bboxes3d_size',
+                'view_num': 'view_num',
+                'view_id': 'view_id',
+                "cam_param": 'cam_param'
+            }
+
+        # 对于objectdet（目标检测）任务，直接生成tfrecord或者json
+        # 对于objectseg（目标分割）任务，直接生成tfrecord或者image/xxx.png, mask/xxx.png
+        # 对于depth（深度估计）任务，直接生成tfrecord或者image/xxx.png, mask/xxx.png
+        # 对于objlandmark（关键点估计）任务，直接生成tfrecord或者json
+        # 对于imagecls（图像分类）任务，直接生成tfrecord或者json
+        sgt = SampleGTTemplate()
+        assert('image' in keymap)
+
+        data_folder = os.path.join(folder, 'data')
+        os.makedirs(data_folder, exist_ok=True)
+        image_folder = os.path.join(data_folder, 'image')
+        os.makedirs(image_folder, exist_ok=True)
+        mask_folder = os.path.join(data_folder, 'mask')
+        os.makedirs(mask_folder, exist_ok=True)
+
+        tfrecord_folder = os.path.join(folder, 'tfrecord')
+        if is_tfrecord:
+            os.makedirs(tfrecord_folder, exist_ok=True)
+
+        anno_info_list = []
+        for index, info in enumerate(self):
+            gt_info = sgt.get()
+
+            image = info[keymap['image']]
+            image_h, image_w = image.shape[:2]
+
+            image_path = os.path.join(data_folder, 'image', f'{index}.png')
+            cv2.imwrite(image_path, image)
+            gt_info['image_file'] = f'data/image/{index}.png'
+            gt_info['height'] = image_h
+            gt_info['width'] = image_w
+
+            mask_path = ''
+            if 'segments' in keymap and keymap['segments'] in info:
+                segments = info[keymap['segments']]
+                mask_path = f'data/mask/{index}.png'
+                cv2.imwrite(os.path.join(data_folder, 'mask', f'{index}.png'), segments)
+            gt_info['semantic_file'] = mask_path
+
+            joints2d = []
+            if 'joints2d' in keymap and keymap['joints2d'] in info:
+                joints2d = info[keymap['joints2d']]
+            joints3d = []
+            if 'joints3d' in keymap and keymap['joints3d'] in info:
+                joints3d = info[keymap['joints3d']]
+            joints_vis = []
+            if 'joints_vis' in keymap and keymap['joints_vis'] in info:
+                joints_vis = info[keymap['joints_vis']]
+
+            gt_info['joints2d'] = joints2d
+            gt_info['joints3d'] = joints3d
+            gt_info['joints_vis'] = joints_vis
+
+            bboxes = []
+            labels = []
+            if 'bboxes' in keymap and keymap['bboxes'] in info:
+                bboxes = info[keymap['bboxes']]
+
+            labels = []
+            if 'labels' in keymap and keymap['labels'] in info:
+                labels = info[keymap['labels']]
+            gt_info['bboxes'] = bboxes
+            gt_info['labels'] = labels
+
+            image_label = -1
+            if 'image_label' in keymap and keymap['image_label'] in info:
+                image_label = info[keymap['image_label']]
+            gt_info['image_label'] = image_label
+
+            clip_tag = ''
+            if 'clip_tag' in keymap and keymap['clip_tag'] in info:
+                clip_tag = info[keymap['clip_tag']]
+            timestamp = ""
+            if 'timestamp' in keymap and keymap['timestamp'] in info:
+                timestamp = info[keymap['timestamp']]
+            gt_info['clip_tag'] = clip_tag
+            gt_info['timestamp'] = timestamp
+
+            view_num = 0
+            if 'view_num' in keymap and keymap['view_num'] in info:
+                view_num = info[keymap['view_num']]
+            view_id = ""
+            if 'view_id' in keymap and keymap['view_id'] in info:
+                view_id = info[keymap['view_id']]
+            cam_param = {}
+            if 'cam_param' in keymap and keymap['cam_param'] in info:
+                cam_param = info[keymap['cam_param']]
+            gt_info['clip_tag'] = clip_tag
+            gt_info['view_id'] = view_id
+            gt_info['cam_param'] = cam_param
+
+            bboxes3d_trans = []
+            if 'bboxes3d_trans' in keymap and keymap['bboxes3d_trans'] in info:
+                bboxes3d_trans = info[keymap['bboxes3d_trans']]
+            bboxes3d_rotation = []
+            if 'bboxes3d_rotation' in keymap and keymap['bboxes3d_rotation'] in info:
+                bboxes3d_rotation = info[keymap['bboxes3d_rotation']]
+            bboxes3d_size = []
+            if 'bboxes3d_size' in keymap and keymap['bboxes3d_size'] in info:
+                bboxes3d_size = info[keymap['bboxes3d_size']]
+            gt_info['bboxes3d_trans'] = bboxes3d_trans
+            gt_info['bboxes3d_rotation'] = bboxes3d_rotation
+            gt_info['bboxes3d_size'] = bboxes3d_size
+            anno_info_list.append(gt_info)
+
+        with open(os.path.join(folder, f'{prefix}.json'), 'w') as fp:
+            json.dump(anno_info_list, fp)
+
+        if is_tfrecord:
+            package_to_tfrecord(os.path.join(folder, f'{prefix}.json'), tfrecord_folder, prefix, size_in_shard=10000)

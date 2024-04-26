@@ -2,10 +2,10 @@
 
 CONFIG=$1
 GPUS=$2
-NNODES=${NNODES:-1}
-NODE_RANK=${NODE_RANK:-0}
+NNODES=$3
+NODE_RANK=$4
+MASTER_ADDR=$5
 PORT=${PORT:-8990}
-MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
 CRTDIR=$(pwd)
 
 python -m torch.distributed.launch \
@@ -15,4 +15,4 @@ python -m torch.distributed.launch \
     --nproc_per_node=$GPUS \
     --master_port=$PORT \
     $(dirname "$0")/train.py \
-    --launcher pytorch --distributed --config=$CONFIG ${@:3}
+    --launcher pytorch --distributed --config=$CONFIG ${@:6}
