@@ -1253,6 +1253,12 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
                     break
             pipeline_plugin_flag.append(line.strip())
 
+        if is_start_add_src_code:
+            if project_name != pipeline_name:
+                # 说明复合管线项目
+                if f'./{project_name}_plugin.cpp' == line.strip():
+                    continue
+
         if not has_finish_found and is_start_add_src_code and line.strip().endswith(')'):
             if f'./{pipeline_name}_plugin.cpp' not in pipeline_plugin_flag:
                 info.append(f'./{pipeline_name}_plugin.cpp\n')
@@ -1900,7 +1906,6 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             op_graph=op_graph_code
         )
 
-
     # TODO，如何解决之前生成的插件代码，完全冲掉问题（可能已经让开发者添加了部分代码）？
     # 替换AUTOGENERATE PLUGIN HEADER，AUTOGENERATE PLUGIN SOURCE之间的代码块
     if os.path.exists(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp')):
@@ -1992,7 +1997,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         plugin_input_size_list = ['{'+','.join([str(v) for v in shape])+'}' for shape in plugin_input_size_list]
         plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
         demo_code_content = gen_code(f'./templates/demo_code.cpp')(
-            project=project_name,
+            project=pipeline_name,
             # input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
             # input_size_list='{'+','.join(plugin_input_size_list)+'}',
             # input_type_list='{'+plugin_input_type_list+'}',
@@ -2219,6 +2224,7 @@ class DeployMixin:
             # 删除现存plugin_code.cpp
             if os.path.exists(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp')):
                 os.remove(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp'))
+                os.remove(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.h'))
 
         output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
@@ -2226,6 +2232,6 @@ class DeployMixin:
         package_build(
             output_folder, 
             eagleeye_path, 
-            project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=project_name==pipeline_name)
+            project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=True)
 
         return True
