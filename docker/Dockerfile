@@ -59,6 +59,24 @@ make -j 8 && make install && cd /tmp && rm grpc -rf
 RUN cd /opt && git clone -b master --depth 1 http://github.com/microsoft/vcpkg.git && \
 ./vcpkg/bootstrap-vcpkg.sh && ./vcpkg/vcpkg integrate install && /opt/vcpkg/vcpkg install minio-cpp
 
+# install cudnn
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
+dpkg -i cuda-keyring_1.1-1_all.deb && \
+apt-get install libcudnn8=8.9.5.*-1+cuda12.2 && \
+apt-get install libcudnn8-dev=8.9.5.*-1+cuda12.2
+
+# install trt
+RUN mkdir -p /root/.3rd && cd /root/.3rd && \
+wget http://192.168.1.182:9000/sdk/3rd/TensorRT-8.6.1.6.tar.gz && \
+tar -zvxf TensorRT-8.6.1.6.tar.gz && rm TensorRT-8.6.1.6.tar.gz
+
+ENV LD_LIBRARY_PATH=/root/.3rd/TensorRT-8.6.1.6/lib:$LD_LIBRARY_PATH
+
+ENV PATH=/root/.3rd/TensorRT-8.6.1.6:$PATH
+
+RUN cd /root/.3rd/TensorRT-8.6.1.6/samples && make -j 8 && \
+cp -r /root/.3rd/TensorRT-8.6.1.6/lib/* /usr/lib && cp -r /root/.3rd/TensorRT-8.6.1.6/include/* /usr/include
+
 # 初始化conda环境
 RUN conda init bash
 
