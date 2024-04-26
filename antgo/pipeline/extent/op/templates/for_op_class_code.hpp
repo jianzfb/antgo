@@ -66,9 +66,16 @@ public:
 
             std::vector<Tensor> out;
             for(int output_i=0; output_i<this->m_func->getOutputNum(); ++output_i){
-                out.push_back(this->m_func->getOutput(output_i));
+                out.push_back(this->m_func->getOutput(output_i).clone());
             }
             loop_output.push_back(out);
+        }
+
+        if(loop_num == 0){
+            for(int output_i=0; output_i<this->m_func->getOutputNum(); ++output_i){
+                this->m_outputs[output_i] = Tensor();
+            }
+            return 0;
         }
 
         // stack all output
