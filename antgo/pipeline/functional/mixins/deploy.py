@@ -2228,6 +2228,18 @@ class DeployMixin:
 
         output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
+        # 准备外围工程
+        if 'mode' in project_config:
+            if 'grpc' == project_config['mode']['type']:
+                # 创建 proto文件，并编译头文件
+                for key, value in project_config['mode']['source'].items():
+                    pass
+
+                # 创建proto模板代码
+
+            if 'app' == project_config['mode']['type']:
+                pass
+
         # 编译
         package_build(
             output_folder, 

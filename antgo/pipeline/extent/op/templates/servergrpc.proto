@@ -1,0 +1,35 @@
+
+syntax = "proto3";
+
+
+package servergrpc;
+
+// The service definition.
+service ServerGrpc {
+  rpc serverStart (ServerStartRequest) returns (ServerStartReply) {}
+
+  rpc serverEnd (ServerEndRequest) returns (ServerEndReply) {}
+
+  rpc serverMessage(ServerMessageRequest) returns (stream ServerMessageReply) {}
+}
+
+message ServerStartRequest{
+    ${ServerStartRequest}
+}
+message ServerStartReply{
+    ${ServerStartReply}
+}
+
+message ServerEndRequest{
+    ${ServerEndRequest}
+}
+message ServerEndReply{
+    ${ServerEndReply}
+}
+
+message ServerMessageRequest{
+    ${ServerMessageRequest}
+}
+message ServerMessageReply{
+    ${ServerMessageReply}
+}
