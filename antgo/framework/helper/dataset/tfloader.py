@@ -1,6 +1,5 @@
 import logging
 import sys
-sys.path.insert(0, '/workspace/antgo')
 import numpy as np
 import torch
 import torch.distributed as dist
