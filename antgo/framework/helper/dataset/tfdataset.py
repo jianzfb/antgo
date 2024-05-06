@@ -1,6 +1,6 @@
-from email.utils import localtime
 import logging
 import sys
+sys.path.insert(0, '/workspace/antgo')
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -8,7 +8,9 @@ from antgo.framework.helper.utils import build_from_cfg
 from antgo.framework.helper.runner.dist_utils import get_dist_info
 from tfrecord.reader import *
 from tfrecord import iterator_utils
+from tfrecord import example_pb2
 from antgo.framework.helper.dataset.builder import DATASETS
+from antgo.framework.helper.dataset.dataserver import *
 import copy
 from antgo.dataflow.datasetio import *
 from antgo.framework.helper.fileio.file_client import *
@@ -16,6 +18,8 @@ import threading
 import json
 from pprint import pprint
 from filelock import FileLock
+import pika
+
 
 def _cycle(iterator_fn: typing.Callable) -> typing.Iterable[typing.Any]:
     """Create a repeating iterator from an iterator generator."""
@@ -90,7 +94,7 @@ def _order_iterators(iterators):
                 choice += 1
 
 
-@DATASETS.register_module()
+# @DATASETS.register_module()
 class TFDataset(torch.utils.data.IterableDataset):
     """Parse (generic) TFRecords dataset into `IterableDataset` object,
     which contain `np.ndarrays`s. By default (when `sequence_description`
@@ -141,7 +145,8 @@ class TFDataset(torch.utils.data.IterableDataset):
             self.seed = 0
 
     def __init__(self,
-                 data_folder,
+                 data_folder=None,
+                 data_server=None,
                  ratios: typing.Union[typing.List[float], None]=None,
                  description: typing.Union[typing.List[str], typing.Dict[str, str], None] = None,
                  shuffle_queue_size: typing.Optional[int] = 1024,
@@ -153,14 +158,50 @@ class TFDataset(torch.utils.data.IterableDataset):
                  infinite: typing.Optional[bool] = False,
                  inputs_def=None,
                  sample_num_equalizer=True,
-                 auto_ext_info=[]) -> None:
+                 auto_ext_info=[],
+                 worker_num=1) -> None:
         super().__init__()
-        if isinstance(data_folder, str):
-            data_folder = [data_folder]
+        self.data_folder = data_folder
+        self.data_server = data_server
 
-        # 准备数据
-        self._prepare_data(data_folder)
+        self.shuffle_queue_size = shuffle_queue_size
+        self.sample_num_equalizer = sample_num_equalizer
+        self.compression_type = compression_type
+        self.ratios = ratios
 
+        rank, world_size = get_dist_info()
+        self.rank = rank
+        self.world_size = world_size
+
+        self.infinite = infinite
+        self.auto_ext_info = auto_ext_info
+        self.epoch = 10   
+        self.sample_id = 0      # 先默认为0
+
+        if self.data_folder is not None:
+            # 从本地数据加载
+            if isinstance(data_folder, str):
+                data_folder = [data_folder]
+
+            # 准备数据
+            self._prepare_data(data_folder)
+
+            if shuffle_queue_size > 0:
+                # 如果已经设置了shuffle queue，则设置默认ratios
+                if self.ratios is None:
+                    self.ratios = [1 for _ in range(len(self.data_path_list))]
+
+            # 分析数据
+            self._analyze_data()
+        else:
+            # 从数据服务加载
+            self.server_ip, self.server_port, self.server_name = self.data_server.split('/')
+            self.receiver_map = dict()
+            for worker_id in range(worker_num):
+                self.receiver_map[f'{worker_num}/{worker_id}'] = \
+                    DataReceiver(self.server_name, self.server_ip, self.server_port, self.rank, worker_id, worker_num)
+
+        # 分析解析信息
         if description is None:
             description = {}
             print('Using default tfrecord description.')
@@ -216,14 +257,6 @@ class TFDataset(torch.utils.data.IterableDataset):
                 })
 
         self.sequence_description = sequence_description
-        self.shuffle_queue_size = shuffle_queue_size
-        self.sample_num_equalizer = sample_num_equalizer
-        self.compression_type = compression_type
-        self.ratios = ratios
-        if shuffle_queue_size > 0:
-            # 如果已经设置了shuffle queue，则设置默认ratios
-            if self.ratios is None:
-                self.ratios = [1 for _ in range(len(self.data_path_list))]
         self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
         self._alias = None
         if self._fields is not None and 'alias' in inputs_def:
@@ -259,38 +292,6 @@ class TFDataset(torch.utils.data.IterableDataset):
                         self.strong_pipeline.append(transform)
                     else:
                         raise TypeError('strong_pipeline must be a dict')
-        self.infinite = infinite
-
-        # 自动扩展样本信息
-        self.auto_ext_info = auto_ext_info
-        self.epoch = 10   
-        self.sample_id = 0      # 先默认为0
-
-        self.num_samples_list = []
-        self.num_samples = 0
-        for i, index_path in enumerate(self.index_path_list):
-            index = np.loadtxt(index_path, dtype=np.int64)[:, 0]
-            self.num_samples += len(index) 
-            self.num_samples_list.append(len(index))
-
-        rank, world_size = get_dist_info()
-        self.rank = rank
-        self.world_size = world_size
-
-        self.select_index_list_in_world = []    # format: [[],[],[],...]
-        if world_size > 1:
-            # TODO，现在多卡实现基于文件级别的拆分，粒度较粗
-            assert(len(self.data_path_list) >= world_size)
-
-            # 公平选择，尽量确保每张卡有相同的样本数量
-            self.select_index_list_in_world = self._fair_select(self.num_samples_list, world_size)
-
-            # 每张卡期望使用的样本数（以最大为准，不足的通过后续重复采样补充）
-            self.num_samples = 0
-            for rank_i in range(world_size):
-                num = np.sum([self.num_samples_list[i] for i in self.select_index_list_in_world[rank_i]])
-                if self.num_samples < num:
-                    self.num_samples = num
 
     def _select_next_set(self, num_samples_list, target_num):
         data = num_samples_list
@@ -342,7 +343,7 @@ class TFDataset(torch.utils.data.IterableDataset):
 
     def _arrange(self, sample, fields, alias):
         if fields is None:
-            return sample      
+            return sample
 
         if type(fields[0]) == list or type(fields[0]) == tuple:
             warp_ins = []
@@ -418,7 +419,7 @@ class TFDataset(torch.utils.data.IterableDataset):
             sample = self._arrange(sample, self._fields, self._alias)        
             return sample
 
-    def __iter__(self):
+    def _from_disk_iter(self):
         # 获得线程信息
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is None:
@@ -504,6 +505,37 @@ class TFDataset(torch.utils.data.IterableDataset):
         if self.shuffle_queue_size:
             it = iterator_utils.shuffle_iterator(it, self.shuffle_queue_size)
 
+        return it
+
+    def _from_server_iter(self):
+        # 获得线程信息
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            worker_info = TFDataset._InnerWorkerInfo()
+
+        typename_mapping = {
+            "byte": "bytes_list",
+            "float": "float_list",
+            "int": "int64_list"
+        }
+
+        # receiver
+        data_receiver = self.receiver_map[f'{worker_info.num_workers}/{worker_info.id}']
+
+        # 解析data package
+        for record in data_receiver:
+            example = example_pb2.Example()
+            example.ParseFromString(record)
+
+            yield extract_feature_dict(example.features, self.description, typename_mapping)
+
+    def __iter__(self):
+        it = None
+        if self.data_folder is not None:
+            it = self._from_disk_iter()
+        else:
+            it = self._from_server_iter()
+
         it = map(self.__transform, it)
         return it
 
@@ -573,55 +605,59 @@ class TFDataset(torch.utils.data.IterableDataset):
             self.data_path_list.extend(part_path_list)
             self.index_path_list.extend(part_index_path_list)
 
+    def _analyze_data(self):
+        self.num_samples_list = []
+        self.num_samples = 0
+        for i, index_path in enumerate(self.index_path_list):
+            index = np.loadtxt(index_path, dtype=np.int64)[:, 0]
+            self.num_samples += len(index) 
+            self.num_samples_list.append(len(index))
 
-# data = [2,4,6,7,8,5]
-# data_sum = int(np.sum(data))
+        self.select_index_list_in_world = []    # format: [[],[],[],...]
+        if self.world_size > 1:
+            # TODO，现在多卡实现基于文件级别的拆分，粒度较粗
+            assert(len(self.data_path_list) >= self.world_size)
 
-# dp = [[0 for i in range(data_sum//2+1)] for _ in range(len(data)+1)]
+            # 公平选择，尽量确保每张卡有相同的样本数量
+            self.select_index_list_in_world = self._fair_select(self.num_samples_list, self.world_size)
 
-# for i in range(1,len(data)+1):
-#     for j in range(0, data_sum//2+1):
-#         if j >= data[i-1]:
-#             dp[i][j] = max(dp[i-1][j], dp[i-1][j-data[i-1]]+data[i-1])
-#             pass
-#         else:
-#             dp[i][j] = dp[i-1][j]
+            # 每张卡期望使用的样本数（以最大为准，不足的通过后续重复采样补充）
+            self.num_samples = 0
+            for rank_i in range(self.world_size):
+                num = np.sum([self.num_samples_list[i] for i in self.select_index_list_in_world[rank_i]])
+                if self.num_samples < num:
+                    self.num_samples = num
 
-# j = data_sum//2
-# print(j)
 
-# print('select')
-# for i in range(len(data), 0, -1):
-#     if dp[i][j] > dp[i-1][j]:
-#         print(i-1)
-#         j -= data[i-1]
+if __name__ == "__main__":
+    dataset = TFDataset(
+        data_folder=None,
+        data_server='192.168.1.90/5672/hwiaaabc',
+        description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
+        inputs_def=dict(
+            fields = ["image"]
+        ),
+        shuffle_queue_size=10,
+        pipeline=[
+            dict(type='DecodeImage', to_rgb=False),
+            dict(type="ResizeS", target_dim=(384,256)),    # 384,256
+        ],
+        worker_num=2,
+    )
 
-# print('sdf')
+    data_loader = torch.utils.data.DataLoader(
+        dataset, 
+        batch_size=2, 
+        num_workers=2,
+        drop_last=True)
 
-# abcd = TFDataset(
-#     data_folder=[
-# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
-# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
-# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
-# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
-# 			"/workspace/dataset/beta-xuejiazhen-pole-priv",
-#             "/workspace/dataset/beta-office-pole-priv",
-#             "/workspace/dataset/beta-office-pole-priv",
-#             "/workspace/dataset/beta-office-pole-priv",
-#             "/workspace/dataset/beta-office-pole-priv",
-#             "/workspace/dataset/beta-office-pole-priv"
-#         ],
-#     description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
-#     inputs_def=dict(
-#         fields = ["image", 'bboxes', 'labels', 'image_meta']
-#     ),
-#     shuffle_queue_size=4096
-# )
-# # print('sd')
-# # select_all = abcd._fair_select([2,4,6,7,8,5], 3)
-# # print(select_all)
+    for epoch_i in range(5):
+        print(f'epoch_i {epoch_i}')
+        sample_count = 0
+        for data in data_loader:
+            sample_count += 1
+            print(f'sample_count {sample_count}')
 
-# count = 0
-# for ii in abcd:
-#     count += 1
-#     print(count)
+        print(f'finish {epoch_i}')
+
+    print('hh')

@@ -236,4 +236,6 @@ int main(int argc, char** argv){
         free(cache_data_list[i]);
     }    
     eagleeye_${project}_release();
+
+    return 0;
 }

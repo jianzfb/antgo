@@ -42,3 +42,4 @@ httpx
 portalocker
 filelock
 scikit-image
+pika
