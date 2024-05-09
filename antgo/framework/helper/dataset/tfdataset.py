@@ -1,5 +1,6 @@
 import logging
 import sys
+sys.path.insert(0, '/workspace/antgo')
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -195,6 +196,10 @@ class TFDataset(torch.utils.data.IterableDataset):
         else:
             # 从数据服务加载
             self.server_ip, self.server_port, self.server_name = self.data_server.split('/')
+
+            # 获取基本数据信息（样本数）
+            self.num_samples = DataReceiver.sample_num(self.server_name, self.server_ip, self.server_port, self.rank)
+            # 加载数据接收器
             self.receiver_map = dict()
             for worker_id in range(worker_num):
                 self.receiver_map[f'{worker_num}/{worker_id}'] = \

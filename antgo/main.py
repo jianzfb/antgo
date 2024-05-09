@@ -91,7 +91,7 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric']
 
 
@@ -188,6 +188,15 @@ def main():
       args.ssh = True
 
     tools.operate_on_running_status(action_name, args)
+    return
+
+  if action_name == 'dataserver':
+    # 数据生产服务
+    if args.ssh:
+      pass
+    else:
+      raise NotImplemented
+
     return
 
   # 解析配置文件

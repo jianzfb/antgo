@@ -4,6 +4,7 @@ import os
 import logging
 from multiprocessing import current_process
 import time
+import torch.distributed as dist
 from tfrecord import example_pb2
 
 
@@ -73,7 +74,7 @@ def get_data_worker_info():
 
 
 class DataServer(object):
-    def __init__(self, name, loader, server, port=5672, consumer_size=1, worker_num=1, epoch_num=1, max_queue_size=1024):
+    def __init__(self, name, loader, server, port=5672, consumer_size=1, worker_num=1, epoch_num=1, max_queue_size=1024, is_distribute=False):
         self.name = name
         self.loader = loader
         self.worker_num = worker_num
@@ -84,9 +85,47 @@ class DataServer(object):
         self.port = port
         self.max_queue_size = max_queue_size
         self.consumer_size = consumer_size
+        self.is_distribute = is_distribute
+        if self.is_distribute:
+            dist.init_process_group(backend='mpii')
+
+    def get_dist_info(self):
+        if dist.is_available() and dist.is_initialized():
+            rank = dist.get_rank()
+            world_size = dist.get_world_size()
+        else:
+            rank = 0
+            world_size = 1
+        return rank, world_size
 
     def start(self):
-        # 创建线程，并开始服务
+        # 分布式环境信息
+        dist_rank, dist_world_size = self.get_dist_info()
+
+        # 数据基本信息 (sample num/epoch)
+        sample_num = len(self.loader)
+        if self.is_distribute:
+            tensor_list = [torch.zeros(1, dtype=torch.int64) for _ in range(dist_world_size)]
+            tensor = torch.from_numpy(np.array([sample_num], dtype=np.int64))
+            dist.all_gather(tensor_list, tensor)
+            sample_num = int(torch.sum(torch.concat(tensor_list[dist_rank])).cpu().numpy())
+
+        if dist_rank == 0:
+            connection = pika.BlockingConnection(
+                pika.ConnectionParameters(self.server, self.port)
+            )
+
+            channel = connection.channel()
+            for rank_i in range(self.rank_size):
+                channel.queue_declare(queue=f'{self.name}/rank{rank_i}/basic')
+                channel.basic_publish(
+                    exchange='',
+                    routing_key=f'{self.name}/rank{rank_i}/basic',
+                    body=f'{sample_num}'
+                )
+            connection.close()
+
+        # 启动数据服务
         for epoch_i in range(self.epoch_num):
             print(f'dataset {self.name} epoch {epoch_i} generate')
             self.loader.epoch = epoch_i
@@ -113,34 +152,38 @@ class DataServer(object):
                 p.start()
                 self.process_objs.append(p)
 
-            for thread_obj in self.process_objs:
-                thread_obj.join()
+            for process_obj in self.process_objs:
+                process_obj.join()
+
+            if self.is_distribute:
+                dist.barrier()
 
             # 结束标记
-            connection = pika.BlockingConnection(
-                pika.ConnectionParameters(self.server, self.port)
-            )
-            channel = connection.channel()
-            for rank_i in range(self.rank_size):
-                for consumer_queue_i in range(self.consumer_size):
-                    channel.queue_declare(queue=f'{self.name}/rank{rank_i}/{consumer_queue_i}')
-                    channel.basic_publish(
-                        exchange='',
-                        routing_key=f'{self.name}/rank{rank_i}/{consumer_queue_i}',
-                        body=b''
-                    )
-            connection.close()
+            if dist_rank == 0:
+                connection = pika.BlockingConnection(
+                    pika.ConnectionParameters(self.server, self.port)
+                )
+                channel = connection.channel()
+                for rank_i in range(self.rank_size):
+                    for consumer_queue_i in range(self.consumer_size):
+                        channel.queue_declare(queue=f'{self.name}/rank{rank_i}/{consumer_queue_i}')
+                        channel.basic_publish(
+                            exchange='',
+                            routing_key=f'{self.name}/rank{rank_i}/{consumer_queue_i}',
+                            body=b''
+                        )
+                connection.close()
 
 
-def worker_receiver(name, server, port, rank, consumer_id, callback):
+def worker_receiver(name, server, port, receiver_queue_name, callback):
     connection = pika.BlockingConnection(
         pika.ConnectionParameters(server, port)
     )
 
     channel = connection.channel()
-    channel.queue_declare(queue=f'{name}/rank{rank}/{consumer_id}')
+    channel.queue_declare(queue=receiver_queue_name)
     channel.basic_consume(
-        queue=f'{name}/rank{rank}/{consumer_id}',
+        queue=receiver_queue_name,
         on_message_callback=callback,
         auto_ack=False)
 
@@ -148,32 +191,54 @@ def worker_receiver(name, server, port, rank, consumer_id, callback):
 
 
 class DataReceiver(object):
-    def __init__(self, name, server, port=5672, rank=0, consumer_id=0, consumer_num=1, waiting_num=1, maxsize=1024):
+    sample_num_in_epoch = 0
+    def __init__(self, name, server, port=5672, rank=0, consumer_id=0, consumer_num=1, maxsize=1024):
         self.name = name
         self.rank = rank
         self.consumer_id = consumer_id
         self.consumer_num = consumer_num
-        self.waiting_num = waiting_num
-        self.waiting_i = 0
+        self.server = server
+        self.port = port
 
-        self.queue = multiprocessing.Queue(maxsize=maxsize)
-        p = multiprocessing.Process(target=worker_receiver, args=(name, server, port, rank, consumer_id, self.callback))
+        self.receiver_queue = multiprocessing.Queue(maxsize=maxsize)
+        self.receiver_queue_name = f'{name}/rank{rank}/{consumer_id}'
+        p = multiprocessing.Process(target=worker_receiver, args=(name, server, port, self.receiver_queue_name, self.callback))
         p.daemon = True
         p.start()
 
     def callback(self, ch, method, properties, body):
-        self.queue.put(body)
+        self.receiver_queue.put(body)
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        val = self.queue.get()
+        val = self.receiver_queue.get()
         if val == b'':
-            self.waiting_i += 1
-            if self.waiting_i == self.waiting_num:
-                self.waiting_i = 0
-                raise StopIteration
+            raise StopIteration
 
         return val
+
+    @classmethod
+    def sample_num_receiver_callback(cls, ch, method, properties, body):
+        DataReceiver.sample_num_in_epoch = int(body)
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        ch.stop_consuming()
+
+    @classmethod
+    def sample_num(cls, name, server, port, rank):
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(server, port)
+        )
+
+        channel = connection.channel()
+        channel.queue_declare(queue=f'{name}/rank{rank}/basic')
+
+        channel.basic_consume(
+            queue=f'{name}/rank{rank}/basic',
+            on_message_callback=DataReceiver.sample_num_receiver_callback,
+            auto_ack=False)
+
+        channel.start_consuming()
+        return DataReceiver.sample_num_in_epoch

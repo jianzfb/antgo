@@ -1186,7 +1186,7 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
     # ignore op_args
     converted_op_args = {}
     for arg_name, arg_info in op_kwargs.items():
-        if isinstance(arg_info, tuple) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
+        if (isinstance(arg_info, tuple) or isinstance(arg_info, list)) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
             # complex arg (func)
             # TODO, 需要支持多种初始化模式
             temp_args = convert_args_eagleeye_op_args(None, arg_info[1])
@@ -1229,6 +1229,10 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
         elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
             # list
             converted_op_args[arg_name] = np.array(arg_info).flatten().astype(np.float32)
+        elif isinstance(arg_info, str):
+            # string
+            converted_op_args[arg_name] = ['"'+arg_info+'"']
+            converted_op_args['c++_type'] = 'std::map<std::string, std::vector<std::string>>'
         else:
             # scalar
             converted_op_args[arg_name] = [float(arg_info)]

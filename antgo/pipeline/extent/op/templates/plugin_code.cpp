@@ -59,14 +59,18 @@ for(size_t i=0; i<in_port_list.size(); ++i){
         }
     }
     else if(type_str == "EAGLEEYE_SIGNAL_GRAY_IMAGE" ||
-            type_str == "EAGLEEYE_SIGNAL_MASK"){
+            type_str == "EAGLEEYE_SIGNAL_MASK" || 
+            type_str == "EAGLEEYE_SIGNAL_UCMATRIX"){
         input_node = new Placeholder<ImageSignal<unsigned char>>();
 
         if(type_str == "EAGLEEYE_SIGNAL_GRAY_IMAGE"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_GRAY_IMAGE);
         }
-        else{
+        else if(type_str == "EAGLEEYE_SIGNAL_MASK"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_MASK);
+        }
+        else{
+            input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_UCMATRIX);
         }
     }
     else if(type_str == "EAGLEEYE_SIGNAL_DET" ||
@@ -74,7 +78,8 @@ for(size_t i=0; i<in_port_list.size(); ++i){
             type_str == "EAGLEEYE_SIGNAL_TRACKING" ||
             type_str == "EAGLEEYE_SIGNAL_POS_2D" ||
             type_str == "EAGLEEYE_SIGNAL_POS_3D" ||
-            type_str == "EAGLEEYE_SIGNAL_LANDMARK"){
+            type_str == "EAGLEEYE_SIGNAL_LANDMARK" || 
+            type_str == "EAGLEEYE_SIGNAL_FMATRIX"){
         input_node = new Placeholder<ImageSignal<float>>();
         if(type_str == "EAGLEEYE_SIGNAL_DET"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_DET);
@@ -91,18 +96,25 @@ for(size_t i=0; i<in_port_list.size(); ++i){
         else if(type_str == "EAGLEEYE_SIGNAL_POS_3D"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_POS_3D);
         }
-        else{
+        else if(type_str == "EAGLEEYE_SIGNAL_LANDMARK"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_LANDMARK);
+        }
+        else{
+            input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_FMATRIX);
         }
     }
     else if(type_str == "EAGLEEYE_SIGNAL_CLS" ||
-            type_str == "EAGLEEYE_SIGNAL_STATE"){
+            type_str == "EAGLEEYE_SIGNAL_STATE" ||
+            type_str == "EAGLEEYE_SIGNAL_IMATRIX"){
         input_node = new Placeholder<ImageSignal<int>>();
         if(type_str == "EAGLEEYE_SIGNAL_CLS"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_CLS);
         }
-        else{
+        else if(type_str == "EAGLEEYE_SIGNAL_STATE"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_STATE);
+        }
+        else{
+            input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_IMATRIX);
         }
     }
     else if(type_str == "EAGLEEYE_SIGNAL_SWITCH"){

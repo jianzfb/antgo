@@ -56,4 +56,3 @@ class DatasetMixin:
     def filter_data(self):
         # core API already exists
         pass
-

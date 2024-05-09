@@ -1,5 +1,6 @@
 import logging
 import sys
+sys.path.insert(0, '/workspace/antgo')
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -276,6 +277,10 @@ class TFLoader(torch.utils.data.IterableDataset):
                 # 本地存储模式
                 if '*' in dataset_folder:
                     dataset_folder = dataset_folder.replace('*', '')
+                
+                if not os.path.exists(dataset_folder):
+                    print(f'No {dataset_folder} in local disk.')
+                    continue
 
             # 替换为本地路径
             if ':///' in dataset_folder:
@@ -310,6 +315,9 @@ class TFLoader(torch.utils.data.IterableDataset):
 
             self.data_path_list.extend(part_path_list)
             self.index_path_list.extend(part_index_path_list)
+
+    def __len__(self):
+        return self.num_samples
 
     def _analyze_data(self):
         for i, index_path in enumerate(self.index_path_list):

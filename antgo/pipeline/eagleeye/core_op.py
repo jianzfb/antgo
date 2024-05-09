@@ -39,6 +39,8 @@ class CoreOp(object):
                 else:
                     print(f'Dont support {var_key}')
                     print(var_value)
+            elif isinstance(var_value, str):
+                self.param_2[var_key] = var_value
             else:
                 self.param_1[var_key] = [float(var_value)]
 
