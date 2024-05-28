@@ -302,7 +302,7 @@ def register_struct_info(struct_name, type_name_list, var_name_list):
 
 
 # runtime
-FuncInfo = namedtuple('FuncInfo', ['func', 'cpp_info', 'init'])
+FuncInfo = namedtuple('FuncInfo', ['func', 'cpp_info', 'init', 'destroy'])
 CTX_FUNC_MAP = dict()  # CTX_FUNC_MAP[ctx][cpp_fname] -> FuncInfo
 
 
@@ -521,7 +521,10 @@ def _add_function(func_map, func_idcode, rtn_type, cpp_info, dll_fname, func_kin
         func = getattr(cpp_info.dll, f'{func_idcode_hash}_run', None)
         func.restype = None
 
-        func_map[func_idcode] = FuncInfo(func=func, cpp_info=cpp_info, init=init)
+        destroy = getattr(cpp_info.dll, f'{func_idcode_hash}_destroy', None)
+        destroy.restype = None
+
+        func_map[func_idcode] = FuncInfo(func=func, cpp_info=cpp_info, init=init, destroy=destroy)
         return
 
     func = getattr(cpp_info.dll, func_idcode_hash, None)
@@ -538,7 +541,7 @@ def _add_function(func_map, func_idcode, rtn_type, cpp_info, dll_fname, func_kin
             warnings.warn('The function `{}` in `{}` will be overridden by that in `{}`'.format(
                 func_idcode, old_func.cpp_info.cpp_fname, cpp_info.cpp_fname))
 
-    func_map[func_idcode] = FuncInfo(func=func, cpp_info=cpp_info, init=None)
+    func_map[func_idcode] = FuncInfo(func=func, cpp_info=cpp_info, init=None, destroy=None)
 
 
 class OpLoader:
@@ -681,6 +684,7 @@ class OpLoader:
         # 算子/函数
         self.func = func_map[idcode].func
         self.init = func_map[idcode].init
+        self.destroy = func_map[idcode].destroy
         self.init_args = cfunc.loader_kwargs['construct_arg_names'] if 'construct_arg_names' in cfunc.loader_kwargs else None
         self.init_handler = None
         self.cpp_info = func_map[idcode].cpp_info
@@ -694,6 +698,10 @@ class OpLoader:
             args = (ctypes.c_ulong(self.init_handler),) +args
 
         result = self.func(*args)
+        if self.destroy is not None:
+            self.destroy(ctypes.c_ulong(self.init_handler))
+            self.init_handler = None
+
         return result
 
     def clear(self, data):

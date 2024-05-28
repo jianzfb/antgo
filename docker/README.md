@@ -23,7 +23,7 @@ sudo bash docker/build_dev.sh with-android-ndk with-vscode-server
 ### 创建运行环境容器
 可以直接以命令行方式，运行相关实验
 ```
-# sudo docker run -it --rm --name antgo-env-runtime --shm-size="20G" --gpus all,capabilities=video --privileged antgo-env /bin/bash
+# sudo docker run -it --rm --name antgo-env-runtime --shm-size="20G" --gpus all --privileged antgo-env /bin/bash
 
 ```
 

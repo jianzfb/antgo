@@ -11,7 +11,9 @@ from antgo.pipeline.functional import *
 from antgo.pipeline.extent import op
 from antgo.pipeline.extent.glue.common import *
 from antgo.pipeline.engine import *
+from antgo.pipeline.eagleeye import *
 import numpy as np
+
 import os
 import json
 

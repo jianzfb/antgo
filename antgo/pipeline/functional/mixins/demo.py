@@ -144,7 +144,7 @@ class DemoMixin:
                     input_req[i] = '/'.join(input_req[i].split('/')[2:])
                     input_req[i] = f'{query_folder}/{input_req[i]}'
             if b == 'checkbox':
-                input_req[i] = bool(input_req[i])
+                input_req[i] = bool(int(input_req[i]))
 
             if b == 'image-search':
                 selected_image_list = []

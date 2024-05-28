@@ -1184,62 +1184,88 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
 
 def convert_args_eagleeye_op_args(op_args, op_kwargs):
     # ignore op_args
-    converted_op_args = {}
+    # 自动拆分 op_kwargs参数类型
+    # string, float
+    group_op_kwargs = {
+        'string': {},
+        'float': {},
+        'complex': {}
+    }
     for arg_name, arg_info in op_kwargs.items():
         if (isinstance(arg_info, tuple) or isinstance(arg_info, list)) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
-            # complex arg (func)
-            # TODO, 需要支持多种初始化模式
-            temp_args = convert_args_eagleeye_op_args(None, arg_info[1])
-            temp_args.pop('c++_type')
-            converted_op_args['c++_type'] = 'std::map<std::string, void*>'
-            
-            arg_code = ''
-            for sub_arg_name, sub_arg_list in temp_args.items():
-                if arg_code == '':
-                    arg_code = '{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
-                else:
-                    arg_code += ',{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
-
-            op_name = arg_info[0]
-            if op_name.startswith('deploy'):
-                op_name = op_name[7:]
-            elif op_name.startswith('eagleeye'):
-                op_name = op_name[12:]
-                if op_name.endswith('_op'):
-                    op_name = op_name.capitalize()
-                    kk = op_name.split('_')
-                    op_name = kk[0]
-                    for i in range(1, len(kk)):
-                        op_name += kk[i].capitalize()
-            else:
-                if op_name.endswith('_op'):
-                    op_name = op_name.capitalize()
-                    kk = op_name.split('_')
-                    op_name = kk[0]
-                    for i in range(1, len(kk)):
-                        op_name += kk[i].capitalize()
-
-            converted_op_args[arg_name] = f'{op_name}* {arg_name} = new {op_name}();\n{arg_name}->init(std::map<std::string, std::vector<float>>('+'{'+f'{arg_code}'+'}));'
-
-        elif isinstance(arg_info, np.ndarray):
-            # numpy
-            if arg_info.size > 0:
-                converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
-                converted_op_args[arg_name.replace('val', 'shape')] = [float(shape_v) for shape_v in arg_info.shape]
-        elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
-            # list
-            converted_op_args[arg_name] = np.array(arg_info).flatten().astype(np.float32)
+            group_op_kwargs['complex'][arg_name] = arg_info
         elif isinstance(arg_info, str):
-            # string
-            converted_op_args[arg_name] = ['"'+arg_info+'"']
-            converted_op_args['c++_type'] = 'std::map<std::string, std::vector<std::string>>'
+            group_op_kwargs['string'][arg_name] = arg_info
         else:
-            # scalar
-            converted_op_args[arg_name] = [float(arg_info)]
+            group_op_kwargs['float'][arg_name] = arg_info
 
-    if 'c++_type' not in converted_op_args:
-        converted_op_args['c++_type'] = 'std::map<std::string, std::vector<float>>'
-    return converted_op_args
+    group_converted_op_args = []
+    group_name_list = ['string', 'float', 'complex']
+    for group_name in group_name_list:
+        op_kwargs = group_op_kwargs[group_name]
+        if len(op_kwargs) == 0:
+            continue
+
+        converted_op_args = {}
+        for arg_name, arg_info in op_kwargs.items():
+            if (isinstance(arg_info, tuple) or isinstance(arg_info, list)) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
+                # complex arg (func)
+                # TODO, 需要支持多种初始化模式
+                temp_args = convert_args_eagleeye_op_args(None, arg_info[1])
+                if isinstance(temp_args, tuple):
+                    temp_args = temp_args[0]
+                temp_args.pop('c++_type')
+                converted_op_args['c++_type'] = 'std::map<std::string, void*>'
+                
+                arg_code = ''
+                for sub_arg_name, sub_arg_list in temp_args.items():
+                    if arg_code == '':
+                        arg_code = '{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
+                    else:
+                        arg_code += ',{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
+
+                op_name = arg_info[0]
+                if op_name.startswith('deploy'):
+                    op_name = op_name[7:]
+                elif op_name.startswith('eagleeye'):
+                    op_name = op_name[12:]
+                    if op_name.endswith('_op'):
+                        op_name = op_name.capitalize()
+                        kk = op_name.split('_')
+                        op_name = kk[0]
+                        for i in range(1, len(kk)):
+                            op_name += kk[i].capitalize()
+                else:
+                    if op_name.endswith('_op'):
+                        op_name = op_name.capitalize()
+                        kk = op_name.split('_')
+                        op_name = kk[0]
+                        for i in range(1, len(kk)):
+                            op_name += kk[i].capitalize()
+
+                converted_op_args[arg_name] = f'{op_name}* {arg_name} = new {op_name}();\n{arg_name}->init(std::map<std::string, std::vector<float>>('+'{'+f'{arg_code}'+'}));'
+
+            elif isinstance(arg_info, np.ndarray):
+                # numpy
+                if arg_info.size > 0:
+                    converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
+                    converted_op_args[arg_name.replace('val', 'shape')] = [float(shape_v) for shape_v in arg_info.shape]
+            elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
+                # list
+                converted_op_args[arg_name] = np.array(arg_info).flatten().astype(np.float32)
+            elif isinstance(arg_info, str):
+                # string
+                converted_op_args[arg_name] = ['"'+arg_info+'"']
+                converted_op_args['c++_type'] = 'std::map<std::string, std::vector<std::string>>'
+            else:
+                # scalar
+                converted_op_args[arg_name] = [float(arg_info)]
+
+        if 'c++_type' not in converted_op_args:
+            converted_op_args['c++_type'] = 'std::map<std::string, std::vector<float>>'
+        
+        group_converted_op_args.append(converted_op_args)
+    return tuple(group_converted_op_args)
 
 
 def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info):
@@ -1453,34 +1479,34 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
         run_shell_code_list = []
         is_found_model_push_line = False
         is_found_model_platform_folder = False
-        for line in open(os.path.join(output_folder, 'setup.sh')):
-            if '.tnnmodel' in line:
-                continue
-            if line.startswith(f'adb push {platform_model_path}') and not is_found_model_push_line:
-                # 替换
-                line = f'adb push {platform_model_path} {model_folder}\n'
-                if platform_model_path.endswith('.tnnproto'):
-                    line += f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n'
-                is_found_model_push_line = True
+        # for line in open(os.path.join(output_folder, 'setup.sh')):
+        #     if '.tnnmodel' in line:
+        #         continue
+        #     if line.startswith(f'adb push {platform_model_path}') and not is_found_model_push_line:
+        #         # 替换
+        #         line = f'adb push {platform_model_path} {model_folder}\n'
+        #         if platform_model_path.endswith('.tnnproto'):
+        #             line += f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n'
+        #         is_found_model_push_line = True
 
-            if f'mkdir -p {model_folder};' in line:
-                is_found_model_platform_folder = True
+        #     if f'mkdir -p {model_folder};' in line:
+        #         is_found_model_platform_folder = True
 
-            if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_platform_folder:
-                # 插入
-                run_shell_code_list.append(f'adb shell "if [ ! -d {model_folder} ]; then mkdir -p {model_folder}; fi;"\n')
+        #     if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_platform_folder:
+        #         # 插入
+        #         run_shell_code_list.append(f'adb shell "if [ ! -d {model_folder} ]; then mkdir -p {model_folder}; fi;"\n')
 
-            if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
-                # 插入
-                run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
-                if platform_model_path.endswith('.tnnproto'):
-                    run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
+        #     if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
+        #         # 插入
+        #         run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
+        #         if platform_model_path.endswith('.tnnproto'):
+        #             run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
 
-            run_shell_code_list.append(line)
+        #     run_shell_code_list.append(line)
 
-        with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
-            for line in run_shell_code_list:
-                fp.write(line)
+        # with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
+        #     for line in run_shell_code_list:
+        #         fp.write(line)
 
     num_threads = 2
     for input_tensor in onnx_session.get_inputs():
