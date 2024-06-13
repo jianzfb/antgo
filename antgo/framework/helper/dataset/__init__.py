@@ -4,6 +4,7 @@ from .pipelines import *
 from .dataset_split import DatasetSamplingByClass
 from .dataset_filter import IterableDatasetFilter
 from .tfdataset import *
+from .dataserver import *
 from antgo.dataflow import dataset as local_dataset
 from antgo.framework.helper.reader import *
 import torchvision
@@ -55,5 +56,5 @@ register_torchvision_dataset()
 
 
 __all__ = [
-    'DATASETS','build_dataloader','build_dataset','ConcatDataset', 'IterConcatDataset','RepeatDataset', 'TFDataset', 'DatasetSamplingByClass', 'IterableDatasetFilter'
+    'DATASETS','build_dataloader','build_dataset','ConcatDataset', 'IterConcatDataset','RepeatDataset', 'TFDataset', 'DatasetSamplingByClass', 'IterableDatasetFilter', 'DataServer', 'DataReceiver', 'get_data_worker_info'
 ]

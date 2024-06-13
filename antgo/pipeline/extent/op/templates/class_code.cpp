@@ -7,3 +7,9 @@ ANTGO_API void ${func_idcode_hash}_run(uint64_t void_ptr, ${run_args_def}) {
   ${class_name}* obj_ptr = (${class_name}*)(void_ptr);
   obj_ptr->run(${run_args_inst});
 }
+
+
+ANTGO_API void ${func_idcode_hash}_destroy(uint64_t void_ptr) {
+  ${class_name}* obj_ptr = (${class_name}*)(void_ptr);
+  delete obj_ptr;
+}

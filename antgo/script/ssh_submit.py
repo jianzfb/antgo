@@ -341,3 +341,8 @@ def ssh_submit_process_func(project_name, create_time, sys_argv, gpu_num, cpu_nu
 def ssh_submit_resource_check_func(gpu_num, cpu_num, memory_size):
     # TODO，支持资源检查
     return True
+
+
+def ssh_data_server_func(data_name, data_server_ip, data_server_port, consumer_size, worker_num, epoch_num, loader_ip):
+    # 生成数据服务代码
+    pass

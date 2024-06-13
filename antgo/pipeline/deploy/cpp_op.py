@@ -72,7 +72,7 @@ class CppOp(object):
             self.kwargs.update({
                 kname: kval
             })
-            
+
         output_data = self.func(*func_args, **self.kwargs)
 
         # 返回结果

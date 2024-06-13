@@ -87,10 +87,10 @@ class Exe(object):
         if self.proc is None:
             if self.project_platform_info == "linux":
                 command = f'{self.project_folder}/bin/X86-64/{self.plugin_name}_demo'
-                self.proc = Popen([command] + ['stdinout'] + run_args, stdin=PIPE, stderr=PIPE, stdout=PIPE, text=False)
+                self.proc = Popen([command] + ['stdinout'] + run_args, stdin=PIPE, stdout=PIPE, text=False)
             elif self.project_platform_info == "android":
                 command = f'adb shell "cd /data/local/tmp/{self.plugin_name}; export LD_LIBRARY_PATH=.; ./{self.plugin_name}_demo stdinout '+' '.join(run_args)+'"'
-                self.proc = Popen([command], stdin=PIPE, stderr=PIPE, stdout=PIPE, text=False, shell=True)
+                self.proc = Popen([command], stdin=PIPE, stdout=PIPE, text=False, shell=True)
 
             # 获取stdout的文件描述符
             self.stdout_fd = self.proc.stdout.fileno()
@@ -104,6 +104,7 @@ class Exe(object):
 
         for arg_i, arg_value in enumerate(args):
             self.proc.stdin.write(arg_value.tobytes())
+        self.proc.stdin.close()
 
         # 解析输出数据
         out_list = [None for _ in range(len(self.project_output_info))]

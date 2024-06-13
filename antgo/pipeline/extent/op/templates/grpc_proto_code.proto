@@ -1,0 +1,46 @@
+
+syntax = "proto3";
+
+
+package ${package};
+
+// The service definition.
+service ${servername} {
+  rpc ${servername}Start (${servername}StartRequest) returns (${servername}StartReply) {}
+
+  rpc ${servername}Stop (${servername}StopRequest) returns (${servername}StopReply) {}
+
+  rpc ${servername}Call(${servername}CallRequest) returns (${servername}CallReply) {}
+}
+
+message ${servername}StartRequest {
+  string serverpipeline = 1;            // 服务管线
+  string serverid = 2;                  // 唯一ID
+  string servercfg = 3;                 // 服务配置
+}
+
+
+message ${servername}StartReply {
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string serverkey = 3;                 // 服务关键字  
+}
+
+message ${servername}CallRequest{
+  string serverkey = 1;                 // 服务关键字
+}
+
+message ${servername}CallReply{
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string data = 3;                      // 里面是json 见json配置文件
+}
+
+message ${servername}StopRequest {
+    string serverkey = 1;               // 服务关键字
+}
+
+message ${servername}StopReply {
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+}

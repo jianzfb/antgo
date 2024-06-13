@@ -1184,58 +1184,88 @@ def auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_fold
 
 def convert_args_eagleeye_op_args(op_args, op_kwargs):
     # ignore op_args
-    converted_op_args = {}
+    # 自动拆分 op_kwargs参数类型
+    # string, float
+    group_op_kwargs = {
+        'string': {},
+        'float': {},
+        'complex': {}
+    }
     for arg_name, arg_info in op_kwargs.items():
-        if isinstance(arg_info, tuple) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
-            # complex arg (func)
-            # TODO, 需要支持多种初始化模式
-            temp_args = convert_args_eagleeye_op_args(None, arg_info[1])
-            temp_args.pop('c++_type')
-            converted_op_args['c++_type'] = 'std::map<std::string, void*>'
-            
-            arg_code = ''
-            for sub_arg_name, sub_arg_list in temp_args.items():
-                if arg_code == '':
-                    arg_code = '{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
-                else:
-                    arg_code += ',{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
-
-            op_name = arg_info[0]
-            if op_name.startswith('deploy'):
-                op_name = op_name[7:]
-            elif op_name.startswith('eagleeye'):
-                op_name = op_name[12:]
-                if op_name.endswith('_op'):
-                    op_name = op_name.capitalize()
-                    kk = op_name.split('_')
-                    op_name = kk[0]
-                    for i in range(1, len(kk)):
-                        op_name += kk[i].capitalize()
-            else:
-                if op_name.endswith('_op'):
-                    op_name = op_name.capitalize()
-                    kk = op_name.split('_')
-                    op_name = kk[0]
-                    for i in range(1, len(kk)):
-                        op_name += kk[i].capitalize()
-
-            converted_op_args[arg_name] = f'{op_name}* {arg_name} = new {op_name}();\n{arg_name}->init(std::map<std::string, std::vector<float>>('+'{'+f'{arg_code}'+'}));'
-
-        elif isinstance(arg_info, np.ndarray):
-            # numpy
-            if arg_info.size > 0:
-                converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
-                converted_op_args[arg_name.replace('val', 'shape')] = [float(shape_v) for shape_v in arg_info.shape]
-        elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
-            # list
-            converted_op_args[arg_name] = np.array(arg_info).flatten().astype(np.float32)
+        if (isinstance(arg_info, tuple) or isinstance(arg_info, list)) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
+            group_op_kwargs['complex'][arg_name] = arg_info
+        elif isinstance(arg_info, str):
+            group_op_kwargs['string'][arg_name] = arg_info
         else:
-            # scalar
-            converted_op_args[arg_name] = [float(arg_info)]
+            group_op_kwargs['float'][arg_name] = arg_info
 
-    if 'c++_type' not in converted_op_args:
-        converted_op_args['c++_type'] = 'std::map<std::string, std::vector<float>>'
-    return converted_op_args
+    group_converted_op_args = []
+    group_name_list = ['string', 'float', 'complex']
+    for group_name in group_name_list:
+        op_kwargs = group_op_kwargs[group_name]
+        if len(op_kwargs) == 0:
+            continue
+
+        converted_op_args = {}
+        for arg_name, arg_info in op_kwargs.items():
+            if (isinstance(arg_info, tuple) or isinstance(arg_info, list)) and len(arg_info) == 2 and isinstance(arg_info[0], str) and isinstance(arg_info[1], dict):
+                # complex arg (func)
+                # TODO, 需要支持多种初始化模式
+                temp_args = convert_args_eagleeye_op_args(None, arg_info[1])
+                if isinstance(temp_args, tuple):
+                    temp_args = temp_args[0]
+                temp_args.pop('c++_type')
+                converted_op_args['c++_type'] = 'std::map<std::string, void*>'
+                
+                arg_code = ''
+                for sub_arg_name, sub_arg_list in temp_args.items():
+                    if arg_code == '':
+                        arg_code = '{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
+                    else:
+                        arg_code += ',{"'+sub_arg_name+'",{'+','.join([str(v) for v in sub_arg_list])+'}}'
+
+                op_name = arg_info[0]
+                if op_name.startswith('deploy'):
+                    op_name = op_name[7:]
+                elif op_name.startswith('eagleeye'):
+                    op_name = op_name[12:]
+                    if op_name.endswith('_op'):
+                        op_name = op_name.capitalize()
+                        kk = op_name.split('_')
+                        op_name = kk[0]
+                        for i in range(1, len(kk)):
+                            op_name += kk[i].capitalize()
+                else:
+                    if op_name.endswith('_op'):
+                        op_name = op_name.capitalize()
+                        kk = op_name.split('_')
+                        op_name = kk[0]
+                        for i in range(1, len(kk)):
+                            op_name += kk[i].capitalize()
+
+                converted_op_args[arg_name] = f'{op_name}* {arg_name} = new {op_name}();\n{arg_name}->init(std::map<std::string, std::vector<float>>('+'{'+f'{arg_code}'+'}));'
+
+            elif isinstance(arg_info, np.ndarray):
+                # numpy
+                if arg_info.size > 0:
+                    converted_op_args[arg_name] = arg_info.flatten().astype(np.float32)
+                    converted_op_args[arg_name.replace('val', 'shape')] = [float(shape_v) for shape_v in arg_info.shape]
+            elif isinstance(arg_info, list) or isinstance(arg_info, tuple):
+                # list
+                converted_op_args[arg_name] = np.array(arg_info).flatten().astype(np.float32)
+            elif isinstance(arg_info, str):
+                # string
+                converted_op_args[arg_name] = ['"'+arg_info+'"']
+                converted_op_args['c++_type'] = 'std::map<std::string, std::vector<std::string>>'
+            else:
+                # scalar
+                converted_op_args[arg_name] = [float(arg_info)]
+
+        if 'c++_type' not in converted_op_args:
+            converted_op_args['c++_type'] = 'std::map<std::string, std::vector<float>>'
+        
+        group_converted_op_args.append(converted_op_args)
+    return tuple(group_converted_op_args)
 
 
 def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info):
@@ -1449,34 +1479,34 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
         run_shell_code_list = []
         is_found_model_push_line = False
         is_found_model_platform_folder = False
-        for line in open(os.path.join(output_folder, 'setup.sh')):
-            if '.tnnmodel' in line:
-                continue
-            if line.startswith(f'adb push {platform_model_path}') and not is_found_model_push_line:
-                # 替换
-                line = f'adb push {platform_model_path} {model_folder}\n'
-                if platform_model_path.endswith('.tnnproto'):
-                    line += f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n'
-                is_found_model_push_line = True
+        # for line in open(os.path.join(output_folder, 'setup.sh')):
+        #     if '.tnnmodel' in line:
+        #         continue
+        #     if line.startswith(f'adb push {platform_model_path}') and not is_found_model_push_line:
+        #         # 替换
+        #         line = f'adb push {platform_model_path} {model_folder}\n'
+        #         if platform_model_path.endswith('.tnnproto'):
+        #             line += f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n'
+        #         is_found_model_push_line = True
 
-            if f'mkdir -p {model_folder};' in line:
-                is_found_model_platform_folder = True
+        #     if f'mkdir -p {model_folder};' in line:
+        #         is_found_model_platform_folder = True
 
-            if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_platform_folder:
-                # 插入
-                run_shell_code_list.append(f'adb shell "if [ ! -d {model_folder} ]; then mkdir -p {model_folder}; fi;"\n')
+        #     if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_platform_folder:
+        #         # 插入
+        #         run_shell_code_list.append(f'adb shell "if [ ! -d {model_folder} ]; then mkdir -p {model_folder}; fi;"\n')
 
-            if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
-                # 插入
-                run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
-                if platform_model_path.endswith('.tnnproto'):
-                    run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
+        #     if line.startswith('adb shell "cd /data/local/tmp') and not is_found_model_push_line:
+        #         # 插入
+        #         run_shell_code_list.append(f'adb push {platform_model_path} {model_folder}\n')
+        #         if platform_model_path.endswith('.tnnproto'):
+        #             run_shell_code_list.append(f'adb push {platform_model_path.replace(".tnnproto", ".tnnmodel")} {model_folder}\n')
 
-            run_shell_code_list.append(line)
+        #     run_shell_code_list.append(line)
 
-        with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
-            for line in run_shell_code_list:
-                fp.write(line)
+        # with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
+        #     for line in run_shell_code_list:
+        #         fp.write(line)
 
     num_threads = 2
     for input_tensor in onnx_session.get_inputs():
@@ -1554,7 +1584,7 @@ def split_function(function_key_name_list):
     return function_list
 
 
-def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True):    
+def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None):    
     project_name = project_config["name"]
     pipeline_name = project_name
     if '/' in project_name:
@@ -2018,6 +2048,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     for src_info in deploy_graph_info.values():
         if 'depedent_src' in src_info:
             src_code_list.extend(src_info['depedent_src'])
+
     update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []))
 
     # 更新插件工程编译脚本
@@ -2053,6 +2084,10 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         'graph': graph_config,
         'platform': platform
     })
+    if mode is not None:
+        project_config.update({
+            'mode': mode
+        })
     with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
         json.dump(project_config, fp)
 
@@ -2176,7 +2211,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
             elif compile_prop_key == 'minio':
                 # 提供对象存储上传/下载
                 pass
-        
+
         # 获得eagleeye编译脚本
         compile_param_suffix = ''
         compile_script_prefix = f'{system_platform.lower()}_build' if len(eagleeye_config) == 0 else f'{system_platform.lower()}_build_with'
@@ -2197,17 +2232,20 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
     eagleeye_path = os.path.abspath(eagleeye_path)
-    return eagleeye_path
+    return eagleeye_path, eagleeye_config
 
 
 class DeployMixin:
     def build(self, platform='android/arm64-v8a', output_folder='./deploy', project_config=None, eagleeye_config=None):
         # android/arm64-v8a, linux/x86-64
-        assert(platform in ['android/arm64-v8a', 'linux/x86-64'])
+        if platform not in ['android/arm64-v8a', 'linux/x86-64', 'linux/arm']:
+            print("Platform Only support android/arm64-v8a,linux/x86-64")
+            return
+
         system_platform, abi_platform = platform.split('/')
 
         # 准备eagleeye集成环境
-        eagleeye_path = prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config)
+        eagleeye_path, eagleeye_config = prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config)
 
         # 创建工程
         project_name = project_config["name"]
@@ -2228,10 +2266,129 @@ class DeployMixin:
 
         output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
+        # 准备外围工程
+        enable_project_mode = False
+        if 'mode' in project_config:
+            if project_config['mode'] not in ['server', 'app']:
+                print('mode must is server or app')
+                return
+
+            # 创建配置文件（管线初始化默认文件）
+            os.makedirs(os.path.join(output_folder, 'config'), exist_ok=True)
+            config_folder = os.path.join(output_folder, 'config')
+            is_callback_mode = True
+            if 'config' in project_config:
+                config_info = project_config['config']
+                ''' format
+                    {
+                        'server_params': [{"node": "node_name", "name": "param_name", "value": "param_value", "type": "string"/"float"/"double"/"int"/"bool"}],
+                        'data_source': [{"type": "camera", "address": "", "format": "RGB/BGR", "mode": "NETWORK/USB/ANDROID_NATIVE/V4L2", "flag": "front"}, {"type": "video", "address": "", "format": "RGB/BGR"},...]
+                    }
+                '''
+                if 'data_source' not in config_info or len(config_info['data_source']) == 0:
+                    is_callback_mode = False
+
+                if is_callback_mode:
+                    config_info["server_mode"] = "callback"
+                config_info["pipeline_name"] = pipeline_name
+                old_config_info = {}
+                if os.path.exists(os.path.join(config_folder, 'plugin_config.json')):
+                    with open(os.path.join(config_folder, 'plugin_config.json'), 'r') as fp:
+                        old_config_info = json.load(fp)
+
+                old_config_info[pipeline_name] = config_info
+                with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
+                    json.dump(old_config_info,fp)
+
+            if 'server' == project_config['mode']:
+                if system_platform != 'linux':
+                    print('mode=server, must is linux platform')
+                    return
+
+                # 创建proto文件，并编译头文件
+                os.makedirs(os.path.join(output_folder, 'proto'),exist_ok=True)
+                if not os.path.exists(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto')):
+                    proto_code_template_file = f'./templates/grpc_proto_code.proto'
+                    if is_callback_mode:
+                        proto_code_template_file = f'./templates/grpc_stream_proto_code.proto'
+                    grpc_proto_code_content = gen_code(proto_code_template_file)(
+                        package=f'{project_name.lower()}grpc',
+                        servername=f'{project_name.lower().capitalize()}Grpc'
+                    )
+                    with open(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto'), 'w') as fp:
+                        fp.write(grpc_proto_code_content)
+
+                    # 编译proto
+                    if 'tool' not in project_config:
+                        project_config['tool'] = {}
+                    proto_tool_dir = ''
+                    if 'proto' in project_config['tool']:
+                        proto_tool_dir = project_config['tool']['proto']
+                        if proto_tool_dir.endswith('/'):
+                            proto_tool_dir = proto_tool_dir[:-1]
+                    proto_out_dir = os.path.join(output_folder, 'proto')
+
+                    proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
+                    os.system(proto_compile_cmd)
+
+                    # 更新CMakeLists
+                    grpc_include = f'set(CMAKE_PREFIX_PATH "{proto_tool_dir}")\ninclude(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
+                    code_line_list = []
+                    for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
+                        if len(code_line_list) > 0 and code_line_list[-1].strip() == '# grpc code' and line == '\n':
+                            code_line_list.append(grpc_include)
+
+                        if len(code_line_list) > 0 and code_line_list[-1].strip().startswith(f'set({project_name}_demo_SRC'):
+                            code_line_list.append(f'proto/{project_name}.pb.cc\nproto/{project_name}.grpc.pb.cc\n')
+
+                        code_line_list.append(line)
+
+                    with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
+                        for line in code_line_list:
+                            fp.write(line)
+
+                # 创建grpc服务和启动代码
+                if not os.path.exists(os.path.join(output_folder, f'grpc_server.hpp')):
+                    grpc_server_code_template_file = './templates/grpc_server_code.hpp'
+                    if is_callback_mode:
+                        grpc_server_code_template_file = './templates/grpc_stream_server_code.hpp'
+                    grpc_server_code_content = gen_code(grpc_server_code_template_file)(
+                        project=f'{project_name.lower()}',
+                        package=f'{project_name.lower()}grpc',
+                        servername=f'{project_name.lower().capitalize()}Grpc'
+                    )
+                    with open(os.path.join(output_folder, 'grpc_server.hpp'), 'w') as fp:
+                        fp.write(grpc_server_code_content)
+
+                    grpc_main_code_content = gen_code('./templates/grpc_main_code.cpp')(
+                        servername=f'{project_name.lower().capitalize()}Grpc',
+                        plugin_root='./plugins/'
+                    )
+                    with open(os.path.join(output_folder, f'{project_name}_demo.cpp'), 'w') as fp:
+                        fp.write(grpc_main_code_content)
+
+                enable_project_mode = True
+
+            if 'app' == project_config['mode']:
+                pass
+
         # 编译
         package_build(
             output_folder, 
             eagleeye_path, 
-            project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=True)
+            project_config=project_config, 
+            platform=system_platform, 
+            abi=abi_platform, 
+            generate_demo_code=False if enable_project_mode else True,
+            mode=project_config['mode'] if 'mode' in project_config else None)
+
+        # 更新.project.json
+        project_info = {}
+        with open(os.path.join(output_folder, '.project.json'), 'r') as fp:
+            project_info = json.load(fp)
+
+        project_info['eagleeye'] = eagleeye_config
+        with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
+            json.dump(project_info, fp)
 
         return True

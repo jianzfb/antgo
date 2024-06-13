@@ -31,7 +31,6 @@ public:
 
     virtual int runOnCpu(const std::vector<Tensor>& input){
         int loop_num = input[0].dims()[0];
-        
         std::vector<std::vector<Tensor>> loop_output;
         for(int loop_i=0; loop_i<loop_num; ++loop_i){
             int input_num = input.size();
@@ -73,11 +72,15 @@ public:
 
         if(loop_num == 0){
             for(int output_i=0; output_i<this->m_func->getOutputNum(); ++output_i){
-                this->m_outputs[output_i] = Tensor();
+                this->m_outputs[output_i] = Tensor(
+                    std::vector<int64_t>{0},
+                    EAGLEEYE_FLOAT32,
+                    DataFormat::AUTO,
+                    CPU_BUFFER
+                );
             }
             return 0;
         }
-
         // stack all output
         for(int output_i=0; output_i<this->m_func->getOutputNum(); ++output_i){
             // 申请空间

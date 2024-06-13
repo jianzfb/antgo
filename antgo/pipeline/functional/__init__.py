@@ -164,6 +164,22 @@ def serial_imread_dc(*args):
   return DataFrame(inner())
 
 
+@dynamic_dispatch
+def lambda_dc(*args):
+  index = param_scope()._index
+
+  global_entity = Entity()
+  def inner():
+    for data in args[0]:
+      global_entity = Entity()
+      if isinstance(data, tuple):
+        yield global_entity(**{**{key: value for key,value in zip(index, data)}})
+      else:
+        yield global_entity(**{**{index: data}})
+
+  return DataFrame(inner())
+
+
 def _api(name='serve'):
   """
   Create an API input, for building RestFul API or application API.
