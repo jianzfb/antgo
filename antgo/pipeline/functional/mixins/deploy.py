@@ -1584,7 +1584,7 @@ def split_function(function_key_name_list):
     return function_list
 
 
-def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True):    
+def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None):    
     project_name = project_config["name"]
     pipeline_name = project_name
     if '/' in project_name:
@@ -2048,6 +2048,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     for src_info in deploy_graph_info.values():
         if 'depedent_src' in src_info:
             src_code_list.extend(src_info['depedent_src'])
+
     update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []))
 
     # 更新插件工程编译脚本
@@ -2083,6 +2084,10 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         'graph': graph_config,
         'platform': platform
     })
+    if mode is not None:
+        project_config.update({
+            'mode': mode
+        })
     with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
         json.dump(project_config, fp)
 
@@ -2206,7 +2211,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
             elif compile_prop_key == 'minio':
                 # 提供对象存储上传/下载
                 pass
-        
+
         # 获得eagleeye编译脚本
         compile_param_suffix = ''
         compile_script_prefix = f'{system_platform.lower()}_build' if len(eagleeye_config) == 0 else f'{system_platform.lower()}_build_with'
@@ -2227,17 +2232,20 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
     eagleeye_path = os.path.abspath(eagleeye_path)
-    return eagleeye_path
+    return eagleeye_path, eagleeye_config
 
 
 class DeployMixin:
     def build(self, platform='android/arm64-v8a', output_folder='./deploy', project_config=None, eagleeye_config=None):
         # android/arm64-v8a, linux/x86-64
-        assert(platform in ['android/arm64-v8a', 'linux/x86-64'])
+        if platform not in ['android/arm64-v8a', 'linux/x86-64', 'linux/arm']:
+            print("Platform Only support android/arm64-v8a,linux/x86-64")
+            return
+
         system_platform, abi_platform = platform.split('/')
 
         # 准备eagleeye集成环境
-        eagleeye_path = prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config)
+        eagleeye_path, eagleeye_config = prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config)
 
         # 创建工程
         project_name = project_config["name"]
@@ -2259,21 +2267,128 @@ class DeployMixin:
         output_folder = os.path.join(output_folder, f'{project_name}_plugin')
 
         # 准备外围工程
+        enable_project_mode = False
         if 'mode' in project_config:
-            if 'grpc' == project_config['mode']['type']:
-                # 创建 proto文件，并编译头文件
-                for key, value in project_config['mode']['source'].items():
-                    pass
+            if project_config['mode'] not in ['server', 'app']:
+                print('mode must is server or app')
+                return
 
-                # 创建proto模板代码
+            # 创建配置文件（管线初始化默认文件）
+            os.makedirs(os.path.join(output_folder, 'config'), exist_ok=True)
+            config_folder = os.path.join(output_folder, 'config')
+            is_callback_mode = True
+            if 'config' in project_config:
+                config_info = project_config['config']
+                ''' format
+                    {
+                        'server_params': [{"node": "node_name", "name": "param_name", "value": "param_value", "type": "string"/"float"/"double"/"int"/"bool"}],
+                        'data_source': [{"type": "camera", "address": "", "format": "RGB/BGR", "mode": "NETWORK/USB/ANDROID_NATIVE/V4L2", "flag": "front"}, {"type": "video", "address": "", "format": "RGB/BGR"},...]
+                    }
+                '''
+                if 'data_source' not in config_info or len(config_info['data_source']) == 0:
+                    is_callback_mode = False
 
-            if 'app' == project_config['mode']['type']:
+                if is_callback_mode:
+                    config_info["server_mode"] = "callback"
+                config_info["pipeline_name"] = pipeline_name
+                old_config_info = {}
+                if os.path.exists(os.path.join(config_folder, 'plugin_config.json')):
+                    with open(os.path.join(config_folder, 'plugin_config.json'), 'r') as fp:
+                        old_config_info = json.load(fp)
+
+                old_config_info[pipeline_name] = config_info
+                with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
+                    json.dump(old_config_info,fp)
+
+            if 'server' == project_config['mode']:
+                if system_platform != 'linux':
+                    print('mode=server, must is linux platform')
+                    return
+
+                # 创建proto文件，并编译头文件
+                os.makedirs(os.path.join(output_folder, 'proto'),exist_ok=True)
+                if not os.path.exists(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto')):
+                    proto_code_template_file = f'./templates/grpc_proto_code.proto'
+                    if is_callback_mode:
+                        proto_code_template_file = f'./templates/grpc_stream_proto_code.proto'
+                    grpc_proto_code_content = gen_code(proto_code_template_file)(
+                        package=f'{project_name.lower()}grpc',
+                        servername=f'{project_name.lower().capitalize()}Grpc'
+                    )
+                    with open(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto'), 'w') as fp:
+                        fp.write(grpc_proto_code_content)
+
+                    # 编译proto
+                    if 'tool' not in project_config:
+                        project_config['tool'] = {}
+                    proto_tool_dir = ''
+                    if 'proto' in project_config['tool']:
+                        proto_tool_dir = project_config['tool']['proto']
+                        if proto_tool_dir.endswith('/'):
+                            proto_tool_dir = proto_tool_dir[:-1]
+                    proto_out_dir = os.path.join(output_folder, 'proto')
+
+                    proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
+                    os.system(proto_compile_cmd)
+
+                    # 更新CMakeLists
+                    grpc_include = f'set(CMAKE_PREFIX_PATH "{proto_tool_dir}")\ninclude(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
+                    code_line_list = []
+                    for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
+                        if len(code_line_list) > 0 and code_line_list[-1].strip() == '# grpc code' and line == '\n':
+                            code_line_list.append(grpc_include)
+
+                        if len(code_line_list) > 0 and code_line_list[-1].strip().startswith(f'set({project_name}_demo_SRC'):
+                            code_line_list.append(f'proto/{project_name}.pb.cc\nproto/{project_name}.grpc.pb.cc\n')
+
+                        code_line_list.append(line)
+
+                    with open(os.path.join(output_folder, 'CMakeLists.txt'), 'w') as fp:
+                        for line in code_line_list:
+                            fp.write(line)
+
+                # 创建grpc服务和启动代码
+                if not os.path.exists(os.path.join(output_folder, f'grpc_server.hpp')):
+                    grpc_server_code_template_file = './templates/grpc_server_code.hpp'
+                    if is_callback_mode:
+                        grpc_server_code_template_file = './templates/grpc_stream_server_code.hpp'
+                    grpc_server_code_content = gen_code(grpc_server_code_template_file)(
+                        project=f'{project_name.lower()}',
+                        package=f'{project_name.lower()}grpc',
+                        servername=f'{project_name.lower().capitalize()}Grpc'
+                    )
+                    with open(os.path.join(output_folder, 'grpc_server.hpp'), 'w') as fp:
+                        fp.write(grpc_server_code_content)
+
+                    grpc_main_code_content = gen_code('./templates/grpc_main_code.cpp')(
+                        servername=f'{project_name.lower().capitalize()}Grpc',
+                        plugin_root='./plugins/'
+                    )
+                    with open(os.path.join(output_folder, f'{project_name}_demo.cpp'), 'w') as fp:
+                        fp.write(grpc_main_code_content)
+
+                enable_project_mode = True
+
+            if 'app' == project_config['mode']:
                 pass
 
         # 编译
         package_build(
             output_folder, 
             eagleeye_path, 
-            project_config=project_config, platform=system_platform, abi=abi_platform, generate_demo_code=True)
+            project_config=project_config, 
+            platform=system_platform, 
+            abi=abi_platform, 
+            generate_demo_code=False if enable_project_mode else True,
+            mode=project_config['mode'] if 'mode' in project_config else None)
+
+        # 更新.project.json
+        project_info = {}
+        with open(os.path.join(output_folder, '.project.json'), 'r') as fp:
+            project_info = json.load(fp)
+
+        project_info['eagleeye'] = eagleeye_config
+        with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
+            json.dump(project_info, fp)
 
         return True

@@ -12,8 +12,4 @@ make
 cd ../
 
 
-# install (package)
-mkdir -p ./package/arm64-v8a/${project}
-cp -r ./bin/arm64-v8a/*.so ./package/arm64-v8a/${project}/
 echo "finish compile arm64-v8a"
-echo "FINISH-arm64-v8a"
