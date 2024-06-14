@@ -1,6 +1,5 @@
 import logging
 import sys
-sys.path.insert(0, '/workspace/antgo')
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -18,7 +17,6 @@ import threading
 import json
 from pprint import pprint
 from filelock import FileLock
-import pika
 
 
 def _cycle(iterator_fn: typing.Callable) -> typing.Iterable[typing.Any]:

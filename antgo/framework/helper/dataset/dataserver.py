@@ -1,4 +1,3 @@
-import pika
 import multiprocessing
 import os
 import logging
@@ -6,7 +5,10 @@ from multiprocessing import current_process
 import time
 import torch.distributed as dist
 from tfrecord import example_pb2
-
+try:
+    import pika
+except:
+    print('no pika')
 
 _worker_info = dict()
 
