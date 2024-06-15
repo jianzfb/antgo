@@ -12,7 +12,9 @@ class For(object):
 
     def __call__(self, *args):
         out_list = None
-        for data_tuple in zip(*args):
+        loop_num = max([v.shape[0] for v in args])
+        for loop_i in range(loop_num):
+            data_tuple = [v[loop_i%v.shape[0]] for v in args]
             out = self.func(*data_tuple)
             if not isinstance(out, list) and not isinstance(out, tuple()):
                 out = [out]

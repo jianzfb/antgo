@@ -24,6 +24,15 @@ class stack(object):
             x = np.transpose(x, self.transpose_dims)
         return x
 
+@register
+class expand_dim_op(object):
+    def __init__(self, axis=0):
+        self.axis = axis
+    
+    def __call__(self, x):
+        x = np.expand_dims(x, self.axis)
+        return x
+
 
 @register
 class global_op(object):

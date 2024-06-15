@@ -31,16 +31,24 @@ public:
 
     virtual int runOnCpu(const std::vector<Tensor>& input){
         int loop_num = input[0].dims()[0];
+        for(int i=1; i<input.size(); ++i){
+            if(loop_num < input[i].dims()[0]){
+                loop_num = input[i].dims()[0];
+            }
+        }
+
         std::vector<std::vector<Tensor>> loop_output;
         for(int loop_i=0; loop_i<loop_num; ++loop_i){
             int input_num = input.size();
 
             std::vector<Tensor> slice_input;
             for(int input_i=0; input_i<input_num; ++input_i){
-                int slice_size = input[input_i].numel() / loop_num;
+                int slice_i = loop_i % input[i].dims()[0];
+                int slice_size = input[input_i].numel() / input[i].dims()[0];
+
                 Tensor input_i_tensor = input[input_i];
                 // 数据
-                char* input_i_slice_ptr = input_i_tensor.template cpu<char>() + loop_i * slice_size * input[input_i].elemsize();
+                char* input_i_slice_ptr = input_i_tensor.template cpu<char>() + slice_i * slice_size * input[input_i].elemsize();
                 // 形状
                 std::vector<int64_t> input_i_slice_shape;
                 if(input[input_i].dims().size() > 1){
