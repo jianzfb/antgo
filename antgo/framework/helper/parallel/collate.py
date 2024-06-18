@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 import torch
 import torch.nn.functional as F
 from torch.utils.data.dataloader import default_collate
+import numpy as np
 
 from .data_container import DataContainer
 
@@ -82,7 +83,7 @@ def collate(batch, samples_per_gpu=1, level=0, stack=True, ignore_stack=[]):
                 stacked.append(
                     [sample.data for sample in batch[i:i + samples_per_gpu]])
         return DataContainer(stacked, batch[0].stack, batch[0].padding_value)
-    elif isinstance(batch[0], Sequence):
+    elif isinstance(batch[0], Sequence) and level == 0:
         transposed = zip(*batch)
         return [collate(samples, samples_per_gpu, level+1) for samples in transposed]
     elif isinstance(batch[0], Mapping) and level == 0:
@@ -93,8 +94,11 @@ def collate(batch, samples_per_gpu=1, level=0, stack=True, ignore_stack=[]):
     elif isinstance(batch[0], Mapping):
         return [d for d in batch]
     elif not stack:
-        # for gt bboxes tensors
-        return [torch.from_numpy(d) for d in batch]
+        # for like gt bboxes tensors
+        if len(batch) > 0 and isinstance(batch[0], np.ndarray):
+            return [torch.from_numpy(d) for d in batch]
+        else:
+            return [d for d in batch]
     else:
         # for image tensors
         return default_collate(batch)

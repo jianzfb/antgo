@@ -181,6 +181,7 @@ class BaseCocoStyleDataset(Dataset):
                     continue
 
                 instance_list.append(instance_info)
+
         return instance_list, image_list
 
     def parse_data_info(self, raw_data_info: dict) -> Optional[dict]:
@@ -440,9 +441,12 @@ class BaseCocoStyleDataset(Dataset):
             if data is None:
                 idx = self._rand_another()
                 continue
-            
+
             image = cv2.imread(osp.join(self.dir, data['img_path']))
             data['image'] = image
+            data['image_meta'] = {
+                'ori_image_shape': image.shape[:2]
+            }
             return data
 
         raise Exception(f'Cannot find valid image after {self.max_refetch}! '

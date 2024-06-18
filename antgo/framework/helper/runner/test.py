@@ -42,7 +42,7 @@ def single_gpu_test(model, data_loader, needed_info=None):
         for var_name, var_value in result.items():
             if var_name not in results:
                 results[var_name] = []
-            
+
             if batch_size == 0:
                 batch_size = len(var_value)
             results[var_name].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in var_value])
@@ -51,17 +51,17 @@ def single_gpu_test(model, data_loader, needed_info=None):
             for key in needed_info:
                 if key not in results:
                     results[key] = []
-                
+
                 results[key].extend([v.cpu().numpy() if type(v) == torch.Tensor else v for v in data[key]])
-        
+
         for _ in range(batch_size):
             prog_bar.update()
-    
+
     rearrange_results = []
     for var_name, var_value in results.items():
         if len(rearrange_results) == 0:
             rearrange_results = [{} for _ in range(len(var_value))]
-        
+
         for i in range(len(var_value)):
             rearrange_results[i][var_name] = var_value[i]
 
