@@ -43,3 +43,4 @@ portalocker
 filelock
 scikit-image
 pika
+xtcocotools
