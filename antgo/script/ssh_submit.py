@@ -34,7 +34,7 @@ def remote_gpu_running_info(username, ip):
         result = re.split('\s+', gpu_basic_info[gpu_index].strip())
         gpus.append(result[2])
 
-    gpu_pwr_info = re.findall('\d+W / \d+W',content)
+    gpu_pwr_info = re.findall('\d+W +/ +\d+W',content)
     gpu_pwr_usage=[]
     gpu_pwr_cap=[]
     for gpu_index in range(gpu_num):
