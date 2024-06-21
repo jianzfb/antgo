@@ -92,7 +92,7 @@ def _order_iterators(iterators):
                 choice += 1
 
 
-# @DATASETS.register_module()
+@DATASETS.register_module()
 class TFDataset(torch.utils.data.IterableDataset):
     """Parse (generic) TFRecords dataset into `IterableDataset` object,
     which contain `np.ndarrays`s. By default (when `sequence_description`
