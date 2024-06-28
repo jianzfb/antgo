@@ -61,11 +61,20 @@ class VibSLoggerHook(LoggerHook):
     @master_only
     def before_run(self, runner):
         super(VibSLoggerHook, self).before_run(runner)
-        config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-        config.AntConfig.parse_xml(config_xml)
-        token = getattr(config.AntConfig, 'server_user_token', '')   
+        # step 1: 检测当前路径下收否有token缓存
+        token = None
+        if os.path.exists('./.token'):
+            with open('./.token', 'r') as fp:
+                token = fp.readline()
+
+        # step 2: 检查antgo配置目录下的配置文件中是否有token
+        if token is None or token == '':
+            config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+            config.AntConfig.parse_xml(config_xml)
+            token = getattr(config.AntConfig, 'server_user_token', '')
         if token == '' or token is None:
             self.is_ready = False
+            print('not valid token, directly return')
             return
         mlogger.config(self.project, self.experiment, token=token, server="BASELINE")
         self.canvas = mlogger.Container()
