@@ -47,7 +47,7 @@ class VibSLoggerHook(LoggerHook):
                  ignore_last=True,
                  reset_flag=False,
                  project='', 
-                 experiment=''):
+                 experiment='', record_keys=None):
         super(VibSLoggerHook, self).__init__(interval, ignore_last, reset_flag,
                                              by_epoch)
         self.by_epoch = by_epoch
@@ -57,6 +57,7 @@ class VibSLoggerHook(LoggerHook):
         self.experiment = experiment
         self.is_ready = False
         self.canvas = None
+        self.record_keys = record_keys
 
     @master_only
     def before_run(self, runner):
@@ -77,10 +78,11 @@ class VibSLoggerHook(LoggerHook):
             print('not valid token, directly return')
             return
         mlogger.config(self.project, self.experiment, token=token, server="BASELINE")
-        print(f'Show Experiment Dashboard http://experiment.vibstring.com/ExperimentDashboard?token={token}')
+        print(f'Show Experiment Dashboard http://experiment.vibstring.com/#/ExperimentDashboard?token={token}')
         self.canvas = mlogger.Container()
         self.elements_in_canvas = []
         self.is_ready = True
+        self.start_iter = runner.iter
 
     def _get_max_memory(self, runner):
         device = getattr(runner.model, 'output_device', None)
@@ -91,6 +93,64 @@ class VibSLoggerHook(LoggerHook):
         if runner.world_size > 1:
             dist.reduce(mem_mb, 0, op=dist.ReduceOp.MAX)
         return mem_mb.item()
+
+    def _log_info(self, log_dict, runner):
+        if log_dict['mode'] == 'train':
+            if isinstance(log_dict['lr'], dict):
+                lr_str = []
+                for k, val in log_dict['lr'].items():
+                    lr_str.append(f'lr_{k}: {val:.3e}')
+                lr_str = ' '.join(lr_str)
+            else:
+                lr_str = f'lr: {log_dict["lr"]:.3e}'
+
+            # by epoch: Epoch [4][100/1000]
+            # by iter:  Iter [100/100000]
+            if self.by_epoch:
+                log_str = f'Epoch [{log_dict["epoch"]}]' \
+                          f'[{log_dict["iter"]}/{len(runner.data_loader)}]\t'
+            else:
+                log_str = f'Iter [{log_dict["iter"]}/{runner.max_iters}]\t'
+            log_str += f'{lr_str}, '
+
+            if 'time' in log_dict.keys():
+                self.time_sec_tot += (log_dict['time'] * self.interval)
+                time_sec_avg = self.time_sec_tot / (
+                    runner.iter - self.start_iter + 1)
+                eta_sec = time_sec_avg * (runner.max_iters - runner.iter - 1)
+                eta_str = str(datetime.timedelta(seconds=int(eta_sec)))
+                log_str += f'eta: {eta_str}, '
+                log_str += f'time: {log_dict["time"]:.3f}, ' \
+                           f'data_time: {log_dict["data_time"]:.3f}, '
+                # statistic memory
+                if torch.cuda.is_available():
+                    log_str += f'memory: {log_dict["memory"]}, '
+        else:
+            # val/test time
+            # here 1000 is the length of the val dataloader
+            # by epoch: Epoch[val] [4][1000]
+            # by iter: Iter[val] [1000]
+            if self.by_epoch:
+                log_str = f'Epoch({log_dict["mode"]}) ' \
+                    f'[{log_dict["epoch"]}][{log_dict["iter"]}]\t'
+            else:
+                log_str = f'Iter({log_dict["mode"]}) [{log_dict["iter"]}]\t'
+
+        log_items = []
+        for name, val in log_dict.items():
+            # TODO: resolve this hack
+            # these items have been in log_str
+            if name in [
+                    'mode', 'Epoch', 'iter', 'lr', 'time', 'data_time',
+                    'memory', 'epoch'
+            ]:
+                continue
+            if isinstance(val, float):
+                val = f'{val:.4f}'
+            log_items.append(f'{name}: {val}')
+        log_str += ', '.join(log_items)
+
+        runner.logger.info(log_str)
 
     @master_only
     def log(self, runner):
@@ -125,9 +185,18 @@ class VibSLoggerHook(LoggerHook):
                 log_dict['memory'] = self._get_max_memory(runner)
 
         log_dict = dict(log_dict, **runner.log_buffer.output)
+
+        # to log
+        self._log_info(log_dict, runner) 
+
+        # to platform      
         for log_key, log_value in log_dict.items():
             if isinstance(log_value, str):
                 continue
+            
+            if self.record_keys is not None:
+                if log_key not in self.record_keys:
+                    continue
 
             if log_key not in self.elements_in_canvas:
                 setattr(self.canvas, log_key, mlogger.complex.Line(plot_title=log_key, is_series=True))
