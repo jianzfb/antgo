@@ -77,6 +77,7 @@ class VibSLoggerHook(LoggerHook):
             print('not valid token, directly return')
             return
         mlogger.config(self.project, self.experiment, token=token, server="BASELINE")
+        print(f'Show Experiment Dashboard http://experiment.vibstring.com/ExperimentDashboard?token={token}')
         self.canvas = mlogger.Container()
         self.elements_in_canvas = []
         self.is_ready = True
