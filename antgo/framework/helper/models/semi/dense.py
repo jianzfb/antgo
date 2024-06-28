@@ -25,6 +25,7 @@ class DenseTeacher(MultiSteamModule):
         )
         self.freeze("teacher")
         self.semi_sup_key = train_cfg.get('semi_sup_key', None)             # 选择一个目标进行半监督损失
+        self.semi_sup_config = train_cfg.get('semi_sup_config', [{'key': 'heatmap', 'loss': 'heatmap'}, {'key': 'box', 'loss': 'iou'}, {'key': 'mask', 'loss': 'iou'}])
         self.use_sigmoid = train_cfg.get('use_sigmoid', True)               # 是否将挑选出来的featuremap 使用sigmoid 
 
         self.label_batch_size = train_cfg.get('label_batch_size', 5)        # 有标签数据量 在一个batch里

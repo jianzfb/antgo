@@ -23,6 +23,7 @@ import yaml
 from pathlib import Path
 from filelock import FileLock
 from aligo import Aligo
+import antvis.client.mlogger as mlogger
 
 
 # 需要使用python3
@@ -129,7 +130,7 @@ def main():
     config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
     if not os.path.exists('/data'):
       config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
-        
+
     env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
     config_template = env.get_template('config.xml')
     config_content = config_template.render(**config_data)
@@ -166,7 +167,7 @@ def main():
   if action_name == 'web':
     if args.port == 0:
       args.port = 8000
-    
+
     if args.ip == "":
       args.ip = '0.0.0.0'
     os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
@@ -209,6 +210,26 @@ def main():
     os.makedirs(config.AntConfig.data_factory)
   if not os.path.exists(config.AntConfig.task_factory):
     os.makedirs(config.AntConfig.task_factory)
+
+  # 检查token是否存在，否则重新生成
+  token = getattr(config.AntConfig, 'server_user_token', '')
+  if token is None or token == '':
+    logging.info("generate experiment token")
+    config_data = {
+      'FACTORY': getattr(config.AntConfig, 'factory'), 
+      'USER_TOKEN': mlogger.create_token()
+    }
+
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
+
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
+
+  with open('./.token', 'w') as fp:
+    fp.write(token)
 
   ######################################### 支持扩展 ###############################################
   if args.extra and not os.path.exists('extra'):

@@ -15,7 +15,7 @@ from .hooks import (HOOKS, CheckpointHook, ClosureHook,
                     SubModulesDistEvalHook, SubModulesEvalHook,
                     GradientCumulativeFp16OptimizerHook,
                     GradientCumulativeOptimizerHook, Hook, IterTimerHook,
-                    LoggerHook, NeptuneLoggerHook,
+                    LoggerHook,
                     OptimizerHook, SyncBuffersHook, TextLoggerHook, rsetattr, rgetattr)
 from .hooks.lr_updater import StepLrUpdaterHook  # noqa
 from .hooks.lr_updater import (CosineAnnealingLrUpdaterHook,
@@ -52,7 +52,7 @@ __all__ = [
     'StepMomentumUpdaterHook', 'CosineAnnealingMomentumUpdaterHook',
     'CyclicMomentumUpdaterHook', 'OneCycleMomentumUpdaterHook',
     'OptimizerHook', 'IterTimerHook', 'DistSamplerSeedHook', 'LoggerHook',
-    'TextLoggerHook', 'NeptuneLoggerHook', 'Priority',
+    'TextLoggerHook', 'Priority',
     'get_priority', 'get_host_info', 'get_time_str', 'obj_from_dict',
     'init_dist', 'get_dist_info', 'master_only', 'OPTIMIZER_BUILDERS',
     'OPTIMIZERS', 'DefaultOptimizerConstructor', 'build_optimizer',

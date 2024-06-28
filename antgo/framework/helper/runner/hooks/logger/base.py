@@ -139,7 +139,7 @@ class LoggerHook(Hook):
 
     def before_epoch(self, runner):
         runner.log_buffer.clear()  # clear logs of last epoch
-    
+
     def after_train_iter(self, runner):
         if self.by_epoch and self.every_n_inner_iters(runner, self.interval):
             runner.log_buffer.average(self.interval)

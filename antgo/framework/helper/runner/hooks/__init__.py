@@ -6,7 +6,7 @@ from .evaluation import DistEvalHook, EvalHook
 from .submodules_evaluation import SubModulesDistEvalHook, SubModulesEvalHook
 from .hook import HOOKS, Hook, rsetattr, rgetattr
 from .iter_timer import IterTimerHook
-from .logger import ( LoggerHook, NeptuneLoggerHook, TextLoggerHook)
+from .logger import ( LoggerHook, TextLoggerHook, VibSLoggerHook)
 from .lr_updater import (CosineAnnealingLrUpdaterHook,
                          CosineRestartLrUpdaterHook, CyclicLrUpdaterHook,
                          ExpLrUpdaterHook, FixedLrUpdaterHook,
@@ -35,14 +35,14 @@ __all__ = [
     'FlatCosineAnnealingLrUpdaterHook', 'CosineRestartLrUpdaterHook',
     'CyclicLrUpdaterHook', 'OneCycleLrUpdaterHook', 'OptimizerHook',
     'Fp16OptimizerHook', 'IterTimerHook', 'DistSamplerSeedHook',
-    'EmptyCacheHook', 'LoggerHook', 'MlflowLoggerHook', 'PaviLoggerHook',
-    'TextLoggerHook', 'TensorboardLoggerHook', 'NeptuneLoggerHook',
-    'WandbLoggerHook', 'DvcliveLoggerHook', 'MomentumUpdaterHook',
+    'EmptyCacheHook', 'LoggerHook', 
+    'TextLoggerHook', 'VibSLoggerHook',
+    'MomentumUpdaterHook',
     'StepMomentumUpdaterHook', 'CosineAnnealingMomentumUpdaterHook',
     'CyclicMomentumUpdaterHook', 'OneCycleMomentumUpdaterHook',
     'SyncBuffersHook', 'EMAHook', 'EvalHook', 'DistEvalHook', 'ProfilerHook',
     'GradientCumulativeOptimizerHook', 'GradientCumulativeFp16OptimizerHook',
-    'SegmindLoggerHook', 'LinearAnnealingLrUpdaterHook',
-    'LinearAnnealingMomentumUpdaterHook', 'ClearMLLoggerHook', 'Weighter',
+    'LinearAnnealingLrUpdaterHook',
+    'LinearAnnealingMomentumUpdaterHook', 'Weighter',
     'SubModulesDistEvalHook', 'SubModulesEvalHook'
 ]
