@@ -212,12 +212,19 @@ def main():
     os.makedirs(config.AntConfig.task_factory)
 
   # 检查token是否存在，否则重新生成
-  token = getattr(config.AntConfig, 'server_user_token', '')
+  token = None
+  if os.path.exists('./.token'):
+      with open('./.token', 'r') as fp:
+          token = fp.readline()
+  else:
+    token = getattr(config.AntConfig, 'server_user_token', '')
+
   if token is None or token == '':
     logging.info("generate experiment token")
+    token = mlogger.create_token()
     config_data = {
       'FACTORY': getattr(config.AntConfig, 'factory'), 
-      'USER_TOKEN': mlogger.create_token()
+      'USER_TOKEN': token
     }
 
     env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
