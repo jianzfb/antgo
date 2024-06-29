@@ -189,11 +189,11 @@ class VibSLoggerHook(LoggerHook):
         # to log
         self._log_info(log_dict, runner) 
 
-        # to platform      
+        # to platform
         for log_key, log_value in log_dict.items():
             if isinstance(log_value, str):
                 continue
-            
+
             if self.record_keys is not None:
                 if log_key not in self.record_keys:
                     continue

@@ -241,7 +241,7 @@ def main():
   ######################################### 支持扩展 ###############################################
   if args.extra and not os.path.exists('extra'):
     logging.info('download extra package')
-    os.system('wget http://image.mltalker.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
+    os.system('wget http://image.vibstring.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
   
   if args.ext_module != '':
     logging.info('import extent module')
