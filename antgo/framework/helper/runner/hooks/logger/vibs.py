@@ -154,8 +154,10 @@ class VibSLoggerHook(LoggerHook):
 
     @master_only
     def log(self, runner):
+        print('xxxx')
         if not self.is_ready:
             return
+        print('yyyy')
 
         if 'eval_iter_num' in runner.log_buffer.output:
             # this doesn't modify runner.iter and is regardless of by_epoch
