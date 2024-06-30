@@ -141,26 +141,18 @@ class LoggerHook(Hook):
         runner.log_buffer.clear()  # clear logs of last epoch
 
     def after_train_iter(self, runner):
-        print('a')
         if self.by_epoch and self.every_n_inner_iters(runner, self.interval):
             runner.log_buffer.average(self.interval)
-            print('b')
         elif not self.by_epoch and self.every_n_iters(runner, self.interval):
             runner.log_buffer.average(self.interval)
-            print('c')
         elif self.end_of_epoch(runner) and not self.ignore_last:
             # not precise but more stable
             runner.log_buffer.average(self.interval)
-            print('d')
 
         if runner.log_buffer.ready:
-            print('e')
             self.log(runner)
-            print('f')
             if self.reset_flag:
-                print('g')
                 runner.log_buffer.clear_output()
-                print('h')
 
     def after_train_epoch(self, runner):
         if runner.log_buffer.ready:
