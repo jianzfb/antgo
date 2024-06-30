@@ -165,6 +165,7 @@ class VibSLoggerHook(LoggerHook):
         else:
             cur_iter = self.get_iter(runner, inner_iter=True)
 
+        print('zzzz')
         log_dict = OrderedDict(
             mode=self.get_mode(runner),
             epoch=self.get_epoch(runner),
@@ -181,6 +182,8 @@ class VibSLoggerHook(LoggerHook):
                 assert isinstance(lr_, list)
                 log_dict['lr'].update({k: lr_[0]})
 
+        print('11111')
+
         if 'time' in runner.log_buffer.output:
             # statistic memory
             if torch.cuda.is_available():
@@ -188,24 +191,27 @@ class VibSLoggerHook(LoggerHook):
 
         log_dict = dict(log_dict, **runner.log_buffer.output)
 
+        print('2222')
+
         # to log
         self._log_info(log_dict, runner) 
 
-        # to platform
-        for log_key, log_value in log_dict.items():
-            if isinstance(log_value, str):
-                continue
+        print('33333')
+        # # to platform
+        # for log_key, log_value in log_dict.items():
+        #     if isinstance(log_value, str):
+        #         continue
 
-            if self.record_keys is not None:
-                if log_key not in self.record_keys:
-                    continue
+        #     if self.record_keys is not None:
+        #         if log_key not in self.record_keys:
+        #             continue
 
-            if log_key not in self.elements_in_canvas:
-                setattr(self.canvas, log_key, mlogger.complex.Line(plot_title=log_key, is_series=True))
-                self.elements_in_canvas.append(log_key)
+        #     if log_key not in self.elements_in_canvas:
+        #         setattr(self.canvas, log_key, mlogger.complex.Line(plot_title=log_key, is_series=True))
+        #         self.elements_in_canvas.append(log_key)
 
-            getattr(self.canvas, log_key).update(log_value)
-        mlogger.update()
+        #     getattr(self.canvas, log_key).update(log_value)
+        # mlogger.update()
 
     @master_only
     def after_run(self, runner):
