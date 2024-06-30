@@ -112,9 +112,6 @@ class VibSLoggerHook(LoggerHook):
                 log_str += f'eta: {eta_str}, '
                 log_str += f'time: {log_dict["time"]:.3f}, ' \
                            f'data_time: {log_dict["data_time"]:.3f}, '
-                # statistic memory
-                if torch.cuda.is_available():
-                    log_str += f'memory: {log_dict["memory"]}, '
         else:
             # val/test time
             # here 1000 is the length of the val dataloader
