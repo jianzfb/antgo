@@ -7,8 +7,7 @@ recursive-include antgo/pipeline/models/cfg *
 recursive-include antgo/pipeline/extent/op/templates *
 recursive-include antgo/pipeline/extent/cpp *
 recursive-include antgo/pipeline/extent/zoo *
-recursive-include antgo/script *.yaml
-recursive-include antgo/script *.sh
+recursive-include antgo/script *
 include antgo/config.xml
 include requirements.txt
 include README.rst

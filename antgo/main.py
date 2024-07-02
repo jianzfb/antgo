@@ -24,6 +24,7 @@ from pathlib import Path
 from filelock import FileLock
 from aligo import Aligo
 import antvis.client.mlogger as mlogger
+import tempfile
 
 
 # 需要使用python3
@@ -52,6 +53,10 @@ DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
 DEFINE_indicator('data', True, '')
+DEFINE_choices('mode', 'http', ['http', 'grpc'], '')
+DEFINE_string("image-repo", None, "image repo")
+DEFINE_string("image-version", "latest", "image version")
+DEFINE_string("user", None, "user name")
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -92,7 +97,7 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric']
 
 
@@ -171,6 +176,141 @@ def main():
     if args.ip == "":
       args.ip = '0.0.0.0'
     os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+    return
+
+  # 镜像打包服务
+  if action_name == 'package':
+    # step 1: 构建Dockerfile
+    logging.info('Generate Dockerfile')
+    if args.version is None or args.version == '-' or args.version == '':
+      args.version = 'master'
+    dockerfile_data = {
+      'version': args.version
+    }
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    dockerfile_template = env.get_template('script/Dockerfile')
+    dockerfile_content = dockerfile_template.render(**dockerfile_data)
+    with open('./Dockerfile', 'w') as fp:
+      fp.write(dockerfile_content)
+
+    logging.info('Generate Server Launch.sh')
+    if args.main is None or args.main == '':
+      logging.error('Must set main file.(--main=xxx)')
+      return
+
+    if args.port == 0:
+      logging.error('Must set server port.(--port=8080)')
+      return
+
+    launch_tempate =  env.get_template('script/server-launch.sh')
+    launch_data = {}
+    if args.mode == 'http':
+      launch_data.update({
+        'cmd': f'antgo web --main={args.main}:app --port={args.port}'
+      })
+    else:
+      logging.error("grpc support in comming.")
+      return
+
+    launch_content = launch_tempate.render(**launch_data)
+    with open('./launch.sh', 'w') as fp:
+      fp.write(launch_content)
+
+    # step 2: 构建镜像
+    if args.name is None or args.name == '':
+      logging.error('Must set server image name. (--name=xxx)')
+      return
+    logging.info(f'Build docker image {args.name} (Server: {args.mode})')
+    os.system(f'docker build -t {args.name} ./')
+
+    # step 3: 发布镜像
+    if args.image_repo is None or args.user is None:
+      logging.warn("No set image repo and user name, If need to deploy, must set --image-repo=xxxx.")
+      return
+
+    logging.info(f'Push image {args.name} to image repo {args.image_repo}:{args.image_version}')
+    # 需要手动添加密码
+    os.system(f'docker login --username={args.user} {args.image_repo.split("/")[0]}')
+    os.system(f'docker tag {args.name}:latest {args.image_repo}:{args.image_version}')
+    os.system(f'docker push {args.image_repo}:{args.image_version}')
+
+    image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
+    server_config_info = {
+      'image_repo': f'{args.image_repo}:{args.image_version}',
+      'create_time': image_time,
+      'update_time': image_time,
+      'server_port': args.port
+    }
+
+    if os.path.exists('./server_config.json'):
+      with open('./server_config.json', 'r') as fp:
+        info = json.load(fp)
+        server_config_info['create_time'] = info['create_time']
+
+    # 更新服务配置
+    with open('./server_config.json', 'w') as fp:
+      json.dump(server_config_info, fp)
+    return
+
+  # 镜像发布服务
+  if action_name == 'deploy':
+    # step 1: 检查是否存在指定镜像(需要给予镜像仓库)
+    if not os.path.exists('./server_config.json'):
+      logging.error('Need to antgo package ..., before.')
+      return
+    with open('./server_config.json', 'r') as fp:
+      server_info = json.load(fp)
+    
+    try:
+      assert('image_repo' in server_info)
+      assert('server_port' in server_info)
+      assert('create_time' in server_info)
+      assert('update_time' in server_info)      
+    except:
+      logging.error('Server info not complete. Need to antgo package xxx.')
+      return
+
+    print('Server Info.')
+    print(server_info)
+
+    # step 2: 远程启动服务
+    if args.ssh:
+      # 基于ssh远程部署
+      if args.ip == '':
+        logging.error('Must set remote ip (--ip=xxx).')
+        return
+
+      if args.port == 0:
+        logging.error('Must set remote server port (--ip=xxx).')
+        return
+      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+      server_deploy_template = env.get_template('script/server-deploy.sh')
+      server_deploy_data = {
+        'user': '',
+        'image_registry': server_info['image_repo'].split('/')[0],
+        'image': server_info['image_repo'],
+        'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
+        'outer_port': args.port,
+        'inner_port': server_info['server_port'],
+      }
+      server_deploy_content = server_deploy_template.render(**server_deploy_data)
+
+      temp_dir = tempfile.TemporaryDirectory()
+      with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
+        fp.write(server_deploy_content)
+      deploy_script_path = os.path.join(temp_dir, 'deploy.sh')
+
+      ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
+      with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+          ssh_config_info = yaml.safe_load(fp)
+
+      deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {deploy_script_path}'
+      print('deploy cmd')
+      print(deploy_cmd)
+      os.system(deploy_cmd)
+    elif args.k8s:
+      logging.error('K8s deploy in comming.')
+      return
     return
 
   # 查看运行设备（本地/远程）
