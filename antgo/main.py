@@ -180,7 +180,10 @@ def main():
 
   # eagleeye 环境准备
   if action_name == 'eagleeye':
-    import antgo.pipeline
+    try:
+      import antgo.pipeline
+    except:
+      pass
     return
 
   # 镜像打包服务
