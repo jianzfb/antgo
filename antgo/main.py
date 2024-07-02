@@ -97,7 +97,7 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package', 'eagleeye']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric']
 
 
@@ -176,6 +176,11 @@ def main():
     if args.ip == "":
       args.ip = '0.0.0.0'
     os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+    return
+
+  # eagleeye 环境准备
+  if action_name == 'eagleeye':
+    import antgo.eagleeye
     return
 
   # 镜像打包服务

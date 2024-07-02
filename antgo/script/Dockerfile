@@ -1,6 +1,21 @@
 FROM registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest
 
 COPY ./ /workspace/
+
+# antgo 环境
 RUN pip3 install --upgrade --upgrade-strategy=only-if-needed git+https://github.com/jianzfb/antgo.git@{{version}}
+
+# eagleeye 环境
+RUN antgo eagleeye
+
+# 修正环境信息
+RUN rm /miniconda3/bin/../lib/libstdc++.so.6;ln /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /miniconda3/bin/../lib/libstdc++.so.6
+
+# 创建并设置工作目录
 WORKDIR /workspace
-ENTRYPOINT ["launch.sh"]
+
+# 设置环境变量
+ENV PATH="/workspace:${PATH}"
+
+# 设置启动命令
+ENTRYPOINT ["bash launch.sh"]
