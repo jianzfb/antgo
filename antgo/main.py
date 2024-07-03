@@ -57,6 +57,7 @@ DEFINE_choices('mode', 'http', ['http', 'grpc'], '')
 DEFINE_string("image-repo", None, "image repo")
 DEFINE_string("image-version", "latest", "image version")
 DEFINE_string("user", None, "user name")
+DEFINE_string("password", None, "user password")
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -232,13 +233,13 @@ def main():
     os.system(f'docker build -t {args.name} ./')
 
     # step 3: 发布镜像
-    if args.image_repo is None or args.user is None:
-      logging.warn("No set image repo and user name, If need to deploy, must set --image-repo=xxxx.")
+    if args.image_repo is None or args.user is None or args.password is None:
+      logging.warn("No set image repo and user name, If need to deploy, must set --image-repo=xxxx --user=xxx --password=xxx.")
       return
 
     logging.info(f'Push image {args.name} to image repo {args.image_repo}:{args.image_version}')
     # 需要手动添加密码
-    os.system(f'docker login --username={args.user} {args.image_repo.split("/")[0]}')
+    os.system(f'docker login --username={args.user} --password={args.password} {args.image_repo.split("/")[0]}')
     os.system(f'docker tag {args.name}:latest {args.image_repo}:{args.image_version}')
     os.system(f'docker push {args.image_repo}:{args.image_version}')
 
@@ -268,7 +269,7 @@ def main():
       return
     with open('./server_config.json', 'r') as fp:
       server_info = json.load(fp)
-    
+
     try:
       assert('image_repo' in server_info)
       assert('server_port' in server_info)
@@ -291,10 +292,15 @@ def main():
       if args.port == 0:
         logging.error('Must set remote server port (--ip=xxx).')
         return
+
+      if args.user is None or args.password is None:
+        logging.error('Must set docker registry --user=xxx --password=xxx')
+        return
       env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
       server_deploy_template = env.get_template('script/server-deploy.sh')
       server_deploy_data = {
-        'user': '',
+        'user': args.user,
+        'password': args.password,
         'image_registry': server_info['image_repo'].split('/')[0],
         'image': server_info['image_repo'],
         'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,

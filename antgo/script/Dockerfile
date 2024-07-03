@@ -18,4 +18,4 @@ WORKDIR /workspace
 ENV PATH="/workspace:${PATH}"
 
 # 设置启动命令
-ENTRYPOINT ["bash launch.sh"]
+ENTRYPOINT ["bash", "launch.sh"]
