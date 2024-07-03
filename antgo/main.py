@@ -248,7 +248,8 @@ def main():
       'image_repo': f'{args.image_repo}:{args.image_version}',
       'create_time': image_time,
       'update_time': image_time,
-      'server_port': args.port
+      'server_port': args.port,
+      'name': args.name
     }
 
     if os.path.exists('./server_config.json'):
@@ -274,7 +275,8 @@ def main():
       assert('image_repo' in server_info)
       assert('server_port' in server_info)
       assert('create_time' in server_info)
-      assert('update_time' in server_info)      
+      assert('update_time' in server_info)    
+      assert('name' in server_info)  
     except:
       logging.error('Server info not complete. Need to antgo package xxx.')
       return
@@ -296,6 +298,7 @@ def main():
       if args.user is None or args.password is None:
         logging.error('Must set docker registry --user=xxx --password=xxx')
         return
+      
       env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
       server_deploy_template = env.get_template('script/server-deploy.sh')
       server_deploy_data = {
@@ -306,22 +309,22 @@ def main():
         'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
         'outer_port': args.port,
         'inner_port': server_info['server_port'],
+        'name': server_info['name']
       }
       server_deploy_content = server_deploy_template.render(**server_deploy_data)
 
-      temp_dir = tempfile.TemporaryDirectory()
-      with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
-        fp.write(server_deploy_content)
-      deploy_script_path = os.path.join(temp_dir, 'deploy.sh')
+      with tempfile.TemporaryDirectory() as temp_dir:
+        with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
+          fp.write(server_deploy_content)
+        deploy_script_path = os.path.join(temp_dir, 'deploy.sh')
 
-      ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
-      with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-          ssh_config_info = yaml.safe_load(fp)
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
 
-      deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {deploy_script_path}'
-      print('deploy cmd')
-      print(deploy_cmd)
-      os.system(deploy_cmd)
+        deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {deploy_script_path}'
+        logging.info(deploy_cmd)
+        os.system(deploy_cmd)
     elif args.k8s:
       logging.error('K8s deploy in comming.')
       return
