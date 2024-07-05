@@ -47,10 +47,6 @@ class TextLoggerHook(LoggerHook):
             :attr:`out_dir` is specified. If False, the local log will be
             removed. Default: True.
             `New in version 1.3.16.`
-        file_client_args (dict, optional): Arguments to instantiate a
-            FileClient. See :class:`mmcv.fileio.FileClient` for details.
-            Default: None.
-            `New in version 1.3.16.`
     """
 
     def __init__(self,
@@ -188,7 +184,6 @@ class TextLoggerHook(LoggerHook):
         # only append log at last line
         if runner.rank == 0:
             with open(self.json_log_path, 'a+') as f:
-                # mmcv.dump(json_log, f, file_format='json')
                 json.dump(json_log, f)
                 f.write('\n')
 
