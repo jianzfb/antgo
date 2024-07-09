@@ -30,6 +30,7 @@ from antgo.framework.helper.models.proxy_module import *
 from antgo.framework.helper.models.distillation import *
 from antgo.framework.helper.runner.hooks.hook import *
 from antgo.framework.helper.parallel.utils import is_module_wrapper
+import antvis.client.mlogger as mlogger
 from .base_trainer import *
 from thop import profile
 import copy
@@ -147,7 +148,7 @@ class Trainer(BaseTrainer):
             self.cfg = Config.fromstring(json.dumps(cfg), '.json')
         else:
             self.cfg = cfg
-            
+
         self.data_loaders = None
         self.runner = None
         self.work_dir = work_dir
@@ -167,7 +168,7 @@ class Trainer(BaseTrainer):
         if self.distributed:
             init_dist(**self.cfg.get('dist_params', {}))
             # re-set gpu_ids with distributed training mode
-            _, world_size = get_dist_info()
+            # _, world_size = get_dist_info()
 
         # set random seeds
         seed = init_random_seed(self.cfg.get('seed', None), device=device)
@@ -176,6 +177,36 @@ class Trainer(BaseTrainer):
         self.cfg.seed = seed
         self.meta['seed'] = seed
         self.device = device
+
+        rank, _ = get_dist_info()
+        if rank == 0:
+            # step 1: 检测当前路径下收否有token缓存
+            token = None
+            if os.path.exists('./.token'):
+                with open('./.token', 'r') as fp:
+                    token = fp.readline()
+
+            # step 2: 检查antgo配置目录下的配置文件中是否有token
+            if token is None or token == '':
+                config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+                config.AntConfig.parse_xml(config_xml)
+                token = getattr(config.AntConfig, 'server_user_token', '')
+            if token == '' or token is None:
+                print('not valid token, directly return')
+                return
+
+            project = os.path.abspath(os.path.curdir).split('/')[-1]
+            experiment = cfg.filename.split('/')[-1].split('.')[0]
+            # 创建实验
+            mlogger.config(project, experiment, token=token, auto_suffix=True, server="BASELINE")
+
+            # 记录超参配置文件
+            file_logger = mlogger.Container()
+            file_logger.file = mlogger.FileLogger('config', 'qiniu')
+            file_logger.file.update(cfg.filename)
+
+            # 记录代码信息
+            print(f'Show Experiment Dashboard http://ai.vibstring.com/#/ExperimentDashboard?token={token}')
 
     def config_dataloader(self, with_validate=False):
         train_dataloader_default_args = dict(

@@ -45,16 +45,11 @@ class VibSLoggerHook(LoggerHook):
                  by_epoch=True,
                  interval=10,
                  ignore_last=True,
-                 reset_flag=False,
-                 project='', 
-                 experiment='', record_keys=None):
+                 reset_flag=False, record_keys=None):
         super(VibSLoggerHook, self).__init__(interval, ignore_last, reset_flag,
                                              by_epoch)
         self.by_epoch = by_epoch
         self.time_sec_tot = 0
-
-        self.project = project
-        self.experiment = experiment
         self.is_ready = False
         self.canvas = None
         self.record_keys = record_keys
@@ -62,32 +57,12 @@ class VibSLoggerHook(LoggerHook):
     @master_only
     def before_run(self, runner):
         super(VibSLoggerHook, self).before_run(runner)
-        # step 1: 检测当前路径下收否有token缓存
-        token = None
-        if os.path.exists('./.token'):
-            with open('./.token', 'r') as fp:
-                token = fp.readline()
-
-        # step 2: 检查antgo配置目录下的配置文件中是否有token
-        if token is None or token == '':
-            config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-            config.AntConfig.parse_xml(config_xml)
-            token = getattr(config.AntConfig, 'server_user_token', '')
-        if token == '' or token is None:
-            self.is_ready = False
-            print('not valid token, directly return')
-            return
-        mlogger.config(self.project, self.experiment, token=token, auto_suffix=True, server="BASELINE")
-        print(f'Show Experiment Dashboard http://experiment.vibstring.com/#/ExperimentDashboard?token={token}')
-
-        # step 3: 设置运行标记(运行)
-        mlogger.tag.running = 'RUNNING'
-
-        # step 4: 创建图表容器
+        # 创建图表容器
         self.canvas = mlogger.Container()
 
         self.elements_in_canvas = []
-        self.is_ready = True
+        if mlogger.is_ready():
+            self.is_ready = True
         self.start_iter = runner.iter
 
     def _log_info(self, log_dict, runner):
@@ -203,5 +178,4 @@ class VibSLoggerHook(LoggerHook):
 
     @master_only
     def after_run(self, runner):
-        # step 1: 设置运行标记(完成)
-        mlogger.tag.running = 'FINISH'
+        pass

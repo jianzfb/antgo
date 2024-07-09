@@ -7,8 +7,9 @@ import numpy as np
 # control.For.xxx[(),()]()
 
 class For(object):
-    def __init__(self, func):
+    def __init__(self, func, parallel_num=1):
         self.func = func
+        self.parallel_num = parallel_num
 
     def __call__(self, *args):
         out_list = None
