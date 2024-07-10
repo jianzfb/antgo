@@ -2,10 +2,11 @@
 #define _EAGLEEYE_${op_name}_OP_
 #include "eagleeye/engine/nano/dataflow/base.h"
 #include "eagleeye/basic/Tensor.h"
-#include <string>
-#include <vector>
 #include "defines.h"
 #include "eagleeye/basic/DataConvert.h"
+#include <string>
+#include <vector>
+#include <omp.h>
 #include "${include_dependent}"
 
 namespace eagleeye{
@@ -14,37 +15,50 @@ class ${op_name}:public BaseOp<${input_num}, ${output_num}>{
 public:
     using BaseOp<${input_num}, ${output_num}>::init;
     ${op_name}(){
-        m_func = ${func_create};
+        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+            Base* func = ${func_create};
+            m_funcs.push_back(func);
+        }
     }
     virtual ~${op_name}(){
-        delete m_func;
+        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+            delete m_funcs[thread_i];
+        }
     }
 
     virtual int init(std::map<std::string, std::vector<float>> params){
-        ${func_init}
+        // 创建函数实体
+        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+            ${func_init}
+        }
     }
     virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){return 0;};
     virtual int init(std::map<std::string, std::vector<std::string>> params){
-        m_func->init(params);
+        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+            m_funcs[thread_i]->init(params);
+        }
         return 0;
     };
 
     virtual int runOnCpu(const std::vector<Tensor>& input){
+        // split batch dim, as loop_num
         int loop_num = input[0].dims()[0];
         for(int i=1; i<input.size(); ++i){
             if(loop_num < input[i].dims()[0]){
                 loop_num = input[i].dims()[0];
             }
         }
+        std::vector<std::vector<Tensor>> loop_output(loop_num);
 
-        std::vector<std::vector<Tensor>> loop_output;
+        // parallel loop
+#pragma omp parallel for num_threads(${parallel_num})
         for(int loop_i=0; loop_i<loop_num; ++loop_i){
+            int thread_i = omp_get_thread_num();
             int input_num = input.size();
-
             std::vector<Tensor> slice_input;
             for(int input_i=0; input_i<input_num; ++input_i){
-                int slice_i = loop_i % input[i].dims()[0];
-                int slice_size = input[input_i].numel() / input[i].dims()[0];
+                int slice_i = loop_i % input[input_i].dims()[0];
+                int slice_size = input[input_i].numel() / input[input_i].dims()[0];
 
                 Tensor input_i_tensor = input[input_i];
                 // 数据
@@ -69,17 +83,17 @@ public:
                 slice_input.push_back(slice_tensor);
             }
 
-            this->m_func->runOnCpu(slice_input);
+            this->m_funcs[thread_i]->runOnCpu(slice_input);
 
             std::vector<Tensor> out;
-            for(int output_i=0; output_i<this->m_func->getOutputNum(); ++output_i){
-                out.push_back(this->m_func->getOutput(output_i).clone());
+            for(int output_i=0; output_i<this->m_funcs[thread_i]->getOutputNum(); ++output_i){
+                out.push_back(this->m_funcs[thread_i]->getOutput(output_i).clone());
             }
-            loop_output.push_back(out);
+            loop_output[loop_i] = out;
         }
 
         if(loop_num == 0){
-            for(int output_i=0; output_i<this->m_func->getOutputNum(); ++output_i){
+            for(int output_i=0; output_i<this->m_funcs[0]->getOutputNum(); ++output_i){
                 this->m_outputs[output_i] = Tensor(
                     std::vector<int64_t>{0},
                     EAGLEEYE_FLOAT32,
@@ -90,7 +104,7 @@ public:
             return 0;
         }
         // stack all output
-        for(int output_i=0; output_i<this->m_func->getOutputNum(); ++output_i){
+        for(int output_i=0; output_i<this->m_funcs[0]->getOutputNum(); ++output_i){
             // 申请空间
             std::vector<int64_t> output_i_shape;
             output_i_shape.push_back(loop_num);
@@ -124,7 +138,7 @@ public:
     }
 
 private:
-    Base* m_func;
+    std::vector<Base*> m_funcs;
 };
 }
 }
