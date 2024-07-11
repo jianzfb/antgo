@@ -192,18 +192,20 @@ class Trainer(BaseTrainer):
                 config.AntConfig.parse_xml(config_xml)
                 token = getattr(config.AntConfig, 'server_user_token', '')
             if token == '' or token is None:
-                print('not valid token, directly return')
+                print('No valid vibstring token, directly return')
                 return
 
+            # 创建实验
             project = self.cfg.get('project_name', os.path.abspath(os.path.curdir).split('/')[-1])
             experiment = cfg.filename.split('/')[-1].split('.')[0]
-            # 创建实验
             mlogger.config(project, experiment, token=token, auto_suffix=True, server="BASELINE")
 
             # 记录超参配置文件
             file_logger = mlogger.Container()
             file_logger.file = mlogger.FileLogger('config', 'qiniu')
             file_logger.file.update(cfg.filename)
+
+            # TODO,记录代码信息（git branch and commit id）
 
             # 记录代码信息
             print(f'Show Experiment Dashboard http://ai.vibstring.com/#/ExperimentDashboard?token={token}')
