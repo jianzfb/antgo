@@ -230,9 +230,9 @@ class DemoMixin:
                     }
             else:
                 output_info[b] = {
-					'type': output_selection_types[i],
-					'name': b,
-					'value': rsp_value.__dict__[b]
+                  'type': output_selection_types[i],
+                  'name': b,
+                  'value': rsp_value.__dict__[b]
                 }
 
         return output_info
