@@ -57,12 +57,14 @@ class VibSLoggerHook(LoggerHook):
     @master_only
     def before_run(self, runner):
         super(VibSLoggerHook, self).before_run(runner)
-        # 创建图表容器
-        self.canvas = mlogger.Container()
 
         self.elements_in_canvas = []
         if mlogger.is_ready():
+            # 日志平台是否具备条件
             self.is_ready = True
+            # 创建图表容器
+            self.canvas = mlogger.Container()
+
         self.start_iter = runner.iter
 
     def _log_info(self, log_dict, runner):

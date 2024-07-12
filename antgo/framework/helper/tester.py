@@ -124,6 +124,7 @@ class Tester(object):
         local_config_path = None
         local_checkpoint_path = None
         # 下载配置文件
+        mlogger.FileLogger.cache_folder = f'./logger/cache/{experiment_name}'
         file_logger.cfg_file = mlogger.FileLogger('config', 'qiniu')
         file_list = file_logger.cfg_file.get()
         if len(file_list) > 0:
@@ -150,9 +151,9 @@ class Tester(object):
         if checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
 
-        # checkpoint 格式
-        # 1: local path，               本地目录
-        # 2: ali://,                    直接从阿里云盘下载
+        # checkpoint路径格式
+        # 1: local path                 本地目录
+        # 2: ali://                     直接从阿里云盘下载
         # 3: experiment/checkpoint      日志平台（推荐）
         if not os.path.exists(checkpoint):
             # 尝试解析来自于日志平台

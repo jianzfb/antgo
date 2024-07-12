@@ -19,7 +19,7 @@ import os
 import json
 
 
-def package(project, folder='./deploy', **kwargs):
+def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
     # 打包编译好的管线
     project_folder = os.path.join(folder, f'{project}_plugin')
     if not os.path.exists(project_folder):
@@ -73,12 +73,18 @@ def package(project, folder='./deploy', **kwargs):
     # 复制配置文件
     if os.path.exists(os.path.join(project_folder, 'config')):
         print('install config files')
-        os.system(f'cp -r {os.path.join(project_folder, "config")}/* {os.path.join(package_folder, "config")}/')
+        try:
+            os.system(f'cp -r {os.path.join(project_folder, "config")}/* {os.path.join(package_folder, "config")}/')
+        except:
+            pass
 
     # 复制模型文件
     if os.path.exists(os.path.join(project_folder, 'model')):
         print('install model files')
-        os.system(f'cp -r {os.path.join(project_folder, "model")}/* {os.path.join(package_folder, "model")}/')
+        try:
+            os.system(f'cp -r {os.path.join(project_folder, "model")}/* {os.path.join(package_folder, "model")}/')
+        except:
+            pass
 
     # 检查是否需要ffmpeg依赖
     if 'ffmpeg' in project_info['eagleeye']:
@@ -99,7 +105,3 @@ def package(project, folder='./deploy', **kwargs):
 
     # 检查是否需要opencv依赖
 
-
-def release(project, folder='./deploy', **kwargs):
-    # 发布打包好的管线
-    pass
