@@ -30,6 +30,7 @@ from antgo.framework.helper.models.proxy_module import *
 from antgo.framework.helper.models.distillation import *
 from antgo.framework.helper.runner.hooks.hook import *
 from antgo.framework.helper.parallel.utils import is_module_wrapper
+from antgo import config
 import antvis.client.mlogger as mlogger
 from .base_trainer import *
 from thop import profile
