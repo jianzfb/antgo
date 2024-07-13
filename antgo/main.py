@@ -17,7 +17,6 @@ from antgo.help import *
 from antgo import config
 from antgo import tools
 from antgo.script import *
-from antgo.pipeline import *
 from jinja2 import Environment, FileSystemLoader
 import json
 import yaml
@@ -283,7 +282,8 @@ def main():
       return
     elif args.mode in['android/sdk', 'linux/sdk', 'windows/sdk']:
       # 管线由C++代码构建
-      pipeline_cplusplus_package(args.name)
+      import antgo.pipeline
+      antgo.pipeline.pipeline_cplusplus_package(args.name)
       return
     elif args.mode == 'applet':
       # 管线由C++代码构建
