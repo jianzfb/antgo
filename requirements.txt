@@ -17,7 +17,7 @@ scikit-learn
 matplotlib
 prettytable
 opencv-contrib-python
-antviscli@git+https://github.com/jianzfb/antgo.git@master
+antviscli@git+https://github.com/jianzfb/antvis-cli.git@master
 qiniu
 pycocotools
 addict
