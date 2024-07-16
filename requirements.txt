@@ -17,9 +17,9 @@ scikit-learn
 matplotlib
 prettytable
 opencv-contrib-python
-antviscli@git+https://github.com/jianzfb/antvis-cli.git@master
+antviscli@git+https://github.com/jianzfb/antgo.git@master
 qiniu
-pycocotools==2.0.2
+pycocotools
 addict
 yapf
 timer
