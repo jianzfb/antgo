@@ -447,7 +447,7 @@ def main():
 
         shutil.copy(os.path.join(os.path.dirname(__file__), 'script', 'ssh_nopassword_config.sh'), os.path.join(os.environ["HOME"], ".ssh", 'user_ssh_nopassword_config.sh'))
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && rsa=`cat id_rsa.pub` && ' + "sed -i 's%placeholder%'"+"\"${rsa}\""+"'%g' user_ssh_nopassword_config.sh")
-        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh -tt {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
+        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh -t {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
       else:
         logging.error("Only support ssh remote task submitter (--ssh)")
         return
