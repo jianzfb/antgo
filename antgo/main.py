@@ -394,44 +394,6 @@ def main():
 
     return
 
-  # 解析配置文件
-  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-  config.AntConfig.parse_xml(config_xml)
-
-  if not os.path.exists(config.AntConfig.factory):
-    os.makedirs(config.AntConfig.factory)
-  if not os.path.exists(config.AntConfig.data_factory):
-    os.makedirs(config.AntConfig.data_factory)
-  if not os.path.exists(config.AntConfig.task_factory):
-    os.makedirs(config.AntConfig.task_factory)
-
-  # 检查token是否存在，否则重新生成
-  token = None
-  if os.path.exists('./.token'):
-      with open('./.token', 'r') as fp:
-          token = fp.readline()
-  else:
-    token = getattr(config.AntConfig, 'server_user_token', '')
-
-  if token is None or token == '':
-    logging.info("generate experiment token")
-    token = mlogger.create_token()
-    config_data = {
-      'FACTORY': getattr(config.AntConfig, 'factory'), 
-      'USER_TOKEN': token
-    }
-
-    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-    config_template = env.get_template('config.xml')
-    config_content = config_template.render(**config_data)
-
-    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
-      fp.write(config_content)
-    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
-
-  with open('./.token', 'w') as fp:
-    fp.write(token)
-
   ######################################### 支持扩展 ###############################################
   if args.extra and not os.path.exists('extra'):
     logging.info('download extra package')
@@ -669,6 +631,45 @@ def main():
   if args.root is None or args.root == '':
     print('Using default root address ali:///exp')
     args.root = "ali:///exp"
+
+  ######################################### 检查token #################################################
+  # 解析配置文件
+  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+  config.AntConfig.parse_xml(config_xml)
+
+  if not os.path.exists(config.AntConfig.factory):
+    os.makedirs(config.AntConfig.factory)
+  if not os.path.exists(config.AntConfig.data_factory):
+    os.makedirs(config.AntConfig.data_factory)
+  if not os.path.exists(config.AntConfig.task_factory):
+    os.makedirs(config.AntConfig.task_factory)
+
+  # 检查token是否存在，否则重新生成
+  token = None
+  if os.path.exists('./.token'):
+      with open('./.token', 'r') as fp:
+          token = fp.readline()
+  else:
+    token = getattr(config.AntConfig, 'server_user_token', '')
+
+  if token is None or token == '':
+    logging.info("generate experiment token")
+    token = mlogger.create_token()
+    config_data = {
+      'FACTORY': getattr(config.AntConfig, 'factory'), 
+      'USER_TOKEN': token
+    }
+
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
+
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
+
+  with open('./.token', 'w') as fp:
+    fp.write(token)
 
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
