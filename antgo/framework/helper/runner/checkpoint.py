@@ -739,13 +739,16 @@ def save_checkpoint(model,
         for name, optim in optimizer.items():
             checkpoint['optimizer'][name] = optim.state_dict()
 
+    status = None
     if filename.startswith('hdfs'):
         file_client = FileClient.infer_client({'backend': 'hdfs'}, filename)
         with io.BytesIO() as f:
             torch.save(checkpoint, f)
-            file_client.put(f.getvalue(), filename)
+            status = file_client.put(f.getvalue(), filename)
     else:
         file_client = FileClient.infer_client(file_client_args, filename)
         with io.BytesIO() as f:
             torch.save(checkpoint, f)
-            file_client.put(f.getvalue(), filename)
+            status = file_client.put(f.getvalue(), filename)
+
+    return status

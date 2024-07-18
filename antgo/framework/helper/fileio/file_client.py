@@ -105,6 +105,8 @@ class HardDiskBackend(BaseStorageBackend):
             os.makedirs(osp.dirname(filepath))
         with open(filepath, 'wb') as f:
             f.write(obj)
+        
+        return filepath
 
     def put_text(self,
                  obj: str,
@@ -337,6 +339,8 @@ class HDFSBackend(BaseStorageBackend):
             environment.hdfs_client.mkdir(parent_path, True)
         environment.hdfs_client.put(filepath, os.path.join('./temp', filename))
 
+        return os.path.join('./temp', filename)
+
     def put_text(self,
                  obj: str,
                  filepath: str,
@@ -485,7 +489,7 @@ class AliBackend(BaseStorageBackend):
         with open(os.path.join(f'./temp/{filename}'), 'rb') as f:
             value_buf = f.read()
         return value_buf        
-    
+
     def get_text(self,
                  filepath: str,
                  encoding: str = 'utf-8') -> str:
@@ -509,7 +513,10 @@ class AliBackend(BaseStorageBackend):
 
         p = filepath.find(filename)
         parent_path = filepath[:p]
+        # 上传
         self.upload(parent_path, os.path.join('./temp', filename))
+
+        return os.path.join('./temp', filename)
 
     def put_text(self,
                  obj: str,
@@ -524,6 +531,7 @@ class AliBackend(BaseStorageBackend):
 
         p = filepath.find(filename)
         parent_path = filepath[:p]
+        # 上传
         self.upload(parent_path, os.path.join('./temp', filename))
 
     def remove(self, filepath: str) -> None:
@@ -895,7 +903,8 @@ class FileClient:
             obj (bytes): Data to be written.
             filepath (str or Path): Path to write data.
         """
-        self.client.put(obj, filepath)
+        status = self.client.put(obj, filepath)
+        return status
 
     def put_text(self, obj: str, filepath: Union[str, Path]) -> None:
         """Write data to a given ``filepath`` with 'w' mode.

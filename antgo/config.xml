@@ -2,6 +2,6 @@
 <antgo>
     <factory>{{FACTORY}}</factory>
     <server_ip>experiment.vibstring.com</server_ip>
-    <server_port>9002</server_port>
+    <server_port>80</server_port>
     <server_user_token>{{USER_TOKEN}}</server_user_token>
 </antgo>

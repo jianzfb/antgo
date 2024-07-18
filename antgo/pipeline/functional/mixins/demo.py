@@ -48,7 +48,7 @@ class DemoMixin:
     output_selection = [cc['data'] for cc in output]
     output_selection_types = [cc['type'] for cc in output]
     for ui_type in output_selection_types:
-      assert (ui_type in ['image', 'video', 'text', 'number'])
+      assert (ui_type in ['image', 'video', 'text', 'number', 'file'])
 
     input_config = default_config
     if default_config is None:
@@ -230,9 +230,9 @@ class DemoMixin:
                     }
             else:
                 output_info[b] = {
-					'type': output_selection_types[i],
-					'name': b,
-					'value': rsp_value.__dict__[b]
+                  'type': output_selection_types[i],
+                  'name': b,
+                  'value': rsp_value.__dict__[b]
                 }
 
         return output_info

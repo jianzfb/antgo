@@ -210,7 +210,7 @@ class IterBasedRunner(BaseRunner):
         filename = filename_tmpl.format(self.iter + 1)
         filepath = osp.join(out_dir, filename)
         optimizer = self.optimizer if save_optimizer else None
-        save_checkpoint(self.model, filepath, optimizer=optimizer, meta=meta)
+        status = save_checkpoint(self.model, filepath, optimizer=optimizer, meta=meta)
         # in some environments, `os.symlink` is not supported, you may need to
         # set `create_symlink` to False
         if create_symlink:
@@ -221,6 +221,7 @@ class IterBasedRunner(BaseRunner):
                 os.symlink(filename, dst_file)
             else:
                 shutil.copy(filepath, dst_file)
+        return status
 
     def register_training_hooks(self,
                                 lr_config,

@@ -188,13 +188,13 @@ class ComputerVisionMixin:
 
     def to_video(self,
                 output_path,
-                width,
-                height,
+                width=None,
+                height=None,
                 rate=30,
                 codec=None,
                 format=None,
                 template=None,
-                audio_src=None):
+                audio_src=None, encode_code='mp4v'):
         """
         Encode a video with audio if provided.
 
@@ -216,18 +216,26 @@ class ComputerVisionMixin:
             audio_src:
                 The audio to encode with the video.
         """
-        assert(width is not None and height is not None)
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 用于mp4格式的生成的参数
+        # mp4v, VP80
+        fourcc = cv2.VideoWriter_fourcc(*encode_code)  # 用于mp4格式的生成的参数
         # fourcc = cv2.VideoWriter_fourcc(*'XVID')    
         output_folder = os.path.dirname(output_path)
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
-        out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
+
+        out = None
+        if width is not None and height is not None:
+            out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
 
         for array in self:
             h,w = array.shape[:2]
-            if h != height or w !=width:
-                array = cv2.resize(array, (width, height))
+            print((h,w))
+            if out is None:
+                out = cv2.VideoWriter(output_path, fourcc, rate, (w, h))
+
+            if width is not None and height is not None:
+                if h != height or w !=width:
+                    array = cv2.resize(array, (width, height))
             out.write(array)
 
         out.release()

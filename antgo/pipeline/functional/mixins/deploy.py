@@ -837,7 +837,7 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
 
     arg_code = ''
     op_init_code = ''
-    for deploy_arg_name, deploy_arg_list in op_info['args'].items():
+    for deploy_arg_name, deploy_arg_list in op_info['args'][0].items():
         if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
             op_init_code += f'{deploy_arg_list}\n'
             if arg_code == '':
@@ -852,9 +852,9 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
             else:
                 arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-    if 'c++_type' in op_info['args']:
-        args_init_code = op_info['args']['c++_type']+'({'+arg_code+'})'
-        op_init_code += f'm_func->init({args_init_code});\n\n'
+    if 'c++_type' in op_info['args'][0]:
+        args_init_code = op_info['args'][0]['c++_type']+'({'+arg_code+'})'
+        op_init_code += f'm_funcs[thread_i]->init({args_init_code});\n\n'
 
     warp_cpp_code_content = \
         gen_code('./templates/for_op_class_code.hpp')(
@@ -863,6 +863,7 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
             output_num=len(output_ctx),
             func_create=f"new {op_info['type']}();" if 'template' not in op_info else f"new {op_info['type']}{op_info['template']}();",
             func_init=op_init_code,
+            parallel_num=func_kwargs.get('parallel_num', 1),
             include_dependent=op_info['include']
         )
 

@@ -3,6 +3,7 @@ import warnings
 from antgo.framework.helper.fileio import FileClient
 from ..dist_utils import allreduce_params, master_only
 from .hook import HOOKS, Hook
+import antvis.client.mlogger as mlogger
 
 
 @HOOKS.register_module()
@@ -66,6 +67,8 @@ class CheckpointHook(Hook):
         self.sync_buffer = sync_buffer
         self.file_client_args = file_client_args
 
+        self.is_ready = False
+
     @master_only
     def before_run(self, runner):
         if not self.out_dir:
@@ -78,6 +81,15 @@ class CheckpointHook(Hook):
 
         # 添加固定路径格式
         self.out_dir = osp.join(self.out_dir, 'output', 'checkpoint')
+
+        # 设置文件日志存储根目录
+        mlogger.FileLogger.root_folder = self.out_dir
+
+        if mlogger.is_ready():
+            self.is_ready = True
+        self.file_logger = mlogger.Container()
+        self.file_logger.file = mlogger.FileLogger('file', 'aliyun', True)
+
         runner.logger.info(
             (f'Checkpoints will be saved to {self.out_dir} by '
                             f'{self.file_client.name}.'))
@@ -108,8 +120,13 @@ class CheckpointHook(Hook):
     @master_only
     def _save_checkpoint(self, runner):
         """Save the current checkpoint and delete unwanted checkpoint."""
-        runner.save_checkpoint(
+        info = runner.save_checkpoint(
             self.out_dir, save_optimizer=self.save_optimizer, **self.args)
+
+        if self.is_ready:
+            # 文件日志
+            self.file_logger.file.update(info)
+
         if runner.meta is not None:
             if self.by_epoch:
                 cur_ckpt_filename = self.args.get(

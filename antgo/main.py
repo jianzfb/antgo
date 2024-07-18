@@ -15,15 +15,16 @@ from antgo.command import *
 from antgo.framework.helper.tools.util import *
 from antgo.help import *
 from antgo import config
-from jinja2 import Environment, FileSystemLoader
-import json
 from antgo import tools
 from antgo.script import *
+from jinja2 import Environment, FileSystemLoader
+import json
 import yaml
 from pathlib import Path
 from filelock import FileLock
 from aligo import Aligo
 import antvis.client.mlogger as mlogger
+import tempfile
 
 
 # 需要使用python3
@@ -52,6 +53,11 @@ DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
 DEFINE_indicator('data', True, '')
+DEFINE_choices('mode', 'http', ['http', 'grpc', 'android/sdk', 'linux/sdk', 'windows/sdk', 'applet'], '')
+DEFINE_string("image-repo", None, "image repo")
+DEFINE_string("image-version", "latest", "image version")
+DEFINE_string("user", None, "user name")
+DEFINE_string("password", None, "user password")
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -92,7 +98,7 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package', 'eagleeye']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric']
 
 
@@ -173,6 +179,194 @@ def main():
     os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
     return
 
+  # eagleeye 环境准备
+  if action_name == 'eagleeye':
+    try:
+      import antgo.pipeline
+    except:
+      pass
+    return
+
+  # 镜像打包服务
+  if action_name == 'package':
+    if args.mode == 'http':
+      # step 1: 构建Dockerfile
+      logging.info('Generate Dockerfile')
+      if args.version is None or args.version == '-' or args.version == '':
+        args.version = 'master'
+      dockerfile_data = {
+        'version': args.version
+      }
+      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+      dockerfile_template = env.get_template('script/Dockerfile')
+      dockerfile_content = dockerfile_template.render(**dockerfile_data)
+      with open('./Dockerfile', 'w') as fp:
+        fp.write(dockerfile_content)
+
+      logging.info('Generate Server Launch.sh')
+      if args.main is None or args.main == '':
+        logging.error('Must set main file.(--main=xxx)')
+        return
+
+      if args.port == 0:
+        logging.error('Must set server port.(--port=8080)')
+        return
+
+      launch_tempate =  env.get_template('script/server-launch.sh')
+      launch_data = {}      
+      launch_data.update({
+        'cmd': f'antgo web --main={args.main}:app --port={args.port}'
+      })
+      launch_content = launch_tempate.render(**launch_data)
+      with open('./launch.sh', 'w') as fp:
+        fp.write(launch_content)
+
+      # step 2: 构建镜像
+      if args.name is None or args.name == '':
+        logging.error('Must set server image name. (--name=xxx)')
+        return
+      logging.info(f'Build docker image {args.name} (Server: {args.mode})')
+      os.system(f'docker build -t {args.name} ./')
+
+      # step 3: 发布镜像
+      if args.image_repo is None or args.user is None or args.password is None:
+        # logging.warn("No set image repo and user name, If need to deploy, must set --image-repo=xxxx --user=xxx --password=xxx.")
+        logging.warn("No image_repo, only use local image file")
+        image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
+        server_config_info = {
+          'image_repo': '',
+          'create_time': image_time,
+          'update_time': image_time,
+          'server_port': args.port,
+          'name': args.name,
+          'mode': args.mode
+        }
+
+        if os.path.exists('./server_config.json'):
+          with open('./server_config.json', 'r') as fp:
+            info = json.load(fp)
+            server_config_info['create_time'] = info['create_time']
+
+        # 更新服务配置
+        with open('./server_config.json', 'w') as fp:
+          json.dump(server_config_info, fp)
+        return
+
+      logging.info(f'Push image {args.name} to image repo {args.image_repo}:{args.image_version}')
+      # 需要手动添加密码
+      os.system(f'docker login --username={args.user} --password={args.password} {args.image_repo.split("/")[0]}')
+      os.system(f'docker tag {args.name}:latest {args.image_repo}:{args.image_version}')
+      os.system(f'docker push {args.image_repo}:{args.image_version}')
+
+      image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
+      server_config_info = {
+        'image_repo': f'{args.image_repo}:{args.image_version}',
+        'create_time': image_time,
+        'update_time': image_time,
+        'server_port': args.port,
+        'name': args.name,
+        'mode': args.mode
+      }
+
+      if os.path.exists('./server_config.json'):
+        with open('./server_config.json', 'r') as fp:
+          info = json.load(fp)
+          server_config_info['create_time'] = info['create_time']
+
+      # 更新服务配置
+      with open('./server_config.json', 'w') as fp:
+        json.dump(server_config_info, fp)      
+    elif args.mode == 'grpc':
+      # 管线由C++代码构建
+      logging.error("grpc support in comming.")
+      return
+    elif args.mode in['android/sdk', 'linux/sdk', 'windows/sdk']:
+      # 管线由C++代码构建
+      import antgo.pipeline
+      antgo.pipeline.pipeline_cplusplus_package(args.name)
+      return
+    elif args.mode == 'applet':
+      # 管线由C++代码构建
+      return
+
+    return
+
+  # 镜像发布服务
+  if action_name == 'deploy':
+    # step 1: 检查是否存在指定镜像(需要给予镜像仓库)
+    if not os.path.exists('./server_config.json'):
+      logging.error('Need to antgo package ..., before.')
+      return
+    with open('./server_config.json', 'r') as fp:
+      server_info = json.load(fp)
+
+    if server_info['mode'] not in ['http', 'grpc']:
+      logging.error('Only support mode = http, grpc')
+      return
+
+    try:
+      assert('image_repo' in server_info)
+      assert('server_port' in server_info)
+      assert('create_time' in server_info)
+      assert('update_time' in server_info)    
+      assert('name' in server_info)  
+    except:
+      logging.error('Server info not complete. Need to antgo package xxx.')
+      return
+
+    print('Server Info.')
+    print(server_info)
+
+    # step 2: 远程启动服务
+    if args.ssh:
+      # 基于ssh远程部署
+      if args.ip == '':
+        logging.error('Must set remote ip (--ip=xxx).')
+        return
+
+      if args.port == 0:
+        logging.error('Must set remote server port (--ip=xxx).')
+        return
+
+      ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
+      if not os.path.exists(ssh_submit_config_file):
+        logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml config, couldnt remote deploy')
+        return
+      with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+          ssh_config_info = yaml.safe_load(fp)
+
+      if server_info['image_repo'] == '':
+        # 将镜像本地打包，并传到目标机器
+        os.system(f'docker save -o {server_info["name"]}.tar {server_info["name"]}')
+        os.system(f'scp {server_info["name"]}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
+        os.system(f'rm {server_info["name"]}.tar')
+
+      # 生成服务部署脚本
+      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+      server_deploy_template = env.get_template('script/server-deploy.sh')
+      server_deploy_data = {
+        'user': args.user,
+        'password': args.password,
+        'image_registry': server_info['image_repo'].split('/')[0] if server_info['image_repo'] != '' else '',
+        'image': server_info['image_repo'] if server_info['image_repo'] != '' else server_info['name'],
+        'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
+        'outer_port': args.port,
+        'inner_port': server_info['server_port'],
+        'name': server_info['name']
+      }
+      server_deploy_content = server_deploy_template.render(**server_deploy_data)
+
+      with tempfile.TemporaryDirectory() as temp_dir:
+        with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
+          fp.write(server_deploy_content)
+        deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
+        logging.info(deploy_cmd)
+        os.system(deploy_cmd)
+    elif args.k8s:
+      logging.error('K8s deploy in comming.')
+      return
+    return
+
   # 查看运行设备（本地/远程）
   if action_name == 'device':
     if not (args.ssh or args.k8s):
@@ -200,41 +394,10 @@ def main():
 
     return
 
-  # 解析配置文件
-  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-  config.AntConfig.parse_xml(config_xml)
-
-  if not os.path.exists(config.AntConfig.factory):
-    os.makedirs(config.AntConfig.factory)
-  if not os.path.exists(config.AntConfig.data_factory):
-    os.makedirs(config.AntConfig.data_factory)
-  if not os.path.exists(config.AntConfig.task_factory):
-    os.makedirs(config.AntConfig.task_factory)
-
-  # 检查token是否存在，否则重新生成
-  token = getattr(config.AntConfig, 'server_user_token', '')
-  if token is None or token == '':
-    logging.info("generate experiment token")
-    config_data = {
-      'FACTORY': getattr(config.AntConfig, 'factory'), 
-      'USER_TOKEN': mlogger.create_token()
-    }
-
-    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-    config_template = env.get_template('config.xml')
-    config_content = config_template.render(**config_data)
-
-    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
-      fp.write(config_content)
-    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
-
-  with open('./.token', 'w') as fp:
-    fp.write(token)
-
   ######################################### 支持扩展 ###############################################
   if args.extra and not os.path.exists('extra'):
     logging.info('download extra package')
-    os.system('wget http://image.mltalker.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
+    os.system('wget http://image.vibstring.com/extra.tar; tar -xf extra.tar; cd extra/manopth; python3 setup.py install')
   
   if args.ext_module != '':
     logging.info('import extent module')
@@ -284,7 +447,7 @@ def main():
 
         shutil.copy(os.path.join(os.path.dirname(__file__), 'script', 'ssh_nopassword_config.sh'), os.path.join(os.environ["HOME"], ".ssh", 'user_ssh_nopassword_config.sh'))
         os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && rsa=`cat id_rsa.pub` && ' + "sed -i 's%placeholder%'"+"\"${rsa}\""+"'%g' user_ssh_nopassword_config.sh")
-        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
+        os.system(f'cd {os.path.join(os.environ["HOME"], ".ssh")} && ssh -tt {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} < user_ssh_nopassword_config.sh')
       else:
         logging.error("Only support ssh remote task submitter (--ssh)")
         return
@@ -469,6 +632,45 @@ def main():
     print('Using default root address ali:///exp')
     args.root = "ali:///exp"
 
+  ######################################### 检查token #################################################
+  # 解析配置文件
+  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+  config.AntConfig.parse_xml(config_xml)
+
+  if not os.path.exists(config.AntConfig.factory):
+    os.makedirs(config.AntConfig.factory)
+  if not os.path.exists(config.AntConfig.data_factory):
+    os.makedirs(config.AntConfig.data_factory)
+  if not os.path.exists(config.AntConfig.task_factory):
+    os.makedirs(config.AntConfig.task_factory)
+
+  # 检查token是否存在，否则重新生成
+  token = None
+  if os.path.exists('./.token'):
+      with open('./.token', 'r') as fp:
+          token = fp.readline()
+  else:
+    token = getattr(config.AntConfig, 'server_user_token', '')
+
+  if token is None or token == '':
+    logging.info("generate experiment token")
+    token = mlogger.create_token()
+    config_data = {
+      'FACTORY': getattr(config.AntConfig, 'factory'), 
+      'USER_TOKEN': token
+    }
+
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
+
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
+
+  with open('./.token', 'w') as fp:
+    fp.write(token)
+
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
     os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
@@ -612,53 +814,26 @@ def main():
 
     # 下载依赖checkpoint
     if args.checkpoint != '':
+      # checkpoint路径格式
+      # 1: local path                 本地目录
+      # 2: ali://                     直接从阿里云盘下载
+      # 3: experiment/checkpoint      日志平台（推荐）      
       print(args.checkpoint)
-      if not os.path.exists(args.checkpoint):
-        # 非本地有效路径
+      if args.checkpoint.startswith('ali://'):
+        # 阿里云盘路径
         if not os.path.exists('./checkpoint'):
           os.makedirs('./checkpoint')
 
         with FileLock('download.lock'):
-          if '/' in args.checkpoint:
-            # 如果传入的是路径，则尝试直接下载
-            checkpoint_name = args.checkpoint.split('/')[-1]
-            if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
-              logging.info('downling checkpoint...')
-              logging.info(args.checkpoint)              
-              file_client_get(args.checkpoint, './checkpoint')
-            args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
-          else:
-            # 尝试从实验存储目录中，加载
-            if os.path.exists('./.project.json'):
-              with open('./.project.json', 'r') as fp:
-                project_info = json.load(fp)
+          checkpoint_name = args.checkpoint.split('/')[-1]
+          if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
+            logging.info('downling checkpoint...')
+            logging.info(args.checkpoint)              
+            file_client_get(args.checkpoint, './checkpoint')
+          args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
 
-            checkpoint_name = args.checkpoint
-            if args.exp in project_info['exp']:
-              found_exp_related_info_list = []
-              for exp_info in project_info['exp'][args.exp]:
-                if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
-                  found_exp_related_info_list.append(
-                    exp_info
-                  )
-
-              found_exp_info = None
-              if len(found_exp_related_info_list) > 0:
-                found_exp_info = found_exp_related_info_list[-1]
-
-              if found_exp_info is not None:
-                found_exp_root = found_exp_info['root']
-                if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
-                  logging.info('downling checkpoint...')
-                  logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
-                  file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
-
-                args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
-
+      # checkpoint（可能具体路径存储在日志平台，需要实际运行时获取具体路径并下载）
       logging.info(f'use checkpoint {args.checkpoint}')
-      if not os.path.exists(args.checkpoint):
-        logging.error(f'Dont exist {args.checkpoint}, exit.')
-        return
 
     if args.resume_from != '':
       if not os.path.exists(args.resume_from):
@@ -912,7 +1087,7 @@ def main():
                 {
                   'checkpoint': args.checkpoint,
                   'time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time())),
-                  'metric': metric_info['metric']
+                  'metric': metric_info
                 }
               )
               break

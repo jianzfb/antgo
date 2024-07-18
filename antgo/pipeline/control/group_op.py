@@ -28,6 +28,7 @@ class Group(object):
         inner_data_dict = {}
         for input_output_info, func_op in zip(self.relation, self.func_list):
             input_info, output_info = input_output_info
+            func_op._index = input_info if isinstance(input_info, tuple) else (input_info,)
             input_data_list = []
             if isinstance(input_info, tuple):
                 for input_tag in input_info:

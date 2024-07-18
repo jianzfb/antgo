@@ -8,10 +8,12 @@ from torch.utils.data import DataLoader
 
 from antgo.framework.helper.fileio import FileClient
 from antgo.framework.helper.utils import is_seq_of
+import antvis.client.mlogger as mlogger
 import json
 import os
 from .hook import Hook
 from .logger import LoggerHook
+from ..dist_utils import master_only
 
 
 class EvalHook(Hook):
@@ -152,6 +154,9 @@ class EvalHook(Hook):
         self.out_dir = out_dir
         self.file_client_args = file_client_args
         self.metric_func = metric
+        self.is_ready = False
+        self.canvas = None
+        self.elements_in_canvas = []
 
     def _init_rule(self, rule, key_indicator):
         """Initialize rule, key_indicator, comparison_func, and best score.
@@ -208,11 +213,18 @@ class EvalHook(Hook):
             self.out_dir = runner.work_dir
 
         # 存储控制对象
-        self.file_client = FileClient.infer_client(self.file_client_args,
-                                                   self.out_dir)
+        self.file_client = FileClient.infer_client(self.file_client_args, self.out_dir)
         # 添加固定路径格式
         self.out_dir = osp.join(self.out_dir, 'output', 'metric')
-        
+
+        rank, _ = get_dist_info()
+        if rank == 0:
+            if mlogger.is_ready():
+                # 日志平台是否具备条件
+                self.is_ready = True
+                # 创建图表容器
+                self.canvas = mlogger.Container()
+
         if self.save_best is not None:
             if runner.meta is None:
                 warnings.warn('runner.meta is None. Creating an empty one.')
@@ -268,7 +280,7 @@ class EvalHook(Hook):
         key_score, metric_info = self.evaluate(runner, results)
         # the key_score may be `None` so it needs to skip the action to save
         # the best checkpoint
-        
+
         if self.save_best and key_score:
             self._save_ckpt(runner, key_score)
             self._save_metric(runner, metric_info)
@@ -362,6 +374,7 @@ class EvalHook(Hook):
                 f'Best {self.key_indicator} is {best_score:0.4f} '
                 f'at {cur_time} {cur_type}.')
 
+    @master_only
     def evaluate(self, runner, results):
         """Evaluate the results.
 
@@ -386,8 +399,17 @@ class EvalHook(Hook):
 
             eval_res = self.metric_func(results, gts)
 
-        for name, val in eval_res.items():
+        for metric_i, (name, val) in enumerate(eval_res.items()):
+            # metric name / metric value
             runner.log_buffer.output[name] = val
+
+            # 日志平台
+            if self.is_ready:
+                if f'metric_{metric_i}' not in self.elements_in_canvas:
+                    setattr(self.canvas, f'metric_{metric_i}', mlogger.complex.Line(plot_title=name, is_series=True))
+                    self.elements_in_canvas.append(f'metric_{metric_i}')
+                getattr(self.canvas, f'metric_{metric_i}').update(val)
+
         runner.log_buffer.ready = True
 
         if self.save_best is not None:
