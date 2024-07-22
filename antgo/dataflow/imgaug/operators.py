@@ -184,7 +184,7 @@ class Meta(BaseOperator):
 
 
 class ConvertRandomObjJointsAndOffset(BaseOperator):
-    def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.1, center_factor=0.25, rot_factor=30, skeleton=[], with_random=True, inputs=None):
+    def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.1, center_factor=0.25, rot_factor=30, skeleton=[], with_random=True, use_bbox=False,inputs=None):
         super().__init__(inputs=inputs)
         self.input_size = input_size
         self._heatmap_size = heatmap_size
@@ -196,6 +196,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         self._feat_stride = np.array(self.input_size) / np.array(self._heatmap_size) 
         self._sigma = sigma
         self.skeleton = skeleton
+        self.use_bbox = use_bbox
 
     def extend_bbox(self, bbox, image_shape=None):
         x1, y1, x2, y2 = bbox
@@ -229,7 +230,7 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
 
         return offset_x, offset_y, weight
 
-    def _target_generator(self, joints_25d, num_joints, _feat_stride):
+    def _target_generator(self, joints_25d, num_joints, _feat_stride, jonits_vis):
         # print(np.max(joints_3d))
         target_weight = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
         target = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
@@ -239,6 +240,8 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         tmp_size = self._sigma * 2  # self._sigma * 4
 
         for i in range(num_joints):
+            if jonits_vis[i,0] == 0:
+                continue
             mu_x = int(joints_25d[i, 0] / _feat_stride[0] + 0.5)
             mu_y = int(joints_25d[i, 1] / _feat_stride[1] + 0.5)
             fmu_x = joints_25d[i, 0] / _feat_stride[0]
@@ -363,17 +366,33 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             joints2d = joints2d[obj_i]
             joints_vis = joints_vis[obj_i]
 
-            if 'bboxes' in sample and len(sample['bboxes']) > 0:
+            if 'bboxes' in sample and len(sample['bboxes']) > 0 and self.use_bbox:
                 bbox = sample['bboxes'][obj_i]
             else:
-                x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
-                bbox = [x1, y1, x2, y2]
+                valid_index_0 = joints2d[:, 0] > 0
+                valid_index_1 = joints2d[:, 1] > 0
+                valid_index = valid_index_0 * valid_index_1
+                if np.max(valid_index) != True:
+                    # 没有有效关键点，使用默认bbox
+                    # 放心设置，由于joints2d是无效坐标，所以target为0
+                    bbox = [0,0,10,10]
+                else:
+                    x1, y1, x2, y2 = [joints2d[valid_index, 0].min(), joints2d[valid_index, 1].min(), joints2d[valid_index, 0].max(), joints2d[valid_index, 1].max()]
+                    bbox = [x1-10, y1-10, x2+10, y2+10]
         else:
-            if 'bboxes' in sample and len(sample['bboxes']) > 0:
+            if 'bboxes' in sample and len(sample['bboxes']) > 0 and self.use_bbox:
                 bbox = sample['bboxes']
             else:
-                x1, y1, x2, y2 = [joints2d[:, 0].min(), joints2d[:, 1].min(), joints2d[:, 0].max(), joints2d[:, 1].max()]
-                bbox = [x1, y1, x2, y2]
+                valid_index_0 = joints2d[:, 0] > 0
+                valid_index_1 = joints2d[:, 1] > 0
+                valid_index = valid_index_0 * valid_index_1    
+                if np.max(valid_index) != True:
+                    # 没有有效关键点，使用默认bbox
+                    # 放心设置，由于joints2d是无效坐标，所以target为0
+                    bbox = [0,0,10,10]
+                else:
+                    x1, y1, x2, y2 = [joints2d[valid_index, 0].min(), joints2d[valid_index, 1].min(), joints2d[valid_index, 0].max(), joints2d[valid_index, 1].max()]
+                    bbox = [x1-10, y1-10, x2+10, y2+10]
 
         xmin, ymin, xmax, ymax = bbox
         center, scale = self._box_to_center_scale(xmin, ymin, xmax - xmin, ymax - ymin, 1.0)
@@ -426,15 +445,14 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
 
         # 转换监督目标
         target, offset_x, offset_y, target_weight = \
-            self._target_generator(joints2d, self.num_joints, self._feat_stride)
+            self._target_generator(joints2d, self.num_joints, self._feat_stride, joints_vis)
 
         # for joint_i, (x,y) in enumerate(joints2d):
         #     x, y = int(x), int(y)
-        #     if joints_vis[joint_i]:
-        #         cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
-        #         cv2.putText(image, f'{joint_i}', (x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,255), 1)
+        #     cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
+        #     cv2.putText(image, f'{joint_i}', (x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,255), 1)
         # for s,e in self.skeleton:
-        #     if joints_vis[s] and joints_vis[e]:
+        #     if joints_vis[s,0] and joints_vis[e,0]:
         #         start_x,start_y = joints2d[s]
         #         end_x, end_y = joints2d[e]
         #         if start_x < 0 or end_x < 0:
