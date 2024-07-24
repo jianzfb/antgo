@@ -1,4 +1,4 @@
-# -*- coding: UTF-8 -*-
+antgo/pipeline/functional/mixins/deploy.py# -*- coding: UTF-8 -*-
 # @Time    : 2022/9/12 21:56
 # @File    : deploy.py
 # @Author  : jian<jian@mltalker.com>
@@ -31,7 +31,7 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
     root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder, 'snpe-2.9.0.4462')):
-        os.system(f'cd {root_folder} ; wget http://files.mltalker.com/snpe-2.9.0.4462.zip ; unzip snpe-2.9.0.4462.zip')
+        os.system(f'cd {root_folder} ; wget http://files.vibstring.com/snpe-2.9.0.4462.zip ; unzip snpe-2.9.0.4462.zip')
     snpe_path = os.path.join(root_folder, 'snpe-2.9.0.4462')
 
     # step2: 推送依赖库到包位置
@@ -97,8 +97,9 @@ def tnn_import_config(output_folder, project_name, platform, abi, device=''):
 def rknn_import_config(output_folder, project_name, platform, abi, device='rk3588'):
     # step1: 下载rknn库，并解压到固定为止
     root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
+    root_folder = os.path.join(root_folder, 'rk')
     os.makedirs(root_folder, exist_ok=True)
-    if not os.path.exists(os.path.join(root_folder, 'rknpu2')):
+    if not os.path.exists(os.path.join(root_folder,'rknpu2')):
         os.system(f'cd {root_folder} ; git clone https://github.com/rockchip-linux/rknpu2.git')
     rknn_path = os.path.join(root_folder, 'rknpu2')
 
@@ -168,7 +169,7 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')):
         print('download cudnn')
         if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')):
-            os.system(f'cd {root_folder} ; wget http://files.mltalker.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+            os.system(f'cd {root_folder} ; wget http://files.vibstring.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
         else:
             os.system(f'cd {root_folder} ; tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
 
@@ -178,7 +179,7 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6')):
         print('download tensorrt')
         if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')):
-            os.system(f'cd {root_folder} ; wget http://files.mltalker.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+            os.system(f'cd {root_folder} ; wget http://files.vibstring.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
         else:
             os.system(f'cd {root_folder} ; tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
         
@@ -1490,8 +1491,8 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     output_names = []
     output_shapes = []
     output_types = []
-    model_folder = f'/sdcard/{project_name}/.model/' if (platform == 'android' or (platform == 'linux' and abi == 'arm64')) else './models/'          # 考虑将转好的模型放置的位置
-    writable_path = f'/sdcard/{project_name}/.tmp/' if (platform == 'android' or (platform == 'linux' and abi == 'arm64')) else './models/'           # 考虑到 设备可写权限位置(android)
+    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else './models/'          # 考虑将转好的模型放置的位置
+    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else './models/'           # 考虑到 设备可写权限位置(android)
 
     # 更新setup.sh（仅设备端运行时需要添加推送模型代码）
     if platform.lower() == 'android':
@@ -2326,7 +2327,7 @@ class DeployMixin:
             if project_config.get('git', None) is not None and project_config['git'] != '':
                 os.system(f'cd {output_folder} ; git clone {project_config["git"]}')
             else:
-                os.system(f'cd {output_folder} ; eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform} --eagleeye={eagleeye_path}')
+                os.system(f'cd {output_folder} ; eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform if abi_platform != "arm64" else "arm64-v8a"} --platform={system_platform} --eagleeye={eagleeye_path}')
 
             # 删除现存plugin_code.cpp
             if os.path.exists(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp')):
