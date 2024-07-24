@@ -1452,17 +1452,17 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
         platform_model_path = op_kwargs.get('onnx_path')
 
     # 将平台关联模型放入输出目录中
-    os.makedirs(os.path.join(output_folder, 'model'), exist_ok=True)
+    os.makedirs(os.path.join(output_folder, 'models'), exist_ok=True)
     if os.path.exists(platform_model_path):
-        os.makedirs(os.path.join(output_folder, 'model'), exist_ok=True)
-        shutil.copyfile(platform_model_path, os.path.join(output_folder, 'model', os.path.basename(platform_model_path)))
+        os.makedirs(os.path.join(output_folder, 'models'), exist_ok=True)
+        shutil.copyfile(platform_model_path, os.path.join(output_folder, 'models', os.path.basename(platform_model_path)))
         if '.tnnproto' in  platform_model_path:
             another_model_path = platform_model_path.replace('.tnnproto', '.tnnmodel')
-            shutil.copyfile(another_model_path, os.path.join(output_folder, 'model', os.path.basename(another_model_path)))
+            shutil.copyfile(another_model_path, os.path.join(output_folder, 'models', os.path.basename(another_model_path)))
 
         if '.tnnmodel' in platform_model_path:
             another_model_path = platform_model_path.replace('.tnnmodel', '.tnnproto')
-            shutil.copyfile(another_model_path, os.path.join(output_folder, 'model', os.path.basename(another_model_path)))
+            shutil.copyfile(another_model_path, os.path.join(output_folder, 'models', os.path.basename(another_model_path)))
 
     # 2.step 参数转换及代码生成
     config_func_map = {
@@ -1490,8 +1490,8 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     output_names = []
     output_shapes = []
     output_types = []
-    model_folder = f'/sdcard/{project_name}/.model/' if (platform == 'android' or (platform == 'linux' and abi == 'arm64')) else os.path.dirname(op_kwargs['onnx_path'])          # 考虑将转好的模型放置的位置
-    writable_path = f'/sdcard/{project_name}/.tmp/' if (platform == 'android' or (platform == 'linux' and abi == 'arm64')) else os.path.dirname(op_kwargs['onnx_path'])           # 考虑到 设备可写权限位置(android)
+    model_folder = f'/sdcard/{project_name}/.model/' if (platform == 'android' or (platform == 'linux' and abi == 'arm64')) else './models/'          # 考虑将转好的模型放置的位置
+    writable_path = f'/sdcard/{project_name}/.tmp/' if (platform == 'android' or (platform == 'linux' and abi == 'arm64')) else './models/'           # 考虑到 设备可写权限位置(android)
 
     # 更新setup.sh（仅设备端运行时需要添加推送模型代码）
     if platform.lower() == 'android':
@@ -2137,7 +2137,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         if platform.lower() == 'android':
             os.system(f'cd {output_folder} ; bash {platform}_build.sh')
         elif platform.lower().startswith('linux') and 'arm64' in abi.lower():
-            os.system(f'cd {output_folder} ; bash {platform}_arm64_build.sh')
+            os.system(f'cd {output_folder} ; bash {platform}_arm64_v8a_build.sh')
         else:
             os.system(f'cd {output_folder} ; bash {platform}_x86_64_build.sh')
 
@@ -2197,7 +2197,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         # 检测需要的第三方依赖，并准备环境
         for compile_prop_key, compile_prop_val in eagleeye_config.items():
             if compile_prop_key == 'rk':
-                if compile_prop_val != '':
+                if compile_prop_val is not None and compile_prop_val != '':
                     print('Exist rk dependent, dont need download and compile')
                     continue
 
@@ -2219,14 +2219,14 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     os.system(f"cd {rk_root_folder}; git clone https://github.com/rockchip-linux/mpp.git &&  cd mpp/build/linux/aarch64 && sed -i 's/aarch64-linux-gnu-gcc/\/usr\/bin\/gcc/g' arm.linux.cross.cmake && sed -i 's/aarch64-linux-gnu-g++/\/usr\/bin\/g++/g' arm.linux.cross.cmake && bash make-Makefiles.bash && make -j 6 ")
                 eagleeye_config[compile_prop_key] = rk_root_folder
             elif compile_prop_key == 'ffmpeg':
-                if compile_prop_val != '':
+                if compile_prop_val is not None and compile_prop_val != '':
                     print('Exist ffmpeg dependent, dont need download and compile')
                     continue
 
                 # 需要修改源码（libavformat/rtsp.h, libavformat/rtspcodes.h）
                 root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
                 os.makedirs(root_folder, exist_ok=True)
-                if os.path.exists(os.path.join(root_folder, 'ffmpeg')):
+                if os.path.exists(os.path.join(root_folder, 'ffmpeg')) and (os.path.exists(os.path.join(root_folder, 'ffmpeg', f'{abi_platform.lower()}-install'))):
                     print('Exist ffmpeg dependent, dont need download and compile')
                     eagleeye_config[compile_prop_key] = os.path.join(root_folder, 'ffmpeg')
                     continue
@@ -2241,16 +2241,16 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/libavformat/')
                     os.system('apt-get -y install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
-                    # 安装到./install目录
-                    os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./install --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
+                    # 安装到./linux-install目录
+                    os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./linux-install --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}'
                 elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
                     # 默认FFMPEG
                     os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/libavformat/')
-                    # 安装到./install目录
-                    os.system(f'./configure --prefix=./install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --pkg-config="pkg-config --static" && make clean && make -j 6 && make install')
+                    # 安装到./linux-install目录
+                    os.system(f'./configure --prefix=./linux-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --pkg-config="pkg-config --static" && make clean && make -j 6 && make install')
                 elif system_platform.lower().startswith('android'):
                     os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
                     # 修改部分源码
@@ -2264,7 +2264,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     CXX=f'{TOOLCHAIN}/bin/aarch64-linux-android{API}-clang++'
                     SYSROOT=f'{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
                     CROSS_PREFIX=f'{TOOLCHAIN}/bin/aarch64-linux-android-'
-                    os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
+                    os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./android-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}'
             elif compile_prop_key == 'grpc':
                 # 提供网络服务
@@ -2289,8 +2289,10 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 if compile_prop_key == 'app':
                     compile_param_suffix += ' app'
                 else:
-                    compile_param_suffix += f' {compile_prop_val}'
                     compile_script_prefix += f'_{compile_prop_key}'
+                    if compile_prop_val is None:
+                        continue
+                    compile_param_suffix += f' {compile_prop_val}'
 
         compile_script = f'{compile_script_prefix}.sh'
         if compile_param_suffix != '':
@@ -2324,7 +2326,7 @@ class DeployMixin:
             if project_config.get('git', None) is not None and project_config['git'] != '':
                 os.system(f'cd {output_folder} ; git clone {project_config["git"]}')
             else:
-                os.system(f'cd {output_folder} ; eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform.capitalize() if system_platform != "android" else abi_platform} --eagleeye={eagleeye_path}')
+                os.system(f'cd {output_folder} ; eagleeye-cli project --project={project_name} --version={project_config.get("version", "1.0.0.0")} --signature=xxxxx --build_type=Release --abi={abi_platform} --eagleeye={eagleeye_path}')
 
             # 删除现存plugin_code.cpp
             if os.path.exists(os.path.join(output_folder, f'{project_name}_plugin', f'{project_name}_plugin.cpp')):
