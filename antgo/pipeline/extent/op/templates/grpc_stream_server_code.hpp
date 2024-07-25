@@ -12,6 +12,8 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "eagleeye/common/CJsonObject.hpp"
+#include "eagleeye/common/base64.h"
+#include "opencv2/opencv.hpp"
 
 
 using namespace grpc;
@@ -82,49 +84,26 @@ public:
     ::grpc::Status ${servername}Message(::grpc::ServerContext* context, const ::${package}::${servername}MessageRequest* request, ::grpc::ServerWriter< ::${package}::${servername}MessageReply>* writer){
         std::string server_key = request->serverkey();
         std::string server_request = request->serverrequest();
-
-        // TODO, 解析服务请求，并处理输入数据
-        // image -> base64解码 -> opencv read -> memory
-        // matrix/float -> memory
-        // matrix/int32 -> memory
-        if(server_request != ""){
-            neb::CJsonObject server_request_obj(server_request);
-            neb::CJsonObject data_info;
-            server_request_obj.Get("data", data_info);
-            for(int data_i=0; data_i<data_info.GetArraySize(); ++data_i){
-                neb::CJsonObject data_cfg;
-                data_info.Get(data_i, data_cfg);
-                std::string data_type = "";
-                data_cfg.Get("type", data_type);
-
-                if(data_type == "image"){
-                    // step 1: base64 解码
-
-                    // step 2: imread
-                }
-                else if(data_type == "matrix/float"){
-                    // TODO, 即将支持
-                }
-                else if(data_type == "matrix/int32"){
-                    // TODO, 即将支持
-                }
-            }
+        neb::CJsonObject server_request_obj(server_request);
+        int timeout = -1;
+        if(!(server_request_obj.Get("timeout", timeout))){
+            // 默认 -1
+            timeout = -1;
         }
 
-
-        bool is_pipeline_stop = false;
         while(1){
             std::string server_reply;
-            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, "", server_reply, 5);
-            // TODO, 区分超时结束，还是管线停止结束
-            if(result == eagleeye::SERVER_TIMEOUT){
-                continue;
-            }
+            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, "", server_reply, timeout);
 
             ${servername}MessageReply reply;
             reply.set_code(0);
             reply.set_data(server_reply);
             writer->Write(reply);
+
+            if(result == eagleeye::SERVER_TIMEOUT){
+                reply.set_code(1);
+                break;
+            }
         }
 
         return Status::OK;

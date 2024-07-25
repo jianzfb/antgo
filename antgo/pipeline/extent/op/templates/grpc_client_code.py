@@ -1,13 +1,15 @@
-from __future__ import print_function
+antgo/pipelinefrom __future__ import print_function
 
 import logging, sys
 sys.path.insert(0, './proto')
 import grpc
 import ${project}_pb2_grpc
 import ${project}_pb2
+import argparse
 
-def run():
-	with grpc.insecure_channel('127.0.0.1:PORT') as channel:
+
+def run(port):
+	with grpc.insecure_channel(f'127.0.0.1:{port}') as channel:
 		stup = ${project}_pb2_grpc.${servername}Stub(channel)
         
 		response = stup.${servername}Start(${project}_pb2.${servername}StartRequest(serverpipeline="",serverid="", servercfg=""))
@@ -18,5 +20,7 @@ def run():
 
 
 if __name__ == '__main__':
-	logging.basicConfig()
-	run()
+    parser = argparse.ArgumentParser(description='grpc')
+    parser.add_argument('--port', default=9002, type=int, help ='port')
+    args = parser.parse_args()
+    run(args.port)

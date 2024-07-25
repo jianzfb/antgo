@@ -2426,7 +2426,7 @@ class DeployMixin:
                         for line in code_line_list:
                             fp.write(line)
 
-                # 创建grpc服务和启动代码
+                # 创建grpc服务代码
                 if not os.path.exists(os.path.join(output_folder, f'grpc_server.hpp')):
                     grpc_server_code_template_file = './templates/grpc_server_code.hpp'
                     if is_callback_mode:
@@ -2438,26 +2438,6 @@ class DeployMixin:
                     )
                     with open(os.path.join(output_folder, 'grpc_server.hpp'), 'w') as fp:
                         fp.write(grpc_server_code_content)
-
-                    grpc_main_code_content = gen_code('./templates/grpc_main_code.cpp')(
-                        servername=f'{project_name.lower().capitalize()}Grpc',
-                        plugin_root='./plugins/',
-                        plugin_names=pipeline_name
-                    )
-                    with open(os.path.join(output_folder, f'{project_name}_demo.cpp'), 'w') as fp:
-                        fp.write(grpc_main_code_content)
-
-                # 创建grpc客户端python代码(用于测试)
-                if not os.path.exists(os.path.join(output_folder, f'grpc_client.py')):
-                    grpc_client_code_template_file = './templates/grpc_client_code.py'
-                    if is_callback_mode:
-                        grpc_client_code_template_file = './templates/grpc_stream_client_code.py'
-                    grpc_client_code_content = gen_code(grpc_client_code_template_file)(
-                        project=f'{project_name.lower()}',
-                        servername=f'{project_name.lower().capitalize()}Grpc'
-                    )
-                    with open(os.path.join(output_folder, 'grpc_client.py'), 'w') as fp:
-                        fp.write(grpc_client_code_content)
 
                 # 创建管线服务默认配置文件
                 os.makedirs(os.path.join(output_folder, 'config'), exist_ok=True)
@@ -2477,6 +2457,27 @@ class DeployMixin:
                 with open(os.path.join(output_folder, 'config', 'plugin_config.json'), 'w') as fp:
                     json.dump(plugin_config_info, fp)
 
+                # 创建grpc服务启动代码
+                grpc_main_code_content = gen_code('./templates/grpc_main_code.cpp')(
+                    servername=f'{project_name.lower().capitalize()}Grpc',
+                    plugin_root='./plugins/',
+                    plugin_names=','.join([f'\"{n}\"' for n in plugin_config_info.keys()])
+                )
+                with open(os.path.join(output_folder, f'{project_name}_demo.cpp'), 'w') as fp:
+                    fp.write(grpc_main_code_content)
+
+                # 创建grpc客户端python代码(用于测试)
+                if not os.path.exists(os.path.join(output_folder, f'grpc_client.py')):
+                    grpc_client_code_template_file = './templates/grpc_client_code.py'
+                    if is_callback_mode:
+                        grpc_client_code_template_file = './templates/grpc_stream_client_code.py'
+                    grpc_client_code_content = gen_code(grpc_client_code_template_file)(
+                        project=f'{project_name.lower()}',
+                        servername=f'{project_name.lower().capitalize()}Grpc'
+                    )
+                    with open(os.path.join(output_folder, 'grpc_client.py'), 'w') as fp:
+                        fp.write(grpc_client_code_content)
+
                 # 创建插件目录
                 code_snippet_list = []
                 with open(os.path.join(output_folder, 'setup.sh'), 'r') as fp:
@@ -2487,8 +2488,14 @@ class DeployMixin:
 
                 bin_folder = os.path.join('./', "bin", abi_platform if abi_platform != 'arm64' else 'arm64-v8a')
                 plugin_folder = os.path.join('./', "bin", abi_platform if abi_platform != 'arm64' else 'arm64-v8a', 'plugins', project_name)
-                code_snippet_list.append(f'mkdir -p {plugin_folder}\n')
-                code_snippet_list.append(f'mv {bin_folder}/lib{project_name}.so {plugin_folder}/\n')
+                is_exist = False
+                for exist_code_snippet in code_snippet_list:
+                    if exist_code_snippet == f'mv {bin_folder}/lib{project_name}.so {plugin_folder}/\n':
+                        is_exist = True
+                        break
+                if not is_exist:
+                    code_snippet_list.append(f'mkdir -p {plugin_folder}\n')
+                    code_snippet_list.append(f'mv {bin_folder}/lib{project_name}.so {plugin_folder}/\n')
                 with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
                     for code_snippet in code_snippet_list:
                         fp.write(f'{code_snippet}')
