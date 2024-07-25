@@ -9,9 +9,13 @@ int main(int argc, char** argv){
     std::stringstream ss(argv[1]);
     int port = 0;
 	ss>>port;
+    if(port <= 0){
+        std::cout<<"port not valid"<<std::endl;
+        return -1;
+    }
 
     // 初始化插件系统
-    eagleeye::eagleeye_pipeline_server_init("${plugin_root}");
+    eagleeye::eagleeye_pipeline_server_init("${plugin_root}", std::vector<std::string>{"${plugin_names}"});
 
     // 初始化服务
     std::string server_address = "0.0.0.0:"+std::to_string(port);

@@ -81,6 +81,36 @@ public:
     }
     ::grpc::Status ${servername}Message(::grpc::ServerContext* context, const ::${package}::${servername}MessageRequest* request, ::grpc::ServerWriter< ::${package}::${servername}MessageReply>* writer){
         std::string server_key = request->serverkey();
+        std::string server_request = request->serverrequest();
+
+        // TODO, 解析服务请求，并处理输入数据
+        // image -> base64解码 -> opencv read -> memory
+        // matrix/float -> memory
+        // matrix/int32 -> memory
+        if(server_request != ""){
+            neb::CJsonObject server_request_obj(server_request);
+            neb::CJsonObject data_info;
+            server_request_obj.Get("data", data_info);
+            for(int data_i=0; data_i<data_info.GetArraySize(); ++data_i){
+                neb::CJsonObject data_cfg;
+                data_info.Get(data_i, data_cfg);
+                std::string data_type = "";
+                data_cfg.Get("type", data_type);
+
+                if(data_type == "image"){
+                    // step 1: base64 解码
+
+                    // step 2: imread
+                }
+                else if(data_type == "matrix/float"){
+                    // TODO, 即将支持
+                }
+                else if(data_type == "matrix/int32"){
+                    // TODO, 即将支持
+                }
+            }
+        }
+
 
         bool is_pipeline_stop = false;
         while(1){

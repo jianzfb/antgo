@@ -2346,7 +2346,7 @@ class DeployMixin:
             # 创建配置文件（管线初始化默认文件）
             os.makedirs(os.path.join(output_folder, 'config'), exist_ok=True)
             config_folder = os.path.join(output_folder, 'config')
-            is_callback_mode = True
+            is_callback_mode = False
             if 'config' in project_config:
                 config_info = project_config['config']
                 ''' format
@@ -2355,8 +2355,8 @@ class DeployMixin:
                         'data_source': [{"type": "camera", "address": "", "format": "RGB/BGR", "mode": "NETWORK/USB/ANDROID_NATIVE/V4L2", "flag": "front"}, {"type": "video", "address": "", "format": "RGB/BGR"},...]
                     }
                 '''
-                if 'data_source' not in config_info or len(config_info['data_source']) == 0:
-                    is_callback_mode = False
+                if 'data_source' in config_info and len(config_info['data_source']) > 0:
+                    is_callback_mode = True
 
                 if is_callback_mode:
                     config_info["server_mode"] = "callback"
@@ -2388,7 +2388,7 @@ class DeployMixin:
                     with open(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto'), 'w') as fp:
                         fp.write(grpc_proto_code_content)
 
-                    # 编译proto
+                    # 编译proto(c++, python)
                     if 'tool' not in project_config:
                         project_config['tool'] = {}
                     proto_tool_dir = ''
@@ -2396,9 +2396,18 @@ class DeployMixin:
                         proto_tool_dir = project_config['tool']['proto']
                         if proto_tool_dir.endswith('/'):
                             proto_tool_dir = proto_tool_dir[:-1]
-                    proto_out_dir = os.path.join(output_folder, 'proto')
+                    if proto_tool_dir == '':
+                        print('Dont find proto tool folder.')
+                        return
 
+                    proto_out_dir = os.path.join(output_folder, 'proto')
+                    
+                    # C++ proto
                     proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
+                    os.system(proto_compile_cmd)
+
+                    # python proto
+                    proto_compile_cmd = f'cd {proto_out_dir}; python3 -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. ./{project_name.lower()}.proto'
                     os.system(proto_compile_cmd)
 
                     # 更新CMakeLists
@@ -2432,11 +2441,57 @@ class DeployMixin:
 
                     grpc_main_code_content = gen_code('./templates/grpc_main_code.cpp')(
                         servername=f'{project_name.lower().capitalize()}Grpc',
-                        plugin_root='./plugins/'
+                        plugin_root='./plugins/',
+                        plugin_names=pipeline_name
                     )
                     with open(os.path.join(output_folder, f'{project_name}_demo.cpp'), 'w') as fp:
                         fp.write(grpc_main_code_content)
 
+                # 创建grpc客户端python代码(用于测试)
+                if not os.path.exists(os.path.join(output_folder, f'grpc_client.py')):
+                    grpc_client_code_template_file = './templates/grpc_client_code.py'
+                    if is_callback_mode:
+                        grpc_client_code_template_file = './templates/grpc_stream_client_code.py'
+                    grpc_client_code_content = gen_code(grpc_client_code_template_file)(
+                        project=f'{project_name.lower()}',
+                        servername=f'{project_name.lower().capitalize()}Grpc'
+                    )
+                    with open(os.path.join(output_folder, 'grpc_client.py'), 'w') as fp:
+                        fp.write(grpc_client_code_content)
+
+                # 创建管线服务默认配置文件
+                os.makedirs(os.path.join(output_folder, 'config'), exist_ok=True)
+                plugin_config_info = {}
+                if os.path.exists(os.path.join(output_folder, 'config', 'plugin_config.json')):
+                    with open(os.path.join(output_folder, 'config', 'plugin_config.json'), 'r') as fp:
+                        plugin_config_info = json.load(fp)
+                
+                if pipeline_name not in plugin_config_info:
+                    plugin_config_info[pipeline_name] = {}
+                plugin_config_info[pipeline_name].update(
+                    {
+                        "pipeline_name": pipeline_name
+                    }
+                )
+
+                with open(os.path.join(output_folder, 'config', 'plugin_config.json'), 'w') as fp:
+                    json.dump(plugin_config_info, fp)
+
+                # 创建插件目录
+                code_snippet_list = []
+                with open(os.path.join(output_folder, 'setup.sh'), 'r') as fp:
+                    c = fp.readline()
+                    while c:
+                        code_snippet_list.append(c)
+                        c = fp.readline()
+
+                bin_folder = os.path.join('./', "bin", abi_platform if abi_platform != 'arm64' else 'arm64-v8a')
+                plugin_folder = os.path.join('./', "bin", abi_platform if abi_platform != 'arm64' else 'arm64-v8a', 'plugins', project_name)
+                code_snippet_list.append(f'mkdir -p {plugin_folder}\n')
+                code_snippet_list.append(f'mv {bin_folder}/lib{project_name}.so {plugin_folder}/\n')
+                with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
+                    for code_snippet in code_snippet_list:
+                        fp.write(f'{code_snippet}')
                 enable_project_mode = True
 
             if 'app' == project_config['mode']:

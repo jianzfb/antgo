@@ -28,6 +28,7 @@ message ${servername}StartReply {
 
 message ${servername}MessageRequest{
   string serverkey = 1;                 // 服务关键字
+  string serverrequest = 2;             // 服务请求
 }
 
 message ${servername}MessageReply{
