@@ -8,8 +8,8 @@ import ${project}_pb2
 import argparse
 
 
-def run(port):
-	with grpc.insecure_channel(f'127.0.0.1:{port}') as channel:
+def run(ip, port):
+	with grpc.insecure_channel(f'{ip}:{port}') as channel:
 		stup = ${project}_pb2_grpc.${servername}Stub(channel)
         
 		response = stup.${servername}Start(${project}_pb2.${servername}StartRequest(serverpipeline="",serverid="", servercfg=""))
@@ -21,6 +21,7 @@ def run(port):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='grpc')
+    parser.add_argument('--ip', default="127.0.0.1", type=str, help ='ip')
     parser.add_argument('--port', default=9002, type=int, help ='port')
     args = parser.parse_args()
-    run(args.port)
+    run(args.ip, args.port)

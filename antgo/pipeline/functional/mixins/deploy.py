@@ -1380,7 +1380,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         converted_model_file = file_name
                         break
 
-                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/snpe/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]} ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
             else:
                 # 转浮点模型
@@ -1395,7 +1395,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         converted_model_file = file_name
                         break
 
-                os.system(f'cp -r /tmp/onnx/snpe/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/snpe/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]} ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
         elif platform_engine == 'rknn':
             if platform_engine_args.get('quantize', False):
@@ -1416,7 +1416,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         converted_model_file = file_name
                         break
 
-                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
             else:
                 # 转浮点模型
@@ -1433,7 +1433,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         converted_model_file = file_name
                         break
                 
-                os.system(f'cp -r /tmp/onnx/rknn/* {onnx_dir_path} ; rm -rf /tmp/onnx/')
+                os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
         elif platform_engine == 'tnn':
             os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
@@ -2116,7 +2116,8 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
 
     project_config.update({
         'graph': graph_config,
-        'platform': platform
+        'platform': platform,
+        'abi': abi if abi !='arm64' else 'arm64-v8a'
     })
     if mode is not None:
         project_config.update({

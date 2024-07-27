@@ -1,0 +1,18 @@
+FROM registry.cn-hangzhou.aliyuncs.com/vibstring/linuxx86-base:latest
+
+ADD . /workspace/project/
+
+# eagleeye 环境更新
+RUN cd /root/.3rd && rm -rf eagleeye && git clone -b {{version}} https://github.com/jianzfb/eagleeye.git && cd eagleeye && bash linux_{{eagleeye_compile_suffix}}.sh
+
+# 项目编译项目
+RUN cd /workspace/project/deploy/{{project}}_plugin/ && bash linux_{{project_compile_suffix}}_build.sh && bash setup.sh && cp -r bin/{{abi}}/* ../package/
+
+# 创建并设置工作目录
+WORKDIR /workspace/project/deploy/package/
+
+# 设置环境变量
+ENV PATH="/workspace/project:${PATH}"
+
+# 设置启动命令
+ENTRYPOINT ["bash", "server-launch.sh", "{{server_port}}"]

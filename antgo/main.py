@@ -277,8 +277,20 @@ def main():
       with open('./server_config.json', 'w') as fp:
         json.dump(server_config_info, fp)      
     elif args.mode == 'grpc':
-      # 管线由C++代码构建
-      logging.error("grpc support in comming.")
+      # step 1: 管线由C++代码构建，打包所有依赖
+      import antgo.pipeline
+      antgo.pipeline.pipeline_cplusplus_package(args.name)
+
+      # step 2: 构建镜像，构建Dockerfile
+      antgo.pipeline_build_image(
+        args.name, 
+        version=args.version, 
+        port=args.port,
+        image_repo=args.image_repo,
+        image_version=args.image_version,
+        user=args.user,
+        password=args.password,
+      )
       return
     elif args.mode in['android/sdk', 'linux/sdk', 'windows/sdk']:
       # 管线由C++代码构建
