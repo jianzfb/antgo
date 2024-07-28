@@ -4,16 +4,16 @@ then
 fi
 
 # compile
-echo "start compile X86-64"
+echo "start compile ${abival}"
 mkdir -p build
 cd build
 if [[ $1 == BUILD_PYTHON_MODULE ]];then
-cmake -DCMAKE_BUILD_TYPE=Release -DX86_ABI=X86-64 -DBUILD_PYTHON_MODULE:BOOL=ON ..
+cmake -DCMAKE_BUILD_TYPE=Release -D${abikey}=${abival} -DBUILD_PYTHON_MODULE:BOOL=ON ..
 else
-cmake -DCMAKE_BUILD_TYPE=Release -DX86_ABI=X86-64 ..
+cmake -DCMAKE_BUILD_TYPE=Release -D${abikey}=${abival} ..
 
 fi
 make
 cd ../
 
-echo "finish compile X86-64"
+echo "finish compile ${abival}"

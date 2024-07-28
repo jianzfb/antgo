@@ -8,4 +8,4 @@ else
     rm {{image}}.tar
 fi
 docker stop {{name}}
-docker run --name {{name}} --rm -d --shm-size="50G" -w /workspace --gpus "device={{gpu_id}}" -p {{outer_port}}:{{inner_port}} --privileged {{image}}
+docker run --name {{name}} --rm -d --shm-size="50G" -w {{workspace}} --gpus "device={{gpu_id}}" -p {{outer_port}}:{{inner_port}} --privileged {{image}}

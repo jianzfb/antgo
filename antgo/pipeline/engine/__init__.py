@@ -51,7 +51,7 @@ class GroupDef(object):
         os.makedirs(ANTGO_DEPEND_ROOT, exist_ok=True)
         if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', 'py')):
             if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')):
-                os.system('cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
+                os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
 
             if 'darwin' in sys.platform:
                 os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && mv install py')
@@ -63,7 +63,7 @@ class GroupDef(object):
                 if first_comiple:
                     # 增加搜索.so路径
                     cur_abs_path = os.path.abspath(os.curdir)
-                    so_abs_path = os.path.join(cur_abs_path, f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64")
+                    so_abs_path = os.path.join(cur_abs_path, f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64")
                     os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
         
         op_cls_gen = None

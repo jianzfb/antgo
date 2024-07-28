@@ -12,6 +12,8 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/health_check_service_interface.h>
 #include "eagleeye/common/CJsonObject.hpp"
+#include "eagleeye/common/base64.h"
+#include "opencv2/opencv.hpp"
 
 
 using namespace grpc;
@@ -81,20 +83,27 @@ public:
     }
     ::grpc::Status ${servername}Message(::grpc::ServerContext* context, const ::${package}::${servername}MessageRequest* request, ::grpc::ServerWriter< ::${package}::${servername}MessageReply>* writer){
         std::string server_key = request->serverkey();
+        std::string server_request = request->serverrequest();
+        neb::CJsonObject server_request_obj(server_request);
+        int timeout = -1;
+        if(!(server_request_obj.Get("timeout", timeout))){
+            // 默认 -1
+            timeout = -1;
+        }
 
-        bool is_pipeline_stop = false;
         while(1){
             std::string server_reply;
-            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, "", server_reply, 5);
-            // TODO, 区分超时结束，还是管线停止结束
-            if(result == eagleeye::SERVER_TIMEOUT){
-                continue;
-            }
+            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, "", server_reply, timeout);
 
             ${servername}MessageReply reply;
             reply.set_code(0);
             reply.set_data(server_reply);
             writer->Write(reply);
+
+            if(result == eagleeye::SERVER_TIMEOUT){
+                reply.set_code(1);
+                break;
+            }
         }
 
         return Status::OK;
