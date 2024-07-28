@@ -121,7 +121,7 @@ def get_build_flag_cpu():
         LDFLAGS.add_string(f'-L {opencv_dir}/lib {opencv_libs}')
         
     if config.USING_EAGLEEYE:
-        eagleeye_lib_dir = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-install', 'libs', 'X86-64')
+        eagleeye_lib_dir = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-x86-64-install', 'libs', 'x86-64')
         LDFLAGS.add_string(f'-L {eagleeye_lib_dir} -leagleeye')
         
     return config.CXX, CFLAGS, LDFLAGS
@@ -197,7 +197,7 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
                 os.system(f'cd {src_path} && bash linux_build.sh && mv install {sys.platform}-install')
 
                 # 添加so的搜索路径 (for linux)
-                so_abs_path = os.path.join(install_path, 'libs', 'X86-64')
+                so_abs_path = os.path.join(install_path, 'libs', 'x86-64')
                 os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
 
     # 构建编译信息

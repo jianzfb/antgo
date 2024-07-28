@@ -22,11 +22,11 @@ if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', 'py')):
         if first_comiple:
             # 增加搜索.so路径
             cur_abs_path = os.path.abspath(os.curdir)
-            so_abs_path = os.path.join(cur_abs_path, f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64")
+            so_abs_path = os.path.join(cur_abs_path, f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64")
             os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
 
-if f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64' not in sys.path:
-    sys.path.append(f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64')
+if f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64' not in sys.path:
+    sys.path.append(f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64')
 import eagleeye
 
 # usage:

@@ -31,7 +31,7 @@ class Exe(object):
             project_info = json.load(fp)
         
         # if project_info['platform'] == 'linux':
-        #     self.data_folder = os.path.join(self.folder, 'deploy', f'{self.plugin_name}_plugin', 'bin', 'X86-64')
+        #     self.data_folder = os.path.join(self.folder, 'deploy', f'{self.plugin_name}_plugin', 'bin', 'x86-64')
         self.project_input_info = project_info['input']
         self.project_output_info = project_info['output']
         self.project_graph_info = project_info['graph']
@@ -86,7 +86,7 @@ class Exe(object):
 
         if self.proc is None:
             if self.project_platform_info == "linux":
-                command = f'{self.project_folder}/bin/X86-64/{self.plugin_name}_demo'
+                command = f'{self.project_folder}/bin/x86-64/{self.plugin_name}_demo'
                 self.proc = Popen([command] + ['stdinout'] + run_args, stdin=PIPE, stdout=PIPE, text=False)
             elif self.project_platform_info == "android":
                 command = f'adb shell "cd /data/local/tmp/{self.plugin_name}; export LD_LIBRARY_PATH=.; ./{self.plugin_name}_demo stdinout '+' '.join(run_args)+'"'

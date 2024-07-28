@@ -2,10 +2,13 @@ FROM registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest
 
 COPY ./ /workspace/
 
+# eagleeye 环境更新
+RUN mkdir -p /root/.3rd && cd /root/.3rd && rm -rf eagleeye && git clone https://github.com/jianzfb/eagleeye.git
+
 # antgo 环境
 RUN pip3 install --upgrade --upgrade-strategy=only-if-needed git+https://github.com/jianzfb/antgo.git@{{version}}
 
-# eagleeye 环境
+# eagleeye python 编译
 RUN antgo eagleeye
 
 # 修正环境信息

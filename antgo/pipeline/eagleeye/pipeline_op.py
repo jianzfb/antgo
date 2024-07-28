@@ -17,7 +17,7 @@ class CorePipeline(object):
                     self.plugin_name = subfolder.replace('_plugin', '')
                     break
 
-        so_abs_path = os.path.join(f'./deploy/{self.plugin_name}_plugin', 'bin', 'X86-64')
+        so_abs_path = os.path.join(f'./deploy/{self.plugin_name}_plugin', 'bin', 'x86-64')
         so_abs_path = os.path.abspath(so_abs_path)
         sys.path.append(so_abs_path)
 
