@@ -282,7 +282,7 @@ def main():
       antgo.pipeline.pipeline_cplusplus_package(args.name)
 
       # step 2: 构建镜像，构建Dockerfile
-      antgo.pipeline_build_image(
+      antgo.pipeline.pipeline_build_image(
         args.name, 
         version=args.version, 
         port=args.port,
@@ -359,14 +359,17 @@ def main():
       server_deploy_data = {
         'user': args.user,
         'password': args.password,
-        'image_registry': server_info['image_repo'].split('/')[0] if server_info['image_repo'] != '' else '',
+        'image_registry': server_info['image_repo'].split('/')[0] if server_info['image_repo'] != '' else '\"\"',
         'image': server_info['image_repo'] if server_info['image_repo'] != '' else server_info['name'],
         'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
         'outer_port': args.port,
         'inner_port': server_info['server_port'],
-        'name': server_info['name']
+        'name': server_info['name'],
+        'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/'
       }
       server_deploy_content = server_deploy_template.render(**server_deploy_data)
+
+      print(server_deploy_content)
 
       with tempfile.TemporaryDirectory() as temp_dir:
         with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:

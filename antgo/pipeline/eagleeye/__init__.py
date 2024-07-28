@@ -15,16 +15,16 @@ if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', 'py')):
         first_comiple = False
         if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye','py')):
             first_comiple = True
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && mv install py')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_x86_64_build.sh BUILD_PYTHON_MODULE && mv linux-x86-64-install py')
         if first_comiple:
             # 增加搜索.so路径
             cur_abs_path = os.path.abspath(os.curdir)
-            so_path = f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64"
+            so_path = f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64"
             os.system(f'echo "{so_path}" >> /etc/ld.so.conf')
             so_path = "/usr/lib/x86_64-linux-gnu/"
             os.system(f'echo "{so_path}" >> /etc/ld.so.conf')
             os.system('ldconfig')
 
-if f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64' not in sys.path:
-    sys.path.append(f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/X86-64')
+if f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64' not in sys.path:
+    sys.path.append(f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64')
 import eagleeye

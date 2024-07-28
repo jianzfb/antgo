@@ -18,6 +18,9 @@ import shutil
 import pathlib
 import os
 import json
+import logging
+import time
+
 
 ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
 def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
@@ -169,9 +172,8 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
         fp.write(dockerfile_content)
 
     # 构建镜像
-    os.system(f'docker build -t {project} .')
+    # os.system(f'docker build -t {project} .')
 
-    return
     # 发布镜像
     image_pro = kwargs.get('image_repo', None)
     image_version = kwargs.get('image_version', None)
