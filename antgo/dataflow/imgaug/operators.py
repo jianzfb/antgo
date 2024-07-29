@@ -128,14 +128,7 @@ class DecodeImage(BaseOperator):
         if 'image_meta' not in sample:
             sample['image_meta'] = {}
         sample['image_meta']['image_shape'] = (im.shape[0], im.shape[1])
-            
-        # decode mixup image
-        if self.with_mixup and 'mixup' in sample:
-            self.__call__(sample['mixup'], context)
-
-        # decode cutmix image
-        if self.with_cutmix and 'cutmix' in sample:
-            self.__call__(sample['cutmix'], context)
+        sample['image_meta']['ori_image_shape'] = (im.shape[0], im.shape[1])
 
         # decode semantic label 
         if 'segments' in sample and sample['segments'].size > 0:
@@ -554,6 +547,9 @@ class KeepRatio(BaseOperator):
         rhi, rwi = im.shape[:2]
         height, width = im.shape[:2]
 
+        acc_offset_x = -left
+        acc_offset_y = -top
+
         if 'segments' in sample and sample['segments'].size != 0:
             sample['segments'] = sample['segments'][top:bottom, left:right].copy()
 
@@ -620,6 +616,9 @@ class KeepRatio(BaseOperator):
                     pos_outlie = pos_outlie_x | pos_outlie_y | sample['joints_vis'] == 0
                     sample['joints_vis'][pos_outlie] = 0                    
 
+            acc_offset_x += left_padding
+            acc_offset_y += top_padding
+
         sample['image'] = image_new
         sample['bboxes'] = gt_bbox
         sample['height'] = image_new.shape[0]
@@ -627,6 +626,7 @@ class KeepRatio(BaseOperator):
 
         if 'image_meta' in sample:
             sample['image_meta']['image_shape'] = (image_new.shape[0], image_new.shape[1])
+            sample['image_meta']['offset'] = [acc_offset_x, acc_offset_y] * 2
         return sample
 
     def __call__(self, sample, context=None):
@@ -1899,7 +1899,16 @@ class ResizeS(BaseOperator):
     def __call__(self, sample, context=None):
         w = sample['image'].shape[1]
         h = sample['image'].shape[0]
+        resize_w, resize_h = self.target_dim
+        
         if w == self.target_dim[0] and h == self.target_dim[1]:
+            if 'image_meta' not in sample:
+                sample['image_meta'] = {}
+
+            sample['height'] = resize_h
+            sample['width'] = resize_w
+            sample['image_meta']['image_shape'] = (resize_h, resize_w)
+            sample['image_meta']['scale_factor'] =  [1.0, 1.0] * 2
             return sample
 
         if self.interp == "RANDOM":
@@ -1907,7 +1916,6 @@ class ResizeS(BaseOperator):
         else:
             interp = self.interp
 
-        resize_w, resize_h = self.target_dim
         scale_x = resize_w / w
         scale_y = resize_h / h
         if 'bboxes' in sample and len(sample['bboxes']) > 0:

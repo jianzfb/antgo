@@ -1,4 +1,4 @@
-antgo/pipelinefrom __future__ import print_function
+from __future__ import print_function
 
 import logging, sys
 sys.path.insert(0, './proto')

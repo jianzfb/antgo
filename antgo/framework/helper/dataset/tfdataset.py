@@ -381,6 +381,8 @@ class TFDataset(torch.utils.data.IterableDataset):
                     new_sample[k] = json.loads(sample[k].tobytes().decode('utf-8'))
                 else:
                     new_sample[k] = sample[k]
+
+        raw_ann_info = copy.deepcopy(new_sample)
         sample = new_sample
         weak_sample = None
         strong_sample = None
@@ -417,8 +419,11 @@ class TFDataset(torch.utils.data.IterableDataset):
             for transform in self.pipeline:
                 sample = transform(sample)
 
-            # arange warp       
-            sample = self._arrange(sample, self._fields, self._alias)        
+            # arange warp
+            sample.update({
+                'raw_ann_info': raw_ann_info
+            })
+            sample = self._arrange(sample, self._fields, self._alias)
             return sample
 
     def _from_disk_iter(self):

@@ -10,12 +10,12 @@ if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', 'py')):
         os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
 
     if 'darwin' in sys.platform:
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && mv install py')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE')
     else:
         first_comiple = False
         if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye','py')):
             first_comiple = True
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_x86_64_build.sh BUILD_PYTHON_MODULE && mv linux-x86-64-install py')
+        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_x86_64_build.sh BUILD_PYTHON_MODULE')
         if first_comiple:
             # 增加搜索.so路径
             cur_abs_path = os.path.abspath(os.curdir)
