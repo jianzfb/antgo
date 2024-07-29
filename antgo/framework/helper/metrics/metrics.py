@@ -38,18 +38,19 @@ class COCOWarp(COCO):
 @MEASURES.register_module()
 class COCOCompatibleEval(object):
     def __init__(self, categories, without_background=True, prob_thres=0.1, ignore_category_ids=None):
+        # 在原始图像分辨率下评测指标
         self.categories = categories
         for c in self.categories:
             if 'supercategory' not in c:
                 c['supercategory'] = 'default'
-        
+
         self.without_background = without_background
         self.prob_thres = prob_thres
         self.ignore_category_ids = ignore_category_ids
-    
+
     def keys(self):
         # 约束使用此评估方法，需要具体的关键字信息
-        return {'pred': ['box', 'label'], 'gt': ['image_meta', 'bboxes', 'labels']}
+        return {'pred': ['pred_bboxes', 'pred_labels'], 'gt': ['image_meta', 'raw_ann_info']}
 
     def __call__(self, preds, gts):
         # gts 格式 'info', 'licenses', 'images', 'annotations', 'categories'
@@ -61,18 +62,18 @@ class COCOCompatibleEval(object):
         for image_id, gt in enumerate(gts):
             image_file = gt['image_meta']['image_file'] if 'image_file' in gt['image_meta'] else ''
 
-            bboxes = [[box[0], box[1], box[2]-box[0], box[3]-box[1]] for box in gt['bboxes'].tolist()]
+            bboxes = [[box[0], box[1], box[2]-box[0], box[3]-box[1]] for box in gt['raw_ann_info']['bboxes'].tolist()]
             areas = [box[2]*box[3] for box in bboxes]
-            category_ids = [l for l in gt['labels'].tolist()]
+            category_ids = [l for l in gt['raw_ann_info']['labels'].tolist()]
 
             for _, (bbox, area, category_id) in enumerate(zip(bboxes, areas, category_ids)):
-                if self.without_background:
-                    category_id += 1
-
                 if self.ignore_category_ids is not None:
                     if category_id in self.ignore_category_ids:
                         # ignore category
                         continue
+
+                if self.without_background:
+                    category_id += 1
 
                 annotations.append({
                     "segmentation": [],
@@ -87,8 +88,8 @@ class COCOCompatibleEval(object):
                 bbox_id += 1
 
             images.append({
-                'height': gt['image_meta']['image_shape'][0],
-                'width': gt['image_meta']['image_shape'][1],
+                'height': gt['image_meta']['ori_image_shape'][0],
+                'width': gt['image_meta']['ori_image_shape'][1],
                 'id': image_id+1,
                 'file_name': image_file
             })
@@ -102,9 +103,9 @@ class COCOCompatibleEval(object):
         # 将预测转换为COCO格式
         pred_annotations = []
         for image_id, pred in enumerate(preds):
-            pred_bboxes = pred['box'][:,:4]
-            pred_probs = pred['box'][:,4]
-            pred_labels = pred['label']
+            pred_bboxes = pred['pred_bboxes'][:,:4]
+            pred_probs = pred['pred_bboxes'][:,4]
+            pred_labels = pred['pred_labels']
 
             for _, (pred_bbox, pred_prob, pred_label) in enumerate(zip(pred_bboxes, pred_probs, pred_labels)):
                 if pred_prob < self.prob_thres:
@@ -114,13 +115,13 @@ class COCOCompatibleEval(object):
                 x1, y1, x2, y2 = pred_bbox
                 score = (float)(pred_prob)
                 label = (int)(pred_label)
-                if self.without_background:
-                    label += 1
-
                 if self.ignore_category_ids is not None:
                     if label in self.ignore_category_ids:
                         # ignore category
                         continue
+
+                if self.without_background:
+                    label += 1
 
                 w, h = x2 - x1, y2 - y1
                 pred_dict = {
