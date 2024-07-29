@@ -13,6 +13,7 @@ from antgo.ant.utils import *
 from antgo.ant.client import get_client, launch_server
 from antgo.command import *
 from antgo.framework.helper.tools.util import *
+from antgo.tools.install import *
 from antgo.help import *
 from antgo import config
 from antgo import tools
@@ -98,8 +99,8 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package', 'eagleeye']
-action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric', 'install']
 
 
 def main():
@@ -121,6 +122,24 @@ def main():
     sub_action_name = sys.argv[2]
     sys.argv = [sys.argv[0]] + sys.argv[3:]
   args = parse_args()
+
+  if action_name == 'install':
+    if sub_action_name not in ['eagleeye', 'opencv', 'eigen']:
+      print(f'sorry, {sub_action_name} not support.')
+      return
+    
+    if sub_action_name == 'eagleeye':
+      install_eagleeye()
+      return
+
+    if sub_action_name == 'opencv':
+      install_opencv()
+      return
+
+    if sub_action_name == 'eigen':
+      install_eigen()
+      return
+    return
 
   if args.ip != '':
     args.ssh = True
@@ -177,14 +196,6 @@ def main():
     if args.ip == "":
       args.ip = '0.0.0.0'
     os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
-    return
-
-  # eagleeye 环境准备
-  if action_name == 'eagleeye':
-    try:
-      import antgo.pipeline
-    except:
-      pass
     return
 
   # 镜像打包服务

@@ -31,7 +31,7 @@ def snpe_import_config(output_folder, project_name, platform, abi, device='GPU')
     root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder, 'snpe-2.9.0.4462')):
-        os.system(f'cd {root_folder} ; wget http://files.vibstring.com/snpe-2.9.0.4462.zip ; unzip snpe-2.9.0.4462.zip')
+        os.system(f'cd {root_folder} ; wget http://file.vibstring.com/snpe-2.9.0.4462.zip ; unzip snpe-2.9.0.4462.zip')
     snpe_path = os.path.join(root_folder, 'snpe-2.9.0.4462')
 
     # step2: 推送依赖库到包位置
@@ -169,7 +169,7 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive')):
         print('download cudnn')
         if not os.path.exists(os.path.join(root_folder, 'cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')):
-            os.system(f'cd {root_folder} ; wget http://files.vibstring.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
+            os.system(f'cd {root_folder} ; wget http://file.vibstring.com/cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz && tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
         else:
             os.system(f'cd {root_folder} ; tar -xf cudnn-linux-x86_64-8.8.0.121_cuda12-archive.tar.xz')
 
@@ -179,7 +179,7 @@ def tensorrt_import_config(output_folder, project_name, platform, abi, device=''
     if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6')):
         print('download tensorrt')
         if not os.path.exists(os.path.join(root_folder, 'TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')):
-            os.system(f'cd {root_folder} ; wget http://files.vibstring.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
+            os.system(f'cd {root_folder} ; wget http://file.vibstring.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
         else:
             os.system(f'cd {root_folder} ; tar -xf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz')
         
@@ -2239,22 +2239,22 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     # 默认FFMPEG+CUDA
                     os.system(f'cd {root_folder} ; git clone --recurse-submodules -b sdk/12.0 https://git.videolan.org/git/ffmpeg/nv-codec-headers.git')
                     os.system(f'cd {root_folder}/nv-codec-headers && make && make install && cd -')
-                    os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git')
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/libavformat/')
                     os.system('apt-get -y install build-essential yasm cmake libtool libc6 libc6-dev unzip wget libnuma1 libnuma-dev')
                     # 安装到./linux-install目录
-                    os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./linux-install --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
+                    os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./linux-install --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda-12.1/lib64 --disable-static --enable-shared ; make -j 8 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}'
                 elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
                     # 默认FFMPEG
-                    os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git')
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/libavformat/')
                     # 安装到./linux-install目录
                     os.system(f'./configure --prefix=./linux-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --pkg-config="pkg-config --static" && make clean && make -j 6 && make install')
                 elif system_platform.lower().startswith('android'):
-                    os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git ffmpeg/')
+                    os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git')
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/libavformat/')
                     ARCH='arm64'

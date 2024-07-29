@@ -85,7 +85,7 @@ def get_common_flags():
 
     if config.USING_EAGLEEYE:
         # 使用eagleeye库
-        INC_PATHS.extend([os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-install', 'include')])
+        INC_PATHS.extend([os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-x86-64-install', 'include')])
 
     for path in INC_PATHS:
         p = os.path.join(ENV_PATH, path)
@@ -180,7 +180,7 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
         if not os.path.exists(install_path):
             # 下载源码
             os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://gitlab.com/libeigen/eigen.git -b 3.3')
-    
+
     if config.USING_EAGLEEYE:
         src_path = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')
         if not os.path.exists(src_path):
@@ -188,13 +188,13 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
             os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
 
         # 编译
-        install_path = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-install')
+        install_path = os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', f'{sys.platform}-x86-64-install')
         if not os.path.exists(install_path):
             print('compile eagleeye')
             if 'darwin' in sys.platform:
-                os.system(f'cd {src_path} && bash osx_build.sh && mv install {sys.platform}-install')
+                os.system(f'cd {src_path} && bash osx_build.sh && mv install {sys.platform}-x86-64-install')
             else:
-                os.system(f'cd {src_path} && bash linux_build.sh && mv install {sys.platform}-install')
+                os.system(f'cd {src_path} && bash linux_build.sh && mv install {sys.platform}-x86-64-install')
 
                 # 添加so的搜索路径 (for linux)
                 so_abs_path = os.path.join(install_path, 'libs', 'x86-64')
