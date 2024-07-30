@@ -216,6 +216,9 @@ dc = dynamic_dispatch(_dc)
 def _placeholder(*arg):
   index = param_scope()._index
 
+  # clear grap record info
+  clear_grap_info()
+
   # 
   if isinstance(index, tuple):
     for ii,xx in zip(index, arg):
@@ -276,10 +279,10 @@ def _placeholder(*arg):
       elif isinstance(xx, bool):
         data_shape = []
         data_type = 10
-  
+
       if data_type < 0:
         print('placeholder type abnormal.')
-      
+
       add_op_info(
         'placeholder_op', 
         (None, (ii,)), 

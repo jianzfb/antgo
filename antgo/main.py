@@ -85,6 +85,8 @@ DEFINE_string("tags", None, "tag info")
 DEFINE_string("no-tags", None, "tag info")
 DEFINE_indicator("feedback", True, "")
 DEFINE_indicator("user-input", True, "")
+DEFINE_indicator('ngrok', True, "whether enable network tunnel")
+DEFINE_string("authtoken", "", "3rd platform token")
 DEFINE_int('num', 0, "number")
 DEFINE_indicator("to", True, "")
 DEFINE_indicator("from", True, "")
@@ -124,21 +126,24 @@ def main():
   args = parse_args()
 
   if action_name == 'install':
-    if sub_action_name not in ['eagleeye', 'opencv', 'eigen']:
+    if sub_action_name not in ['eagleeye', 'opencv', 'eigen', 'grpc', 'ffmpeg']:
       print(f'sorry, {sub_action_name} not support.')
       return
     
     if sub_action_name == 'eagleeye':
       install_eagleeye()
-      return
 
     if sub_action_name == 'opencv':
       install_opencv()
-      return
 
     if sub_action_name == 'eigen':
       install_eigen()
-      return
+    
+    if sub_action_name == 'grpc':
+      install_grpc()
+    
+    if sub_action_name == 'ffmpeg':
+      install_ffmpeg()
     return
 
   if args.ip != '':
@@ -195,6 +200,19 @@ def main():
 
     if args.ip == "":
       args.ip = '0.0.0.0'
+    if args.ngrok:
+      if args.authtoken == "":
+        print('Mut set --authtoken')
+        return
+
+      os.system(f'ngrok authtoken {args.authtoken}')
+      from pyngrok import ngrok
+      public_url = ngrok.connect(args.port).public_url
+      print(f'ngrok public url {public_url}')
+
+      os.system(f'NGROK_AUTHTOKEN={args.authtoken} uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+      return
+
     os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
     return
 
@@ -226,7 +244,7 @@ def main():
       launch_tempate =  env.get_template('script/server-launch.sh')
       launch_data = {}      
       launch_data.update({
-        'cmd': f'antgo web --main={args.main}:app --port={args.port}'
+        'cmd': f'antgo web --main={args.main} --port={args.port}'
       })
       launch_content = launch_tempate.render(**launch_data)
       with open('./launch.sh', 'w') as fp:
