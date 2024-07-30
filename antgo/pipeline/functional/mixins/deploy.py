@@ -1614,7 +1614,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     core_op_set = load_eagleeye_op_set(eagleeye_path)
 
     # 获得计算图配置信息
-    graph_config = copy.deepcopy(get_graph_info()['op'])
+    graph_config = get_graph_info()['op']
     circle_node_list = []
 
     # 准备算子函数代码
@@ -1870,9 +1870,6 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                     'name': op_unique_name,
                     'index': out_i
                 }
-
-    # clear global graph config
-    get_graph_info()['op'].clear()
 
     # 准备插件文件代码
     # 包括任务管线建立, nano算子图，任务输入信号设置，任务输出信号设置
