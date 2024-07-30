@@ -205,6 +205,7 @@ def main():
         print('Mut set --authtoken')
         return
 
+      os.system(f'ngrok authtoken {args.authtoken}')
       from pyngrok import ngrok
       public_url = ngrok.connect(args.port).public_url
       print(f'ngrok public url {public_url}')
