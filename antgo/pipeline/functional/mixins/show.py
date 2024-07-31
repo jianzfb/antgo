@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.interactcontext import *
 from antgo.pipeline.hparam import param_scope
+from antgo.utils import *
 import subprocess
 
 
@@ -44,11 +45,10 @@ class ShowMixin:
       os.system('apt install ffmpeg')
 
     # step 2: 检查是否有推流服务器是否启动
-    ret = subprocess.Popen(f'docker inspect rtsp-server', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ret = subprocess.Popen(f'{"docker" if not is_in_colab() else "udocker --allow-root"} inspect rtsp-server', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     response = ret.stdout.read().decode('utf-8')
     if '[]\n' in response:
-      # os.system(f'docker run -d --rm -it -e MTX_PROTOCOLS=tcp -e MTX_WEBRTCADDITIONALHOSTS={rtsp_ip} -p {rtsp_port}:8554 -p 1935:1935 -p 8888:8888 -p 8889:8889 -p 8890:8890/udp -p 8189:8189/udp --name rtsp-server bluenviron/mediamtx')
-      os.system('docker run -d --rm -it --name rtsp-server --network=host bluenviron/mediamtx:latest')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} run -d --rm -it --name rtsp-server --network=host bluenviron/mediamtx:latest')
 
     # step 3: 运行推流
     pipe = None

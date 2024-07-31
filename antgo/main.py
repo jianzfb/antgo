@@ -9,6 +9,7 @@ import sys
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
+from antgo.utils import *
 from antgo.ant.utils import *
 from antgo.ant.client import get_client, launch_server
 from antgo.command import *
@@ -255,7 +256,7 @@ def main():
         logging.error('Must set server image name. (--name=xxx)')
         return
       logging.info(f'Build docker image {args.name} (Server: {args.mode})')
-      os.system(f'docker build -t {args.name} ./')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {args.name} ./')
 
       # step 3: 发布镜像
       if args.image_repo is None or args.user is None or args.password is None:
@@ -283,9 +284,9 @@ def main():
 
       logging.info(f'Push image {args.name} to image repo {args.image_repo}:{args.image_version}')
       # 需要手动添加密码
-      os.system(f'docker login --username={args.user} --password={args.password} {args.image_repo.split("/")[0]}')
-      os.system(f'docker tag {args.name}:latest {args.image_repo}:{args.image_version}')
-      os.system(f'docker push {args.image_repo}:{args.image_version}')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} login --username={args.user} --password={args.password} {args.image_repo.split("/")[0]}')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} tag {args.name}:latest {args.image_repo}:{args.image_version}')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} push {args.image_repo}:{args.image_version}')
 
       image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
       server_config_info = {
@@ -378,7 +379,7 @@ def main():
 
       if server_info['image_repo'] == '':
         # 将镜像本地打包，并传到目标机器
-        os.system(f'docker save -o {server_info["name"]}.tar {server_info["name"]}')
+        os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} save -o {server_info["name"]}.tar {server_info["name"]}')
         os.system(f'scp {server_info["name"]}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
         os.system(f'rm {server_info["name"]}.tar')
 

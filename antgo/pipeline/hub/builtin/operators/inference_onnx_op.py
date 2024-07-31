@@ -9,6 +9,7 @@ from __future__ import print_function
 from antgo.pipeline.engine import *
 from antgo.pipeline.models.utils.utils import *
 from antgo.interactcontext import InteractContext
+from antgo.utils import *
 import torch
 import numpy as np
 import onnx
@@ -153,7 +154,7 @@ class inference_onnx_op(object):
                 onnx_dir_path = os.path.dirname(self.onnx_path)
                 mean_values = ','.join([str(v) for v in self.mean_val])
                 std_values = ','.join([str(v) for v in self.std_val])
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
@@ -169,7 +170,7 @@ class inference_onnx_op(object):
                 onnx_dir_path = os.path.dirname(self.onnx_path)
                 mean_values = ','.join([str(v) for v in  self.mean_val])
                 std_values = ','.join([str(v) for v in  self.std_val])
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
@@ -187,7 +188,7 @@ class inference_onnx_op(object):
 
                 prefix = os.path.basename(self.onnx_path)[:-5]
                 onnx_dir_path = os.path.dirname(self.onnx_path)
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
@@ -201,7 +202,7 @@ class inference_onnx_op(object):
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
@@ -213,7 +214,7 @@ class inference_onnx_op(object):
             os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {self.onnx_path} /tmp/onnx/')                 
             prefix = os.path.basename(self.onnx_path)[:-5]
             onnx_dir_path = os.path.dirname(self.onnx_path)
-            os.system(f'cd /tmp/onnx/ ; docker run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+            os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
             converted_model_file = []
             for file_name in os.listdir('/tmp/onnx/tnn/'):
                 if file_name[0] != '.' and '.tnnproto' in file_name:

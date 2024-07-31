@@ -8,6 +8,7 @@ from antgo.framework.helper.utils.config import Config
 from antgo.framework.helper.runner.builder import *
 from antgo.framework.helper.models.builder import *
 from antgo.framework.helper.dataset import build_dataset
+from antgo.utils import *
 import numpy as np
 import cv2
 from thop import profile
@@ -133,13 +134,13 @@ class Exporter(object):
                     os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
                     shutil.copytree(os.path.join(self.work_dir, 'calibration-images'), '/tmp/onnx/calibration-images')
 
-                    os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --image-folder=./calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --image-folder=./calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
                     os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
                 else:
                     # fp16
                     onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
                     os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
-                    os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={target_device} --mean-values={mean_values} --std-values={std_values}')
                     os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
             elif target_engine == 'snpe':
                 if self.cfg.export.deploy.quantize:
@@ -163,13 +164,13 @@ class Exporter(object):
                     # npu
                     onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
                     os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
-                    os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
                     os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} ; rm -rf /tmp/onnx/')
                 else:
                     # other 
                     onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
                     os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')                    
-                    os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
                     os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} ; rm -rf /tmp/onnx/')
             elif target_engine == 'tensorrt':
                 if self.cfg.export.deploy.quantize:
@@ -193,17 +194,17 @@ class Exporter(object):
                     # int8
                     onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
                     os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tensorrt ; cp {onnx_file_path} /tmp/onnx/')                    
-                    os.system(f'cd /tmp/onnx/ ; docker run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix} --quantize --data-folder=calibration-images')
+                    os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix} --quantize --data-folder=calibration-images')
                     os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} ; rm -rf /tmp/onnx/')
                 else:
                     # fp16
                     onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
                     os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tensorrt ; cp {onnx_file_path} /tmp/onnx/')                      
-                    os.system(f'cd /tmp/onnx/ ; docker run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix}')
+                    os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix}')
                     os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} ; rm -rf /tmp/onnx/')
             elif target_engine == 'tnn':
                 print('Only use tnn for mobile gpu/cpu deploy')
                 onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
                 os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
-                os.system(f'cd /tmp/onnx/ ; docker run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+                os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
                 os.system(f'cp -r /tmp/onnx/tnn/* {self.work_dir} ; rm -rf /tmp/onnx/')

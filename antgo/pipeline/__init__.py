@@ -12,6 +12,8 @@ from antgo.pipeline.extent import op
 from antgo.pipeline.extent.glue.common import *
 from antgo.pipeline.engine import *
 from antgo.pipeline.eagleeye import *
+from antgo.utils import *
+
 from jinja2 import Environment, FileSystemLoader
 import numpy as np
 import shutil
@@ -172,7 +174,7 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
         fp.write(dockerfile_content)
 
     # 构建镜像
-    # os.system(f'docker build -t {project} .')
+    os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {project} .')
 
     # 发布镜像
     image_pro = kwargs.get('image_repo', None)
@@ -205,9 +207,9 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
 
     logging.info(f'Push image {project} to image repo {image_pro}:{image_version}')
     # 需要手动添加密码
-    os.system(f'docker login --username={user} --password={password} {image_repo.split("/")[0]}')
-    os.system(f'docker tag {project}:latest {image_repo}:{image_version}')
-    os.system(f'docker push {image_repo}:{image_version}')
+    os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} login --username={user} --password={password} {image_repo.split("/")[0]}')
+    os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} tag {project}:latest {image_repo}:{image_version}')
+    os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} push {image_repo}:{image_version}')
 
     image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
     server_config_info = {
