@@ -8,6 +8,8 @@ ${include_list}
 #include "${project}_plugin.h"
 #include "eagleeye/processnode/NNNode.h"
 #include "eagleeye/framework/pipeline/DynamicPipelineCreater.h"
+#include "eagleeye/processnode/LambdaNode.h"
+#include "eagleeye/framework/pipeline/JsonSignal.h"
 // >>>>>>>>>>>>>>>>>>>>>>AUTOGENERATE PLUGIN HEADER>>>>>>>>>>>>>>>>>>>>>>
 
 // DEVELOPER WRITE HEADER HERE
