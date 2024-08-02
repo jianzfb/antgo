@@ -9,7 +9,7 @@ from .bricks import (ACTIVATION_LAYERS, CONV_LAYERS, NORM_LAYERS,
                      NonLocal1d, NonLocal2d, NonLocal3d, Scale, Swish,
                      build_activation_layer, build_conv_layer,
                      build_norm_layer, build_padding_layer, build_plugin_layer,
-                     build_upsample_layer, conv_ws_2d, is_norm)
+                     build_upsample_layer, conv_ws_2d, is_norm, SELayer)
 from .builder import MODELS, build_model_from_cfg
 # yapf: enable
 from .resnet import ResNet, make_res_layer
@@ -36,5 +36,5 @@ __all__ = [
     'ConvTranspose2d', 'MaxPool2d', 'ConvTranspose3d', 'MaxPool3d', 'Conv3d',
     'initialize', 'INITIALIZERS', 'ConstantInit', 'XavierInit', 'NormalInit',
     'TruncNormalInit', 'UniformInit', 'KaimingInit', 'PretrainedInit',
-    'Caffe2XavierInit', 'MODELS', 'build_model_from_cfg'
+    'Caffe2XavierInit', 'MODELS', 'build_model_from_cfg', 'SELayer'
 ]
