@@ -83,128 +83,129 @@ class Exporter(object):
                 output_names = output_name_list,
                 dynamic_axes=dynamic_axes
         )
+        if self.cfg.export.get('deploy', None) is None:
+            return
 
         # 基于目标引擎，转换onnx模型
-        if self.cfg.export.get('deploy', None):
-            # deploy=dict(
-            #     engine='rknn',      # rknn,snpe,tensorrt,tnn
-            #     device='rk3568',    # rk3568/rk3588,qualcomm,nvidia,mobile
-            #     preprocess=dict(
-            #         mean_values='0,0,0',        # mean values
-            #         std_values='255,255,255'    # std values
-            #     ),
-            #     quantize=False,                 # is quantize
-            #     calibration=dict(...)           # calibration dataset config
-            # )
-            target_engine = self.cfg.export.deploy.engine  # rknn,snpe,tensorrt,tnn
+        # deploy=dict(
+        #     engine='rknn',      # rknn,snpe,tensorrt,tnn
+        #     device='rk3568',    # rk3568/rk3588,qualcomm,nvidia,mobile
+        #     preprocess=dict(
+        #         mean_values='0,0,0',        # mean values
+        #         std_values='255,255,255'    # std values
+        #     ),
+        #     quantize=False,                 # is quantize
+        #     calibration=dict(...)           # calibration dataset config
+        # )
+        target_engine = self.cfg.export.deploy.engine  # rknn,snpe,tensorrt,tnn
 
-            if target_engine == 'rknn':
-                target_device = self.cfg.export.deploy.device  # rk3568/rk3588
-                mean_values = self.cfg.export.deploy.preprocess.mean_values        # 0,0,0
-                std_values = self.cfg.export.deploy.preprocess.std_values          # 255,255,255
-                if isinstance(mean_values, list) or isinstance(mean_values, tuple):
-                    mean_values = ','.join(f'{value}' for value in mean_values)
-                if isinstance(std_values, list) or isinstance(std_values, tuple):
-                    std_values = ','.join(f'{value}' for value in std_values)
-                print(f'using mean_values {mean_values}, std_values {std_values}')
-                if self.cfg.export.deploy.get('quantize', False):
-                    # int8
-                    # 生成校准数据
-                    if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
-                        dataset = build_dataset(self.cfg.export.deploy.calibration)
-                        os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
-
-                        count = 0
-                        for sample in dataset:
-                            image = sample['image']
-                            
-                            if not isinstance(image, np.ndarray) or len(image.shape) != 3 or image.shape[-1] != 3 or image.dtype != np.uint8:
-                                print('calibration data not correct.')
-                                return 
-
-                            cv2.imwrite(os.path.join(self.work_dir, 'calibration-images', f'{count}.png'), image)
-                            count += 1
-
-                            if self.cfg.export.deploy.get('calibration_size', -1) > 0:
-                                if count > self.cfg.export.deploy.calibration_size:
-                                    break
-
-                    # 开始转模型
-                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
-                    os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
-                    shutil.copytree(os.path.join(self.work_dir, 'calibration-images'), '/tmp/onnx/calibration-images')
-
-                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --image-folder=./calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
-                    os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
-                else:
-                    # fp16
-                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
-                    os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
-                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={target_device} --mean-values={mean_values} --std-values={std_values}')
-                    os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
-            elif target_engine == 'snpe':
-                if self.cfg.export.deploy.quantize:
-                    # 生成校准数据
+        if target_engine == 'rknn':
+            target_device = self.cfg.export.deploy.device  # rk3568/rk3588
+            mean_values = self.cfg.export.deploy.preprocess.mean_values        # 0,0,0
+            std_values = self.cfg.export.deploy.preprocess.std_values          # 255,255,255
+            if isinstance(mean_values, list) or isinstance(mean_values, tuple):
+                mean_values = ','.join(f'{value}' for value in mean_values)
+            if isinstance(std_values, list) or isinstance(std_values, tuple):
+                std_values = ','.join(f'{value}' for value in std_values)
+            print(f'using mean_values {mean_values}, std_values {std_values}')
+            if self.cfg.export.deploy.get('quantize', False):
+                # int8
+                # 生成校准数据
+                if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
                     dataset = build_dataset(self.cfg.export.deploy.calibration)
-                    if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
-                        os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
+                    os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
 
                     count = 0
                     for sample in dataset:
                         image = sample['image']
                         
-                        # 注意这里需要保证image已经是减过均值，除过方差的
-                        if image.dtype != np.float32:
-                            print('For snpe int8 deploy. calibration data must be float32 (finish preprocess)')
-                            return
+                        if not isinstance(image, np.ndarray) or len(image.shape) != 3 or image.shape[-1] != 3 or image.dtype != np.uint8:
+                            print('calibration data not correct.')
+                            return 
 
-                        np.save(os.path.join(self.work_dir, 'calibration-images', f'{count}.npy'), image)
+                        cv2.imwrite(os.path.join(self.work_dir, 'calibration-images', f'{count}.png'), image)
                         count += 1
 
-                    # npu
-                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
-                    os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
-                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
-                    os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} ; rm -rf /tmp/onnx/')
-                else:
-                    # other 
-                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
-                    os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')                    
-                    os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
-                    os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} ; rm -rf /tmp/onnx/')
-            elif target_engine == 'tensorrt':
-                if self.cfg.export.deploy.quantize:
-                    # 生成校准数据
-                    dataset = build_dataset(self.cfg.export.deploy.calibration)
-                    if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
-                        os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
+                        if self.cfg.export.deploy.get('calibration_size', -1) > 0:
+                            if count > self.cfg.export.deploy.calibration_size:
+                                break
 
-                    count = 0
-                    for sample in dataset:
-                        image = sample['image']
-                        
-                        # 注意这里需要保证image已经是减过均值，除过方差的
-                        if image.dtype != np.float32:
-                            print('For snpe int8 deploy. calibration data must be float32 (finish preprocess)')
-                            return
-
-                        np.save(os.path.join(self.work_dir, 'calibration-images', f'{count}.npy'), image)
-                        count += 1
-
-                    # int8
-                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
-                    os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tensorrt ; cp {onnx_file_path} /tmp/onnx/')                    
-                    os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix} --quantize --data-folder=calibration-images')
-                    os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} ; rm -rf /tmp/onnx/')
-                else:
-                    # fp16
-                    onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
-                    os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tensorrt ; cp {onnx_file_path} /tmp/onnx/')                      
-                    os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix}')
-                    os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} ; rm -rf /tmp/onnx/')
-            elif target_engine == 'tnn':
-                print('Only use tnn for mobile gpu/cpu deploy')
+                # 开始转模型
                 onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
-                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
-                os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
-                os.system(f'cp -r /tmp/onnx/tnn/* {self.work_dir} ; rm -rf /tmp/onnx/')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
+                shutil.copytree(os.path.join(self.work_dir, 'calibration-images'), '/tmp/onnx/calibration-images')
+
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --image-folder=./calibration-images --quantize --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
+            else:
+                # fp16
+                onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={target_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cp -r /tmp/onnx/rknn/* {self.work_dir} ; rm -rf /tmp/onnx/')
+        elif target_engine == 'snpe':
+            if self.cfg.export.deploy.quantize:
+                # 生成校准数据
+                dataset = build_dataset(self.cfg.export.deploy.calibration)
+                if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
+                    os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
+
+                count = 0
+                for sample in dataset:
+                    image = sample['image']
+                    
+                    # 注意这里需要保证image已经是减过均值，除过方差的
+                    if image.dtype != np.float32:
+                        print('For snpe int8 deploy. calibration data must be float32 (finish preprocess)')
+                        return
+
+                    np.save(os.path.join(self.work_dir, 'calibration-images', f'{count}.npy'), image)
+                    count += 1
+
+                # npu
+                onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} ; rm -rf /tmp/onnx/')
+            else:
+                # other 
+                onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')                    
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                os.system(f'cp -r /tmp/onnx/snpe/* {self.work_dir} ; rm -rf /tmp/onnx/')
+        elif target_engine == 'tensorrt':
+            if self.cfg.export.deploy.quantize:
+                # 生成校准数据
+                dataset = build_dataset(self.cfg.export.deploy.calibration)
+                if not os.path.exists(os.path.join(self.work_dir, 'calibration-images')):
+                    os.makedirs(os.path.join(self.work_dir, 'calibration-images'))
+
+                count = 0
+                for sample in dataset:
+                    image = sample['image']
+                    
+                    # 注意这里需要保证image已经是减过均值，除过方差的
+                    if image.dtype != np.float32:
+                        print('For snpe int8 deploy. calibration data must be float32 (finish preprocess)')
+                        return
+
+                    np.save(os.path.join(self.work_dir, 'calibration-images', f'{count}.npy'), image)
+                    count += 1
+
+                # int8
+                onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tensorrt ; cp {onnx_file_path} /tmp/onnx/')                    
+                os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix} --quantize --data-folder=calibration-images')
+                os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} ; rm -rf /tmp/onnx/')
+            else:
+                # fp16
+                onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+                os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tensorrt ; cp {onnx_file_path} /tmp/onnx/')                      
+                os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace --gpus all tensorrtconvert bash convert.sh --i={prefix}.onnx --o=./tensorrt/{prefix}')
+                os.system(f'cp -r /tmp/onnx/tensorrt/* {self.work_dir} ; rm -rf /tmp/onnx/')
+        elif target_engine == 'tnn':
+            print('Only use tnn for mobile gpu/cpu deploy')
+            onnx_file_path = os.path.join(self.work_dir, f'{prefix}.onnx')
+            os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
+            os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+            os.system(f'cp -r /tmp/onnx/tnn/* {self.work_dir} ; rm -rf /tmp/onnx/')

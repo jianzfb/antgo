@@ -10,7 +10,7 @@ from antgo.script.base import *
 
 
 # 提交任务运行
-def custom_submit_process_func(project_name, sys_argv, gpu_num, cpu_num, memory_size, task_name=None):   
+def custom_submit_process_func(sys_argv, gpu_num, cpu_num, memory_size, task_name=None):   
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # step1: 加载配置文件
     submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', 'submit-config.yaml')    
