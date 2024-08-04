@@ -197,7 +197,7 @@ class Trainer(BaseTrainer):
                 return
 
             # 创建实验
-            project = self.cfg.get('project_name', os.path.abspath(os.path.curdir).split('/')[-1])
+            project = self.cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
             experiment = cfg.filename.split('/')[-1].split('.')[0]
             mlogger.config(project, experiment, token=token, auto_suffix=True, server="BASELINE")
 
