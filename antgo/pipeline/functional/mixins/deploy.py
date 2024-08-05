@@ -2348,9 +2348,15 @@ class DeployMixin:
             # 创建配置文件（管线初始化默认文件）
             os.makedirs(os.path.join(output_folder, 'config'), exist_ok=True)
             config_folder = os.path.join(output_folder, 'config')
-            is_callback_mode = False
+
+            has_auto_data_source = False
+            call_mode = project_config.get('call', 'sync')      # 调用模式 sync/asyn
+            config_info = {
+                "pipeline_name": pipeline_name,
+                'server_mode': call_mode
+            }
             if 'config' in project_config:
-                config_info = project_config['config']
+                config_info.update(project_config['config'])
                 ''' format
                     {
                         'server_params': [{"node": "node_name", "name": "param_name", "value": "param_value", "type": "string"/"float"/"double"/"int"/"bool"}],
@@ -2358,19 +2364,23 @@ class DeployMixin:
                     }
                 '''
                 if 'data_source' in config_info and len(config_info['data_source']) > 0:
-                    is_callback_mode = True
+                    has_auto_data_source = True
 
-                if is_callback_mode:
+                if has_auto_data_source:
+                    # 重制，如果拥有闭环数据源，则自动设置为回调模式
                     config_info["server_mode"] = "callback"
-                config_info["pipeline_name"] = pipeline_name
-                old_config_info = {}
-                if os.path.exists(os.path.join(config_folder, 'plugin_config.json')):
-                    with open(os.path.join(config_folder, 'plugin_config.json'), 'r') as fp:
-                        old_config_info = json.load(fp)
+                    call_mode = 'callback'
+                else:
+                    config_info["server_mode"] = call_mode
 
-                old_config_info[pipeline_name] = config_info
-                with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
-                    json.dump(old_config_info,fp)
+            old_config_info = {}
+            if os.path.exists(os.path.join(config_folder, 'plugin_config.json')):
+                with open(os.path.join(config_folder, 'plugin_config.json'), 'r') as fp:
+                    old_config_info = json.load(fp)
+
+            old_config_info[pipeline_name] = config_info
+            with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
+                json.dump(old_config_info,fp)
 
             if 'server' == project_config['mode']:
                 if system_platform != 'linux':
@@ -2381,8 +2391,11 @@ class DeployMixin:
                 os.makedirs(os.path.join(output_folder, 'proto'),exist_ok=True)
                 if not os.path.exists(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto')):
                     proto_code_template_file = f'./templates/grpc_proto_code.proto'
-                    if is_callback_mode:
+                    if call_mode == 'callback':
                         proto_code_template_file = f'./templates/grpc_stream_proto_code.proto'
+                    elif call_mode == 'asyn':
+                        proto_code_template_file = f'./templates/grpc_asyn_proto_code.proto'
+
                     grpc_proto_code_content = gen_code(proto_code_template_file)(
                         package=f'{project_name.lower()}grpc',
                         servername=f'{project_name.lower().capitalize()}Grpc'
@@ -2431,8 +2444,11 @@ class DeployMixin:
                 # 创建grpc服务代码
                 if not os.path.exists(os.path.join(output_folder, f'grpc_server.hpp')):
                     grpc_server_code_template_file = './templates/grpc_server_code.hpp'
-                    if is_callback_mode:
+                    if call_mode == 'callback':
                         grpc_server_code_template_file = './templates/grpc_stream_server_code.hpp'
+                    elif call_mode == 'asyn':
+                        grpc_server_code_template_file = './templates/grpc_asyn_server_code.hpp'
+
                     grpc_server_code_content = gen_code(grpc_server_code_template_file)(
                         project=f'{project_name.lower()}',
                         package=f'{project_name.lower()}grpc',
@@ -2471,8 +2487,9 @@ class DeployMixin:
                 # 创建grpc客户端python代码(用于测试)
                 if not os.path.exists(os.path.join(output_folder, f'grpc_client.py')):
                     grpc_client_code_template_file = './templates/grpc_client_code.py'
-                    if is_callback_mode:
+                    if call_mode == 'callback' or call_mode == 'asyn':
                         grpc_client_code_template_file = './templates/grpc_stream_client_code.py'
+
                     grpc_client_code_content = gen_code(grpc_client_code_template_file)(
                         project=f'{project_name.lower()}',
                         servername=f'{project_name.lower().capitalize()}Grpc'

@@ -1,0 +1,60 @@
+
+syntax = "proto3";
+
+
+package ${package};
+
+// The service definition.
+service ${servername} {
+  rpc ${servername}Start (${servername}StartRequest) returns (${servername}StartReply) {}
+
+  rpc ${servername}Stop (${servername}StopRequest) returns (${servername}StopReply) {}
+
+  rpc ${servername}Push(${servername}PushRequest) returns (${servername}PushReply) {}
+
+  rpc ${servername}Message(${servername}MessageRequest) returns (stream ${servername}MessageReply) {}
+}
+
+message ${servername}StartRequest {
+  string serverpipeline = 1;            // 服务管线
+  string serverid = 2;                  // 唯一ID
+  string servercfg = 3;                 // 服务配置
+}
+
+
+message ${servername}StartReply {
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string serverkey = 3;                 // 服务关键字  
+}
+
+message ${servername}PushRequest{
+  string serverkey = 1;                 // 服务关键字
+  string serverrequest = 2;             // 服务请求
+}
+
+message ${servername}PushReply{
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string data = 3;                      // 里面是json 见json配置文件
+}
+
+message ${servername}MessageRequest{
+  string serverkey = 1;                 // 服务关键字
+  string serverrequest = 2;             // 服务请求
+}
+
+message ${servername}MessageReply{
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string data = 3;                      // 里面是json 见json配置文件
+}
+
+message ${servername}StopRequest {
+    string serverkey = 1;               // 服务关键字
+}
+
+message ${servername}StopReply {
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+}
