@@ -2409,27 +2409,33 @@ class DeployMixin:
                     # 编译proto(c++, python)
                     if 'tool' not in project_config:
                         project_config['tool'] = {}
-                    proto_tool_dir = ''
+                    proto_tool_dir = None
                     if 'proto' in project_config['tool']:
                         proto_tool_dir = project_config['tool']['proto']
                         if proto_tool_dir.endswith('/'):
                             proto_tool_dir = proto_tool_dir[:-1]
-                    if proto_tool_dir == '':
-                        print('Dont find proto tool folder.')
-                        return
-
                     proto_out_dir = os.path.join(output_folder, 'proto')
-                    
+
                     # C++ proto
-                    proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
-                    os.system(proto_compile_cmd)
+                    if proto_tool_dir is not None:
+                        # 非系统目录，用户指定目录
+                        proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
+                        os.system(proto_compile_cmd)
+                    else:
+                        # 系统目录
+                        proto_compile_cmd = f'cd {proto_out_dir}; protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc=/usr/local/bin/grpc_cpp_plugin {project_name.lower()}.proto'
+                        os.system(proto_compile_cmd)
 
                     # python proto
                     proto_compile_cmd = f'cd {proto_out_dir}; python3 -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. ./{project_name.lower()}.proto'
                     os.system(proto_compile_cmd)
 
                     # 更新CMakeLists
-                    grpc_include = f'set(CMAKE_PREFIX_PATH "{proto_tool_dir}")\ninclude(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
+                    if proto_tool_dir is not None:
+                        grpc_include = f'include(./cmake/grpc.cmake)\ninclude_directories("/usr/local/include")\ninclude_directories("./proto")\n'
+                    else:
+                         grpc_include = f'include(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
+
                     code_line_list = []
                     for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
                         if len(code_line_list) > 0 and code_line_list[-1].strip() == '# grpc code' and line == '\n':
