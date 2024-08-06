@@ -2351,6 +2351,9 @@ class DeployMixin:
 
             has_auto_data_source = False
             call_mode = project_config.get('call', 'sync')      # 调用模式 sync/asyn
+            if call_mode not in ['sync', 'asyn']:
+                print('call must be sync/asyn')
+                return
             config_info = {
                 "pipeline_name": pipeline_name,
                 'server_mode': call_mode
