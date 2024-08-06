@@ -29,7 +29,8 @@ from .operators import (
   FixedCrop,
   CorrectBoxes,
   RandomBlur,
-  YoloBboxFormat)
+  YoloBboxFormat,
+  CoarseDropout)
 
 from .converting import (
   KeypointConverter,
@@ -65,5 +66,6 @@ __all__ = [
   'RandomBlur',
   'KeypointConverter',
   'KeynameConvert',
-  'YoloBboxFormat'
+  'YoloBboxFormat',
+  'CoarseDropout'
 ]
