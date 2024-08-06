@@ -2416,6 +2416,7 @@ class DeployMixin:
                             proto_tool_dir = proto_tool_dir[:-1]
                     proto_out_dir = os.path.join(output_folder, 'proto')
 
+                    print(f'proto_tool_dir {proto_tool_dir}')
                     # C++ proto
                     if proto_tool_dir is not None:
                         # 非系统目录，用户指定目录
@@ -2432,9 +2433,9 @@ class DeployMixin:
 
                     # 更新CMakeLists
                     if proto_tool_dir is not None:
-                        grpc_include = f'include(./cmake/grpc.cmake)\ninclude_directories("/usr/local/include")\ninclude_directories("./proto")\n'
+                        grpc_include = f'set(CMAKE_PREFIX_PATH "{proto_tool_dir}")\ninclude(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
                     else:
-                         grpc_include = f'include(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
+                        grpc_include = f'include(./cmake/grpc.cmake)\ninclude_directories("/usr/local/include")\ninclude_directories("./proto")\n'
 
                     code_line_list = []
                     for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
