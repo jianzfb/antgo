@@ -793,26 +793,31 @@ def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, 
     init_info_list= []
     name_list = ['m_true_func', 'm_false_func']
     for deploy_op_i, deploy_op_args in enumerate([true_op_info['args'], false_op_info['args']]):
+        # if isinstance(dep, t)
         arg_code = ''
         op_init_code = ''
-        for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
-            if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
-                op_init_code += f'{deploy_arg_list}\n'
-                if arg_code == '':
-                    arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                else:
-                    arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                continue
+        if isinstance(deploy_op_args, dict):
+            deploy_op_args = (deploy_op_args,)
+        
+        for deploy_op_arg_info in deploy_op_args:
+            for deploy_arg_name, deploy_arg_list in deploy_op_arg_info.items():
+                if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                    op_init_code += f'{deploy_arg_list}\n'
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    continue
 
-            if deploy_arg_name != 'c++_type':
-                if arg_code == '':
-                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
-                else:
-                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                if deploy_arg_name != 'c++_type':
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-        if 'c++_type' in deploy_op_args:
-            args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
-            op_init_code += f'{name_list[deploy_op_i]}->init({args_init_code});\n\n'
+            if 'c++_type' in deploy_op_arg_info:
+                args_init_code = deploy_op_arg_info['c++_type']+'({'+arg_code+'})'
+                op_init_code += f'{name_list[deploy_op_i]}->init({args_init_code});\n\n'
 
         init_info_list.append(op_init_code)
 
@@ -1382,7 +1387,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
 
                 os.system(f'cp -r /tmp/onnx/snpe/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]} ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]}')
             else:
                 # 转浮点模型
                 os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
@@ -1397,7 +1402,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
 
                 os.system(f'cp -r /tmp/onnx/snpe/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]} ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]}')
         elif platform_engine == 'rknn':
             if platform_engine_args.get('quantize', False):
                 # 转量化模型
@@ -1418,7 +1423,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
 
                 os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.rknn')
             else:
                 # 转浮点模型
                 os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
@@ -1435,7 +1440,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
                 
                 os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.rknn')
         elif platform_engine == 'tnn':
             os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
             prefix = os.path.basename(onnx_file_path)[:-5]

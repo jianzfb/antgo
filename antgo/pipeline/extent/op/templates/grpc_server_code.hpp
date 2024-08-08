@@ -88,7 +88,9 @@ public:
         // image -> base64解码 -> opencv read -> memory
         // matrix/float -> memory
         // matrix/int32 -> memory
-        std::vector<cv::Mat> data_list;
+        std::vector<cv::Mat> mat_data_list;
+        std::vector<std::shared_ptr<float>> float_data_list;
+        std::vector<std::shared_ptr<int>> int_data_list;
         neb::CJsonObject recon_data_list;
         if(server_request != ""){
             neb::CJsonObject server_request_obj(server_request);
@@ -99,17 +101,18 @@ public:
                 data_info.Get(data_i, data_cfg);
                 std::string data_type = "";
                 data_cfg.Get("type", data_type);
-                std::string data_content = "";
-                data_cfg.Get("content", data_content);
 
                 if(data_type == "image"){
+                    std::string data_content = "";
+                    data_cfg.Get("content", data_content);
+
                     // step 1: base64 解码
                     std::string image_content = base64_decode(data_content);
                     // step 2: imread
                     char* data_c = const_cast<char*>(image_content.c_str());
                     std::vector<char> mem_buffer_enc_img(data_c, data_c + image_content.size());
                     cv::Mat image = cv::imdecode(mem_buffer_enc_img, cv::IMREAD_ANYCOLOR);
-                    data_list.push_back(image);
+                    mat_data_list.push_back(image);
 
                     neb::CJsonObject info_obj;
                     info_obj.Add("type", "image");
@@ -121,7 +124,9 @@ public:
                     recon_data_list.Add(info_obj);
                 }
                 else if(data_type == "string"){
-                    // 
+                    std::string data_content = "";
+                    data_cfg.Get("content", data_content);
+
                     neb::CJsonObject info_obj;
                     info_obj.Add("type", "string");
                     info_obj.Add("content", data_content);
@@ -129,10 +134,54 @@ public:
                     recon_data_list.Add(info_obj);
                 }
                 else if(data_type == "matrix/float"){
-                    // TODO, 即将支持
+                    int width = 0;
+                    int height = 0;
+                    data_cfg.Get("width", width);
+                    data_cfg.Get("height", height);
+
+                    neb::CJsonObject array;
+                    data_cfg.Get("content", array);
+                    std::shared_ptr<float> float_share_ptr(new float[array.GetArraySize()], [](float* arr) { delete[] arr;});
+                    float* float_ptr = float_share_ptr.get();
+                    for(int index=0; index<array.GetArraySize(); ++index){
+                        float value;
+                        array.Get(index, value);
+                        float_ptr[index] = value;
+                    }
+                    float_data_list.push_back(float_share_ptr);
+
+                    neb::CJsonObject info_obj;
+                    info_obj.Add("content", long((void*)(float_ptr)));
+                    info_obj.Add("width", width);
+                    info_obj.Add("height", height);
+                    info_obj.Add("type", "matrix/float");
+
+                    recon_data_list.Add(info_obj);
                 }
                 else if(data_type == "matrix/int32"){
-                    // TODO, 即将支持
+                    int width = 0;
+                    int height = 0;
+                    data_cfg.Get("width", width);
+                    data_cfg.Get("height", height);
+
+                    neb::CJsonObject array;
+                    data_cfg.Get("content", array);
+                    std::shared_ptr<int> int_share_ptr(new int[array.GetArraySize()], [](int* arr) { delete[] arr;}); 
+                    int* int_ptr = int_share_ptr.get();
+                    for(int index=0; index<array.GetArraySize(); ++index){
+                        int value;
+                        array.Get(index, value);
+                        int_ptr[index] = value;
+                    }
+                    int_data_list.push_back(int_share_ptr);
+
+                    neb::CJsonObject info_obj;
+                    info_obj.Add("content", long((void*)(int_ptr)));
+                    info_obj.Add("width", width);
+                    info_obj.Add("height", height);
+                    info_obj.Add("type", "matrix/int32");  
+
+                    recon_data_list.Add(info_obj);
                 }
             }
         }

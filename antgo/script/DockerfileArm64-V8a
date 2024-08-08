@@ -3,7 +3,8 @@ FROM registry.cn-hangzhou.aliyuncs.com/vibstring/linuxarm-base:latest
 ADD . /workspace/project/
 
 # eagleeye 环境更新
-RUN cd /root/.3rd && rm -rf eagleeye && git clone -b {{version}} https://github.com/jianzfb/eagleeye.git && cd eagleeye && bash linux_{{eagleeye_compile_suffix}}.sh
+# RUN cd /root/.3rd && rm -rf eagleeye && git clone -b {{version}} https://github.com/jianzfb/eagleeye.git && cd eagleeye && bash linux_{{eagleeye_compile_suffix}}.sh
+RUN cd /root/.3rd/eagleeye && git pull && git checkout {{version}} && bash linux_{{eagleeye_compile_suffix}}.sh
 
 # 项目编译项目
 RUN cd /workspace/project/deploy/{{project}}_plugin/ && bash linux_{{project_compile_suffix}}_build.sh && bash setup.sh && cp -r bin/{{abi}}/* ../package/

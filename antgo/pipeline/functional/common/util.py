@@ -202,6 +202,7 @@ class tensor_int32_op(object):
         else:
             return self.init_val
 
+
 @register
 class tensor_float32_op(object):
     def __init__(self, init_val, is_placeholder=False, is_mutable=True):
@@ -240,6 +241,15 @@ class tensor_float64_op(object):
             return NoUpdate()
         else:
             return self.init_val
+
+
+@register
+class placeholder_int32_op(object):
+    def __init__(self, init_val=0):
+        self.init_val = np.array([init_val]).astype(np.int32)
+
+    def __call__(self, *args):
+        return self.init_val
 
 
 @register

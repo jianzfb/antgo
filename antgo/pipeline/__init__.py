@@ -22,6 +22,7 @@ import os
 import json
 import logging
 import time
+import tempfile
 
 
 ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
@@ -124,7 +125,7 @@ def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
 def pipeline_build_image(project, folder='./deploy', **kwargs):
     eagleeye_version = kwargs.get('version', 'master')
     dockerfile_data = {
-        'version': eagleeye_version
+        'version': 'master' if eagleeye_version == '-' else eagleeye_version
     }
 
     project_folder = os.path.join(folder, f'{project}_plugin')
@@ -173,10 +174,7 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
     with open(f'Dockerfile', 'w') as fp:
         fp.write(dockerfile_content)
 
-    # 构建镜像
-    os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {project} .')
-
-    # 发布镜像
+    # 服务镜像基本信息
     image_pro = kwargs.get('image_repo', None)
     image_version = kwargs.get('image_version', None)
     user = kwargs.get('user', None)
@@ -203,6 +201,37 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
         # 更新服务配置
         with open('./server_config.json', 'w') as fp:
             json.dump(server_config_info, fp)
+
+    # 是否启动远程编译（可能需要输入用户密码）
+    if kwargs.get('remote_ip', None) is not None and kwargs.get('remote_user', None) is not None:
+        remote_ip = kwargs.get('remote_ip')
+        remote_user = kwargs.get('remote_user')
+        print(f'start remote image build {remote_user}@{remote_ip}')
+        print(f'step 1: tar project files')
+        project_dir = os.path.abspath(os.curdir).split('/')[-1]
+        os.system(f'cd .. && tar -cf project.tar ./{project_dir} && scp project.tar {remote_user}@{remote_ip}:~/')
+        print(f'step 2: docker build project')
+
+        env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-2])))
+        server_image_build_template = env.get_template('script/docker-build.sh')
+        server_image_build = {
+            'project': project
+        }
+        server_image_build_content = server_image_build_template.render(**server_image_build)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(os.path.join(temp_dir, 'docker-build.sh'), 'w') as fp:
+                fp.write(server_image_build_content)
+            docker_build_cmd = f'ssh {remote_user}@{remote_ip} bash -s < {os.path.join(temp_dir, "docker-build.sh")}'
+            logging.info(docker_build_cmd)
+            os.system(docker_build_cmd)
+        return
+
+    # 构建镜像
+    os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {project} .')
+
+    # 发布镜像
+    if image_pro is None or user is None or password is None:
         return
 
     logging.info(f'Push image {project} to image repo {image_pro}:{image_version}')

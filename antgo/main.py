@@ -51,6 +51,8 @@ DEFINE_indicator("auto", True, '')              # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')          # 是否启用finetune模式
 DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
+DEFINE_string("remote-ip", None, "")
+DEFINE_string("remote-user", None, "")
 DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
@@ -320,6 +322,8 @@ def main():
         image_version=args.image_version,
         user=args.user,
         password=args.password,
+        remote_ip=args.remote_ip,
+        remote_user=args.remote_user
       )
       return
     elif args.mode in['android/sdk', 'linux/sdk', 'windows/sdk']:
