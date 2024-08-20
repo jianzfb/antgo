@@ -326,7 +326,7 @@ class SamplingByComposer(object):
 
 
 class Activelearning(Tester):
-    def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False):
+    def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False, **kwargs):
         self.cfg = cfg
         # 默认使用单卡进行主动学习即可
         assert(not distributed)

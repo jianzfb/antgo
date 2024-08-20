@@ -19,7 +19,7 @@ import shutil
 
 
 class Exporter(object):
-    def __init__(self, cfg, work_dir):
+    def __init__(self, cfg, work_dir, **kwargs):
         if isinstance(cfg, dict):
             self.cfg = Config.fromstring(json.dumps(cfg), '.json')
         else:

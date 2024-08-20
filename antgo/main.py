@@ -129,6 +129,9 @@ def main():
     sys.argv = [sys.argv[0]] + sys.argv[3:]
   args = parse_args()
 
+  # 执行脚本命令，则默认normal运行（默认情况是debug）
+  args.running = 'normal'
+
   if action_name == 'install':
     if sub_action_name not in ['eagleeye', 'opencv', 'eigen', 'grpc', 'ffmpeg']:
       print(f'sorry, {sub_action_name} not support.')

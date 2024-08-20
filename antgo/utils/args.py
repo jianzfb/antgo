@@ -143,6 +143,12 @@ def DEFINE_nn_args():
         help='train or test process'
     )
     parser.add_argument(
+        '--running',
+        choices=['normal', 'debug'],
+        default='debug',
+        help='running mode'
+    )    
+    parser.add_argument(
         '--max-epochs',
         type=int,
         default=-1,

@@ -31,12 +31,13 @@ from antgo.framework.helper.task_flag import *
 from thop import profile
 from antgo.framework.helper.runner.dist_utils import master_only
 import antvis.client.mlogger as mlogger
+from .base_trainer import *
 import json
 import zlib
 
 
 class Tester(object):
-    def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False):
+    def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False, **kwargs):
         if isinstance(cfg, dict):
             self.cfg = Config.fromstring(json.dumps(cfg), '.json')
         else:
@@ -93,7 +94,8 @@ class Tester(object):
             self.dataset.append(dataset)
             self.data_loader.append(data_loader)
 
-        self.is_support_logger_platform = False
+        self.is_ready = False
+        self.use_logger_platform = False
 
     @master_only
     def _finding_from_logger(self, experiment_name, checkpoint_name):
@@ -110,7 +112,7 @@ class Tester(object):
             token = getattr(config.AntConfig, 'server_user_token', '')
         if token == '' or token is None:
             print('No valid vibstring token, directly return')
-            return
+            return None, None
 
         # 创建实验
         mlogger.config(token=token)
@@ -118,7 +120,7 @@ class Tester(object):
         status = mlogger.activate(project_name, experiment_name)
         if status is None:
             print(f'Couldnt find {project_name}/{experiment_name}, from logger platform')
-            exit(-1)
+            return None, None
 
         file_logger = mlogger.Container()
         local_config_path = None
@@ -138,7 +140,7 @@ class Tester(object):
                 local_checkpoint_path = file_name
                 break
         print(f'Found {local_config_path} {local_checkpoint_path}')
-        self.is_support_logger_platform = True
+        self.use_logger_platform = True
         return local_config_path, local_checkpoint_path
 
     def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False, strict=True):
@@ -155,16 +157,18 @@ class Tester(object):
         # 1: local path                 本地目录
         # 2: ali://                     直接从阿里云盘下载
         # 3: experiment/checkpoint      日志平台（推荐）
-        if not os.path.exists(checkpoint):
+        if not os.path.exists(checkpoint) and len(checkpoint[1:]) == 2:
             # 尝试解析来自于日志平台
             self.experiment_name, self.checkpoint_name = checkpoint[1:].split('/')
             _, checkpoint = self._finding_from_logger(self.experiment_name, self.checkpoint_name)
 
         if checkpoint is None or checkpoint == '':
             logger.error('Missing checkpoint file')
+            return
         else:
             checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu', revise_keys=revise_keys, strict=strict)
 
+        self.is_ready = True
         if is_fuse_conv_bn:
             print('use fuse conv_bn')
             self.model = fuse_conv_bn(self.model)
@@ -180,6 +184,9 @@ class Tester(object):
                 broadcast_buffers=False)
 
     def evaluate(self, json_file=None):
+        if not self.is_ready:
+            return
+
         rank, _ = get_dist_info()        
         if json_file is None and self.work_dir is not None and rank == 0:
             if not os.path.exists(osp.abspath(self.work_dir)):
@@ -220,7 +227,9 @@ class Tester(object):
                 all_metric.append(metric)
 
         # 上传测试报告到日志平台
-        if self.is_support_logger_platform:
+        if BaseTrainer.running_mode == 'debug':
+            print('In debug mode')        
+        if self.use_logger_platform and BaseTrainer.running_mode != 'debug':
             report = {
                 self.checkpoint_name: {
                     'measure': []
