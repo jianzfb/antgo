@@ -66,7 +66,6 @@ class CheckpointHook(Hook):
         self.args = kwargs
         self.sync_buffer = sync_buffer
         self.file_client_args = file_client_args
-
         self.is_ready = False
 
     @master_only
@@ -83,12 +82,11 @@ class CheckpointHook(Hook):
         self.out_dir = osp.join(self.out_dir, 'output', 'checkpoint')
 
         # 设置文件日志存储根目录
-        mlogger.FileLogger.root_folder = self.out_dir
-
         if mlogger.is_ready():
             self.is_ready = True
-        self.file_logger = mlogger.Container()
-        self.file_logger.file = mlogger.FileLogger('file', 'aliyun', True)
+            mlogger.FileLogger.root_folder = self.out_dir
+            self.file_logger = mlogger.Container()
+            self.file_logger.file = mlogger.FileLogger('file', 'aliyun', True)
 
         runner.logger.info(
             (f'Checkpoints will be saved to {self.out_dir} by '
