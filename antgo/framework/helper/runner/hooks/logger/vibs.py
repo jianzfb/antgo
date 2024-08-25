@@ -53,6 +53,13 @@ class VibSLoggerHook(LoggerHook):
         self.is_ready = False
         self.canvas = None
         self.record_keys = record_keys
+        if self.record_keys is None:
+            self.record_keys = []
+
+        if 'lr' not in self.record_keys:
+            self.record_keys.append('lr')
+        if 'epoch' not in self.record_keys:
+            self.record_keys.append('epoch')
 
     @master_only
     def before_run(self, runner):
@@ -174,8 +181,28 @@ class VibSLoggerHook(LoggerHook):
             if log_key not in self.elements_in_canvas:
                 setattr(self.canvas, log_key, mlogger.complex.Line(plot_title=log_key, is_series=True))
                 self.elements_in_canvas.append(log_key)
-
             getattr(self.canvas, log_key).update(log_value)
+
+        if 'basic' not in self.elements_in_canvas:
+            setattr(self.canvas, 'basic', mlogger.complex.Table("basic"))
+            self.elements_in_canvas.append('basic')
+
+        eta_str = ''
+        if log_dict['mode'] == 'train' and 'time' in log_dict.keys():
+            time_sec_avg = self.time_sec_tot / (
+                runner.iter - self.start_iter + 1)
+            eta_sec = time_sec_avg * (runner.max_iters - runner.iter - 1)
+            eta_str = str(datetime.timedelta(seconds=int(eta_sec)))
+        getattr(self.canvas, 'basic').r0c0 = 'eta'
+        getattr(self.canvas, 'basic').r1c0 = eta_str
+
+        getattr(self.canvas, 'basic').r0c1 = 'data_time'
+        getattr(self.canvas, 'basic').r1c1 = "%.2f" % log_dict['data_time']
+
+        getattr(self.canvas, 'basic').r0c2 = 'time'
+        getattr(self.canvas, 'basic').r1c2 = log_dict['time']
+
+        getattr(self.canvas, 'basic').update()
         mlogger.update()
 
     @master_only
