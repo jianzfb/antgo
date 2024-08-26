@@ -130,7 +130,6 @@ class DecodeImage(BaseOperator):
         if 'image_meta' not in sample:
             sample['image_meta'] = {}
         sample['image_meta']['image_shape'] = (im.shape[0], im.shape[1])
-        sample['image_meta']['ori_image_shape'] = (im.shape[0], im.shape[1])
 
         # decode semantic label 
         if 'segments' in sample and sample['segments'].size > 0:
