@@ -128,13 +128,13 @@ class Tester(object):
         # 下载配置文件
         mlogger.FileLogger.cache_folder = f'./logger/cache/{experiment_name}'
         file_logger.cfg_file = mlogger.FileLogger('config', 'qiniu')
-        file_list = file_logger.cfg_file.get()
+        file_list, _ = file_logger.cfg_file.get()
         if len(file_list) > 0:
            local_config_path = file_list[0]
 
         # 下载checkpoint文件
         file_logger.checkpoint_file = mlogger.FileLogger('file', 'aliyun')
-        file_list = file_logger.checkpoint_file.get(checkpoint_name)
+        file_list, _ = file_logger.checkpoint_file.get(checkpoint_name)
         for file_name in file_list:
             if file_name.endswith(checkpoint_name):
                 local_checkpoint_path = file_name
@@ -157,7 +157,7 @@ class Tester(object):
         # 1: local path                 本地目录
         # 2: ali://                     直接从阿里云盘下载
         # 3: experiment/checkpoint      日志平台（推荐）
-        if not os.path.exists(checkpoint) and len(checkpoint[1:]) == 2:
+        if not os.path.exists(checkpoint) and len(checkpoint[1:].split('/')) == 2:
             # 尝试解析来自于日志平台
             self.experiment_name, self.checkpoint_name = checkpoint[1:].split('/')
             _, checkpoint = self._finding_from_logger(self.experiment_name, self.checkpoint_name)
