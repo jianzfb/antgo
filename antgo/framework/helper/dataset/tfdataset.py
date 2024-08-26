@@ -375,6 +375,9 @@ class TFDataset(torch.utils.data.IterableDataset):
                         new_sample[k] = np.frombuffer(bytearray(sample[k]), dtype=dtype).reshape(shape).copy()
                     else:
                         new_sample[k] = np.frombuffer(bytearray(sample[k].tobytes()), dtype=dtype).reshape(shape).copy()
+                    
+                    if new_sample[k].dtype == np.float64:
+                        new_sample[k] = new_sample[k].astype(np.float32)
                 elif self.raw_description[k] == 'str':
                     new_sample[k] = sample[k].tobytes().decode('utf-8')
                 elif self.raw_description[k] == 'dict':
