@@ -12,6 +12,7 @@ from queue import Queue
 import threading
 import time
 import copy
+import imagesize
 
 
 class __SampleDataGenerator(object):
@@ -134,6 +135,10 @@ class __SampleDataGenerator(object):
                     with open(image_path, 'rb') as fp:
                         image_content = fp.read()
                         sample['image'] = image_content
+                    
+                    width, height = imagesize.get(image_path)
+                    sample['width'] = width
+                    sample['height'] = height
                 else:
                     logging.error(f'Missing image {image_path}')
                     sample['image'] = b''
