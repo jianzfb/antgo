@@ -279,8 +279,10 @@ class BaseCocoStyleDataset(Dataset):
             # rename key
             if 'bbox' in data_info:
                 data_info['bboxes'] = data_info['bbox']
+                data_info.pop('bbox')
             if 'bbox_score' in data_info:
                 data_info['bboxes_score'] = data_info['bbox_score']
+                data_info.pop('bbox_score')
 
         return data_list_tp
 
@@ -317,8 +319,10 @@ class BaseCocoStyleDataset(Dataset):
             # rename key
             if 'bbox' in data_info_bu:
                 data_info_bu['bboxes'] = data_info_bu['bbox']
+                data_info_bu.pop('bbox')
             if 'bbox_score' in data_info_bu:
                 data_info_bu['bboxes_score'] = data_info_bu['bbox_score']
+                data_info_bu.pop('bbox_score')
 
             # The segmentation annotation of invalid objects will be used
             # to generate valid region mask in the pipeline.
