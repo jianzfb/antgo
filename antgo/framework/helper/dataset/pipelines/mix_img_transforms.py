@@ -701,7 +701,7 @@ class FilterAnnotations(BaseTransform):
                  by_box: bool = False,
                  by_area: bool = False,
                  by_kpt: bool = False,
-                 keep_empty: bool = True) -> None:
+                 keep_empty: bool = False) -> None:
 
         assert by_box or by_kpt or by_area
         self.min_gt_bbox_wh = min_gt_bbox_wh
@@ -721,6 +721,7 @@ class FilterAnnotations(BaseTransform):
         Returns:
             dict: Updated result dict.
         """
+
         if self.by_box or self.by_area:
             if len(results['bboxes']) == 0:
                 return results
