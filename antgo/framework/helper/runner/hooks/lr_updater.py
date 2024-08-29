@@ -833,7 +833,7 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
             hook = build_from_cfg(lr_config, HOOKS)
             assert('begin' in lr_config and 'end' in lr_config)
             assert(begin == lr_config['begin'])
-            begin = lr_config['end']
+            begin = lr_config['end'] + 1
             self.lr_updater_cfg.append(lr_config)
             self.lr_updater_list.append(hook)
 
@@ -857,11 +857,11 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
             runner.epoch = 0
             runner.iter = 0
             for policy_i in range(len(self.lr_updater_list)-1):
-                if cur_epoch >= self.lr_updater_cfg[policy_i]['begin'] and cur_epoch < self.lr_updater_cfg[policy_i]['end']:
+                if cur_epoch >= self.lr_updater_cfg[policy_i]['begin'] and cur_epoch <= self.lr_updater_cfg[policy_i]['end']:
                     self.cur_policy_i = policy_i
                     break
 
-                runner.epoch = self.lr_updater_cfg[policy_i]['end'] - 1
+                runner.epoch = self.lr_updater_cfg[policy_i]['end']
                 runner.iter = runner.epoch * iter_num_in_one_epoch
                 self.lr_updater_list[policy_i].before_train_epoch(runner)
                 self.lr_updater_list[policy_i].before_train_iter(runner)
@@ -876,7 +876,7 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
             return
 
         for policy_i in range(len(self.lr_updater_list)):
-            if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch < self.lr_updater_cfg[policy_i]['end']:
+            if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch <= self.lr_updater_cfg[policy_i]['end']:
                 if self.cur_policy_i != policy_i:
                     self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
                     self.cur_policy_i = policy_i
@@ -887,14 +887,14 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
     def before_train_iter(self, runner):
         if not self.by_epoch:
             for policy_i in range(len(self.lr_updater_list)):
-                if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter < self.lr_updater_cfg[policy_i]['end']:
+                if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter <= self.lr_updater_cfg[policy_i]['end']:
                     if self.cur_policy_i != policy_i:
                         self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
                         self.cur_policy_i = policy_i
                     break
         else:
             for policy_i in range(len(self.lr_updater_list)):
-                if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch < self.lr_updater_cfg[policy_i]['end']:
+                if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch <= self.lr_updater_cfg[policy_i]['end']:
                     if self.cur_policy_i != policy_i:
                         self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
                         self.cur_policy_i = policy_i
