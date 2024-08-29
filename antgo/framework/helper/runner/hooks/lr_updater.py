@@ -304,12 +304,10 @@ class CosineAnnealingLrUpdaterHook(LrUpdaterHook):
             Default: None.
     """
 
-    def __init__(self, min_lr=None, begin=0, end=None, min_lr_ratio=None, **kwargs):
+    def __init__(self, min_lr=None, min_lr_ratio=None, **kwargs):
         assert (min_lr is None) ^ (min_lr_ratio is None)
         self.min_lr = min_lr
         self.min_lr_ratio = min_lr_ratio
-        self.begin = begin
-        self.end = end
         super(CosineAnnealingLrUpdaterHook, self).__init__(**kwargs)
 
     def get_lr(self, runner, base_lr):
