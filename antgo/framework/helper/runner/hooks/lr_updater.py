@@ -47,6 +47,7 @@ class LrUpdaterHook(Hook):
         self.end = end
 
         if self.warmup_by_epoch:
+            # 如果warmup采用by_epoch，则将warmup_iters赋值给warmup_epochs
             self.warmup_epochs = self.warmup_iters
             self.warmup_iters = None
         else:
@@ -85,14 +86,18 @@ class LrUpdaterHook(Hook):
     def get_warmup_lr(self, cur_iters):
 
         def _get_warmup_lr(cur_iters, regular_lr):
+            warmup_iters = self.warmup_iters
+            if self.by_epoch:
+                warmup_iters = self.warmup_epochs
+
             if self.warmup == 'constant':
                 warmup_lr = [_lr * self.warmup_ratio for _lr in regular_lr]
             elif self.warmup == 'linear':
-                k = (1 - cur_iters / self.warmup_iters) * (1 -
+                k = (1 - cur_iters / warmup_iters) * (1 -
                                                            self.warmup_ratio)
                 warmup_lr = [_lr * (1 - k) for _lr in regular_lr]
             elif self.warmup == 'exp':
-                k = self.warmup_ratio**(1 - cur_iters / self.warmup_iters)
+                k = self.warmup_ratio**(1 - cur_iters / warmup_iters)
                 warmup_lr = [_lr * k for _lr in regular_lr]
             return warmup_lr
 
@@ -124,10 +129,6 @@ class LrUpdaterHook(Hook):
             ]
 
     def before_train_epoch(self, runner):
-        if self.warmup_iters is None:
-            epoch_len = len(runner.data_loader)
-            self.warmup_iters = self.warmup_epochs * epoch_len
-
         if not self.by_epoch:
             return
 
@@ -145,9 +146,9 @@ class LrUpdaterHook(Hook):
                 self._set_lr(runner, warmup_lr)
         elif self.by_epoch:
             cur_iter = runner.epoch
-            if self.warmup is None or cur_iter > self.warmup_iters:
+            if self.warmup is None or cur_iter > self.warmup_epochs:
                 return
-            elif cur_iter == self.warmup_iters:
+            elif cur_iter == self.warmup_epochs:
                 self._set_lr(runner, self.regular_lr)
             else:
                 warmup_lr = self.get_warmup_lr(cur_iter)
