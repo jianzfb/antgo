@@ -202,16 +202,20 @@ class StepLrUpdaterHook(LrUpdaterHook):
 
     def get_lr(self, runner, base_lr):
         progress = runner.epoch if self.by_epoch else runner.iter
-        if self.begin is not None and self.end is not None:
-            if self.by_epoch:
-                progress = runner.epoch - self.begin
-            else:
-                progress = runner.iter - self.begin
 
         # calculate exponential term
         if isinstance(self.step, int):
+            # 如此设置，意味着每隔step步，调整一次学习率
+            # 此时需要考虑self.begin, self.end确定整体区间
+            if self.begin is not None and self.end is not None:
+                if self.by_epoch:
+                    progress = runner.epoch - self.begin
+                else:
+                    progress = runner.iter - self.begin
+
             exp = progress // self.step
         else:
+            # 如此设置，意味着在不同区间，调整一次学习率
             exp = len(self.step)
             for i, s in enumerate(self.step):
                 if progress < s:
