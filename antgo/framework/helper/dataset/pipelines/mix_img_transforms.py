@@ -211,10 +211,11 @@ class Mosaic(MixImageTransform):
         results['image_meta'] = {
             'image_shape': canvas.shape
         }
-        bboxes = results['bboxes'] * scale
-        bboxes[:,::2] = bboxes[:,::2] + offset_x
-        bboxes[:,1::2] = bboxes[:,1::2] + offset_y
-        results['bboxes'] = bboxes
+        if 'bboxes' in results and len(results['bboxes']) > 0:
+            bboxes = results['bboxes'] * scale
+            bboxes[:,::2] = bboxes[:,::2] + offset_x
+            bboxes[:,1::2] = bboxes[:,1::2] + offset_y
+            results['bboxes'] = bboxes
 
         if 'keypoints' in results:
             keypoints = results['keypoints'] * scale
