@@ -336,7 +336,8 @@ class Mosaic(MixImageTransform):
                 annos['area'].append(data['area'] * scale_ratio**2)
 
         for key in annos:
-            annos[key] = np.concatenate(annos[key])
+            valid_anns = [ann for ann in annos[key] if len(ann) > 0]
+            annos[key] = np.concatenate(valid_anns)
         return mosaic_img, annos
 
     def _mosaic_combine(
