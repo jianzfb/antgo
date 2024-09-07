@@ -2401,8 +2401,6 @@ class DeployMixin:
                     proto_code_template_file = f'./templates/grpc_proto_code.proto'
                     if call_mode == 'callback':
                         proto_code_template_file = f'./templates/grpc_stream_proto_code.proto'
-                    elif call_mode == 'asyn':
-                        proto_code_template_file = f'./templates/grpc_asyn_proto_code.proto'
 
                     grpc_proto_code_content = gen_code(proto_code_template_file)(
                         package=f'{project_name.lower()}grpc',
@@ -2461,8 +2459,6 @@ class DeployMixin:
                     grpc_server_code_template_file = './templates/grpc_server_code.hpp'
                     if call_mode == 'callback':
                         grpc_server_code_template_file = './templates/grpc_stream_server_code.hpp'
-                    elif call_mode == 'asyn':
-                        grpc_server_code_template_file = './templates/grpc_asyn_server_code.hpp'
 
                     grpc_server_code_content = gen_code(grpc_server_code_template_file)(
                         project=f'{project_name.lower()}',
