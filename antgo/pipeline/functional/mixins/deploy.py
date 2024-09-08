@@ -2361,7 +2361,8 @@ class DeployMixin:
                 return
             config_info = {
                 "pipeline_name": pipeline_name,
-                'server_mode': call_mode
+                'server_mode': call_mode,
+                'data_mode': project_config.get('data_mode', '')
             }
             if 'config' in project_config:
                 config_info.update(project_config['config'])
@@ -2474,7 +2475,7 @@ class DeployMixin:
                 if os.path.exists(os.path.join(output_folder, 'config', 'plugin_config.json')):
                     with open(os.path.join(output_folder, 'config', 'plugin_config.json'), 'r') as fp:
                         plugin_config_info = json.load(fp)
-                
+
                 if pipeline_name not in plugin_config_info:
                     plugin_config_info[pipeline_name] = {}
                 plugin_config_info[pipeline_name].update(
