@@ -2362,25 +2362,26 @@ class DeployMixin:
             config_info = {
                 "pipeline_name": pipeline_name,
                 'server_mode': call_mode,
-                'data_mode': project_config.get('data_mode', '')
+                'data_mode': project_config.get('data_mode', ''),    # data_mode: "H264"/"H265", "" 仅在异步调用时有效
             }
-            if 'config' in project_config:
-                config_info.update(project_config['config'])
-                ''' format
-                    {
-                        'server_params': [{"node": "node_name", "name": "param_name", "value": "param_value", "type": "string"/"float"/"double"/"int"/"bool"}],
-                        'data_source': [{"type": "camera", "address": "", "format": "RGB/BGR", "mode": "NETWORK/USB/ANDROID_NATIVE/V4L2", "flag": "front"}, {"type": "video", "address": "", "format": "RGB/BGR"},...]
-                    }
-                '''
-                if 'data_source' in config_info and len(config_info['data_source']) > 0:
-                    has_auto_data_source = True
 
-                if has_auto_data_source:
-                    # 重制，如果拥有闭环数据源，则自动设置为回调模式
-                    config_info["server_mode"] = "callback"
-                    call_mode = 'callback'
-                else:
-                    config_info["server_mode"] = call_mode
+            ''' format
+                {
+                    'server_params': [{"node": "node_name", "name": "param_name", "value": "param_value", "type": "string"/"float"/"double"/"int"/"bool"}],
+                    'data_source': [{"type": "camera", "address": "", "format": "RGB/BGR", "mode": "NETWORK/USB/ANDROID_NATIVE/V4L2", "flag": "front"}, {"type": "video", "address": "", "format": "RGB/BGR"},...]
+                }
+            '''
+            if 'data_source' in project_config and len(project_config['data_source']) > 0:
+                has_auto_data_source = True
+                config_info['data_source'] = project_config['data_source']
+
+            if 'server_params' in project_config:
+                config_info['server_params'] = project_config['server_params']
+
+            if has_auto_data_source:
+                # 重制，如果拥有闭环数据源，则自动设置为回调模式
+                config_info["server_mode"] = "callback"
+                call_mode = 'callback'
 
             old_config_info = {}
             if os.path.exists(os.path.join(config_folder, 'plugin_config.json')):
