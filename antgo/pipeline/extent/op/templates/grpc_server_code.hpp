@@ -95,7 +95,7 @@ public:
         std::vector<cv::Mat> mat_data_list;
         std::vector<std::shared_ptr<float>> float_data_list;
         std::vector<std::shared_ptr<int>> int_data_list;
-        neb::CJsonObject recon_data_list;
+        std::vector<RequestData> server_request_data;
         if(server_request != ""){
             neb::CJsonObject server_request_obj(server_request);
             neb::CJsonObject data_info;
@@ -118,24 +118,27 @@ public:
                     cv::Mat image = cv::imdecode(mem_buffer_enc_img, cv::IMREAD_ANYCOLOR);
                     mat_data_list.push_back(image);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("type", "image");
-                    info_obj.Add("content", long(image.data));
-                    info_obj.Add("width", image.cols);
-                    info_obj.Add("height", image.rows);
-                    info_obj.Add("channel", 3);
+                    RequestData request_data;
+                    request_data.data = image.data;
+                    request_data.width = image.cols;
+                    request_data.height = image.rows;
+                    request_data.channel = 3;
+                    request_data.type = "image";
 
-                    recon_data_list.Add(info_obj);
+                    server_request_data.push_back(request_data);
                 }
                 else if(data_type == "string"){
                     std::string data_content = "";
                     data_cfg.Get("content", data_content);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("type", "string");
-                    info_obj.Add("content", data_content);
+                    RequestData request_data;
+                    request_data.data = (void*)(const_cast<char*>(data_content.c_str()));
+                    request_data.width = data_content.size();
+                    request_data.height = 1;
+                    request_data.channel = 0;
+                    request_data.type = "string";
 
-                    recon_data_list.Add(info_obj);
+                    server_request_data.push_back(request_data);                    
                 }
                 else if(data_type == "matrix/float"){
                     int width = 0;
@@ -154,13 +157,13 @@ public:
                     }
                     float_data_list.push_back(float_share_ptr);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("content", long((void*)(float_ptr)));
-                    info_obj.Add("width", width);
-                    info_obj.Add("height", height);
-                    info_obj.Add("type", "matrix/float");
-
-                    recon_data_list.Add(info_obj);
+                    RequestData request_data;
+                    request_data.data = float_ptr;
+                    request_data.width = width;
+                    request_data.height = height;
+                    request_data.channel = 0;
+                    request_data.type = "matrix/float";
+                    server_request_data.push_back(request_data);        
                 }
                 else if(data_type == "matrix/int32"){
                     int width = 0;
@@ -179,23 +182,20 @@ public:
                     }
                     int_data_list.push_back(int_share_ptr);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("content", long((void*)(int_ptr)));
-                    info_obj.Add("width", width);
-                    info_obj.Add("height", height);
-                    info_obj.Add("type", "matrix/int32");  
-
-                    recon_data_list.Add(info_obj);
+                    RequestData request_data;
+                    request_data.data = int_ptr;
+                    request_data.width = width;
+                    request_data.height = height;
+                    request_data.channel = 0;
+                    request_data.type = "matrix/float";
+                    server_request_data.push_back(request_data); 
                 }
             }
         }
 
-        neb::CJsonObject recon_server_request_obj;
-        recon_server_request_obj.Add("data", recon_data_list);
-
         // step 2: 执行服务管线
         std::string server_reply;
-        eagleeye::eagleeye_pipeline_server_call(server_key, recon_server_request_obj.ToString(), server_reply);
+        eagleeye::eagleeye_pipeline_server_call(server_key, server_request_data, server_reply);
         response->set_code(0);
         response->set_data(server_reply);
         return Status::OK;
@@ -282,7 +282,7 @@ public:
         std::vector<cv::Mat> mat_data_list;
         std::vector<std::shared_ptr<float>> float_data_list;
         std::vector<std::shared_ptr<int>> int_data_list;
-        neb::CJsonObject recon_data_list;
+        std::vector<RequestData> server_request_data;
         if(server_request != ""){
             neb::CJsonObject server_request_obj(server_request);
             neb::CJsonObject data_info;
@@ -305,24 +305,27 @@ public:
                     cv::Mat image = cv::imdecode(mem_buffer_enc_img, cv::IMREAD_ANYCOLOR);
                     mat_data_list.push_back(image);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("type", "image");
-                    info_obj.Add("content", long(image.data));
-                    info_obj.Add("width", image.cols);
-                    info_obj.Add("height", image.rows);
-                    info_obj.Add("channel", 3);
+                    RequestData request_data;
+                    request_data.data = image.data;
+                    request_data.width = image.cols;
+                    request_data.height = image.rows;
+                    request_data.channel = 3;
+                    request_data.type = "image";
 
-                    recon_data_list.Add(info_obj);
+                    server_request_data.push_back(request_data);
                 }
                 else if(data_type == "string"){
                     std::string data_content = "";
                     data_cfg.Get("content", data_content);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("type", "string");
-                    info_obj.Add("content", data_content);
+                    RequestData request_data;
+                    request_data.data = (void*)(const_cast<char*>(data_content.c_str()));
+                    request_data.width = data_content.size();
+                    request_data.height = 1;
+                    request_data.channel = 0;
+                    request_data.type = "string";
 
-                    recon_data_list.Add(info_obj);
+                    server_request_data.push_back(request_data);                    
                 }
                 else if(data_type == "matrix/float"){
                     int width = 0;
@@ -341,13 +344,13 @@ public:
                     }
                     float_data_list.push_back(float_share_ptr);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("content", long((void*)(float_ptr)));
-                    info_obj.Add("width", width);
-                    info_obj.Add("height", height);
-                    info_obj.Add("type", "matrix/float");
-
-                    recon_data_list.Add(info_obj);
+                    RequestData request_data;
+                    request_data.data = float_ptr;
+                    request_data.width = width;
+                    request_data.height = height;
+                    request_data.channel = 0;
+                    request_data.type = "matrix/float";
+                    server_request_data.push_back(request_data);        
                 }
                 else if(data_type == "matrix/int32"){
                     int width = 0;
@@ -366,22 +369,19 @@ public:
                     }
                     int_data_list.push_back(int_share_ptr);
 
-                    neb::CJsonObject info_obj;
-                    info_obj.Add("content", long((void*)(int_ptr)));
-                    info_obj.Add("width", width);
-                    info_obj.Add("height", height);
-                    info_obj.Add("type", "matrix/int32");  
-
-                    recon_data_list.Add(info_obj);
+                    RequestData request_data;
+                    request_data.data = int_ptr;
+                    request_data.width = width;
+                    request_data.height = height;
+                    request_data.channel = 0;
+                    request_data.type = "matrix/float";
+                    server_request_data.push_back(request_data); 
                 }
             }
         }
 
-        neb::CJsonObject recon_server_request_obj;
-        recon_server_request_obj.Add("data", recon_data_list);
-
         // 推送数据到管线队列
-        eagleeye::eagleeye_pipeline_server_push(server_key, recon_server_request_obj.ToString());
+        eagleeye::eagleeye_pipeline_server_push(server_key, server_request_data);
         response->set_code(0);
         return Status::OK;
     }
