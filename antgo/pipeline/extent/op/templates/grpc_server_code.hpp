@@ -389,32 +389,12 @@ public:
         // 仅用于对视频流分析
         std::string server_key = request->serverkey();
 
-        // TODO，加入通用H264解码
-        // 流输入默认是H264编码
-        if(decode_map.find(server_key) == decode_map.end()){
-            decode_map[server_key] = std::shared_ptr<eagleeye::RKH264Decoder>(
-                new eagleeye::RKH264Decoder(), [](eagleeye::RKH264Decoder* m){delete m;}
-            );
-        }
-
-        std::vector<eagleeye::Matrix<eagleeye::Array<unsigned char,3>>> frame_list;
-        char* package_data = const_cast<char*>(request->package_data().c_str());
-        decode_map[server_key]->decode((uint8_t*)package_data, request->package_size(), frame_list);
-        std::vector<eagleeye::Image> image_list;
-        for(int frame_i=0; frame_i<frame_list.size(); ++frame_i){
-            eagleeye::Image image;
-            unsigned char* ptr = frame_list[frame_i].cpu<unsigned char>();
-            image.data = std::shared_ptr<unsigned char>(ptr, [](unsigned char*){});
-            image.width = frame_list[frame_i].cols();
-            image.height = frame_list[frame_i].rows();
-            image.channel = 3;
-            image_list.push_back(image);
-        }
         // 推送数据到管线队列
-        eagleeye::eagleeye_pipeline_server_push_stream(server_key, image_list);
+        char* package_data = const_cast<char*>(request->package_data().c_str());
+        eagleeye::eagleeye_pipeline_server_push_stream(server_key, (uint8_t*)package_data, request->package_size());
         response->set_code(0);
         return Status::OK;
-    }    
+    }
     ::grpc::Status ${servername}AsynMessage(::grpc::ServerContext* context, const ::${package}::${servername}AsynMessageRequest* request, ::grpc::ServerWriter< ::${package}::${servername}AsynMessageReply>* writer){
         std::string server_key = request->serverkey();
         std::string server_request = request->serverrequest();
