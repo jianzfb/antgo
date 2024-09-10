@@ -25,7 +25,7 @@ class LrUpdaterHook(Hook):
                  warmup=None,
                  warmup_iters=0,
                  warmup_ratio=0.1,
-                 warmup_by_epoch=False, begin=None, end=None, **kwargs):
+                 begin=None, end=None, **kwargs):
         # validate the "warmup" argument
         if warmup is not None:
             if warmup not in ['constant', 'linear', 'exp']:
@@ -42,7 +42,7 @@ class LrUpdaterHook(Hook):
         self.warmup = warmup
         self.warmup_iters = warmup_iters
         self.warmup_ratio = warmup_ratio
-        self.warmup_by_epoch = warmup_by_epoch
+        self.warmup_by_epoch = by_epoch     # warmup_by_epoch 和 by_epoch保持一致
         self.begin = begin
         self.end = end
 
