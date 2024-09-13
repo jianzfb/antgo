@@ -95,7 +95,7 @@ public:
         std::vector<cv::Mat> mat_data_list;
         std::vector<std::shared_ptr<float>> float_data_list;
         std::vector<std::shared_ptr<int>> int_data_list;
-        std::vector<RequestData> server_request_data;
+        std::vector<eagleeye::RequestData> server_request_data;
         if(server_request != ""){
             neb::CJsonObject server_request_obj(server_request);
             neb::CJsonObject data_info;
@@ -118,7 +118,7 @@ public:
                     cv::Mat image = cv::imdecode(mem_buffer_enc_img, cv::IMREAD_ANYCOLOR);
                     mat_data_list.push_back(image);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = image.data;
                     request_data.width = image.cols;
                     request_data.height = image.rows;
@@ -131,7 +131,7 @@ public:
                     std::string data_content = "";
                     data_cfg.Get("content", data_content);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = (void*)(const_cast<char*>(data_content.c_str()));
                     request_data.width = data_content.size();
                     request_data.height = 1;
@@ -157,7 +157,7 @@ public:
                     }
                     float_data_list.push_back(float_share_ptr);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = float_ptr;
                     request_data.width = width;
                     request_data.height = height;
@@ -182,7 +182,7 @@ public:
                     }
                     int_data_list.push_back(int_share_ptr);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = int_ptr;
                     request_data.width = width;
                     request_data.height = height;
@@ -282,7 +282,7 @@ public:
         std::vector<cv::Mat> mat_data_list;
         std::vector<std::shared_ptr<float>> float_data_list;
         std::vector<std::shared_ptr<int>> int_data_list;
-        std::vector<RequestData> server_request_data;
+        std::vector<eagleeye::RequestData> server_request_data;
         if(server_request != ""){
             neb::CJsonObject server_request_obj(server_request);
             neb::CJsonObject data_info;
@@ -305,7 +305,7 @@ public:
                     cv::Mat image = cv::imdecode(mem_buffer_enc_img, cv::IMREAD_ANYCOLOR);
                     mat_data_list.push_back(image);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = image.data;
                     request_data.width = image.cols;
                     request_data.height = image.rows;
@@ -318,7 +318,7 @@ public:
                     std::string data_content = "";
                     data_cfg.Get("content", data_content);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = (void*)(const_cast<char*>(data_content.c_str()));
                     request_data.width = data_content.size();
                     request_data.height = 1;
@@ -344,7 +344,7 @@ public:
                     }
                     float_data_list.push_back(float_share_ptr);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = float_ptr;
                     request_data.width = width;
                     request_data.height = height;
@@ -369,7 +369,7 @@ public:
                     }
                     int_data_list.push_back(int_share_ptr);
 
-                    RequestData request_data;
+                    eagleeye::RequestData request_data;
                     request_data.data = int_ptr;
                     request_data.width = width;
                     request_data.height = height;
@@ -407,7 +407,7 @@ public:
 
         while(1){
             std::string server_reply;
-            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, "", server_reply, timeout);
+            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, std::vector<eagleeye::RequestData>{}, server_reply, timeout);
 
             ${servername}AsynMessageReply reply;
             reply.set_code(0);

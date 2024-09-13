@@ -26,6 +26,7 @@ public:
     virtual int init(std::map<std::string, std::vector<float>> params){
         ${true_func_init}
         ${false_func_init}
+        return 0;
     }
     virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){return 0;};
     virtual int init(std::map<std::string, std::vector<std::string>> params){

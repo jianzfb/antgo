@@ -1192,6 +1192,61 @@ def auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_nam
     return info
 
 
+def auto_generate_control_asyn_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set, platform, abi, project_name):
+    op_info = prepare_cplusplus_code(func_name, op_index, func_kwargs.get(func_name, {}), output_folder, core_op_set, platform, abi, project_name)
+
+    input_ctx, output_ctx = op_index
+    if isinstance(input_ctx, str):
+        input_ctx = [input_ctx]
+    if isinstance(output_ctx, str):
+        output_ctx = [output_ctx]
+
+    arg_code = ''
+    op_init_code = ''
+    if len(op_info['args']) > 0:
+        for deploy_arg_name, deploy_arg_list in op_info['args'][0].items():
+            if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                op_init_code += f'{deploy_arg_list}\n'
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                continue
+
+            if deploy_arg_name != 'c++_type':
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+        # if 'c++_type' in op_info['args'][0]:
+        #     args_init_code = op_info['args'][0]['c++_type']+'({'+arg_code+'})'
+        #     op_init_code += f'm_funcs[thread_i]->init({args_init_code});\n\n'
+
+    warp_cpp_code_content = \
+        gen_code('./templates/asyn_op_class_code.hpp')(
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            input_num=len(input_ctx),
+            output_num=len(output_ctx),
+            func_create=f"new {op_info['type']}();" if 'template' not in op_info else f"new {op_info['type']}{op_info['template']}();",
+            func_init=op_init_code,
+            include_dependent=op_info['include']
+        )
+
+    src_folder = os.path.join(output_folder, 'extent', 'include')
+    os.makedirs(src_folder, exist_ok=True)
+    with open(os.path.join(src_folder, f'{op_name}.hpp'), 'w') as fp:
+        fp.write(warp_cpp_code_content)
+
+    info = {
+        'type': f"{op_name.replace('_','').capitalize()}Op",
+        'input': input_ctx,
+        'output': output_ctx,
+        'args': {},
+        'include': os.path.join('extent/include/', f'{op_name}.hpp'),
+        'src': op_info['src'],
+    }
+    return info
 
 # --------------------------------------------------------------------------- #
 
@@ -1734,6 +1789,18 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
 
                 op_info = auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_name, def_func_op_kwargs, tracking_func_op_name, tracking_func_op_kwargs, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                deploy_graph_info[op_unique_name] = op_info
+            elif function_key_list[1] == 'Asyn':
+                function_op_name_list = split_function(function_key_list[2:])
+                func_op_name = function_op_name_list[0]
+
+                op_name = f'{function_key_list[1]}_{func_op_name}'
+                if op_name not in op_name_count:
+                    op_name_count[op_name] = 0
+                op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+                op_name_count[op_name] += 1
+
+                op_info = auto_generate_control_asyn_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
                 deploy_graph_info[op_unique_name] = op_info
             else:
                 raise NotImplementedError
