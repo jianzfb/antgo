@@ -92,7 +92,7 @@ public:
             m_run_finish = false;
 
             // step 2: process data
-            m_op_func->runOnGpu(in_data);
+            m_op_func->runOnCpu(in_data);
             for(int i=0;i<this->m_op_func->getOutputNum(); ++i){
                 m_outputs[i] = this->m_op_func->getOutput(i);
             }
