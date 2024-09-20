@@ -1434,7 +1434,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/snpeconvert:latest bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
@@ -1449,7 +1449,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/snpeconvert:latest bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
@@ -1470,7 +1470,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                 onnx_dir_path = os.path.dirname(onnx_file_path)
                 mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
                 std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
-                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/rknnconvert:latest bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
@@ -1487,7 +1487,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                 onnx_dir_path = os.path.dirname(onnx_file_path)
                 mean_values = ','.join([str(v) for v in  op_kwargs.get('mean', [0,0,0])])
                 std_values = ','.join([str(v) for v in  op_kwargs.get('std', [1,1,1])])
-                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/rknnconvert:latest bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
@@ -1500,7 +1500,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
             os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
             prefix = os.path.basename(onnx_file_path)[:-5]
             onnx_dir_path = os.path.dirname(onnx_file_path)
-            os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+            os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/tnnconvert:latest bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
             converted_model_file = []
             for file_name in os.listdir('/tmp/onnx/tnn/'):
                 if file_name[0] != '.' and '.tnnproto' in file_name:

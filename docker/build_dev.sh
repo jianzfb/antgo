@@ -20,11 +20,11 @@ fi
 
 # download vscode-server
 if [ "$1"x = "with-vscode-server"x -o "$2"x = "with-vscode-server"x ]; then
-    if [ ! -d "./code-server-4.0.2-linux-amd64" ];then
-        if [ ! -f "./code-server-4.0.2-linux-amd64.tar.gz" ];then
-            wget https://github.com/coder/code-server/releases/download/v4.0.2/code-server-4.0.2-linux-amd64.tar.gz
+    if [ ! -d "./code-server-4.92.2-linux-amd64" ];then
+        if [ ! -f "./code-server-4.92.2-linux-amd64.tar.gz" ];then
+            wget https://github.com/coder/code-server/releases/download/v4.92.2/code-server-4.92.2-linux-amd64.tar.gz
         fi
-        tar -xf code-server-4.0.2-linux-amd64.tar.gz
+        tar -xf code-server-4.92.2-linux-amd64.tar.gz
     fi
 
     # 自动修改Dockerfile
