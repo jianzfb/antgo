@@ -2422,7 +2422,7 @@ class DeployMixin:
             config_folder = os.path.join(output_folder, 'config')
 
             has_auto_data_source = False
-            call_mode = project_config.get('call', 'sync')      # 调用模式 sync/asyn
+            call_mode = project_config.get('call_mode', 'sync')      # 调用模式 sync/asyn
             if call_mode not in ['sync', 'asyn']:
                 print('call must be sync/asyn')
                 return
@@ -2459,11 +2459,7 @@ class DeployMixin:
             with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
                 json.dump(old_config_info,fp)
 
-            if 'server' == project_config['mode']:
-                if system_platform != 'linux':
-                    print('mode=server, must is linux platform')
-                    return
-
+            if system_platform != "linux" and 'server' == project_config['mode']:
                 # 创建proto文件，并编译头文件
                 os.makedirs(os.path.join(output_folder, 'proto'),exist_ok=True)
                 if not os.path.exists(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto')):
