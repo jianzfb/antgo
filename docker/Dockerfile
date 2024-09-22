@@ -67,8 +67,8 @@ apt-get install libcudnn8-dev=8.9.5.*-1+cuda12.2
 
 # install trt
 RUN mkdir -p /root/.3rd && cd /root/.3rd && \
-wget http://192.168.1.182:9000/sdk/3rd/TensorRT-8.6.1.6.tar.gz && \
-tar -zvxf TensorRT-8.6.1.6.tar.gz && rm TensorRT-8.6.1.6.tar.gz
+wget https://file.vibstring.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && \
+tar -zvxf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && rm TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz
 
 ENV LD_LIBRARY_PATH=/root/.3rd/TensorRT-8.6.1.6/lib:$LD_LIBRARY_PATH
 
