@@ -192,9 +192,9 @@ def source_to_so_ctx(build_path, srcs, target_name, ctx_name):
         if not os.path.exists(install_path):
             print('compile eagleeye')
             if 'darwin' in sys.platform:
-                os.system(f'cd {src_path} && bash osx_build.sh && mv install {sys.platform}-x86-64-install')
+                os.system(f'cd {src_path} && bash osx_build.sh')
             else:
-                os.system(f'cd {src_path} && bash linux_build.sh && mv install {sys.platform}-x86-64-install')
+                os.system(f'cd {src_path} && bash linux_x86_64_build.sh')
 
                 # 添加so的搜索路径 (for linux)
                 so_abs_path = os.path.join(install_path, 'libs', 'x86-64')

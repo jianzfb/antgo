@@ -6,7 +6,7 @@
 # require Docker Engine >= 17.05
 #
 # builder stage
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 # 基础容器镜像的默认用户已经是 root
 # USER root
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y build-essential autoconf libtool pkg-co
 cd /tmp && git clone --recurse-submodules -b v1.62.0 --depth 1 --shallow-submodules http://github.com/grpc/grpc && \
 cd grpc && mkdir -p cmake/build && cd cmake/build && \
 cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF ../.. && \
-make -j 8 && make install && cd /tmp && rm grpc -rf
+make -j 8 && make install && cd /tmp && rm grpc -rf && pip3 install grpcio
 
 # install vcpkg && minio-cpp
 RUN cd /opt && git clone -b master --depth 1 http://github.com/microsoft/vcpkg.git && \

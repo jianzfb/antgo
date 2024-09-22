@@ -59,7 +59,7 @@ class GroupDef(object):
                 first_comiple = False
                 if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye','py')):
                     first_comiple = True
-                os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && mv install py')
+                os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_x86_64_build.sh BUILD_PYTHON_MODULE && mv install py')
                 if first_comiple:
                     # 增加搜索.so路径
                     cur_abs_path = os.path.abspath(os.curdir)
