@@ -83,6 +83,17 @@ public:
             for(int i=0; i<in_data.size(); ++i){
                 if(in_data[i].empty() || in_data[i].dims()[0] == 0){
                     is_ready = false;
+
+                    // empty data, return directly
+                    for(int k=0;k<this->m_op_func->getOutputNum(); ++k){
+                        m_outputs[k] = Tensor(
+                            std::vector<int64_t>{0},
+                            EAGLEEYE_FLOAT32,
+                            DataFormat::AUTO,
+                            CPU_BUFFER
+                        );
+                    }
+                    m_run_finish = true;
                     break;
                 }
             }

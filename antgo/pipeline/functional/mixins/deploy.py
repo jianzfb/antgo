@@ -2267,7 +2267,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         print('Compile eagleeye core sdk')
         compile_props = ['app', 'ffmpeg', 'rk']
         if system_platform.lower().startswith('linux'):
-            compile_props = ['app', 'ffmpeg', 'rk', 'cuda', 'grpc', 'minio']
+            compile_props = ['app', 'ffmpeg', 'rk', 'cuda', 'grpc', 'minio', 'opencv']
 
         # 检测需要的第三方依赖，并准备环境
         for compile_prop_key, compile_prop_val in eagleeye_config.items():
@@ -2342,11 +2342,35 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./android-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}'
             elif compile_prop_key == 'grpc':
-                # 提供网络服务
+                # 默认基础镜像提供
                 pass
             elif compile_prop_key == 'minio':
                 # 提供对象存储上传/下载
+                # 默认基础镜像提供
                 pass
+            elif compile_prop_key == 'opencv' and system_platform.startswith('linux'):
+                # 仅对linux下opencv依赖就行处理
+                if compile_prop_val is not None and compile_prop_val != '':
+                    print('Exist opencv dependent, dont need download and compile')
+                    continue
+
+                root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
+                os.makedirs(root_folder, exist_ok=True)
+                install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+                if not os.path.exists(install_path):
+                    if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                        # 下载源码
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
+
+                    # 编译
+                    print('compile opencv')
+                    os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+                    os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
+
+                    # 添加so的搜索路径 (for linux)
+                    so_abs_path = os.path.join(install_path, 'lib')
+                    os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
 
         # 获得eagleeye编译脚本
         compile_param_suffix = ''
@@ -2459,7 +2483,7 @@ class DeployMixin:
             with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
                 json.dump(old_config_info,fp)
 
-            if system_platform != "linux" and 'server' == project_config['mode']:
+            if system_platform == "linux" and 'server' == project_config['mode']:
                 # 创建proto文件，并编译头文件
                 os.makedirs(os.path.join(output_folder, 'proto'),exist_ok=True)
                 if not os.path.exists(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto')):

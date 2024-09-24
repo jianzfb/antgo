@@ -70,6 +70,9 @@ RUN mkdir -p /root/.3rd && cd /root/.3rd && \
 wget https://file.vibstring.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && \
 tar -zvxf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && rm TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz
 
+# update zlib
+RUN cd /opt && wget https://www.zlib.net/zlib-1.3.1.tar.gz && tar -zxvf zlib-1.3.1.tar.gz && cd zlib-1.3.1 && ./configure && make -j 4  && make install
+
 ENV LD_LIBRARY_PATH=/root/.3rd/TensorRT-8.6.1.6/lib:$LD_LIBRARY_PATH
 
 ENV PATH=/root/.3rd/TensorRT-8.6.1.6:$PATH
