@@ -15,28 +15,32 @@ class ${op_name}:public BaseOp<${input_num}, ${output_num}>{
 public:
     using BaseOp<${input_num}, ${output_num}>::init;
     ${op_name}(){
-        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
-            Base* func = ${func_create};
-            m_funcs.push_back(func);
-        }
+        // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+        //     Base* func = ${func_create};
+        //     m_funcs.push_back(func);
+        // }
+        Base* func = ${func_create};
+        m_funcs.push_back(func);
     }
     virtual ~${op_name}(){
-        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
-            delete m_funcs[thread_i];
-        }
+        // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+        //     delete m_funcs[thread_i];
+        // }
+        delete m_funcs[0];
     }
 
     virtual int init(std::map<std::string, std::vector<float>> params){
         // 创建函数实体
-        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
-            ${func_init}
-        }
+        // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+        //     ${func_init}
+        // }
     }
     virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){return 0;};
     virtual int init(std::map<std::string, std::vector<std::string>> params){
-        for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
-            m_funcs[thread_i]->init(params);
-        }
+        // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+        //     m_funcs[thread_i]->init(params);
+        // }
+        m_funcs[0]->init(params);
         return 0;
     };
 
@@ -51,9 +55,9 @@ public:
         std::vector<std::vector<Tensor>> loop_output(loop_num);
 
         // parallel loop
-#pragma omp parallel for num_threads(${parallel_num})
         for(int loop_i=0; loop_i<loop_num; ++loop_i){
-            int thread_i = omp_get_thread_num();
+            // int thread_i = omp_get_thread_num();
+            int thread_i = 0;
             int input_num = input.size();
             std::vector<Tensor> slice_input;
             for(int input_i=0; input_i<input_num; ++input_i){

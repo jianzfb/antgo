@@ -101,7 +101,8 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
     root_folder = os.path.join(root_folder, 'rk')
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder,'rknpu2')):
-        os.system(f'cd {root_folder} ; git clone https://github.com/rockchip-linux/rknpu2.git')
+        # 
+        os.system(f'cd {root_folder} ; git clone https://github.com/rockchip-linux/rknpu2.git') 
     rknn_path = os.path.join(root_folder, 'rknpu2')
 
     rknn_runtime_folder = os.path.join(rknn_path, 'runtime')
@@ -133,8 +134,8 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
         # linux/arm64
         RKNN_API_PATH = os.path.join(device_rknn_runtime_folder, platform.capitalize(), 'librknn_api')
         # step2: 推送依赖库到包为止
-        os.makedirs(os.path.join(output_folder, '3rd', 'aarch64'), exist_ok=True)
-        shutil.copyfile(os.path.join(RKNN_API_PATH, 'aarch64', 'librknnrt.so'), os.path.join(output_folder, '3rd', 'aarch64', 'librknnrt.so'))
+        os.makedirs(os.path.join(output_folder, '3rd', 'arm64-v8a'), exist_ok=True)
+        shutil.copyfile(os.path.join(RKNN_API_PATH, 'aarch64', 'librknnrt.so'), os.path.join(output_folder, '3rd', 'arm64-v8a', 'librknnrt.so'))
         # step3: 生成cmake代码片段
         rknn_cmake_code_snippet = f'set(RKNN_API_PATH {RKNN_API_PATH})\n'
         rknn_cmake_code_snippet += 'add_definitions(-DRKNN_NN_ENGINE)\n'
@@ -1349,7 +1350,7 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
     return tuple(group_converted_op_args)
 
 
-def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info):
+def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info, platform, abi):
     info = []
     is_found_include_directories_insert = False
     is_start_add_src_code = False
@@ -1397,7 +1398,10 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
 
         # 添加opencv依赖
         if 'set(OpenCV_DIR "")' in line and (config.USING_OPENCV or 'opencv' in compile_info):
-            opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+            if 'arm64' in abi:
+                opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-arm64-install')
+            else:
+                opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
             line = f'set(OpenCV_DIR "{opencv_path}")'
 
         info.append(line)
@@ -1665,7 +1669,7 @@ def split_function(function_key_name_list):
     return function_list
 
 
-def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None):    
+def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None, eagleeye_config={}):    
     project_name = project_config["name"]
     pipeline_name = project_name
     if '/' in project_name:
@@ -2121,9 +2125,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
         demo_code_content = gen_code(f'./templates/demo_code.cpp')(
             project=pipeline_name,
-            # input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
-            # input_size_list='{'+','.join(plugin_input_size_list)+'}',
-            # input_type_list='{'+plugin_input_type_list+'}',
+            input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
+            input_size_list='{'+','.join(plugin_input_size_list)+'}',
+            input_type_list='{'+plugin_input_type_list+'}',
             output_name_list='{'+','.join(['"nnnode"' for _ in range(len(project_config['output']))])+'}',
             output_port_list='{'+','.join([f"{i}" for i in range(len(project_config['output']))])+'}'
         )
@@ -2142,9 +2146,11 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         if 'depedent_src' in src_info:
             src_code_list.extend(src_info['depedent_src'])
 
-    update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []))
+    update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []), platform, abi)
 
     # 更新插件工程编译脚本
+    if os.path.exists(os.path.join(output_folder, 'build.sh')):
+        os.remove(os.path.join(output_folder, 'build.sh'))
     if platform.lower() == 'android':
         # android (仅考虑arm64-v8a)
         shell_code_content = gen_code('./templates/android_build.sh')(
@@ -2155,7 +2161,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             fp.write(shell_code_content)
     elif platform.lower().startswith('linux') and 'arm64' in abi.lower():
         # linux arm64
-        shell_code_content = gen_code('./templates/linux_build.sh')(
+        shell_code_content = gen_code('./templates/linux_arm64_v8a_build.sh')(
             project=project_name,
             abikey='ARM_ABI',
             abival='arm64-v8a'
@@ -2171,6 +2177,58 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         )
         with open(os.path.join(output_folder, 'linux_x86_64_build.sh'), 'w') as fp:
             fp.write(shell_code_content)
+
+    # 更新依赖库（setup.sh）
+    setup_info = []
+    with open(os.path.join(output_folder, 'setup.sh'), 'r') as fp:
+        line = fp.readline()
+        line = line.strip()
+        if line == '':
+            line = fp.readline()
+            line = line.strip()
+        while line:
+            setup_info.append(line)
+            line = fp.readline()
+            line = line.strip()
+
+    if 'arm64' in abi.lower():
+        abi = 'arm64-v8a'
+
+    if 'ffmpeg' in eagleeye_config:
+        temp_info = []
+        is_found = False
+        for line_i, line_info in enumerate(setup_info):
+            if line_info == '#ffmpeg':
+                temp_info.append('#ffmpeg')
+                temp_info.append(f'cp {eagleeye_config["ffmpeg"]}/lib/*.so* bin/{abi.lower()}')
+                is_found = True
+            else:
+                temp_info.append(line_info)
+
+        if not is_found:
+            temp_info.append('#ffmpeg')
+            temp_info.append(f'cp {eagleeye_config["ffmpeg"]}/lib/*.so* bin/{abi.lower()}')
+        setup_info = temp_info
+
+    if 'opencv' in eagleeye_config:
+        temp_info = []
+        is_found = False
+        for line_i, line_info in enumerate(setup_info):
+            if line_info == '#opencv':
+                temp_info.append('#opencv')
+                temp_info.append(f'cp {eagleeye_config["opencv"]}/lib/*.so* bin/{abi.lower()}')
+                is_found = True
+            else:
+                temp_info.append(line_info)
+
+        if not is_found:
+            temp_info.append('#opencv')
+            temp_info.append(f'cp {eagleeye_config["opencv"]}/lib/*.so* bin/{abi.lower()}')
+        setup_info = temp_info
+
+    with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
+        for line_info in setup_info:
+            fp.write(f'{line_info}\n')
 
     # 保存项目配置信息
     for item in graph_config:
@@ -2264,7 +2322,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
 
     eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_prefix}-install'
     if not os.path.exists(eagleeye_path):
-        print('Compile eagleeye core sdk')
+        print('Compile eagleeye core sdk and collect 3rd dependent')
         compile_props = ['app', 'ffmpeg', 'rk']
         if system_platform.lower().startswith('linux'):
             compile_props = ['app', 'ffmpeg', 'rk', 'cuda', 'grpc', 'minio', 'opencv']
@@ -2325,7 +2383,8 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/libavformat/')
                     # 安装到./linux-install目录
-                    os.system(f'./configure --prefix=./linux-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --pkg-config="pkg-config --static" && make clean && make -j 6 && make install')
+                    os.system(f'./configure --prefix=./linux-arm64-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --pkg-config="pkg-config --static" && make clean && make -j 6 && make install')
+                    eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}'
                 elif system_platform.lower().startswith('android'):
                     os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git')
                     # 修改部分源码
@@ -2348,7 +2407,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 # 提供对象存储上传/下载
                 # 默认基础镜像提供
                 pass
-            elif compile_prop_key == 'opencv' and system_platform.startswith('linux'):
+            elif compile_prop_key == 'opencv':
                 # 仅对linux下opencv依赖就行处理
                 if compile_prop_val is not None and compile_prop_val != '':
                     print('Exist opencv dependent, dont need download and compile')
@@ -2356,23 +2415,43 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
 
                 root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
                 os.makedirs(root_folder, exist_ok=True)
-                install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
-                if not os.path.exists(install_path):
-                    if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
-                        # 下载源码
-                        os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
-                        os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
+                if system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+                    # 交叉编译linux/arm64
+                    install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-arm64-install')
+                    if not os.path.exists(install_path):
+                        if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                            # 下载源码
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
 
-                    # 编译
-                    print('compile opencv')
-                    os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
-                    os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
+                        # 编译
+                        print('compile opencv')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; tool_chain_path="/opt/cross_build/linux-arm64/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"; cmake -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DTOOLCHAIN_PATH=$tool_chain_path -DCMAKE_C_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-gcc -DCMAKE_CXX_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-g++ -DCMAKE_FIND_ROOT_PATH="$tool_chain_path/aarch64-linux-gnu" -DZLIB_ROOT=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_INCLUDE_DIR=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_LIBRARY=/opt/cross_build/linux-arm64/zlib-1.3.1/libz.so -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D ENABLE_NEON=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
+                    eagleeye_config[compile_prop_key] = install_path
+                elif system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+                    # 编译linux/x86-64
+                    install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+                    if not os.path.exists(install_path):
+                        if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                            # 下载源码
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
 
-                    # 添加so的搜索路径 (for linux)
-                    so_abs_path = os.path.join(install_path, 'lib')
-                    os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
+                        # 编译
+                        print('compile opencv')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
 
-        # 获得eagleeye编译脚本
+                        # 添加so的搜索路径 (for linux)
+                        so_abs_path = os.path.join(install_path, 'lib')
+                        os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
+                    eagleeye_config[compile_prop_key] = install_path
+                else:
+                    # android（do nothing）
+                    eagleeye_config[compile_prop_key] = f'{eagleeye_path}/3rd/opencv/'
+
+        # 准备eagleeye编译脚本
         compile_param_suffix = ''
         compile_script_prefix = ''
         if system_platform == 'android':
@@ -2399,6 +2478,39 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
 
         print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
+
+
+    # 第三方依赖信息so库整理
+    for compile_prop_key, compile_prop_val in eagleeye_config.items():
+        if compile_prop_key == 'ffmpeg':
+            # install folder
+            if compile_prop_val is None:
+                compile_prop_val =  os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'ffmpeg')
+            ffmpeg_install_folder = ''
+            if system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+                ffmpeg_install_folder = f'{compile_prop_val}/linux-install'
+            elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+                ffmpeg_install_folder = f'{compile_prop_val}/linux-arm64-install'
+            else:
+                ffmpeg_install_folder = f'{compile_prop_val}/android-install'
+
+            eagleeye_config[compile_prop_key] = ffmpeg_install_folder
+        elif compile_prop_key == 'opencv':
+            # install folder
+            opencv_install_folder = ''
+            if system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+                if compile_prop_val is None:
+                    compile_prop_val = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-install')
+                opencv_install_folder = compile_prop_val
+            elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+                if compile_prop_val is None:
+                    compile_prop_val = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-arm64-install')
+                opencv_install_folder = compile_prop_val
+            else:
+                opencv_install_folder = compile_prop_val
+            
+            eagleeye_config[compile_prop_key] = opencv_install_folder
+
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path, eagleeye_config
 
@@ -2631,7 +2743,8 @@ class DeployMixin:
             platform=system_platform, 
             abi=abi_platform, 
             generate_demo_code=False if enable_project_mode else True,
-            mode=project_config['mode'] if 'mode' in project_config else None)
+            mode=project_config['mode'] if 'mode' in project_config else None,
+            eagleeye_config=eagleeye_config)
 
         # 更新.project.json
         project_info = {}

@@ -86,6 +86,7 @@ class Exe(object):
 
         if self.proc is None:
             if self.project_platform_info == "linux":
+                # TODO, 支持linux/arm64远程平台
                 command = f'{self.project_folder}/bin/x86-64/{self.plugin_name}_demo'
                 self.proc = Popen([command] + ['stdinout'] + run_args, stdin=PIPE, stdout=PIPE, text=False)
             elif self.project_platform_info == "android":
@@ -104,116 +105,134 @@ class Exe(object):
 
         for arg_i, arg_value in enumerate(args):
             self.proc.stdin.write(arg_value.tobytes())
-        self.proc.stdin.close()
 
         # 解析输出数据
         out_list = [None for _ in range(len(self.project_output_info))]
 
+        # 解析返回结果
+        # 需要拆解返回二进制数据，满足等待数据
         out_i = 0
-        while out_i < len(out_list):
-            is_finish = False
-            is_first_packet = True
-            packet_size = 0
-            packet_data = b''
-            receive_size = 0
-            data_type_code = -1
-            data_dim_code = -1
-            shape_list = []
-            while True:
-                ready_fds, _, _ = select.select(self.readable_fds, [], [])
+        none_complete_bytes = b''
+        while True:
+            ready_fds, _, _ = select.select(self.readable_fds, [], [])
 
-                for fd in ready_fds:
-                    if fd == self.stdout_fd:
-                        value = self.proc.stdout.read()
-                        if value:
-                            if is_first_packet:
-                                # 数据类型标记
-                                data_type_code, = struct.unpack('<Q', value[0:8])
-                                # 数据维度
-                                data_dim_code, = struct.unpack('<Q', value[8:16])
-                                # 数据shape
-                                packet_size = 1
-                                for dim_i in range(data_dim_code):
-                                    t, = struct.unpack('<Q', value[16+8*dim_i:16+8*(dim_i+1)])
-                                    shape_list.append(t)
-                                    packet_size *= t
+            for fd in ready_fds:
+                if fd == self.stdout_fd:
+                    value = self.proc.stdout.read()
+                    if value:
+                        tensor_info_bytes = value
+                        tensor_info_bytes = none_complete_bytes + tensor_info_bytes
+                        while tensor_info_bytes:
+                            # 数据类型标记
+                            data_type_code, = struct.unpack('<Q', tensor_info_bytes[0:8])
+                            # 数据维度
+                            data_dim_code, = struct.unpack('<Q', tensor_info_bytes[8:16])
+                            # 数据shape
+                            tensor_size = 1
+                            shape_list = []
+                            for dim_i in range(data_dim_code):
+                                t, = struct.unpack('<Q', tensor_info_bytes[16+8*dim_i:16+8*(dim_i+1)])
+                                shape_list.append(t)
+                                tensor_size *= t
 
-                                if np.prod(shape_list) == 0:
-                                    # 空, 需要创建empty
-                                    is_finish = True
+                            # 数据内容
+                            tensor_byte_size = 0
+                            if data_type_code == 0:
+                                # int8
+                                tensor_byte_size = tensor_size
+                                if len(tensor_info_bytes) < 8*(2+data_dim_code)+tensor_byte_size:
+                                    none_complete_bytes = tensor_info_bytes
                                     break
 
-                                packet_size += 8*(2+data_dim_code)
-                                is_first_packet = False
-                            
-                            receive_size += len(value)
-                            packet_data += value
-                            if packet_size == receive_size:
-                                is_finish = True
-                    if is_finish:
-                        break
-                if is_finish:
-                    break 
+                                if np.prod(shape_list) == 0:
+                                    out_list[out_i] = np.empty(shape_list, np.int8)
+                                else:
+                                    data = np.frombuffer(tensor_info_bytes[8*(2+data_dim_code):8*(2+data_dim_code)+tensor_byte_size], np.int8)
+                                    data = data.reshape(shape_list)
+                                    out_list[out_i] = data
+                            elif data_type_code == 1 or data_type_code == 8 or data_type_code == 9:
+                                # uint8
+                                tensor_byte_size = tensor_size
+                                if len(tensor_info_bytes) < 8*(2+data_dim_code)+tensor_byte_size:
+                                    none_complete_bytes = tensor_info_bytes
+                                    break
 
-            if data_type_code == 0:
-                # int8
-                if np.prod(shape_list) == 0:
-                    out_list[out_i] = np.empty(shape_list, np.int8)
-                else:
-                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.int8)
-                    data = data.reshape(shape_list)
-                    out_list[out_i] = data
-            elif data_type_code == 1 or data_type_code == 8 or data_type_code == 9:
-                # uint8
-                if np.prod(shape_list) == 0:
-                    out_list[out_i] = np.empty(shape_list, np.uint8)
-                else:
-                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.uint8)
-                    data = data.reshape(shape_list)
-                    out_list[out_i] = data
-            elif data_type_code == 4:
-                # int32
-                if np.prod(shape_list) == 0:
-                    out_list[out_i] = np.empty(shape_list, np.int32)
-                else:
-                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.int32)
-                    data = data.reshape(shape_list)
-                    out_list[out_i] = data
-            elif data_type_code == 5:
-                # uint32
-                if np.prod(shape_list) == 0:
-                    out_list[out_i] = np.empty(shape_list, np.uint32)
-                else:
-                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.uint32)
-                    data = data.reshape(shape_list)
-                    out_list[out_i] = data
-            elif data_type_code == 6:
-                # float32
-                if np.prod(shape_list) == 0:
-                    out_list[out_i] = np.empty(shape_list, np.float32)
-                else:
-                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.float32)
-                    data = data.reshape(shape_list)
-                    out_list[out_i] = data
-            elif data_type_code == 7:
-                # double
-                if np.prod(shape_list) == 0:
-                    out_list[out_i] = np.empty(shape_list, np.float64)
-                else:
-                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.float64)
-                    data = data.reshape(shape_list)
-                    out_list[out_i] = data
-            elif data_type_code == 10:
-                # bool
-                if np.prod(shape_list) == 0:
-                    out_list[out_i] = np.empty(shape_list, np.bool)
-                else:
-                    data = np.frombuffer(packet_data[8*(2+data_dim_code):], np.bool)
-                    data = data.reshape(shape_list)
-                    out_list[out_i] = data
+                                if np.prod(shape_list) == 0:
+                                    out_list[out_i] = np.empty(shape_list, np.uint8)
+                                else:
+                                    data = np.frombuffer(tensor_info_bytes[8*(2+data_dim_code):8*(2+data_dim_code)+tensor_byte_size], np.uint8)
+                                    data = data.reshape(shape_list)
+                                    out_list[out_i] = data
+                            elif data_type_code == 4:
+                                # int32
+                                tensor_byte_size = tensor_size*4
+                                if len(tensor_info_bytes) < 8*(2+data_dim_code)+tensor_byte_size:
+                                    none_complete_bytes = tensor_info_bytes
+                                    break
 
-            out_i += 1
-            if out_i >= len(out_list):
+                                if np.prod(shape_list) == 0:
+                                    out_list[out_i] = np.empty(shape_list, np.int32)
+                                else:
+                                    data = np.frombuffer(tensor_info_bytes[8*(2+data_dim_code):8*(2+data_dim_code)+tensor_byte_size], np.int32)
+                                    data = data.reshape(shape_list)
+                                    out_list[out_i] = data
+                            elif data_type_code == 5:
+                                # uint32
+                                tensor_byte_size = tensor_size*4
+                                if len(tensor_info_bytes) < 8*(2+data_dim_code)+tensor_byte_size:
+                                    none_complete_bytes = tensor_info_bytes
+                                    break
+
+                                if np.prod(shape_list) == 0:
+                                    out_list[out_i] = np.empty(shape_list, np.uint32)
+                                else:
+                                    data = np.frombuffer(tensor_info_bytes[8*(2+data_dim_code):8*(2+data_dim_code)+tensor_byte_size], np.uint32)
+                                    data = data.reshape(shape_list)
+                                    out_list[out_i] = data
+                            elif data_type_code == 6:
+                                # float32
+                                tensor_byte_size = tensor_size*4
+                                if len(tensor_info_bytes) < 8*(2+data_dim_code)+tensor_byte_size:
+                                    none_complete_bytes = tensor_info_bytes
+                                    break
+
+                                if np.prod(shape_list) == 0:
+                                    out_list[out_i] = np.empty(shape_list, np.float32)
+                                else:
+                                    data = np.frombuffer(tensor_info_bytes[8*(2+data_dim_code):8*(2+data_dim_code)+tensor_byte_size], np.float32)
+                                    data = data.reshape(shape_list)
+                                    out_list[out_i] = data
+                            elif data_type_code == 7:
+                                # double
+                                tensor_byte_size = tensor_size*8
+                                if len(tensor_info_bytes) < 8*(2+data_dim_code)+tensor_byte_size:
+                                    none_complete_bytes = tensor_info_bytes
+                                    break
+
+                                if np.prod(shape_list) == 0:
+                                    out_list[out_i] = np.empty(shape_list, np.float64)
+                                else:
+                                    data = np.frombuffer(tensor_info_bytes[8*(2+data_dim_code):8*(2+data_dim_code)+tensor_byte_size], np.float64)
+                                    data = data.reshape(shape_list)
+                                    out_list[out_i] = data
+                            elif data_type_code == 10:
+                                # bool
+                                tensor_byte_size = tensor_size
+                                if len(tensor_info_bytes) < 8*(2+data_dim_code)+tensor_byte_size:
+                                    none_complete_bytes = tensor_info_bytes
+                                    break
+
+                                if np.prod(shape_list) == 0:
+                                    out_list[out_i] = np.empty(shape_list, np.bool)
+                                else:
+                                    data = np.frombuffer(tensor_info_bytes[8*(2+data_dim_code):8*(2+data_dim_code)+tensor_byte_size], np.bool)
+                                    data = data.reshape(shape_list)
+                                    out_list[out_i] = data
+
+                            tensor_info_bytes = tensor_info_bytes[8*(2+data_dim_code)+tensor_byte_size:]
+                            none_complete_bytes = b''
+                            out_i += 1
+
+            if out_i == len(out_list):
                 break
-
         return out_list if len(out_list) > 1 else out_list[0]
