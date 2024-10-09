@@ -31,6 +31,7 @@ uploadProject(){
 pidarr=()
 for target_ip in ${target_ip_list[@]}
 do
+    echo ${target_ip}
     uploadProject ${username} ${target_ip} ${project} ${submit_time} &
     pid=$!
     pidarr+=(${pid})

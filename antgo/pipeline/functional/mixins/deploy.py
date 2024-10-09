@@ -2698,7 +2698,7 @@ class DeployMixin:
 
                 # 创建grpc客户端python代码(用于测试)
                 if not os.path.exists(os.path.join(output_folder, f'grpc_client.py')):
-                    grpc_client_code_template_file = './templates/grpc_client_code.py'
+                    grpc_client_code_template_file = './templates/grpc_client_code'
                     if call_mode == 'callback' or call_mode == 'asyn':
                         grpc_client_code_template_file = './templates/grpc_stream_client_code.py'
 

@@ -1,5 +1,4 @@
 import sys
-sys.path.insert(0, '/workspace/antgo')
 import logging
 import os
 import time
@@ -137,6 +136,7 @@ def analyze_all_dependent_data(config_file_path):
         dependent_data_list.extend(_iterator_analyze_data_list(cfg.data.test))
     
     return dependent_data_list
+
 
 def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False, env='master'):   
     # 前提假设，调用此函数前当前目录下需要存在项目代码
@@ -337,6 +337,157 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     # 删除临时配置:
     if os.path.exists('./extra-config.py'):
         os.remove('./extra-config.py')
+    return True
+
+
+def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp=''):
+    # 前提假设，调用此函数前当前目录下需要存在项目代码
+    # 遍历所有注册的设备，找到每个设备的空闲GPU
+    with open('./.project.json', 'r') as fp:
+        project_info = json.load(fp)
+
+    username = ''
+    password = ''
+    ssh_config_info = None
+    logging.info("Analyze cluster environment.")
+    if ip == '':
+        # 自动搜索可用远程机器
+        for file_name in os.listdir(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+            register_ip = ''
+            if file_name.endswith('.yaml') and file_name.startswith('ssh'):
+                terms = file_name.split('-')
+                if len(terms) == 4:
+                    register_ip = terms[1]
+            else:
+                continue
+
+            if register_ip == '':
+                continue
+
+            ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', file_name)
+            with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+                ssh_config_info = yaml.safe_load(fp)
+
+            # 检查GPU占用情况
+            logging.info(f'Analyze IP: {register_ip}')
+            info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
+            if len(info['free_gpus']) >= gpu_num:
+                ip = ssh_config_info["config"]["ip"]
+                username = ssh_config_info["config"]["username"]
+                password = ssh_config_info["config"]["password"]
+                free_gpus = info['free_gpus']
+                break
+
+    target_ip_list = ip.split(',')
+    target_machine_info_list = []
+    for target_ip in target_ip_list:
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{target_ip}-submit-config.yaml')
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
+
+        # 检查GPU占用情况
+        info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
+        if len(info['free_gpus']) < gpu_num:
+            logging.error(f"No enough gpu in {target_ip}.")
+            return
+
+        username = ssh_config_info["config"]["username"]
+        password = ssh_config_info["config"]["password"]
+        target_machine_info_list.append({
+            'ip': target_ip,
+            'username': username,
+            'password': password,
+            'gpus': info['free_gpus']
+        })
+
+    if len(target_machine_info_list) != len(target_ip_list):
+        logging.error("No enough machine resource")
+        return
+    logging.info(f"Apply target machine resource {target_machine_info_list}")
+
+    apply_gpu_id = [str(i) for i in range(gpu_num)]
+    if len(target_machine_info_list) == 1:
+        apply_gpu_id = [str(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
+    apply_gpu_id = ','.join(apply_gpu_id)
+
+    image_name = base_image
+    if image_name is None and ('image' in project_info and project_info['image'] != ''):
+        image_name = project_info['image']
+
+    if password == '':
+        password = 'default'
+
+    print(f'Use image {image_name}')
+    project_name = os.path.abspath(os.path.curdir).split("/")[-1]
+    submit_time = create_time
+    env = '-'
+
+    target_machine_ips = ','.join([v['ip'] for v in target_machine_info_list])
+    print(f'project_name {project_name}')
+    print(f'target_machine_ips {target_machine_ips}')
+
+    submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
+    exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
+    submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{exe_script}" {image_name} {project_name} {env} {submit_time}'
+
+    # 解析提交后的输出，并解析出container id
+    print('submit command')
+    print(submit_cmd)
+    ret = subprocess.Popen(submit_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    content = ret.stdout.read()
+    content = content.decode('utf-8')
+    print(content)
+
+    # 检查返回的容器ID和机器IP对应关系
+    master_machine_info = target_machine_info_list[0]
+    container_id_list = content.split('\n')[(-1-len(target_machine_info_list)):-1]
+
+    master_container_id = ''
+    for container_id in container_id_list:
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{master_machine_info["ip"]}-submit-config.yaml')
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
+
+        cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} docker ps'
+        ret = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if ret.returncode:
+            logging.error("Couldnt get running info")
+            continue
+
+        running_info = ret.stdout.read()
+        running_info = running_info.decode('utf-8')
+        running_info = running_info.split('\n')
+        if len(running_info) <= 1:
+            logging.error(f"Couldnt parse container info on {master_machine_info['ip']}")
+            continue
+
+        is_found = False
+        for i in range(1, len(running_info)):
+            if running_info[i] == '':
+                continue
+
+            container_info = running_info[i].split(' ')
+            abs_container_id = container_info[0]
+            if container_id.startswith(abs_container_id):
+                is_found = True
+                break
+        
+        if is_found:
+            master_container_id = container_id
+            break
+
+    if master_container_id == '':
+        logging.error('Couldnt find task container id.')
+        return False
+
+    # 获得container id
+    with open('./.project.json', 'r') as fp:
+        project_info = json.load(fp)
+    project_info['exp'][exp][-1]['id'] = master_container_id
+    project_info['exp'][exp][-1]['ip'] = target_machine_info_list[0]['ip']
+    with open('./.project.json', 'w') as fp:
+        json.dump(project_info,fp)
+
     return True
 
 # 检查任务资源是否满足

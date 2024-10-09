@@ -41,6 +41,7 @@ DEFINE_string('git', None, '')
 DEFINE_string('branch', None, '')
 DEFINE_string('commit', None, '')
 DEFINE_string('image', '', '')                  # 镜像
+DEFINE_string('script', None, '')               # 自定义脚本.sh
 DEFINE_int('cpu', 0, 'set cpu number')          # cpu 数
 DEFINE_int('gpu', 0, 'set gpu number')          # gpu 数
 DEFINE_int('memory', 0, 'set memory size (M)')  # 内存大小（单位M）
@@ -752,6 +753,10 @@ def main():
       shutil.copyfile(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project.json'), './.project.json')
 
     if args.ssh or args.k8s:
+      # 远程提交模式，仅支持训练和推断
+      if action_name not in ['train', 'eval']:
+        logging.error('Antgo remote task submit mode only support train and eval')
+        return
       if args.root.startswith('ali:'):
         # 尝试进行认证，从而保证当前路径下生成认证信息
         ali = Aligo()
@@ -763,8 +768,8 @@ def main():
       with open('./.project.json', 'r') as fp:
         project_info = json.load(fp)
 
-      if action_name in ['train', 'activelearning']:
-        # train, activelearning
+      if action_name in ['train']:
+        # train
         # 项目基本信息
         project_info['image'] = args.image      # 镜像名称
         if args.exp not in project_info['exp']:
@@ -784,7 +789,7 @@ def main():
         with open('./.project.json', 'w') as fp:
           json.dump(project_info,fp)
       else:
-        # eval, export
+        # eval
         # 匹配实验记录（exp, config）
         # (1) root 匹配
         # (2) 默认匹配最新实验
@@ -833,18 +838,21 @@ def main():
 
       # 直接进行任务提交
       # step 1.1: 检查提交脚本配置
-      if args.ssh:
-        # ssh提交
+      if args.ssh and args.script is None:
+        # 基于ssh远程管理
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
 
         ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
-      else:
-        # 自定义脚本提交
-        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-        sys_argv_cmd = f'antgo {sys_argv_cmd}'          
-        custom_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+      elif args.ssh and args.script is not None:
+        # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
+        assert(args.image is not None and args.image != '')
+        ssh_submit2_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
+      elif args.k8s:
+        # TODO,基于k8s远程管理
+        logging.error('Not support k8s now.')
+        pass
 
       # 清理临时存储信息
       if os.path.exists('./aligo.json'):
