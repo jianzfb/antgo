@@ -385,13 +385,13 @@ public:
         response->set_code(0);
         return Status::OK;
     }
-    ::grpc::Status ${servername}AsynPushStream(::grpc::ServerContext* context, const ::${package}::${servername}AsynPushStreamRequest* request, ::${package}::${servername}AsynPushStreamReply* response){
+    ::grpc::Status ${servername}AsynStream(::grpc::ServerContext* context, const ::${package}::${servername}AsynStreamRequest* request, ::${package}::${servername}AsynStreamReply* response){
         // 仅用于对视频流分析
         std::string server_key = request->serverkey();
 
         // 推送数据到管线队列
         char* package_data = const_cast<char*>(request->package_data().c_str());
-        eagleeye::eagleeye_pipeline_server_push_stream(server_key, (uint8_t*)package_data, request->package_size());
+        eagleeye::eagleeye_pipeline_server_stream(server_key, (uint8_t*)package_data, request->package_size());
         response->set_code(0);
         return Status::OK;
     }

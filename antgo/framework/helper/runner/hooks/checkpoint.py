@@ -84,9 +84,16 @@ class CheckpointHook(Hook):
         # 设置文件日志存储根目录
         if mlogger.is_ready():
             self.is_ready = True
+            backend = 'disk'
+            if self.out_dir.startswith('ali'):
+                backend = 'aliyun'
+            elif self.out_dir.startswith('qiniu'):
+                backend = 'qiniu'
+            elif self.out_dir.startswith('htfs'):
+                backend = 'htfs'
             mlogger.FileLogger.root_folder = self.out_dir
             self.file_logger = mlogger.Container()
-            self.file_logger.file = mlogger.FileLogger('file', 'aliyun', True)
+            self.file_logger.file = mlogger.FileLogger('file', backend, True)
 
         runner.logger.info(
             (f'Checkpoints will be saved to {self.out_dir} by '

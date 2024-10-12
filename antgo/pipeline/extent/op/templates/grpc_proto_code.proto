@@ -20,7 +20,7 @@ service ${servername} {
 
   rpc ${servername}AsynPush(${servername}AsynPushRequest) returns (${servername}AsynPushReply) {}
 
-  rpc ${servername}AsynPushStream(${servername}AsynPushStreamRequest) returns (${servername}AsynPushStreamReply) {}
+  rpc ${servername}AsynStream(${servername}AsynStreamRequest) returns (${servername}AsynStreamReply) {}
 
   rpc ${servername}AsynMessage(${servername}AsynMessageRequest) returns (stream ${servername}AsynMessageReply) {}
 }
@@ -49,13 +49,13 @@ message ${servername}AsynPushReply{
   string data = 3;                      // 里面是json 见json配置文件
 }
 
-message ${servername}AsynPushStreamRequest{
+message ${servername}AsynStreamRequest{
   string serverkey = 1;                 // 服务关键字
   bytes package_data = 2;               // 包数据
   int32 package_size = 3;               // 包大小
 }
 
-message ${servername}AsynPushStreamReply{
+message ${servername}AsynStreamReply{
   string message = 1;                   // 返回的消息例如 success
   int32 code = 2;                       // 返回的code 0 成功，非0失败
   string data = 3;                      // 里面是json 见json配置文件

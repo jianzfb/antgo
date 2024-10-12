@@ -355,15 +355,11 @@ def main():
       logging.error('Only support mode = http, grpc')
       return
 
-    try:
-      assert('image_repo' in server_info)
-      assert('server_port' in server_info)
-      assert('create_time' in server_info)
-      assert('update_time' in server_info)    
-      assert('name' in server_info)  
-    except:
-      logging.error('Server info not complete. Need to antgo package xxx.')
-      return
+    assert('image_repo' in server_info)
+    assert('server_port' in server_info)
+    assert('create_time' in server_info)
+    assert('update_time' in server_info)
+    assert('name' in server_info)
 
     print('Server Info.')
     print(server_info)
@@ -418,7 +414,10 @@ def main():
         os.system(deploy_cmd)
     elif args.k8s:
       logging.error('K8s deploy in comming.')
-      return
+    
+    # step 3: 更新平台记录（name, logo, description, address）
+    # 仅内部团队测试使用
+    
     return
 
   # 查看运行设备（本地/远程）
