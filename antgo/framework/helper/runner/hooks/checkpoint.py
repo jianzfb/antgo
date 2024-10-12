@@ -90,7 +90,7 @@ class CheckpointHook(Hook):
             elif self.out_dir.startswith('qiniu'):
                 backend = 'qiniu'
             elif self.out_dir.startswith('htfs'):
-                backend = 'htfs'
+                backend = 'hdfs'
             mlogger.FileLogger.root_folder = self.out_dir
             self.file_logger = mlogger.Container()
             self.file_logger.file = mlogger.FileLogger('file', backend, True)
