@@ -26,6 +26,7 @@ from pathlib import Path
 from filelock import FileLock
 from aligo import Aligo
 import antvis.client.mlogger as mlogger
+from antvis.client.httprpc import *
 import tempfile
 
 
@@ -158,26 +159,7 @@ def main():
     args.ssh = True
 
   ######################################### 配置文件操作 ################################################
-  # 检查配置文件是否存在
-  if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
-    # 使用指定配置文件更新
-    if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
-      os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
-
-	  # 位置优先选择/data/, /HOME/
-    config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
-    if not os.path.exists('/data'):
-      config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
-
-    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-    config_template = env.get_template('config.xml')
-    config_content = config_template.render(**config_data)
-
-    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
-      fp.write(config_content)
-    logging.warn('Using default config file.')
-
-  # 配置操作
+  # 创建配置文件
   if action_name == 'config':
     config_data = {'FACTORY': '', 'USER_TOKEN': ''}
     # 读取现有数值
@@ -200,6 +182,64 @@ def main():
 
     logging.info('Update config file.')
     return
+
+  # 配置文件不存在则创建默认
+  if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
+    # 使用指定配置文件更新
+    if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+      os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
+
+	  # 位置优先选择/data/, /HOME/
+    config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
+    if not os.path.exists('/data'):
+      config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
+
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
+
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn('Using default config file.')
+
+  ######################################### 检查token #################################################
+  # 解析配置文件
+  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+  config.AntConfig.parse_xml(config_xml)
+
+  if not os.path.exists(config.AntConfig.factory):
+    os.makedirs(config.AntConfig.factory)
+  if not os.path.exists(config.AntConfig.data_factory):
+    os.makedirs(config.AntConfig.data_factory)
+  if not os.path.exists(config.AntConfig.task_factory):
+    os.makedirs(config.AntConfig.task_factory)
+
+  # 检查token是否存在，否则重新生成
+  token = None
+  if os.path.exists('./.token'):
+      with open('./.token', 'r') as fp:
+          token = fp.readline()
+  else:
+    token = getattr(config.AntConfig, 'server_user_token', '')
+
+  if token is None or token == '':
+    logging.info("generate experiment token")
+    token = mlogger.create_token()
+    config_data = {
+      'FACTORY': getattr(config.AntConfig, 'factory'), 
+      'USER_TOKEN': token
+    }
+
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
+
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
+
+  with open('./.token', 'w') as fp:
+    fp.write(token)
 
   # web服务
   if action_name == 'web':
@@ -417,7 +457,8 @@ def main():
     
     # step 3: 更新平台记录（name, logo, description, address）
     # 仅内部团队测试使用
-    
+    rpc = HttpRpc("v1", 'antvis', 'experiment.vibstring.com', 80, token=token)
+    rpc.research.create.post(research_url=f'http://{args.ip}:{args.port}', research_name=server_info["name"], research_description='')
     return
 
   # 查看运行设备（本地/远程）
@@ -684,45 +725,6 @@ def main():
   if args.root is None or args.root == '':
     print('Using default root address ali:///exp')
     args.root = "ali:///exp"
-
-  ######################################### 检查token #################################################
-  # 解析配置文件
-  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-  config.AntConfig.parse_xml(config_xml)
-
-  if not os.path.exists(config.AntConfig.factory):
-    os.makedirs(config.AntConfig.factory)
-  if not os.path.exists(config.AntConfig.data_factory):
-    os.makedirs(config.AntConfig.data_factory)
-  if not os.path.exists(config.AntConfig.task_factory):
-    os.makedirs(config.AntConfig.task_factory)
-
-  # 检查token是否存在，否则重新生成
-  token = None
-  if os.path.exists('./.token'):
-      with open('./.token', 'r') as fp:
-          token = fp.readline()
-  else:
-    token = getattr(config.AntConfig, 'server_user_token', '')
-
-  if token is None or token == '':
-    logging.info("generate experiment token")
-    token = mlogger.create_token()
-    config_data = {
-      'FACTORY': getattr(config.AntConfig, 'factory'), 
-      'USER_TOKEN': token
-    }
-
-    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-    config_template = env.get_template('config.xml')
-    config_content = config_template.render(**config_data)
-
-    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
-      fp.write(config_content)
-    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
-
-  with open('./.token', 'w') as fp:
-    fp.write(token)
 
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
