@@ -52,6 +52,7 @@ DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')              # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')          # 是否启用finetune模式
 DEFINE_indicator("release", True, '')           # 发布
+DEFINE_indicator("upgrade", True, '')           # 升级标记
 DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
 DEFINE_string("remote-ip", None, "")
@@ -276,8 +277,13 @@ def main():
       if args.version is None or args.version == '-' or args.version == '':
         args.version = 'master'
       dockerfile_data = {
-        'version': args.version
+        'version': args.version,
+        'is_upgrade': 'no'
       }
+      if args.upgrade:
+        dockerfile_data.update({
+          'is_upgrade': "upgrade"
+        })
       env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
       dockerfile_template = env.get_template('script/Dockerfile')
       dockerfile_content = dockerfile_template.render(**dockerfile_data)
