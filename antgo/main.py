@@ -51,6 +51,7 @@ DEFINE_string('type', None, '')                 # 类型
 DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')              # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')          # 是否启用finetune模式
+DEFINE_indicator("release", True, '')           # 发布
 DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
 DEFINE_string("remote-ip", None, "")
@@ -292,19 +293,20 @@ def main():
         logging.error('Must set server port.(--port=8080)')
         return
 
+      if args.name is None or args.name == '':
+        logging.error('Must set server image name. (--name=xxx)')
+        return
+
       launch_tempate =  env.get_template('script/server-launch.sh')
       launch_data = {}      
       launch_data.update({
-        'cmd': f'antgo web --main={args.main} --port={args.port}'
+        'cmd': f'antgo web --main={args.main} --port={args.port} --name={args.name}'
       })
       launch_content = launch_tempate.render(**launch_data)
       with open('./launch.sh', 'w') as fp:
         fp.write(launch_content)
 
       # step 2: 构建镜像
-      if args.name is None or args.name == '':
-        logging.error('Must set server image name. (--name=xxx)')
-        return
       logging.info(f'Build docker image {args.name} (Server: {args.mode})')
       os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {args.name} ./')
 
@@ -457,11 +459,12 @@ def main():
         os.system(deploy_cmd)
     elif args.k8s:
       logging.error('K8s deploy in comming.')
-    
+
     # step 3: 更新平台记录（name, logo, description, address）
     # 仅内部团队测试使用
-    rpc = HttpRpc("v1", 'antvis', 'experiment.vibstring.com', 80, token=token)
-    rpc.research.create.post(research_url=f'http://{args.ip}:{args.port}', research_name=server_info["name"], research_description='')
+    if args.release:
+      rpc = HttpRpc("v1", 'antvis', 'experiment.vibstring.com', 80, token=token)
+      rpc.research.create.post(research_url=f'http://{args.ip}:{args.port}', research_name=server_info["name"], research_description='')
     return
 
   # 查看运行设备（本地/远程）
