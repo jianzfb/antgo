@@ -261,7 +261,10 @@ def main():
       os.system(f'NGROK_AUTHTOKEN={args.authtoken} uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
       return
 
-    os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+    if args.name is None or args.name == '':
+      os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+    else:
+      os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip} --root-path /{args.name}')
     return
 
   # 镜像打包服务
