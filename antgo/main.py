@@ -890,21 +890,25 @@ def main():
     # 下载依赖checkpoint
     if args.checkpoint != '':
       # checkpoint路径格式
-      # 1: local path                 本地目录
-      # 2: ali://                     直接从阿里云盘下载
-      # 3: experiment/checkpoint      日志平台（推荐）      
+      # 1: local path                           本地目录
+      # 2: ali://                               直接从阿里云盘下载
+      # 3: logger://experiment/checkpoint       日志平台（推荐）     
       print(args.checkpoint)
       if args.checkpoint.startswith('ali://'):
         # 阿里云盘路径
-        if not os.path.exists('./checkpoint'):
-          os.makedirs('./checkpoint')
-
+        os.makedirs('./checkpoint', exist_ok=True)
         with FileLock('download.lock'):
           checkpoint_name = args.checkpoint.split('/')[-1]
           if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
             logging.info('downling checkpoint...')
             logging.info(args.checkpoint)              
             file_client_get(args.checkpoint, './checkpoint')
+          args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
+      elif args.checkpoint.startswith('logger://'):
+        os.makedirs('./checkpoint', exist_ok=True)
+        with FileLock('download.lock'):
+          checkpoint_name = args.checkpoint.split('/')[-1]
+          tools.download_from_logger('./checkpoint', None, args.checkpoint)
           args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
 
       # checkpoint（可能具体路径存储在日志平台，需要实际运行时获取具体路径并下载）
@@ -915,40 +919,22 @@ def main():
         # 非本地有效路径
         if not os.path.exists('./checkpoint'):
           os.makedirs('./checkpoint')
-        with FileLock('download.lock'):
-          if '/' in args.resume_from:
-            # 如果传入的是路径，则尝试直接下载
+
+        if args.resume_from.startswith('ali://'):
+          os.makedirs('./checkpoint', exist_ok=True)
+          with FileLock('download.lock'):
             checkpoint_name = args.resume_from.split('/')[-1]
             if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
               logging.info('downling checkpoint...')
               logging.info(args.resume_from)              
               file_client_get(args.resume_from, './checkpoint')
             args.resume_from = os.path.join('./checkpoint', checkpoint_name)
-          else:
-            # 尝试从实验存储目录中，加载
-            if os.path.exists('./.project.json'):
-              with open('./.project.json', 'r') as fp:
-                project_info = json.load(fp)
-
-            checkpoint_name = args.resume_from
-            if args.exp in project_info['exp']:
-              found_exp_related_info_list = []
-              for exp_info in project_info['exp'][args.exp]:
-                if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
-                  found_exp_related_info_list.append(
-                    exp_info
-                  )
-
-              found_exp_info = None
-              if len(found_exp_related_info_list) > 0:
-                found_exp_info = found_exp_related_info_list[-1]
-
-              if found_exp_info is not None:
-                found_exp_root = found_exp_info['root']
-                logging.info('downling checkpoint...')
-                logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
-                file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
-                args.resume_from = os.path.join('./checkpoint', checkpoint_name)
+        elif args.resume_from.startswith('logger://'):
+          os.makedirs('./checkpoint', exist_ok=True)
+          with FileLock('download.lock'):
+            tools.download_from_logger('./checkpoint', None, args.resume_from)
+            checkpoint_name = args.resume_from.split('/')[-1]
+            args.resume_from = os.path.join('./checkpoint', checkpoint_name)
 
       logging.info(f'use resume_from {args.resume_from}')
       if not os.path.exists(args.resume_from):
@@ -1349,10 +1335,10 @@ def main():
         # args.src 远程文件路径
         # args.tgt 本地路径
         # args.tags 关键字（对于搜索引擎下载使用）
-        if args.num == 0:
+        if args.num == 0 and sub_action_name.split("/")[1] in ['baidu', 'bing', 'google']:
           args.num = 1000
           print(f'Default download sample numbe 1000 (--num=...)')
-        tool_func(args.tgt, args.tags, src_path=args.src, target_num=args.num)
+        tool_func(args.tgt, args.tags, src_path=args.src, target_num=args.num, exp=args.exp, id=args.id, config=args.config)
       elif sub_action_name.startswith('upload'):
         tool_func = getattr(tools, f'upload_to_{sub_action_name.split("/")[1]}', None)
 

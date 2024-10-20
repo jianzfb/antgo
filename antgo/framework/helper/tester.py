@@ -97,52 +97,6 @@ class Tester(object):
         self.is_ready = False
         self.use_logger_platform = False
 
-    @master_only
-    def _finding_from_logger(self, experiment_name, checkpoint_name):
-        # step 1: 检测当前路径下收否有token缓存
-        token = None
-        if os.path.exists('./.token'):
-            with open('./.token', 'r') as fp:
-                token = fp.readline()
-
-        # step 2: 检查antgo配置目录下的配置文件中是否有token
-        if token is None or token == '':
-            config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-            config.AntConfig.parse_xml(config_xml)
-            token = getattr(config.AntConfig, 'server_user_token', '')
-        if token == '' or token is None:
-            print('No valid vibstring token, directly return')
-            return None, None
-
-        # 创建实验
-        mlogger.config(token=token)
-        project_name = self.cfg.get('project_name', os.path.abspath(os.path.curdir).split('/')[-1])
-        status = mlogger.activate(project_name, experiment_name)
-        if status is None:
-            print(f'Couldnt find {project_name}/{experiment_name}, from logger platform')
-            return None, None
-
-        file_logger = mlogger.Container()
-        local_config_path = None
-        local_checkpoint_path = None
-        # 下载配置文件
-        mlogger.FileLogger.cache_folder = f'./logger/cache/{experiment_name}'
-        file_logger.cfg_file = mlogger.FileLogger('config', 'qiniu')
-        file_list, _ = file_logger.cfg_file.get()
-        if len(file_list) > 0:
-           local_config_path = file_list[0]
-
-        # 下载checkpoint文件
-        file_logger.checkpoint_file = mlogger.FileLogger('file', 'aliyun')
-        file_list, _ = file_logger.checkpoint_file.get(checkpoint_name)
-        for file_name in file_list:
-            if file_name.endswith(checkpoint_name):
-                local_checkpoint_path = file_name
-                break
-        print(f'Found {local_config_path} {local_checkpoint_path}')
-        self.use_logger_platform = True
-        return local_config_path, local_checkpoint_path
-
     def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False, strict=True):
         # build the model and load checkpoint
         if model_builder is not None:
@@ -150,17 +104,8 @@ class Tester(object):
         else:
             self.model = build_model(self.cfg.model)
 
-        if checkpoint == '':
+        if checkpoint is None or checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
-
-        # checkpoint路径格式
-        # 1: local path                 本地目录
-        # 2: ali://                     直接从阿里云盘下载
-        # 3: experiment/checkpoint      日志平台（推荐）
-        if not os.path.exists(checkpoint) and len(checkpoint[1:].split('/')) == 2:
-            # 尝试解析来自于日志平台
-            self.experiment_name, self.checkpoint_name = checkpoint[1:].split('/')
-            _, checkpoint = self._finding_from_logger(self.experiment_name, self.checkpoint_name)
 
         if checkpoint is None or checkpoint == '':
             logger.error('Missing checkpoint file')

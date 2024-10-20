@@ -240,6 +240,10 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
             # [0]作为master节点
             sys_argv = f'{sys_argv} --master-addr={target_machine_info_list[0]["ip"]}'
 
+    # 记录提交机器地址
+    with open('./address', 'w') as fp:
+        fp.write(f'{username}@{target_machine_info_list[0]["ip"]}')
+
     # 添加扩展配置:保存到当前目录下并一同提交
     if task_name is not None and len(project_info) > 0:
         extra_config = prepare_extra_config(task_name, project_info)
@@ -271,7 +275,7 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     print(f'Use image {image_name}')
     project_name = os.path.abspath(os.path.curdir).split("/")[-1]
     submit_time = create_time
-
+    
     target_machine_ips = ','.join([v['ip'] for v in target_machine_info_list])
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
     submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name} {env} {submit_time}'
@@ -337,6 +341,9 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     # 删除临时配置:
     if os.path.exists('./extra-config.py'):
         os.remove('./extra-config.py')
+    
+    if os.path.exists('./address'):
+        os.remove('./address')
     return True
 
 

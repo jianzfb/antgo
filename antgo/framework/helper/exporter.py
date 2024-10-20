@@ -29,57 +29,6 @@ class Exporter(object):
         self.work_dir = work_dir
         self.use_logger_platform = False
 
-    @master_only
-    def _finding_from_logger(self, experiment_name, checkpoint_name):
-        # step 1: 检测当前路径下收否有token缓存
-        token = None
-        if os.path.exists('./.token'):
-            with open('./.token', 'r') as fp:
-                token = fp.readline()
-
-        # step 2: 检查antgo配置目录下的配置文件中是否有token
-        if token is None or token == '':
-            config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-            config.AntConfig.parse_xml(config_xml)
-            token = getattr(config.AntConfig, 'server_user_token', '')
-        if token == '' or token is None:
-            print('No valid vibstring token, directly return')
-            return None, None
-
-        # 创建实验
-        mlogger.config(token=token)
-        project_name = self.cfg.get('project_name', os.path.abspath(os.path.curdir).split('/')[-1])
-        status = mlogger.activate(project_name, experiment_name)
-        if status is None:
-            print(f'Couldnt find {project_name}/{experiment_name}, from logger platform')
-            return None, None
-
-        file_logger = mlogger.Container()
-        local_config_path = None
-        local_checkpoint_path = None
-        remote_checkpoint_path = None
-        # 下载配置文件
-        mlogger.FileLogger.cache_folder = f'./logger/cache/{experiment_name}'
-        file_logger.cfg_file = mlogger.FileLogger('config', 'qiniu')
-        file_list, _ = file_logger.cfg_file.get()
-        if len(file_list) > 0:
-           local_config_path = file_list[0]
-
-        # 下载checkpoint文件
-        file_logger.checkpoint_file = mlogger.FileLogger('file', 'aliyun')
-        file_list, remote_list = file_logger.checkpoint_file.get(checkpoint_name)
-
-        for file_name, remote_info in zip(file_list, remote_list):
-            if file_name.endswith(checkpoint_name):
-                local_checkpoint_path = file_name
-                remote_checkpoint_path = remote_info
-                break
-        print(f'Found {local_config_path} {local_checkpoint_path}')
-        self.use_logger_platform = True
-        remote_checkpoint_path = '/'.join(remote_checkpoint_path.split('/')[:-2])
-        mlogger.FileLogger.root_folder = f'{remote_checkpoint_path}/export'
-        return local_config_path, local_checkpoint_path
-
     def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, revise_keys=[], strict=True, is_dynamic=False, skip_flops_stats=False):
         # 构建模型
         model = None
@@ -92,18 +41,8 @@ class Exporter(object):
         if checkpoint is None or checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
 
-        # checkpoint路径格式
-        # 1: local path                 本地目录
-        # 2: ali://                     直接从阿里云盘下载
-        # 3: experiment/checkpoint      日志平台（推荐）
-        if checkpoint is not None:
-            if not os.path.exists(checkpoint) and len(checkpoint[1:].split('/')) == 2:
-                # 尝试解析来自于日志平台
-                self.experiment_name, self.checkpoint_name = checkpoint[1:].split('/')
-                _, checkpoint = self._finding_from_logger(self.experiment_name, self.checkpoint_name)
-
         if checkpoint is None or checkpoint == '':
-            logger.error('Checkpoint not found')
+            logger.error('Missing checkpoint file')
             return
 
         # 加载checkpoint
