@@ -13,6 +13,7 @@ import threading
 import concurrent.futures
 import uuid
 import imagesize
+import pathlib
 
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
@@ -86,9 +87,30 @@ class DemoMixin:
     from fastapi import FastAPI, Request
     DemoMixin.app = FastAPI()
 
-    if os.path.exists(static_folder):
-      shutil.rmtree(static_folder)
-    shutil.copytree(os.path.join(resource_dir, 'resource', 'app'), static_folder)
+    if not os.path.exists(static_folder):
+      os.makedirs(static_folder, exist_ok=True)
+      antgo_depend_root = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
+      if not os.path.exists(os.path.join(antgo_depend_root, 'antgo-web')):
+        os.system(f'cd {antgo_depend_root} ; git clone https://github.com/jianzfb/antgo-web.git ; cd antgo-web ; npm install')
+
+      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('{DEMONAME}', args.name)
+      print(config_content)
+      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js'), 'w') as fp:
+        fp.write(config_content)
+
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('{DEMONAME}', args.name)
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js'), 'w') as fp:
+        fp.write(config_content)
+
+      os.system(f'cd {antgo_depend_root}/antgo-web ; npm run build ; cd -; cp -r {antgo_depend_root}/antgo-web/dist/* {static_folder}')
+
+    # if os.path.exists(static_folder):
+    #   shutil.rmtree(static_folder)
+    # shutil.copytree(os.path.join(resource_dir, 'resource', 'app'), static_folder)
 
     if not os.path.exists(os.path.join(static_folder, 'image', 'query')):
       os.makedirs(os.path.join(static_folder, 'image', 'query'))

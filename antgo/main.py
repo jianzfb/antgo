@@ -22,6 +22,7 @@ from antgo.script import *
 from jinja2 import Environment, FileSystemLoader
 import json
 import yaml
+import pathlib
 from pathlib import Path
 from filelock import FileLock
 from aligo import Aligo
@@ -272,7 +273,42 @@ def main():
   # 镜像打包服务
   if action_name == 'package':
     if args.mode == 'http':
-      # step 1: 构建Dockerfile
+      if args.main is None or args.main == '':
+        logging.error('Must set main file.(--main=xxx)')
+        return
+
+      if args.port == 0:
+        logging.error('Must set server port.(--port=8080)')
+        return
+
+      if args.name is None or args.name == '':
+        logging.error('Must set server image name. (--name=xxx)')
+        return
+
+      # step 1: 创建web工程
+      antgo_depend_root = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
+      if not os.path.exists(os.path.join(antgo_depend_root, 'antgo-web')):
+        os.system(f'cd {antgo_depend_root} ; git clone https://github.com/jianzfb/antgo-web.git ; cd antgo-web ; npm install')
+
+      if os.path.exists('./dump/demo/static'):
+        shutil.rmtree('./dump/demo/static')
+      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('{DEMONAME}', args.name)
+      print(config_content)
+      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js'), 'w') as fp:
+        fp.write(config_content)
+
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('{DEMONAME}', args.name)
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js'), 'w') as fp:
+        fp.write(config_content)
+
+      os.makedirs('./dump/demo/static', exist_ok=True)
+      os.system(f'cd {antgo_depend_root}/antgo-web ; npm run build ; cd -; cp -r {antgo_depend_root}/antgo-web/dist/* ./dump/demo/static/')
+
+      # step 2: 构建Dockerfile
       logging.info('Generate Dockerfile')
       if args.version is None or args.version == '-' or args.version == '':
         args.version = 'master'
@@ -291,18 +327,6 @@ def main():
         fp.write(dockerfile_content)
 
       logging.info('Generate Server Launch.sh')
-      if args.main is None or args.main == '':
-        logging.error('Must set main file.(--main=xxx)')
-        return
-
-      if args.port == 0:
-        logging.error('Must set server port.(--port=8080)')
-        return
-
-      if args.name is None or args.name == '':
-        logging.error('Must set server image name. (--name=xxx)')
-        return
-
       launch_tempate =  env.get_template('script/server-launch.sh')
       launch_data = {}      
       launch_data.update({
@@ -312,11 +336,11 @@ def main():
       with open('./launch.sh', 'w') as fp:
         fp.write(launch_content)
 
-      # step 2: 构建镜像
+      # step 3: 构建镜像
       logging.info(f'Build docker image {args.name} (Server: {args.mode})')
       os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {args.name} ./')
 
-      # step 3: 发布镜像
+      # step 4: 发布镜像
       if args.image_repo is None or args.user is None or args.password is None:
         # logging.warn("No set image repo and user name, If need to deploy, must set --image-repo=xxxx --user=xxx --password=xxx.")
         logging.warn("No image_repo, only use local image file")
