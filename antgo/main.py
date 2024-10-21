@@ -428,7 +428,7 @@ def main():
     with open('./server_config.json', 'r') as fp:
       server_info = json.load(fp)
 
-    if server_info['mode'] not in ['http', 'grpc']:
+    if server_info['mode'] not in ['http/demo', 'http/api', 'grpc']:
       logging.error('Only support mode = http, grpc')
       return
 
