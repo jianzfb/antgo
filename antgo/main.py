@@ -62,7 +62,7 @@ DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
 DEFINE_indicator('data', True, '')
-DEFINE_choices('mode', 'http', ['http', 'grpc', 'android/sdk', 'linux/sdk', 'windows/sdk', 'applet'], '')
+DEFINE_choices('mode', 'http/demo', ['http/demo', 'http/api', 'grpc', 'android/sdk', 'linux/sdk', 'windows/sdk', 'applet'], '')
 DEFINE_string("image-repo", None, "image repo")
 DEFINE_string("image-version", "latest", "image version")
 DEFINE_string("user", None, "user name")
@@ -272,7 +272,7 @@ def main():
 
   # 镜像打包服务
   if action_name == 'package':
-    if args.mode == 'http':
+    if args.mode.startswith('http'):
       if args.main is None or args.main == '':
         logging.error('Must set main file.(--main=xxx)')
         return
@@ -286,32 +286,33 @@ def main():
         return
 
       # step 1: 创建web工程
-      antgo_depend_root = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
-      if not os.path.exists(os.path.join(antgo_depend_root, 'antgo-web')):
-        os.system(f'cd {antgo_depend_root} ; git clone https://github.com/jianzfb/antgo-web.git ; cd antgo-web ; npm install')
+      if args.mode.endswith('demo'):
+        antgo_depend_root = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
+        if not os.path.exists(os.path.join(antgo_depend_root, 'antgo-web')):
+          os.system(f'cd {antgo_depend_root} ; git clone https://github.com/jianzfb/antgo-web.git ; cd antgo-web ; npm install')
 
-      if os.path.exists('./dump/demo/static'):
-        shutil.rmtree('./dump/demo/static')
-      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js.default'), 'r') as fp:
-        config_content = fp.read()
-        config_content = config_content.replace('{DEMONAME}', args.name)
-      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js'), 'w') as fp:
-        fp.write(config_content)
+        if os.path.exists('./dump/demo/static'):
+          shutil.rmtree('./dump/demo/static')
+        with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js.default'), 'r') as fp:
+          config_content = fp.read()
+          config_content = config_content.replace('{DEMONAME}', args.name)
+        with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js'), 'w') as fp:
+          fp.write(config_content)
 
-      with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js.default'), 'r') as fp:
-        config_content = fp.read()
-        config_content = config_content.replace('{DEMONAME}', args.name)
-      with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js'), 'w') as fp:
-        fp.write(config_content)
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js.default'), 'r') as fp:
+          config_content = fp.read()
+          config_content = config_content.replace('{DEMONAME}', args.name)
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js'), 'w') as fp:
+          fp.write(config_content)
 
-      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js.default'), 'r') as fp:
-        config_content = fp.read()
-        config_content = config_content.replace('{DEMONAME}', args.name)
-      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js'), 'w') as fp:
-        fp.write(config_content)
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js.default'), 'r') as fp:
+          config_content = fp.read()
+          config_content = config_content.replace('{DEMONAME}', args.name)
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js'), 'w') as fp:
+          fp.write(config_content)
 
-      os.makedirs('./dump/demo/static', exist_ok=True)
-      os.system(f'cd {antgo_depend_root}/antgo-web ; npm run build ; cd -; cp -r {antgo_depend_root}/antgo-web/dist/* ./dump/demo/static/')
+        os.makedirs('./dump/demo/static', exist_ok=True)
+        os.system(f'cd {antgo_depend_root}/antgo-web ; npm run build ; cd -; cp -r {antgo_depend_root}/antgo-web/dist/* ./dump/demo/static/')
 
       # step 2: 构建Dockerfile
       logging.info('Generate Dockerfile')
@@ -416,10 +417,6 @@ def main():
       import antgo.pipeline
       antgo.pipeline.pipeline_cplusplus_package(args.name)
       return
-    elif args.mode == 'applet':
-      # 管线由C++代码构建
-      return
-
     return
 
   # 镜像发布服务
@@ -499,7 +496,7 @@ def main():
     # 仅内部团队测试使用
     if args.release:
       rpc = HttpRpc("v1", 'antvis', 'experiment.vibstring.com', 80, token=token)
-      rpc.research.create.post(research_url=f'http://{args.ip}:{args.port}', research_name=server_info["name"], research_description='')
+      rpc.research.create.post(research_url=f'https://research.vibstring.com/{server_info["name"]}', research_name=server_info["name"], research_description='')
     return
 
   # 查看运行设备（本地/远程）
