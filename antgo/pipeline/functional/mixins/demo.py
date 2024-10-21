@@ -95,14 +95,20 @@ class DemoMixin:
 
       with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js.default'), 'r') as fp:
         config_content = fp.read()
-        config_content = config_content.replace('{DEMONAME}', args.name)
+        config_content = config_content.replace('/{DEMONAME}/', '/')
       print(config_content)
       with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js'), 'w') as fp:
         fp.write(config_content)
 
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('/{DEMONAME}', '/')
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js'), 'w') as fp:
+        fp.write(config_content)
+
       with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js.default'), 'r') as fp:
         config_content = fp.read()
-        config_content = config_content.replace('{DEMONAME}', args.name)
+        config_content = config_content.replace('/{DEMONAME}/', '/')
       with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js'), 'w') as fp:
         fp.write(config_content)
 
