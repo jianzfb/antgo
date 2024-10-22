@@ -53,6 +53,7 @@ DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')              # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')          # 是否启用finetune模式
 DEFINE_indicator("release", True, '')           # 发布
+DEFINE_indicator("no-launch", True, '')         # 不加载
 DEFINE_indicator("upgrade", True, '')           # 升级标记
 DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
@@ -442,61 +443,62 @@ def main():
     print(server_info)
 
     # step 2: 远程启动服务
-    if args.ssh:
-      # 基于ssh远程部署
-      if args.ip == '':
-        logging.error('Must set remote ip (--ip=xxx).')
-        return
+    if not args.no_launch:
+      if args.ssh:
+        # 基于ssh远程部署
+        if args.ip == '':
+          logging.error('Must set remote ip (--ip=xxx).')
+          return
 
-      if args.port == 0:
-        logging.error('Must set remote server port (--ip=xxx).')
-        return
+        if args.port == 0:
+          logging.error('Must set remote server port (--ip=xxx).')
+          return
 
-      ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
-      if not os.path.exists(ssh_submit_config_file):
-        logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml config, couldnt remote deploy')
-        return
-      with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-          ssh_config_info = yaml.safe_load(fp)
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
+        if not os.path.exists(ssh_submit_config_file):
+          logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml config, couldnt remote deploy')
+          return
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
 
-      if server_info['image_repo'] == '':
-        # 将镜像本地打包，并传到目标机器
-        os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} save -o {server_info["name"]}.tar {server_info["name"]}')
-        os.system(f'scp {server_info["name"]}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
-        os.system(f'rm {server_info["name"]}.tar')
+        if server_info['image_repo'] == '':
+          # 将镜像本地打包，并传到目标机器
+          os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} save -o {server_info["name"]}.tar {server_info["name"]}')
+          os.system(f'scp {server_info["name"]}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
+          os.system(f'rm {server_info["name"]}.tar')
 
-      # 生成服务部署脚本
-      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-      server_deploy_template = env.get_template('script/server-deploy.sh')
-      server_deploy_data = {
-        'user': args.user,
-        'password': args.password,
-        'image_registry': server_info['image_repo'].split('/')[0] if server_info['image_repo'] != '' else '\"\"',
-        'image': server_info['image_repo'] if server_info['image_repo'] != '' else server_info['name'],
-        'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
-        'outer_port': args.port,
-        'inner_port': server_info['server_port'],
-        'name': server_info['name'],
-        'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/'
-      }
-      server_deploy_content = server_deploy_template.render(**server_deploy_data)
+        # 生成服务部署脚本
+        env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+        server_deploy_template = env.get_template('script/server-deploy.sh')
+        server_deploy_data = {
+          'user': args.user,
+          'password': args.password,
+          'image_registry': server_info['image_repo'].split('/')[0] if server_info['image_repo'] != '' else '\"\"',
+          'image': server_info['image_repo'] if server_info['image_repo'] != '' else server_info['name'],
+          'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
+          'outer_port': args.port,
+          'inner_port': server_info['server_port'],
+          'name': server_info['name'],
+          'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/'
+        }
+        server_deploy_content = server_deploy_template.render(**server_deploy_data)
 
-      print(server_deploy_content)
+        print(server_deploy_content)
 
-      with tempfile.TemporaryDirectory() as temp_dir:
-        with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
-          fp.write(server_deploy_content)
-        deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
-        logging.info(deploy_cmd)
-        os.system(deploy_cmd)
-    elif args.k8s:
-      logging.error('K8s deploy in comming.')
+        with tempfile.TemporaryDirectory() as temp_dir:
+          with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
+            fp.write(server_deploy_content)
+          deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
+          logging.info(deploy_cmd)
+          os.system(deploy_cmd)
+      elif args.k8s:
+        logging.error('K8s deploy in comming.')
 
     # step 3: 更新平台记录（name, logo, description, address）
     # 仅内部团队测试使用
     if args.release:
       rpc = HttpRpc("v1", 'antvis', 'experiment.vibstring.com', 80, token=token)
-      rpc.research.create.post(research_url=f'https://research.vibstring.com/{server_info["name"]}', research_name=server_info["name"], research_description='')
+      rpc.research.create.post(research_url=f'http://{args.ip}:{args.port}', research_name=server_info["name"], research_description='')
     return
 
   # 查看运行设备（本地/远程）
