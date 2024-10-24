@@ -1,4 +1,5 @@
 import os
+import os
 import pathlib
 import sys
 ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
@@ -11,7 +12,7 @@ def install_eagleeye():
             os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
 
         if 'darwin' in sys.platform:
-            os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && mv install py')
+            os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE')
         else:
             first_comiple = False
             if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye','py')):
