@@ -27,6 +27,10 @@ from fastapi import Response
 from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
+from fastapi.responses import RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
+import secrets
+
 import json
 import numpy as np
 import cv2
@@ -86,6 +90,7 @@ class DemoMixin:
 
     from fastapi import FastAPI, Request
     DemoMixin.app = FastAPI()
+    DemoMixin.app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 
     if not os.path.exists(static_folder):
       os.makedirs(static_folder, exist_ok=True)
@@ -142,7 +147,12 @@ class DemoMixin:
     )
 
     @DemoMixin.app.post('/antgo/api/demo/submit/')
-    async def wrapper(req: Request):        
+    async def wrapper(req: Request, response: RedirectResponse):        
+        if(req.session.get("session_id") is None):
+          session_id = req.session["session_id"] = secrets.token_urlsafe(32)
+          response.set_cookie(key="Authorization", value=session_id)
+
+        session_id = req.session.get("session_id")
         req = await _decode_content(req)
         req = json.loads(req['query'])
 
@@ -196,6 +206,9 @@ class DemoMixin:
             interactive_info[InteractiveMixin.interactive_elements[f'{demo_name}/{bind_name}']['target']] = data
 
         feed_info.update(interactive_info)
+        feed_info.update(
+          {'session_id': session_id}
+        )
         rsp_value = DemoMixin.pipeline_info[demo_name]['exe'].execute(feed_info)
 
         if rsp_value is None:
@@ -423,7 +436,6 @@ class DemoMixin:
 
       t = threading.Thread(target=search_func[search_engine], args=(target_folder, keys, None, 50))
       t.start()
-
 
     @DemoMixin.app.get('/antgo/api/demo/searchprocess/')
     async def process(req: Request):

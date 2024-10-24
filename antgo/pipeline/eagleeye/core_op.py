@@ -47,6 +47,9 @@ class CoreOp(object):
     def __call__(self, *args):
         input_tensors = []
         for tensor in args:
+            if isinstance(tensor, str):
+                print(f'Concert str {tensor} to numpy mode')
+                tensor = np.frombuffer(tensor.encode('utf-8'), dtype=np.uint8)
             assert(isinstance(tensor, np.ndarray))
             input_tensors.append(tensor)
 
