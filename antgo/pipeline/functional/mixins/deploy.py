@@ -2210,7 +2210,8 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             temp_info.append(f'cp {eagleeye_config["ffmpeg"]}/lib/*.so* bin/{abi.lower()}')
         setup_info = temp_info
 
-    if 'opencv' in eagleeye_config:
+    if ('opencv' in eagleeye_config) and (platform.lower() != 'android'):
+        # 对于android平台，opencv使用eagleeye自身携带的简化版本
         temp_info = []
         is_found = False
         for line_i, line_info in enumerate(setup_info):
@@ -2700,11 +2701,13 @@ class DeployMixin:
                 if not os.path.exists(os.path.join(output_folder, f'grpc_client.py')):
                     grpc_client_code_template_file = './templates/grpc_client_code'
                     if call_mode == 'callback' or call_mode == 'asyn':
-                        grpc_client_code_template_file = './templates/grpc_stream_client_code.py'
+                        grpc_client_code_template_file = './templates/grpc_stream_client_code'
 
                     grpc_client_code_content = gen_code(grpc_client_code_template_file)(
                         project=f'{project_name.lower()}',
-                        servername=f'{project_name.lower().capitalize()}Grpc'
+                        servername=f'{project_name.lower().capitalize()}Grpc',
+                        servercall="Sync" if call_mode=="sync" else "Asyn",
+                        serverpipeline=pipeline_name
                     )
                     with open(os.path.join(output_folder, 'grpc_client.py'), 'w') as fp:
                         fp.write(grpc_client_code_content)

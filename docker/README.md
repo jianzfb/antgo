@@ -99,3 +99,10 @@ docker run -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v 
 
 6. 遇到编译运行ffmepg问题
     启动容器时添加 --gpus all,capabilities=video
+
+7. 遇到nodejs版本问题
+    ```
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+    source ~/.bashrc
+    nvm install 19.7.0
+    ```

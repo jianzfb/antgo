@@ -18,10 +18,9 @@ public:
     using BaseOp<${input_num}, ${output_num}>::init;
     ${op_name}(){
         m_op_func = ${func_create}
-        m_op_thread = std::thread(std::bind(&${op_name}::_run, this));
         m_thread_status = true;
-
         m_run_finish = false;
+        m_op_thread = std::thread(std::bind(&${op_name}::_run, this));
     }
 
     virtual ~${op_name}(){

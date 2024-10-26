@@ -29,10 +29,10 @@ torchvision
 imagesize
 tfrecord
 GitPython
-protobuf==3.20.0
+protobuf==5.28.3
 chumpy
-onnx
-onnxruntime-gpu
+onnx==1.17.0
+onnxruntime-gpu==1.19.2
 pandas
 aligo
 python-multipart
@@ -46,3 +46,4 @@ pika
 xtcocotools
 pyngrok
 itsdangerous
+grpcio-tools==1.67.0
