@@ -14,6 +14,7 @@ from antgo.pipeline.extent.glue.common import *
 from antgo.pipeline.extent.op.loader import *
 from antgo.pipeline.extent.building.build_utils import *
 from antgo.pipeline.engine import *
+from antgo.utils import *
 import onnx
 import onnxruntime
 import re
@@ -100,7 +101,8 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
     root_folder = os.path.join(root_folder, 'rk')
     os.makedirs(root_folder, exist_ok=True)
     if not os.path.exists(os.path.join(root_folder,'rknpu2')):
-        os.system(f'cd {root_folder} ; git clone https://github.com/rockchip-linux/rknpu2.git')
+        # 
+        os.system(f'cd {root_folder} ; git clone https://github.com/rockchip-linux/rknpu2.git') 
     rknn_path = os.path.join(root_folder, 'rknpu2')
 
     rknn_runtime_folder = os.path.join(rknn_path, 'runtime')
@@ -132,8 +134,8 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
         # linux/arm64
         RKNN_API_PATH = os.path.join(device_rknn_runtime_folder, platform.capitalize(), 'librknn_api')
         # step2: 推送依赖库到包为止
-        os.makedirs(os.path.join(output_folder, '3rd', 'aarch64'), exist_ok=True)
-        shutil.copyfile(os.path.join(RKNN_API_PATH, 'aarch64', 'librknnrt.so'), os.path.join(output_folder, '3rd', 'aarch64', 'librknnrt.so'))
+        os.makedirs(os.path.join(output_folder, '3rd', 'arm64-v8a'), exist_ok=True)
+        shutil.copyfile(os.path.join(RKNN_API_PATH, 'aarch64', 'librknnrt.so'), os.path.join(output_folder, '3rd', 'arm64-v8a', 'librknnrt.so'))
         # step3: 生成cmake代码片段
         rknn_cmake_code_snippet = f'set(RKNN_API_PATH {RKNN_API_PATH})\n'
         rknn_cmake_code_snippet += 'add_definitions(-DRKNN_NN_ENGINE)\n'
@@ -792,26 +794,31 @@ def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, 
     init_info_list= []
     name_list = ['m_true_func', 'm_false_func']
     for deploy_op_i, deploy_op_args in enumerate([true_op_info['args'], false_op_info['args']]):
+        # if isinstance(dep, t)
         arg_code = ''
         op_init_code = ''
-        for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
-            if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
-                op_init_code += f'{deploy_arg_list}\n'
-                if arg_code == '':
-                    arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                else:
-                    arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                continue
+        if isinstance(deploy_op_args, dict):
+            deploy_op_args = (deploy_op_args,)
+        
+        for deploy_op_arg_info in deploy_op_args:
+            for deploy_arg_name, deploy_arg_list in deploy_op_arg_info.items():
+                if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                    op_init_code += f'{deploy_arg_list}\n'
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    continue
 
-            if deploy_arg_name != 'c++_type':
-                if arg_code == '':
-                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
-                else:
-                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                if deploy_arg_name != 'c++_type':
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-        if 'c++_type' in deploy_op_args:
-            args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
-            op_init_code += f'{name_list[deploy_op_i]}->init({args_init_code});\n\n'
+            if 'c++_type' in deploy_op_arg_info:
+                args_init_code = deploy_op_arg_info['c++_type']+'({'+arg_code+'})'
+                op_init_code += f'{name_list[deploy_op_i]}->init({args_init_code});\n\n'
 
         init_info_list.append(op_init_code)
 
@@ -1186,6 +1193,61 @@ def auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_nam
     return info
 
 
+def auto_generate_control_asyn_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set, platform, abi, project_name):
+    op_info = prepare_cplusplus_code(func_name, op_index, func_kwargs.get(func_name, {}), output_folder, core_op_set, platform, abi, project_name)
+
+    input_ctx, output_ctx = op_index
+    if isinstance(input_ctx, str):
+        input_ctx = [input_ctx]
+    if isinstance(output_ctx, str):
+        output_ctx = [output_ctx]
+
+    arg_code = ''
+    op_init_code = ''
+    if len(op_info['args']) > 0:
+        for deploy_arg_name, deploy_arg_list in op_info['args'][0].items():
+            if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                op_init_code += f'{deploy_arg_list}\n'
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                continue
+
+            if deploy_arg_name != 'c++_type':
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+        # if 'c++_type' in op_info['args'][0]:
+        #     args_init_code = op_info['args'][0]['c++_type']+'({'+arg_code+'})'
+        #     op_init_code += f'm_funcs[thread_i]->init({args_init_code});\n\n'
+
+    warp_cpp_code_content = \
+        gen_code('./templates/asyn_op_class_code.hpp')(
+            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            input_num=len(input_ctx),
+            output_num=len(output_ctx),
+            func_create=f"new {op_info['type']}();" if 'template' not in op_info else f"new {op_info['type']}{op_info['template']}();",
+            func_init=op_init_code,
+            include_dependent=op_info['include']
+        )
+
+    src_folder = os.path.join(output_folder, 'extent', 'include')
+    os.makedirs(src_folder, exist_ok=True)
+    with open(os.path.join(src_folder, f'{op_name}.hpp'), 'w') as fp:
+        fp.write(warp_cpp_code_content)
+
+    info = {
+        'type': f"{op_name.replace('_','').capitalize()}Op",
+        'input': input_ctx,
+        'output': output_ctx,
+        'args': {},
+        'include': os.path.join('extent/include/', f'{op_name}.hpp'),
+        'src': op_info['src'],
+    }
+    return info
 
 # --------------------------------------------------------------------------- #
 
@@ -1288,7 +1350,7 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
     return tuple(group_converted_op_args)
 
 
-def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info):
+def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info, platform, abi):
     info = []
     is_found_include_directories_insert = False
     is_start_add_src_code = False
@@ -1336,7 +1398,10 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
 
         # 添加opencv依赖
         if 'set(OpenCV_DIR "")' in line and (config.USING_OPENCV or 'opencv' in compile_info):
-            opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+            if 'arm64' in abi:
+                opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-arm64-install')
+            else:
+                opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
             line = f'set(OpenCV_DIR "{opencv_path}")'
 
         info.append(line)
@@ -1373,7 +1438,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/snpeconvert:latest bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix} --quantize --npu --data-folder=calibration-images')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
@@ -1381,14 +1446,14 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
 
                 os.system(f'cp -r /tmp/onnx/snpe/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]} ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]}')
             else:
                 # 转浮点模型
                 os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/snpe ; cp {onnx_file_path} /tmp/onnx/')
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace snpeconvert bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/snpeconvert:latest bash convert.sh --i={prefix}.onnx --o=./snpe/{prefix}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/snpe/'):
                     if file_name[0] != '.':
@@ -1396,7 +1461,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
 
                 os.system(f'cp -r /tmp/onnx/snpe/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]} ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.{converted_model_file.split(".")[-1]}')
         elif platform_engine == 'rknn':
             if platform_engine_args.get('quantize', False):
                 # 转量化模型
@@ -1409,7 +1474,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                 onnx_dir_path = os.path.dirname(onnx_file_path)
                 mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
                 std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/rknnconvert:latest bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
@@ -1417,7 +1482,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
 
                 os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.rknn')
             else:
                 # 转浮点模型
                 os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/rknn ; cp {onnx_file_path} /tmp/onnx/')
@@ -1426,7 +1491,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                 onnx_dir_path = os.path.dirname(onnx_file_path)
                 mean_values = ','.join([str(v) for v in  op_kwargs.get('mean', [0,0,0])])
                 std_values = ','.join([str(v) for v in  op_kwargs.get('std', [1,1,1])])
-                os.system(f'cd /tmp/onnx ; docker run --rm -v $(pwd):/workspace rknnconvert bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
+                os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/rknnconvert:latest bash convert.sh --i={prefix}.onnx --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
                     if file_name[0] != '.':
@@ -1434,12 +1499,12 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                         break
                 
                 os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
-                platform_model_path = os.path.join(onnx_dir_path, converted_model_file)
+                platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.rknn')
         elif platform_engine == 'tnn':
             os.system(f'mkdir /tmp/onnx ; mkdir /tmp/onnx/tnn ; cp {onnx_file_path} /tmp/onnx/')                 
             prefix = os.path.basename(onnx_file_path)[:-5]
             onnx_dir_path = os.path.dirname(onnx_file_path)
-            os.system(f'cd /tmp/onnx/ ; docker run --rm -v $(pwd):/workspace tnnconvert bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
+            os.system(f'cd /tmp/onnx/ ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/tnnconvert:latest bash convert.sh --i={prefix}.onnx --o=./tnn/{prefix}')
             converted_model_file = []
             for file_name in os.listdir('/tmp/onnx/tnn/'):
                 if file_name[0] != '.' and '.tnnproto' in file_name:
@@ -1604,7 +1669,7 @@ def split_function(function_key_name_list):
     return function_list
 
 
-def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None):    
+def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None, eagleeye_config={}):    
     project_name = project_config["name"]
     pipeline_name = project_name
     if '/' in project_name:
@@ -1728,6 +1793,18 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
 
                 op_info = auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_name, def_func_op_kwargs, tracking_func_op_name, tracking_func_op_kwargs, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                deploy_graph_info[op_unique_name] = op_info
+            elif function_key_list[1] == 'Asyn':
+                function_op_name_list = split_function(function_key_list[2:])
+                func_op_name = function_op_name_list[0]
+
+                op_name = f'{function_key_list[1]}_{func_op_name}'
+                if op_name not in op_name_count:
+                    op_name_count[op_name] = 0
+                op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+                op_name_count[op_name] += 1
+
+                op_info = auto_generate_control_asyn_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
                 deploy_graph_info[op_unique_name] = op_info
             else:
                 raise NotImplementedError
@@ -2048,9 +2125,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         plugin_input_type_list = ','.join([str(v) for v in plugin_input_type_list])
         demo_code_content = gen_code(f'./templates/demo_code.cpp')(
             project=pipeline_name,
-            # input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
-            # input_size_list='{'+','.join(plugin_input_size_list)+'}',
-            # input_type_list='{'+plugin_input_type_list+'}',
+            input_name_list='{'+','.join([f'"placeholder_{i}"' for i in range(len(project_config['input']))])+'}',
+            input_size_list='{'+','.join(plugin_input_size_list)+'}',
+            input_type_list='{'+plugin_input_type_list+'}',
             output_name_list='{'+','.join(['"nnnode"' for _ in range(len(project_config['output']))])+'}',
             output_port_list='{'+','.join([f"{i}" for i in range(len(project_config['output']))])+'}'
         )
@@ -2069,9 +2146,11 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         if 'depedent_src' in src_info:
             src_code_list.extend(src_info['depedent_src'])
 
-    update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []))
+    update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []), platform, abi)
 
     # 更新插件工程编译脚本
+    if os.path.exists(os.path.join(output_folder, 'build.sh')):
+        os.remove(os.path.join(output_folder, 'build.sh'))
     if platform.lower() == 'android':
         # android (仅考虑arm64-v8a)
         shell_code_content = gen_code('./templates/android_build.sh')(
@@ -2082,7 +2161,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             fp.write(shell_code_content)
     elif platform.lower().startswith('linux') and 'arm64' in abi.lower():
         # linux arm64
-        shell_code_content = gen_code('./templates/linux_build.sh')(
+        shell_code_content = gen_code('./templates/linux_arm64_v8a_build.sh')(
             project=project_name,
             abikey='ARM_ABI',
             abival='arm64-v8a'
@@ -2098,6 +2177,59 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         )
         with open(os.path.join(output_folder, 'linux_x86_64_build.sh'), 'w') as fp:
             fp.write(shell_code_content)
+
+    # 更新依赖库（setup.sh）
+    setup_info = []
+    with open(os.path.join(output_folder, 'setup.sh'), 'r') as fp:
+        line = fp.readline()
+        line = line.strip()
+        if line == '':
+            line = fp.readline()
+            line = line.strip()
+        while line:
+            setup_info.append(line)
+            line = fp.readline()
+            line = line.strip()
+
+    if 'arm64' in abi.lower():
+        abi = 'arm64-v8a'
+
+    if 'ffmpeg' in eagleeye_config:
+        temp_info = []
+        is_found = False
+        for line_i, line_info in enumerate(setup_info):
+            if line_info == '#ffmpeg':
+                temp_info.append('#ffmpeg')
+                temp_info.append(f'cp {eagleeye_config["ffmpeg"]}/lib/*.so* bin/{abi.lower()}')
+                is_found = True
+            else:
+                temp_info.append(line_info)
+
+        if not is_found:
+            temp_info.append('#ffmpeg')
+            temp_info.append(f'cp {eagleeye_config["ffmpeg"]}/lib/*.so* bin/{abi.lower()}')
+        setup_info = temp_info
+
+    if ('opencv' in eagleeye_config) and (platform.lower() != 'android'):
+        # 对于android平台，opencv使用eagleeye自身携带的简化版本
+        temp_info = []
+        is_found = False
+        for line_i, line_info in enumerate(setup_info):
+            if line_info == '#opencv':
+                temp_info.append('#opencv')
+                temp_info.append(f'cp {eagleeye_config["opencv"]}/lib/*.so* bin/{abi.lower()}')
+                is_found = True
+            else:
+                temp_info.append(line_info)
+
+        if not is_found:
+            temp_info.append('#opencv')
+            temp_info.append(f'cp {eagleeye_config["opencv"]}/lib/*.so* bin/{abi.lower()}')
+        setup_info = temp_info
+
+    with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
+        for line_info in setup_info:
+            fp.write(f'{line_info}\n')
 
     # 保存项目配置信息
     for item in graph_config:
@@ -2191,10 +2323,10 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
 
     eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_prefix}-install'
     if not os.path.exists(eagleeye_path):
-        print('Compile eagleeye core sdk')
+        print('Compile eagleeye core sdk and collect 3rd dependent')
         compile_props = ['app', 'ffmpeg', 'rk']
         if system_platform.lower().startswith('linux'):
-            compile_props = ['app', 'ffmpeg', 'rk', 'cuda', 'grpc', 'minio']
+            compile_props = ['app', 'ffmpeg', 'rk', 'cuda', 'grpc', 'minio', 'opencv']
 
         # 检测需要的第三方依赖，并准备环境
         for compile_prop_key, compile_prop_val in eagleeye_config.items():
@@ -2252,7 +2384,8 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     # 修改部分源码
                     os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/eagleeye/3rd/ffmpeg/libavformat/* {ffmpeg_folder}/libavformat/')
                     # 安装到./linux-install目录
-                    os.system(f'./configure --prefix=./linux-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --pkg-config="pkg-config --static" && make clean && make -j 6 && make install')
+                    os.system(f'./configure --prefix=./linux-arm64-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --pkg-config="pkg-config --static" && make clean && make -j 6 && make install')
+                    eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}'
                 elif system_platform.lower().startswith('android'):
                     os.system(f'cd {root_folder} ; git clone --recurse-submodules -b release/7.0 https://git.ffmpeg.org/ffmpeg.git')
                     # 修改部分源码
@@ -2269,13 +2402,57 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     os.system(f'cd {ffmpeg_folder} ; ./configure --prefix=./android-install --enable-neon --enable-hwaccels --enable-gpl --disable-postproc --disable-debug --enable-small --enable-jni --enable-mediacodec --enable-static --enable-shared --disable-doc --enable-ffmpeg --disable-ffplay --disable-ffprobe --disable-avdevice --disable-doc --enable-symver --cross-prefix={CROSS_PREFIX} --target-os=android --arch={ARCH} --cpu={CPU} --cc={CC} --cxx={CXX} --enable-cross-compile --sysroot={SYSROOT} --pkg-config="pkg-config --static" ; make clean ; make -j16 ; make install')
                     eagleeye_config[compile_prop_key] = f'{ffmpeg_folder}'
             elif compile_prop_key == 'grpc':
-                # 提供网络服务
+                # 默认基础镜像提供
                 pass
             elif compile_prop_key == 'minio':
                 # 提供对象存储上传/下载
+                # 默认基础镜像提供
                 pass
+            elif compile_prop_key == 'opencv':
+                # 仅对linux下opencv依赖就行处理
+                if compile_prop_val is not None and compile_prop_val != '':
+                    print('Exist opencv dependent, dont need download and compile')
+                    continue
 
-        # 获得eagleeye编译脚本
+                root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
+                os.makedirs(root_folder, exist_ok=True)
+                if system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+                    # 交叉编译linux/arm64
+                    install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-arm64-install')
+                    if not os.path.exists(install_path):
+                        if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                            # 下载源码
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
+
+                        # 编译
+                        print('compile opencv')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; tool_chain_path="/opt/cross_build/linux-arm64/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"; cmake -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DTOOLCHAIN_PATH=$tool_chain_path -DCMAKE_C_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-gcc -DCMAKE_CXX_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-g++ -DCMAKE_FIND_ROOT_PATH="$tool_chain_path/aarch64-linux-gnu" -DZLIB_ROOT=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_INCLUDE_DIR=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_LIBRARY=/opt/cross_build/linux-arm64/zlib-1.3.1/libz.so -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D ENABLE_NEON=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
+                    eagleeye_config[compile_prop_key] = install_path
+                elif system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+                    # 编译linux/x86-64
+                    install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+                    if not os.path.exists(install_path):
+                        if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                            # 下载源码
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
+
+                        # 编译
+                        print('compile opencv')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
+
+                        # 添加so的搜索路径 (for linux)
+                        so_abs_path = os.path.join(install_path, 'lib')
+                        os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
+                    eagleeye_config[compile_prop_key] = install_path
+                else:
+                    # android（do nothing）
+                    eagleeye_config[compile_prop_key] = f'{eagleeye_path}/3rd/opencv/'
+
+        # 准备eagleeye编译脚本
         compile_param_suffix = ''
         compile_script_prefix = ''
         if system_platform == 'android':
@@ -2302,6 +2479,39 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
 
         print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
+
+
+    # 第三方依赖信息so库整理
+    for compile_prop_key, compile_prop_val in eagleeye_config.items():
+        if compile_prop_key == 'ffmpeg':
+            # install folder
+            if compile_prop_val is None:
+                compile_prop_val =  os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'ffmpeg')
+            ffmpeg_install_folder = ''
+            if system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+                ffmpeg_install_folder = f'{compile_prop_val}/linux-install'
+            elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+                ffmpeg_install_folder = f'{compile_prop_val}/linux-arm64-install'
+            else:
+                ffmpeg_install_folder = f'{compile_prop_val}/android-install'
+
+            eagleeye_config[compile_prop_key] = ffmpeg_install_folder
+        elif compile_prop_key == 'opencv':
+            # install folder
+            opencv_install_folder = ''
+            if system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+                if compile_prop_val is None:
+                    compile_prop_val = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-install')
+                opencv_install_folder = compile_prop_val
+            elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+                if compile_prop_val is None:
+                    compile_prop_val = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-arm64-install')
+                opencv_install_folder = compile_prop_val
+            else:
+                opencv_install_folder = compile_prop_val
+            
+            eagleeye_config[compile_prop_key] = opencv_install_folder
+
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path, eagleeye_config
 
@@ -2347,41 +2557,53 @@ class DeployMixin:
             # 创建配置文件（管线初始化默认文件）
             os.makedirs(os.path.join(output_folder, 'config'), exist_ok=True)
             config_folder = os.path.join(output_folder, 'config')
-            is_callback_mode = False
-            if 'config' in project_config:
-                config_info = project_config['config']
-                ''' format
-                    {
-                        'server_params': [{"node": "node_name", "name": "param_name", "value": "param_value", "type": "string"/"float"/"double"/"int"/"bool"}],
-                        'data_source': [{"type": "camera", "address": "", "format": "RGB/BGR", "mode": "NETWORK/USB/ANDROID_NATIVE/V4L2", "flag": "front"}, {"type": "video", "address": "", "format": "RGB/BGR"},...]
-                    }
-                '''
-                if 'data_source' in config_info and len(config_info['data_source']) > 0:
-                    is_callback_mode = True
 
-                if is_callback_mode:
-                    config_info["server_mode"] = "callback"
-                config_info["pipeline_name"] = pipeline_name
-                old_config_info = {}
-                if os.path.exists(os.path.join(config_folder, 'plugin_config.json')):
-                    with open(os.path.join(config_folder, 'plugin_config.json'), 'r') as fp:
-                        old_config_info = json.load(fp)
+            has_auto_data_source = False
+            call_mode = project_config.get('call_mode', 'sync')      # 调用模式 sync/asyn
+            if call_mode not in ['sync', 'asyn']:
+                print('call must be sync/asyn')
+                return
+            config_info = {
+                "pipeline_name": pipeline_name,
+                'server_mode': call_mode,
+                'data_mode': project_config.get('data_mode', ''),    # data_mode: "H264"/"H265", "" 仅在异步调用时有效
+            }
 
-                old_config_info[pipeline_name] = config_info
-                with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
-                    json.dump(old_config_info,fp)
+            ''' format
+                {
+                    'server_params': [{"node": "node_name", "name": "param_name", "value": "param_value", "type": "string"/"float"/"double"/"int"/"bool"}],
+                    'data_source': [{"type": "camera", "address": "", "format": "RGB/BGR", "mode": "NETWORK/USB/ANDROID_NATIVE/V4L2", "flag": "front"}, {"type": "video", "address": "", "format": "RGB/BGR"},...]
+                }
+            '''
+            if 'data_source' in project_config and len(project_config['data_source']) > 0:
+                has_auto_data_source = True
+                config_info['data_source'] = project_config['data_source']
 
-            if 'server' == project_config['mode']:
-                if system_platform != 'linux':
-                    print('mode=server, must is linux platform')
-                    return
+            if 'server_params' in project_config:
+                config_info['server_params'] = project_config['server_params']
 
+            if has_auto_data_source:
+                # 重制，如果拥有闭环数据源，则自动设置为回调模式
+                config_info["server_mode"] = "callback"
+                call_mode = 'callback'
+
+            old_config_info = {}
+            if os.path.exists(os.path.join(config_folder, 'plugin_config.json')):
+                with open(os.path.join(config_folder, 'plugin_config.json'), 'r') as fp:
+                    old_config_info = json.load(fp)
+
+            old_config_info[pipeline_name] = config_info
+            with open(os.path.join(config_folder, 'plugin_config.json'), 'w') as fp:
+                json.dump(old_config_info,fp)
+
+            if system_platform == "linux" and 'server' == project_config['mode']:
                 # 创建proto文件，并编译头文件
                 os.makedirs(os.path.join(output_folder, 'proto'),exist_ok=True)
                 if not os.path.exists(os.path.join(output_folder, 'proto', f'{project_name.lower()}.proto')):
                     proto_code_template_file = f'./templates/grpc_proto_code.proto'
-                    if is_callback_mode:
+                    if call_mode == 'callback':
                         proto_code_template_file = f'./templates/grpc_stream_proto_code.proto'
+
                     grpc_proto_code_content = gen_code(proto_code_template_file)(
                         package=f'{project_name.lower()}grpc',
                         servername=f'{project_name.lower().capitalize()}Grpc'
@@ -2392,27 +2614,34 @@ class DeployMixin:
                     # 编译proto(c++, python)
                     if 'tool' not in project_config:
                         project_config['tool'] = {}
-                    proto_tool_dir = ''
+                    proto_tool_dir = None
                     if 'proto' in project_config['tool']:
                         proto_tool_dir = project_config['tool']['proto']
                         if proto_tool_dir.endswith('/'):
                             proto_tool_dir = proto_tool_dir[:-1]
-                    if proto_tool_dir == '':
-                        print('Dont find proto tool folder.')
-                        return
-
                     proto_out_dir = os.path.join(output_folder, 'proto')
-                    
+
+                    print(f'proto_tool_dir {proto_tool_dir}')
                     # C++ proto
-                    proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
-                    os.system(proto_compile_cmd)
+                    if proto_tool_dir is not None:
+                        # 非系统目录，用户指定目录
+                        proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
+                        os.system(proto_compile_cmd)
+                    else:
+                        # 系统目录
+                        proto_compile_cmd = f'cd {proto_out_dir}; protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc=/usr/local/bin/grpc_cpp_plugin {project_name.lower()}.proto'
+                        os.system(proto_compile_cmd)
 
                     # python proto
                     proto_compile_cmd = f'cd {proto_out_dir}; python3 -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. ./{project_name.lower()}.proto'
                     os.system(proto_compile_cmd)
 
                     # 更新CMakeLists
-                    grpc_include = f'set(CMAKE_PREFIX_PATH "{proto_tool_dir}")\ninclude(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
+                    if proto_tool_dir is not None:
+                        grpc_include = f'set(CMAKE_PREFIX_PATH "{proto_tool_dir}")\ninclude(./cmake/grpc.cmake)\ninclude_directories("{proto_tool_dir}/include")\ninclude_directories("./proto")\n'
+                    else:
+                        grpc_include = f'include(./cmake/grpc.cmake)\ninclude_directories("/usr/local/include")\ninclude_directories("./proto")\n'
+
                     code_line_list = []
                     for line in open(os.path.join(output_folder, 'CMakeLists.txt')):
                         if len(code_line_list) > 0 and code_line_list[-1].strip() == '# grpc code' and line == '\n':
@@ -2430,8 +2659,9 @@ class DeployMixin:
                 # 创建grpc服务代码
                 if not os.path.exists(os.path.join(output_folder, f'grpc_server.hpp')):
                     grpc_server_code_template_file = './templates/grpc_server_code.hpp'
-                    if is_callback_mode:
+                    if call_mode == 'callback':
                         grpc_server_code_template_file = './templates/grpc_stream_server_code.hpp'
+
                     grpc_server_code_content = gen_code(grpc_server_code_template_file)(
                         project=f'{project_name.lower()}',
                         package=f'{project_name.lower()}grpc',
@@ -2446,7 +2676,7 @@ class DeployMixin:
                 if os.path.exists(os.path.join(output_folder, 'config', 'plugin_config.json')):
                     with open(os.path.join(output_folder, 'config', 'plugin_config.json'), 'r') as fp:
                         plugin_config_info = json.load(fp)
-                
+
                 if pipeline_name not in plugin_config_info:
                     plugin_config_info[pipeline_name] = {}
                 plugin_config_info[pipeline_name].update(
@@ -2469,12 +2699,15 @@ class DeployMixin:
 
                 # 创建grpc客户端python代码(用于测试)
                 if not os.path.exists(os.path.join(output_folder, f'grpc_client.py')):
-                    grpc_client_code_template_file = './templates/grpc_client_code.py'
-                    if is_callback_mode:
-                        grpc_client_code_template_file = './templates/grpc_stream_client_code.py'
+                    grpc_client_code_template_file = './templates/grpc_client_code'
+                    if call_mode == 'callback' or call_mode == 'asyn':
+                        grpc_client_code_template_file = './templates/grpc_stream_client_code'
+
                     grpc_client_code_content = gen_code(grpc_client_code_template_file)(
                         project=f'{project_name.lower()}',
-                        servername=f'{project_name.lower().capitalize()}Grpc'
+                        servername=f'{project_name.lower().capitalize()}Grpc',
+                        servercall="Sync" if call_mode=="sync" else "Asyn",
+                        serverpipeline=pipeline_name
                     )
                     with open(os.path.join(output_folder, 'grpc_client.py'), 'w') as fp:
                         fp.write(grpc_client_code_content)
@@ -2513,7 +2746,8 @@ class DeployMixin:
             platform=system_platform, 
             abi=abi_platform, 
             generate_demo_code=False if enable_project_mode else True,
-            mode=project_config['mode'] if 'mode' in project_config else None)
+            mode=project_config['mode'] if 'mode' in project_config else None,
+            eagleeye_config=eagleeye_config)
 
         # 更新.project.json
         project_info = {}

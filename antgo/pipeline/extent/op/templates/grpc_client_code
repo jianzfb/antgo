@@ -1,0 +1,43 @@
+from __future__ import print_function
+
+import logging, sys
+sys.path.insert(0, './proto')
+import grpc
+import base64
+import ${project}_pb2_grpc
+import ${project}_pb2
+import argparse
+import json
+
+
+def run(ip, port):
+	with grpc.insecure_channel(f'{ip}:{port}') as channel:
+		stup = ${project}_pb2_grpc.${servername}Stub(channel)
+
+		# step 1: 启动服务
+		response = stup.${servername}${servercall}Start(${project}_pb2.${servername}${servercall}StartRequest(serverpipeline="${serverpipeline}",serverid="xyz", servercfg=""))
+		serverkey = response.ListFields()[0][1]
+		print(f'server key {serverkey}')
+
+		# step 2: 调用服务
+		with open('./image.png', 'rb') as fp:
+			image_content = fp.read()
+		info = {
+			'data': [
+				{
+					'type': 'image',
+					'content': base64.b64encode(image_content).decode()
+				},
+			]
+		}
+		serverrequest = json.dumps(info)		
+		response = stup.${servername}${servercall}Call(${project}_pb2.${servername}${servercall}CallRequest(serverkey=serverkey, serverrequest=serverrequest))
+		print(response)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='grpc')
+    parser.add_argument('--ip', default="127.0.0.1", type=str, help ='ip')
+    parser.add_argument('--port', default=9002, type=int, help ='port')
+    args = parser.parse_args()
+    run(args.ip, args.port)

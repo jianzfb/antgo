@@ -9,6 +9,7 @@ import sys
 import os
 from antgo.utils.utils import *
 from antgo.utils.args import *
+from antgo.utils import *
 from antgo.ant.utils import *
 from antgo.ant.client import get_client, launch_server
 from antgo.command import *
@@ -21,10 +22,12 @@ from antgo.script import *
 from jinja2 import Environment, FileSystemLoader
 import json
 import yaml
+import pathlib
 from pathlib import Path
 from filelock import FileLock
 from aligo import Aligo
 import antvis.client.mlogger as mlogger
+from antvis.client.httprpc import *
 import tempfile
 
 
@@ -40,6 +43,7 @@ DEFINE_string('git', None, '')
 DEFINE_string('branch', None, '')
 DEFINE_string('commit', None, '')
 DEFINE_string('image', '', '')                  # 镜像
+DEFINE_string('script', None, '')               # 自定义脚本.sh
 DEFINE_int('cpu', 0, 'set cpu number')          # cpu 数
 DEFINE_int('gpu', 0, 'set gpu number')          # gpu 数
 DEFINE_int('memory', 0, 'set memory size (M)')  # 内存大小（单位M）
@@ -48,17 +52,23 @@ DEFINE_string('type', None, '')                 # 类型
 DEFINE_string("address", None, "")
 DEFINE_indicator("auto", True, '')              # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')          # 是否启用finetune模式
+DEFINE_indicator("release", True, '')           # 发布
+DEFINE_indicator("no-launch", True, '')         # 不加载
+DEFINE_indicator("upgrade", True, '')           # 升级标记
 DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
+DEFINE_string("remote-ip", None, "")
+DEFINE_string("remote-user", None, "")
 DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
 DEFINE_indicator('data', True, '')
-DEFINE_choices('mode', 'http', ['http', 'grpc', 'android/sdk', 'linux/sdk', 'windows/sdk', 'applet'], '')
+DEFINE_choices('mode', 'http/demo', ['http/demo', 'http/api', 'grpc', 'android/sdk', 'linux/sdk', 'windows/sdk', 'applet'], '')
 DEFINE_string("image-repo", None, "image repo")
 DEFINE_string("image-version", "latest", "image version")
 DEFINE_string("user", None, "user name")
 DEFINE_string("password", None, "user password")
+DEFINE_indicator("remote", True, "whether execute in remote")
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -125,6 +135,9 @@ def main():
     sys.argv = [sys.argv[0]] + sys.argv[3:]
   args = parse_args()
 
+  # 执行脚本命令，则默认normal运行（默认情况是debug）
+  args.running = 'normal'
+
   if action_name == 'install':
     if sub_action_name not in ['eagleeye', 'opencv', 'eigen', 'grpc', 'ffmpeg']:
       print(f'sorry, {sub_action_name} not support.')
@@ -150,26 +163,7 @@ def main():
     args.ssh = True
 
   ######################################### 配置文件操作 ################################################
-  # 检查配置文件是否存在
-  if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
-    # 使用指定配置文件更新
-    if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
-      os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
-
-	  # 位置优先选择/data/, /HOME/
-    config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
-    if not os.path.exists('/data'):
-      config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
-
-    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-    config_template = env.get_template('config.xml')
-    config_content = config_template.render(**config_data)
-
-    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
-      fp.write(config_content)
-    logging.warn('Using default config file.')
-
-  # 配置操作
+  # 创建配置文件
   if action_name == 'config':
     config_data = {'FACTORY': '', 'USER_TOKEN': ''}
     # 读取现有数值
@@ -193,6 +187,64 @@ def main():
     logging.info('Update config file.')
     return
 
+  # 配置文件不存在则创建默认
+  if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')):
+    # 使用指定配置文件更新
+    if not os.path.exists(os.path.join(os.environ['HOME'], '.config', 'antgo')):
+      os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'))
+
+	  # 位置优先选择/data/, /HOME/
+    config_data = {'FACTORY': '/data/.factory', 'USER_TOKEN': ''}
+    if not os.path.exists('/data'):
+      config_data['FACTORY'] = os.path.join(os.environ['HOME'], '.factory')
+
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
+
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn('Using default config file.')
+
+  ######################################### 检查token #################################################
+  # 解析配置文件
+  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
+  config.AntConfig.parse_xml(config_xml)
+
+  if not os.path.exists(config.AntConfig.factory):
+    os.makedirs(config.AntConfig.factory)
+  if not os.path.exists(config.AntConfig.data_factory):
+    os.makedirs(config.AntConfig.data_factory)
+  if not os.path.exists(config.AntConfig.task_factory):
+    os.makedirs(config.AntConfig.task_factory)
+
+  # 检查token是否存在，否则重新生成
+  token = None
+  if os.path.exists('./.token'):
+      with open('./.token', 'r') as fp:
+          token = fp.readline()
+  else:
+    token = getattr(config.AntConfig, 'server_user_token', '')
+
+  if token is None or token == '':
+    logging.info("generate experiment token")
+    token = mlogger.create_token()
+    config_data = {
+      'FACTORY': getattr(config.AntConfig, 'factory'), 
+      'USER_TOKEN': token
+    }
+
+    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+    config_template = env.get_template('config.xml')
+    config_content = config_template.render(**config_data)
+
+    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
+      fp.write(config_content)
+    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
+
+  with open('./.token', 'w') as fp:
+    fp.write(token)
+
   # web服务
   if action_name == 'web':
     if args.port == 0:
@@ -213,26 +265,15 @@ def main():
       os.system(f'NGROK_AUTHTOKEN={args.authtoken} uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
       return
 
-    os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+    if args.name is None or args.name == '':
+      os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+    else:
+      os.system(f'uvicorn {args.main} --reload --port {args.port} --host {args.ip} --root-path /{args.name}')
     return
 
   # 镜像打包服务
   if action_name == 'package':
-    if args.mode == 'http':
-      # step 1: 构建Dockerfile
-      logging.info('Generate Dockerfile')
-      if args.version is None or args.version == '-' or args.version == '':
-        args.version = 'master'
-      dockerfile_data = {
-        'version': args.version
-      }
-      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-      dockerfile_template = env.get_template('script/Dockerfile')
-      dockerfile_content = dockerfile_template.render(**dockerfile_data)
-      with open('./Dockerfile', 'w') as fp:
-        fp.write(dockerfile_content)
-
-      logging.info('Generate Server Launch.sh')
+    if args.mode.startswith('http'):
       if args.main is None or args.main == '':
         logging.error('Must set main file.(--main=xxx)')
         return
@@ -241,23 +282,72 @@ def main():
         logging.error('Must set server port.(--port=8080)')
         return
 
+      if args.name is None or args.name == '':
+        logging.error('Must set server image name. (--name=xxx)')
+        return
+
+      # step 1: 创建web工程
+      if args.mode.endswith('demo'):
+        antgo_depend_root = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
+        if not os.path.exists(os.path.join(antgo_depend_root, 'antgo-web')):
+          os.system(f'cd {antgo_depend_root} ; git clone https://github.com/jianzfb/antgo-web.git ; cd antgo-web ; npm install')
+
+        if os.path.exists('./dump/demo/static'):
+          shutil.rmtree('./dump/demo/static')
+        with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js.default'), 'r') as fp:
+          config_content = fp.read()
+          config_content = config_content.replace('{DEMONAME}', args.name)
+        with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js'), 'w') as fp:
+          fp.write(config_content)
+
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js.default'), 'r') as fp:
+          config_content = fp.read()
+          config_content = config_content.replace('{DEMONAME}', args.name)
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js'), 'w') as fp:
+          fp.write(config_content)
+
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js.default'), 'r') as fp:
+          config_content = fp.read()
+          config_content = config_content.replace('{DEMONAME}', args.name)
+        with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js'), 'w') as fp:
+          fp.write(config_content)
+
+        os.makedirs('./dump/demo/static', exist_ok=True)
+        os.system(f'cd {antgo_depend_root}/antgo-web ; npm run build ; cd -; cp -r {antgo_depend_root}/antgo-web/dist/* ./dump/demo/static/')
+
+      # step 2: 构建Dockerfile
+      logging.info('Generate Dockerfile')
+      if args.version is None or args.version == '-' or args.version == '':
+        args.version = 'master'
+      dockerfile_data = {
+        'version': args.version,
+        'is_upgrade': 'no'
+      }
+      if args.upgrade:
+        dockerfile_data.update({
+          'is_upgrade': "upgrade"
+        })
+      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+      dockerfile_template = env.get_template('script/Dockerfile')
+      dockerfile_content = dockerfile_template.render(**dockerfile_data)
+      with open('./Dockerfile', 'w') as fp:
+        fp.write(dockerfile_content)
+
+      logging.info('Generate Server Launch.sh')
       launch_tempate =  env.get_template('script/server-launch.sh')
       launch_data = {}      
       launch_data.update({
-        'cmd': f'antgo web --main={args.main} --port={args.port}'
+        'cmd': f'antgo web --main={args.main} --port={args.port} --name={args.name}'
       })
       launch_content = launch_tempate.render(**launch_data)
       with open('./launch.sh', 'w') as fp:
         fp.write(launch_content)
 
-      # step 2: 构建镜像
-      if args.name is None or args.name == '':
-        logging.error('Must set server image name. (--name=xxx)')
-        return
+      # step 3: 构建镜像
       logging.info(f'Build docker image {args.name} (Server: {args.mode})')
-      os.system(f'docker build -t {args.name} ./')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {args.name} ./')
 
-      # step 3: 发布镜像
+      # step 4: 发布镜像
       if args.image_repo is None or args.user is None or args.password is None:
         # logging.warn("No set image repo and user name, If need to deploy, must set --image-repo=xxxx --user=xxx --password=xxx.")
         logging.warn("No image_repo, only use local image file")
@@ -283,9 +373,9 @@ def main():
 
       logging.info(f'Push image {args.name} to image repo {args.image_repo}:{args.image_version}')
       # 需要手动添加密码
-      os.system(f'docker login --username={args.user} --password={args.password} {args.image_repo.split("/")[0]}')
-      os.system(f'docker tag {args.name}:latest {args.image_repo}:{args.image_version}')
-      os.system(f'docker push {args.image_repo}:{args.image_version}')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} login --username={args.user} --password={args.password} {args.image_repo.split("/")[0]}')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} tag {args.name}:latest {args.image_repo}:{args.image_version}')
+      os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} push {args.image_repo}:{args.image_version}')
 
       image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
       server_config_info = {
@@ -319,6 +409,8 @@ def main():
         image_version=args.image_version,
         user=args.user,
         password=args.password,
+        remote_ip=args.remote_ip,
+        remote_user=args.remote_user
       )
       return
     elif args.mode in['android/sdk', 'linux/sdk', 'windows/sdk']:
@@ -326,10 +418,6 @@ def main():
       import antgo.pipeline
       antgo.pipeline.pipeline_cplusplus_package(args.name)
       return
-    elif args.mode == 'applet':
-      # 管线由C++代码构建
-      return
-
     return
 
   # 镜像发布服务
@@ -341,74 +429,76 @@ def main():
     with open('./server_config.json', 'r') as fp:
       server_info = json.load(fp)
 
-    if server_info['mode'] not in ['http', 'grpc']:
+    if server_info['mode'] not in ['http/demo', 'http/api', 'grpc']:
       logging.error('Only support mode = http, grpc')
       return
 
-    try:
-      assert('image_repo' in server_info)
-      assert('server_port' in server_info)
-      assert('create_time' in server_info)
-      assert('update_time' in server_info)    
-      assert('name' in server_info)  
-    except:
-      logging.error('Server info not complete. Need to antgo package xxx.')
-      return
+    assert('image_repo' in server_info)
+    assert('server_port' in server_info)
+    assert('create_time' in server_info)
+    assert('update_time' in server_info)
+    assert('name' in server_info)
 
     print('Server Info.')
     print(server_info)
 
     # step 2: 远程启动服务
-    if args.ssh:
-      # 基于ssh远程部署
-      if args.ip == '':
-        logging.error('Must set remote ip (--ip=xxx).')
-        return
+    if not args.no_launch:
+      if args.ssh:
+        # 基于ssh远程部署
+        if args.ip == '':
+          logging.error('Must set remote ip (--ip=xxx).')
+          return
 
-      if args.port == 0:
-        logging.error('Must set remote server port (--ip=xxx).')
-        return
+        if args.port == 0:
+          logging.error('Must set remote server port (--ip=xxx).')
+          return
 
-      ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
-      if not os.path.exists(ssh_submit_config_file):
-        logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml config, couldnt remote deploy')
-        return
-      with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-          ssh_config_info = yaml.safe_load(fp)
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
+        if not os.path.exists(ssh_submit_config_file):
+          logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml config, couldnt remote deploy')
+          return
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
 
-      if server_info['image_repo'] == '':
-        # 将镜像本地打包，并传到目标机器
-        os.system(f'docker save -o {server_info["name"]}.tar {server_info["name"]}')
-        os.system(f'scp {server_info["name"]}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
-        os.system(f'rm {server_info["name"]}.tar')
+        if server_info['image_repo'] == '':
+          # 将镜像本地打包，并传到目标机器
+          os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} save -o {server_info["name"]}.tar {server_info["name"]}')
+          os.system(f'scp {server_info["name"]}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
+          os.system(f'rm {server_info["name"]}.tar')
 
-      # 生成服务部署脚本
-      env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-      server_deploy_template = env.get_template('script/server-deploy.sh')
-      server_deploy_data = {
-        'user': args.user,
-        'password': args.password,
-        'image_registry': server_info['image_repo'].split('/')[0] if server_info['image_repo'] != '' else '\"\"',
-        'image': server_info['image_repo'] if server_info['image_repo'] != '' else server_info['name'],
-        'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
-        'outer_port': args.port,
-        'inner_port': server_info['server_port'],
-        'name': server_info['name'],
-        'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/'
-      }
-      server_deploy_content = server_deploy_template.render(**server_deploy_data)
+        # 生成服务部署脚本
+        env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+        server_deploy_template = env.get_template('script/server-deploy.sh')
+        server_deploy_data = {
+          'user': args.user,
+          'password': args.password,
+          'image_registry': server_info['image_repo'].split('/')[0] if server_info['image_repo'] != '' else '\"\"',
+          'image': server_info['image_repo'] if server_info['image_repo'] != '' else server_info['name'],
+          'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
+          'outer_port': args.port,
+          'inner_port': server_info['server_port'],
+          'name': server_info['name'],
+          'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/'
+        }
+        server_deploy_content = server_deploy_template.render(**server_deploy_data)
 
-      print(server_deploy_content)
+        print(server_deploy_content)
 
-      with tempfile.TemporaryDirectory() as temp_dir:
-        with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
-          fp.write(server_deploy_content)
-        deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
-        logging.info(deploy_cmd)
-        os.system(deploy_cmd)
-    elif args.k8s:
-      logging.error('K8s deploy in comming.')
-      return
+        with tempfile.TemporaryDirectory() as temp_dir:
+          with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
+            fp.write(server_deploy_content)
+          deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
+          logging.info(deploy_cmd)
+          os.system(deploy_cmd)
+      elif args.k8s:
+        logging.error('K8s deploy in comming.')
+
+    # step 3: 更新平台记录（name, logo, description, address）
+    # 仅内部团队测试使用
+    if args.release:
+      rpc = HttpRpc("v1", 'antvis', 'experiment.vibstring.com', 80, token=token)
+      rpc.research.create.post(research_url=f'http://{args.ip}:{args.port}', research_name=server_info["name"], research_description='')
     return
 
   # 查看运行设备（本地/远程）
@@ -676,45 +766,6 @@ def main():
     print('Using default root address ali:///exp')
     args.root = "ali:///exp"
 
-  ######################################### 检查token #################################################
-  # 解析配置文件
-  config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-  config.AntConfig.parse_xml(config_xml)
-
-  if not os.path.exists(config.AntConfig.factory):
-    os.makedirs(config.AntConfig.factory)
-  if not os.path.exists(config.AntConfig.data_factory):
-    os.makedirs(config.AntConfig.data_factory)
-  if not os.path.exists(config.AntConfig.task_factory):
-    os.makedirs(config.AntConfig.task_factory)
-
-  # 检查token是否存在，否则重新生成
-  token = None
-  if os.path.exists('./.token'):
-      with open('./.token', 'r') as fp:
-          token = fp.readline()
-  else:
-    token = getattr(config.AntConfig, 'server_user_token', '')
-
-  if token is None or token == '':
-    logging.info("generate experiment token")
-    token = mlogger.create_token()
-    config_data = {
-      'FACTORY': getattr(config.AntConfig, 'factory'), 
-      'USER_TOKEN': token
-    }
-
-    env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
-    config_template = env.get_template('config.xml')
-    config_content = config_template.render(**config_data)
-
-    with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
-      fp.write(config_content)
-    logging.warn(f'update config file (token: {config_data["USER_TOKEN"]}, factory: {config_data["FACTORY"]}).')
-
-  with open('./.token', 'w') as fp:
-    fp.write(token)
-
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
     os.system(f'nohup python3 {os.path.join(os.path.dirname(__file__), "ant", "client.py")} --port={args.port} --root={args.root} --ext-module={args.ext_module} > /tmp/antgo.server.log 2>&1 &')
@@ -743,6 +794,10 @@ def main():
       shutil.copyfile(os.path.join(os.path.dirname(__file__), 'resource', 'templates', 'project.json'), './.project.json')
 
     if args.ssh or args.k8s:
+      # 远程提交模式，仅支持训练和推断
+      if action_name not in ['train', 'eval']:
+        logging.error('Antgo remote task submit mode only support train and eval')
+        return
       if args.root.startswith('ali:'):
         # 尝试进行认证，从而保证当前路径下生成认证信息
         ali = Aligo()
@@ -754,8 +809,8 @@ def main():
       with open('./.project.json', 'r') as fp:
         project_info = json.load(fp)
 
-      if action_name in ['train', 'activelearning']:
-        # train, activelearning
+      if action_name in ['train']:
+        # train
         # 项目基本信息
         project_info['image'] = args.image      # 镜像名称
         if args.exp not in project_info['exp']:
@@ -775,7 +830,7 @@ def main():
         with open('./.project.json', 'w') as fp:
           json.dump(project_info,fp)
       else:
-        # eval, export
+        # eval
         # 匹配实验记录（exp, config）
         # (1) root 匹配
         # (2) 默认匹配最新实验
@@ -819,22 +874,26 @@ def main():
 
       sys_argv_cp = filter_sys_argv_cp
       sys_argv_cp.append(f'--root={args.root}')
+      sys_argv_cp.append('--remote')  # 加入远程执行标记
       sys_argv_cmd = ' '.join(sys_argv_cp[1:])
 
       # 直接进行任务提交
       # step 1.1: 检查提交脚本配置
-      if args.ssh:
-        # ssh提交
+      if args.ssh and args.script is None:
+        # 基于ssh远程管理
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
 
-        ssh_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
-      else:
-        # 自定义脚本提交
-        sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
-        sys_argv_cmd = f'antgo {sys_argv_cmd}'          
-        custom_submit_process_func(args.project, time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data)
+        ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
+      elif args.ssh and args.script is not None:
+        # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
+        assert(args.image is not None and args.image != '')
+        ssh_submit2_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
+      elif args.k8s:
+        # TODO,基于k8s远程管理
+        logging.error('Not support k8s now.')
+        pass
 
       # 清理临时存储信息
       if os.path.exists('./aligo.json'):
@@ -859,21 +918,25 @@ def main():
     # 下载依赖checkpoint
     if args.checkpoint != '':
       # checkpoint路径格式
-      # 1: local path                 本地目录
-      # 2: ali://                     直接从阿里云盘下载
-      # 3: experiment/checkpoint      日志平台（推荐）      
+      # 1: local path                           本地目录
+      # 2: ali://                               直接从阿里云盘下载
+      # 3: logger://experiment/checkpoint       日志平台（推荐）     
       print(args.checkpoint)
       if args.checkpoint.startswith('ali://'):
         # 阿里云盘路径
-        if not os.path.exists('./checkpoint'):
-          os.makedirs('./checkpoint')
-
+        os.makedirs('./checkpoint', exist_ok=True)
         with FileLock('download.lock'):
           checkpoint_name = args.checkpoint.split('/')[-1]
           if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
             logging.info('downling checkpoint...')
             logging.info(args.checkpoint)              
             file_client_get(args.checkpoint, './checkpoint')
+          args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
+      elif args.checkpoint.startswith('logger://'):
+        os.makedirs('./checkpoint', exist_ok=True)
+        with FileLock('download.lock'):
+          checkpoint_name = args.checkpoint.split('/')[-1]
+          tools.download_from_logger('./checkpoint', None, args.checkpoint)
           args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
 
       # checkpoint（可能具体路径存储在日志平台，需要实际运行时获取具体路径并下载）
@@ -884,40 +947,22 @@ def main():
         # 非本地有效路径
         if not os.path.exists('./checkpoint'):
           os.makedirs('./checkpoint')
-        with FileLock('download.lock'):
-          if '/' in args.resume_from:
-            # 如果传入的是路径，则尝试直接下载
+
+        if args.resume_from.startswith('ali://'):
+          os.makedirs('./checkpoint', exist_ok=True)
+          with FileLock('download.lock'):
             checkpoint_name = args.resume_from.split('/')[-1]
             if not os.path.exists(os.path.join('./checkpoint', checkpoint_name)):
               logging.info('downling checkpoint...')
               logging.info(args.resume_from)              
               file_client_get(args.resume_from, './checkpoint')
             args.resume_from = os.path.join('./checkpoint', checkpoint_name)
-          else:
-            # 尝试从实验存储目录中，加载
-            if os.path.exists('./.project.json'):
-              with open('./.project.json', 'r') as fp:
-                project_info = json.load(fp)
-
-            checkpoint_name = args.resume_from
-            if args.exp in project_info['exp']:
-              found_exp_related_info_list = []
-              for exp_info in project_info['exp'][args.exp]:
-                if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
-                  found_exp_related_info_list.append(
-                    exp_info
-                  )
-
-              found_exp_info = None
-              if len(found_exp_related_info_list) > 0:
-                found_exp_info = found_exp_related_info_list[-1]
-
-              if found_exp_info is not None:
-                found_exp_root = found_exp_info['root']
-                logging.info('downling checkpoint...')
-                logging.info(f'{found_exp_root}/output/checkpoint/{checkpoint_name}')
-                file_client_get(f'{found_exp_root}/output/checkpoint/{checkpoint_name}', './checkpoint')
-                args.resume_from = os.path.join('./checkpoint', checkpoint_name)
+        elif args.resume_from.startswith('logger://'):
+          os.makedirs('./checkpoint', exist_ok=True)
+          with FileLock('download.lock'):
+            tools.download_from_logger('./checkpoint', None, args.resume_from)
+            checkpoint_name = args.resume_from.split('/')[-1]
+            args.resume_from = os.path.join('./checkpoint', checkpoint_name)
 
       logging.info(f'use resume_from {args.resume_from}')
       if not os.path.exists(args.resume_from):
@@ -952,11 +997,15 @@ def main():
       with open('./.project.json', 'w') as fp:
         json.dump(project_info,fp)
 
+      # 根据执行环境决定是否进行自定义依赖环境安装
+      if args.remote:
+        os.system('bash install.sh')
+
       # 训练过程
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -973,7 +1022,7 @@ def main():
         # single gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -990,7 +1039,7 @@ def main():
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=train --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1009,11 +1058,15 @@ def main():
         # root需要将exp加入点到root中
         args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
 
+      # 根据执行环境决定是否进行自定义依赖环境安装
+      if args.remote:
+        os.system('bash install.sh')
+
       # 为主动学习实验，创建存储root
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1028,7 +1081,7 @@ def main():
         # single gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=activelearning --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1043,7 +1096,7 @@ def main():
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name}  --process=activelearning --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name}  --process=activelearning --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1087,24 +1140,28 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
+      # 根据执行环境决定是否进行自定义依赖环境安装
+      if args.remote:
+        os.system('bash install.sh')
+
       # (1)安装;(2)数据准备;(3)运行
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       elif len(args.gpu_id.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       else:
         # multi gpu run
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'bash install.sh; python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=test --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -1171,7 +1228,10 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      os.system(f'bash install.sh; python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --root={args.root} --config={args.config} --work-dir={args.work_dir}')
+      # 根据执行环境决定是否进行自定义依赖环境安装
+      if args.remote:
+        os.system('bash install.sh')
+      os.system(f'python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
   else:
     if action_name == 'create':
       if sub_action_name == 'project':
@@ -1303,10 +1363,10 @@ def main():
         # args.src 远程文件路径
         # args.tgt 本地路径
         # args.tags 关键字（对于搜索引擎下载使用）
-        if args.num == 0:
+        if args.num == 0 and sub_action_name.split("/")[1] in ['baidu', 'bing', 'google']:
           args.num = 1000
           print(f'Default download sample numbe 1000 (--num=...)')
-        tool_func(args.tgt, args.tags, src_path=args.src, target_num=args.num)
+        tool_func(args.tgt, args.tags, src_path=args.src, target_num=args.num, exp=args.exp, id=args.id, config=args.config)
       elif sub_action_name.startswith('upload'):
         tool_func = getattr(tools, f'upload_to_{sub_action_name.split("/")[1]}', None)
 

@@ -25,7 +25,7 @@ class LrUpdaterHook(Hook):
                  warmup=None,
                  warmup_iters=0,
                  warmup_ratio=0.1,
-                 warmup_by_epoch=False, **kwargs):
+                 begin=None, end=None, **kwargs):
         # validate the "warmup" argument
         if warmup is not None:
             if warmup not in ['constant', 'linear', 'exp']:
@@ -42,9 +42,12 @@ class LrUpdaterHook(Hook):
         self.warmup = warmup
         self.warmup_iters = warmup_iters
         self.warmup_ratio = warmup_ratio
-        self.warmup_by_epoch = warmup_by_epoch
+        self.warmup_by_epoch = by_epoch     # warmup_by_epoch 和 by_epoch保持一致
+        self.begin = begin
+        self.end = end
 
         if self.warmup_by_epoch:
+            # 如果warmup采用by_epoch，则将warmup_iters赋值给warmup_epochs
             self.warmup_epochs = self.warmup_iters
             self.warmup_iters = None
         else:
@@ -83,14 +86,18 @@ class LrUpdaterHook(Hook):
     def get_warmup_lr(self, cur_iters):
 
         def _get_warmup_lr(cur_iters, regular_lr):
+            warmup_iters = self.warmup_iters
+            if self.by_epoch:
+                warmup_iters = self.warmup_epochs
+
             if self.warmup == 'constant':
                 warmup_lr = [_lr * self.warmup_ratio for _lr in regular_lr]
             elif self.warmup == 'linear':
-                k = (1 - cur_iters / self.warmup_iters) * (1 -
+                k = (1 - cur_iters / warmup_iters) * (1 -
                                                            self.warmup_ratio)
                 warmup_lr = [_lr * (1 - k) for _lr in regular_lr]
             elif self.warmup == 'exp':
-                k = self.warmup_ratio**(1 - cur_iters / self.warmup_iters)
+                k = self.warmup_ratio**(1 - cur_iters / warmup_iters)
                 warmup_lr = [_lr * k for _lr in regular_lr]
             return warmup_lr
 
@@ -122,10 +129,6 @@ class LrUpdaterHook(Hook):
             ]
 
     def before_train_epoch(self, runner):
-        if self.warmup_iters is None:
-            epoch_len = len(runner.data_loader)
-            self.warmup_iters = self.warmup_epochs * epoch_len
-
         if not self.by_epoch:
             return
 
@@ -143,9 +146,9 @@ class LrUpdaterHook(Hook):
                 self._set_lr(runner, warmup_lr)
         elif self.by_epoch:
             cur_iter = runner.epoch
-            if self.warmup is None or cur_iter > self.warmup_iters:
+            if self.warmup is None or cur_iter > self.warmup_epochs:
                 return
-            elif cur_iter == self.warmup_iters:
+            elif cur_iter == self.warmup_epochs:
                 self._set_lr(runner, self.regular_lr)
             else:
                 warmup_lr = self.get_warmup_lr(cur_iter)
@@ -163,7 +166,6 @@ class WarmupLrUpdaterHook(LrUpdaterHook):
 
 @HOOKS.register_module()
 class FixedLrUpdaterHook(LrUpdaterHook):
-
     def __init__(self, factor=1, **kwargs):
         super(FixedLrUpdaterHook, self).__init__(**kwargs)
         self.factor = factor
@@ -203,8 +205,17 @@ class StepLrUpdaterHook(LrUpdaterHook):
 
         # calculate exponential term
         if isinstance(self.step, int):
+            # 如此设置，意味着每隔step步，调整一次学习率
+            # 此时需要考虑self.begin, self.end确定整体区间
+            if self.begin is not None and self.end is not None:
+                if self.by_epoch:
+                    progress = runner.epoch - self.begin
+                else:
+                    progress = runner.iter - self.begin
+
             exp = progress // self.step
         else:
+            # 如此设置，意味着在不同区间，调整一次学习率
             exp = len(self.step)
             for i, s in enumerate(self.step):
                 if progress < s:
@@ -227,24 +238,43 @@ class ExpLrUpdaterHook(LrUpdaterHook):
 
     def get_lr(self, runner, base_lr):
         progress = runner.epoch if self.by_epoch else runner.iter
+        if self.begin is not None and self.end is not None:
+            if self.by_epoch:
+                progress = runner.epoch - self.begin
+            else:
+                progress = runner.iter - self.begin
+
         return base_lr * self.gamma**progress
 
 
 @HOOKS.register_module()
 class PolyLrUpdaterHook(LrUpdaterHook):
 
-    def __init__(self, power=1., min_lr=0., **kwargs):
+    def __init__(self, power=0.9, min_lr=1e-6, **kwargs):
         self.power = power
         self.min_lr = min_lr
         super(PolyLrUpdaterHook, self).__init__(**kwargs)
 
     def get_lr(self, runner, base_lr):
+        progress, max_progress = 0, 0
         if self.by_epoch:
             progress = runner.epoch
             max_progress = runner.max_epochs
+            if self.end is not None and self.end is not None:
+                progress = progress - self.begin
+                max_progress = self.end - self.begin
         else:
             progress = runner.iter
             max_progress = runner.max_iters
+            if self.end is not None and self.end is not None:
+                progress = progress - self.begin
+                max_progress = self.end - self.begin
+
+        if progress < 0:
+            return base_lr
+        if progress > max_progress:
+            return self.min_lr
+
         coeff = (1 - progress / max_progress)**self.power
         return (base_lr - self.min_lr) * coeff + self.min_lr
 
@@ -259,6 +289,12 @@ class InvLrUpdaterHook(LrUpdaterHook):
 
     def get_lr(self, runner, base_lr):
         progress = runner.epoch if self.by_epoch else runner.iter
+        if self.begin is not None and self.end is not None:
+            if self.by_epoch:
+                progress = runner.epoch - self.begin
+            else:
+                progress = runner.iter - self.begin
+
         return base_lr * (1 + self.gamma * progress)**(-self.power)
 
 
@@ -273,38 +309,37 @@ class CosineAnnealingLrUpdaterHook(LrUpdaterHook):
             Default: None.
     """
 
-    def __init__(self, min_lr=None, begin=0, end=None, min_lr_ratio=None, **kwargs):
+    def __init__(self, min_lr=None, min_lr_ratio=None, **kwargs):
         assert (min_lr is None) ^ (min_lr_ratio is None)
         self.min_lr = min_lr
         self.min_lr_ratio = min_lr_ratio
-        self.begin = begin
-        self.end = end
         super(CosineAnnealingLrUpdaterHook, self).__init__(**kwargs)
 
     def get_lr(self, runner, base_lr):
+        progress, max_progress = 0, 0
         if self.by_epoch:
             progress = runner.epoch
-            max_progress = runner.max_epochs - self.begin
-            if self.end is not None:
+            max_progress = runner.max_epochs
+            if self.begin is not None and self.end is not None:
+                progress = runner.epoch - self.begin
                 max_progress = self.end - self.begin
         else:
             progress = runner.iter
-            max_progress = runner.max_iters - self.begin
-            if self.end is not None:
+            max_progress = runner.max_iters
+            if self.begin is not None and self.end is not None:
+                progress = runner.iter - self.begin
                 max_progress = self.end - self.begin
 
-        if progress < self.begin:
+        if progress < 0:
             return base_lr
 
-        progress = progress - self.begin
         if self.min_lr_ratio is not None:
             target_lr = base_lr * self.min_lr_ratio
         else:
             target_lr = self.min_lr
 
-        if self.end is not None:
-            if progress > self.end:
-                return target_lr
+        if progress > max_progress:
+            return target_lr
 
         return annealing_cos(base_lr, target_lr, progress / max_progress)
 
@@ -344,13 +379,25 @@ class FlatCosineAnnealingLrUpdaterHook(LrUpdaterHook):
 
     def get_lr(self, runner, base_lr):
         if self.by_epoch:
-            start = round(runner.max_epochs * self.start_percent)
-            progress = runner.epoch - start
-            max_progress = runner.max_epochs - start
+            max_epochs = runner.max_epochs
+            progress = runner.epoch
+            if self.begin is not None and self.end is not None:
+                max_epochs = self.end - self.begin
+                progress = progress - self.begin
+
+            start = round(max_epochs * self.start_percent)
+            progress = progress - start
+            max_progress = max_epochs - start
         else:
-            start = round(runner.max_iters * self.start_percent)
-            progress = runner.iter - start
-            max_progress = runner.max_iters - start
+            max_iters = runner.max_iters
+            progress = runner.iter
+            if self.begin is not None and self.end is not None:
+                max_iters = self.end - self.begin
+                progress = progress - self.begin
+
+            start = round(max_iters * self.start_percent)
+            progress = progress - start
+            max_progress = max_iters - start
 
         if self.min_lr_ratio is not None:
             target_lr = base_lr * self.min_lr_ratio
@@ -401,6 +448,12 @@ class CosineRestartLrUpdaterHook(LrUpdaterHook):
             progress = runner.epoch
         else:
             progress = runner.iter
+
+        if self.begin is not None and self.end is not None:
+            if self.by_epoch:
+                progress = runner.epoch - self.begin
+            else:
+                progress = runner.iter - self.begin
 
         if self.min_lr_ratio is not None:
             target_lr = base_lr * self.min_lr_ratio
@@ -687,23 +740,36 @@ class LinearAnnealingLrUpdaterHook(LrUpdaterHook):
             Default: None.
     """
 
-    def __init__(self, min_lr=None, min_lr_ratio=None, **kwargs):
+    def __init__(self, min_lr=1e-6, min_lr_ratio=None, **kwargs):
         assert (min_lr is None) ^ (min_lr_ratio is None)
         self.min_lr = min_lr
         self.min_lr_ratio = min_lr_ratio
         super(LinearAnnealingLrUpdaterHook, self).__init__(**kwargs)
 
     def get_lr(self, runner, base_lr):
+        progress, max_progress = 0, 0
         if self.by_epoch:
             progress = runner.epoch
             max_progress = runner.max_epochs
+            if self.begin is not None and self.end is not None:
+                progress = runner.epoch - self.begin
+                max_progress = self.end - self.begin
         else:
             progress = runner.iter
             max_progress = runner.max_iters
+            if self.begin is not None and self.end is not None:
+                progress = runner.iter - self.begin
+                max_progress = self.end - self.begin
+
         if self.min_lr_ratio is not None:
             target_lr = base_lr * self.min_lr_ratio
         else:
             target_lr = self.min_lr
+
+        if progress < 0:
+            return base_lr
+        if progress > max_progress:
+            return self.min_lr
         return annealing_linear(base_lr, target_lr, progress / max_progress)
 
 
@@ -772,7 +838,7 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
             hook = build_from_cfg(lr_config, HOOKS)
             assert('begin' in lr_config and 'end' in lr_config)
             assert(begin == lr_config['begin'])
-            begin = lr_config['end']
+            begin = lr_config['end'] + 1
             self.lr_updater_cfg.append(lr_config)
             self.lr_updater_list.append(hook)
 
@@ -796,11 +862,11 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
             runner.epoch = 0
             runner.iter = 0
             for policy_i in range(len(self.lr_updater_list)-1):
-                if cur_epoch >= self.lr_updater_cfg[policy_i]['begin'] and cur_epoch < self.lr_updater_cfg[policy_i]['end']:
+                if cur_epoch >= self.lr_updater_cfg[policy_i]['begin'] and cur_epoch <= self.lr_updater_cfg[policy_i]['end']:
                     self.cur_policy_i = policy_i
                     break
 
-                runner.epoch = self.lr_updater_cfg[policy_i]['end'] - 1
+                runner.epoch = self.lr_updater_cfg[policy_i]['end']
                 runner.iter = runner.epoch * iter_num_in_one_epoch
                 self.lr_updater_list[policy_i].before_train_epoch(runner)
                 self.lr_updater_list[policy_i].before_train_iter(runner)
@@ -815,7 +881,7 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
             return
 
         for policy_i in range(len(self.lr_updater_list)):
-            if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch < self.lr_updater_cfg[policy_i]['end']:
+            if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch <= self.lr_updater_cfg[policy_i]['end']:
                 if self.cur_policy_i != policy_i:
                     self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
                     self.cur_policy_i = policy_i
@@ -826,14 +892,14 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
     def before_train_iter(self, runner):
         if not self.by_epoch:
             for policy_i in range(len(self.lr_updater_list)):
-                if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter < self.lr_updater_cfg[policy_i]['end']:
+                if runner.iter >= self.lr_updater_cfg[policy_i]['begin'] and runner.iter <= self.lr_updater_cfg[policy_i]['end']:
                     if self.cur_policy_i != policy_i:
                         self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
                         self.cur_policy_i = policy_i
                     break
         else:
             for policy_i in range(len(self.lr_updater_list)):
-                if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch < self.lr_updater_cfg[policy_i]['end']:
+                if runner.epoch >= self.lr_updater_cfg[policy_i]['begin'] and runner.epoch <= self.lr_updater_cfg[policy_i]['end']:
                     if self.cur_policy_i != policy_i:
                         self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
                         self.cur_policy_i = policy_i

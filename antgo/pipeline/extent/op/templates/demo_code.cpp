@@ -1,8 +1,11 @@
+/*集成核心依赖*/
 #include "${project}_plugin.h"
+/*集成可选依赖，仅负责数据加载等外围功能*/
 #include "eagleeye/common/EagleeyeStr.h"
 #include "eagleeye/common/EagleeyeLog.h"
 #include "eagleeye/common/EagleeyeFile.h"
 #include "eagleeye/common/EagleeyeTime.h"
+/*C++系统依赖*/
 #include <iostream>
 #include <fstream>
 #include <numeric>
@@ -53,10 +56,11 @@ int get_data_size(int data_type, std::vector<size_t> shape){
 }
 
 int main(int argc, char** argv){
-    int original_stdout = dup(STDOUT_FILENO);
-    // 运行模式
+    int original_stdout = 0;
+    // 运行模式 image, file, stdin
     std::string run_mode(argv[1]);
-    if(run_mode != "file"){
+    if(!(run_mode == "file" || run_mode == "image")){
+        original_stdout = dup(STDOUT_FILENO);
         close(STDOUT_FILENO);
     }
 
@@ -79,50 +83,80 @@ int main(int argc, char** argv){
     }
     */
 
-    // 3.step set input data 
-    std::vector<std::string> input_name_list = {};           // 输入节点名字（见计算管线搭建中的设置）
-    std::vector<std::vector<size_t>> input_size_list = {};   // 输入节点数据形状
-    std::vector<int> input_type_list = {};                   // 输入节点属性类型（见EagleeyeType类型）
-
-    for(int argi=2; argi<argc; ++argi){
-        std::string arg_str(argv[argi]);
-        std::string arg_sep = "/";
-        std::vector<std::string> name_shape_type = split(arg_str, arg_sep);
-        std::string input_name = name_shape_type[0];
-        std::string input_shape = name_shape_type[1];
-        std::string input_type = name_shape_type[2];
-
-        arg_sep = ",";
-        std::vector<std::string> shape_str = split(input_shape, arg_sep);
-        input_name_list.push_back(input_name);
-        std::vector<size_t> shape;
-        for(int shape_i=0; shape_i<shape_str.size(); ++shape_i){
-            shape.push_back(tof<size_t>(shape_str[shape_i]));
-        }
-        input_size_list.push_back(shape);
-        input_type_list.push_back(tof<int>(input_type));
-    }
+    // 3.step set input data info
+    std::vector<std::string> input_name_list = ${input_name_list};           // 输入节点名字（见计算管线搭建中的设置）
+    std::vector<std::vector<size_t>> input_size_list = ${input_size_list};   // 输入节点数据形状
+    std::vector<int> input_type_list = ${input_type_list};                   // 输入节点属性类型（见EagleeyeType类型）
+    int input_port_num = input_name_list.size();
 
     std::vector<void*> cache_data_list;
-    while(true){
-        for(int input_port=0; input_port<input_name_list.size(); ++input_port){
+    if(!(run_mode == "file" || run_mode == "image")){
+        // stdinout mode
+        for(int input_port=0; input_port<input_port_num; ++input_port){
             std::string input_name = input_name_list[input_port];
-            std::vector<size_t> input_size = input_size_list[input_port];
             int input_type = input_type_list[input_port];
-            int data_byte_size = get_data_size(input_type, input_size);
 
+            // std::vector<size_t> input_size = input_size_list[input_port];
+            int argi = input_port + 2;
+            std::string input_port_config_info = argv[argi];
+            std::string config_sep = "/";
+            std::vector<std::string> input_port_config = split(input_port_config_info, config_sep);
+            std::string shape_info = input_port_config[1];
+            std::string shape_sep = ",";
+            std::vector<std::string> shape_keys = split(shape_info, shape_sep);
+            std::vector<size_t> input_size;
+            for(int shape_i=0; shape_i<shape_keys.size(); ++shape_i){
+                input_size.push_back(tof<size_t>(shape_keys[shape_i]));
+            }
+            input_size_list[input_port] = input_size;
+
+            int data_byte_size = get_data_size(input_type, input_size);
             if(cache_data_list.size() < input_port+1){
                 char* data = (char*)malloc(data_byte_size);  // YOUR DATA POINTER;
-                memset(data, '\0', data_byte_size);
+                memset(data, 0, data_byte_size);
                 // save to list
                 cache_data_list.push_back(data);
             }
-            char* data = (char*)cache_data_list[input_port];
+        }
+    }
 
-            if(run_mode == "file"){
-                // 从文件加载
-                // load data from ./data/input
-                // file format input_name.input_port.type.shape.bin
+    while(true){
+        // 3.step load pipeline input
+        if(run_mode == "file"){
+            // 从文件加载
+            // load data from ./data/input
+            // file format input_name.input_port.type.shape.bin
+            const char* input_file_folder = "./data/input";
+            std::vector<std::string> input_file_list;
+            traverseFiles(input_file_folder, input_file_list);
+            std::vector<std::string> order_input_shape_list;
+            order_input_shape_list.resize(input_port_num);
+
+            std::string file_name_sep = ".";
+            for(int i=0; i<input_file_list.size(); ++i){
+                std::vector<std::string> keys = split(input_file_list[i], file_name_sep);
+                int input_port = atoi(keys[1].c_str());
+                order_input_shape_list[input_port] = keys[3];
+            }
+
+            for(int input_port=0; input_port<input_port_num; ++input_port){
+                std::string input_name = input_name_list[input_port];
+                int input_type = input_type_list[input_port];
+                std::string shape_sep = ",";
+                std::vector<std::string> shape_str = split(order_input_shape_list[input_port], shape_sep);
+                std::vector<size_t> input_size;
+                for(int shape_i=0; shape_i<shape_str.size(); ++shape_i){
+                    input_size.push_back(tof<size_t>(shape_str[shape_i]));
+                }
+                int data_byte_size = get_data_size(input_type, input_size);
+                if(cache_data_list.size() < input_port+1){
+                    char* data = (char*)malloc(data_byte_size);  // YOUR DATA POINTER;
+                    memset(data, 0, data_byte_size);
+                    // save to list
+                    cache_data_list.push_back(data);
+                }
+                char* data = (char*)cache_data_list[input_port];
+
                 std::string input_size_str = "";
                 for(int k=0; k<input_size.size(); ++k){
                     if(k != input_size.size()-1){
@@ -131,20 +165,56 @@ int main(int argc, char** argv){
                     else{
                         input_size_str += tos(input_size[k]);
                     }
-                }                
-                std::string file_path = std::string("./data/input/")+input_name+".0."+tos(input_type)+"."+input_size_str+".bin";
+                }
+                std::string file_path = std::string("./data/input/")+input_name+"."+ tos(input_port)+"."+tos(input_type)+"."+input_size_str+".bin";
+                EAGLEEYE_LOGI("load file %s for port %d", file_path.c_str(), input_port);
+                EAGLEEYE_LOGI("tensor shape %s", input_size_str.c_str());
+
                 std::ifstream file_path_handle;
                 file_path_handle.open(file_path.c_str(),std::ios::binary);
                 file_path_handle.read((char*)(data), data_byte_size);
                 file_path_handle.close();
-            }
-            else{
-                // 从stdin流加载
-                fread(data, sizeof(char), data_byte_size, stdin);
-            }
 
-            // set pipeline input
-            eagleeye_${project}_set_input(input_name.c_str(), data, input_size.data(), input_size.size(), 0, input_type);
+                // set pipeline input
+                eagleeye_${project}_set_input(input_name.c_str(), data, input_size.data(), input_size.size(), 0, input_type);
+            }
+        }
+        else if(run_mode == "image"){
+            // 从图像加载
+            // load data argv
+            for(int input_port=0; input_port<input_port_num; ++input_port){
+                std::string input_name = input_name_list[input_port];
+                int input_type = input_type_list[input_port];
+
+                int argi = input_port + 2;
+                EAGLEEYE_LOGI("load image %s for port %d", argv[argi], input_port);
+                unsigned char* data = NULL;
+                int height = 0;
+                int width = 0;
+                int channel = 0;
+
+                loadpng(argv[argi], data, height, width, channel);
+                EAGLEEYE_LOGI("image shape %d, %d, %d", height, width, channel);
+                std::vector<size_t> input_size={size_t(height), size_t(width), size_t(channel)};
+
+                // set pipeline input
+                eagleeye_${project}_set_input(input_name.c_str(), data, input_size.data(), input_size.size(), 0, input_type);
+                free(data);
+            }
+        }
+        else{
+            // 从stdin加载
+            for(int input_port=0; input_port<input_port_num; ++input_port){
+                std::string input_name = input_name_list[input_port];
+                int input_type = input_type_list[input_port];
+                std::vector<size_t> input_size = input_size_list[input_port];
+                int data_byte_size = get_data_size(input_type, input_size);
+                char* data = (char*)cache_data_list[input_port];
+                fread(data, sizeof(char), data_byte_size, stdin);
+                
+                // set pipeline input
+                eagleeye_${project}_set_input(input_name.c_str(), data, input_size.data(), input_size.size(), 0, input_type);
+            }
         }
 
         // 4.step refresh module pipeline
@@ -183,31 +253,48 @@ int main(int argc, char** argv){
                 }
 
                 std::string out_data_id = output_name+"."+output_port+"."+tos(out_data_type)+"."+output_size_str+".bin";               
-                if(run_mode == "file"){
+                if(run_mode == "file" || run_mode == "image"){
                     // save data to ./data/output/
                     std::string file_path = std::string("./data/output/")+out_data_id;
                     if(!isdirexist("./data/output")){
                         createdirectory("./data/output");
                     }
-                    std::ofstream file_path_handle;
-                    file_path_handle.open(file_path.c_str(),std::ios::binary);
-                    file_path_handle.write((char*)out_data, data_byte_size);
-                    file_path_handle.close();
+                    if((run_mode == "image") && (out_data_dims == 3 && out_data_type == 0 && (out_data_size[2] == 3 || out_data_size[2] == 4))){
+                        // only for image data format
+                        file_path = std::string("./data/output/")+output_name+"."+output_port+".png";
+                        unsigned char* image_data = (unsigned char*)out_data;
+                        savepng(file_path.c_str(), image_data, out_data_size[0], out_data_size[1], out_data_size[1], out_data_size[2]);
+                    }
+                    else{
+                        // for any tensor
+                        std::ofstream file_path_handle;
+                        file_path_handle.open(file_path.c_str(),std::ios::binary);
+                        file_path_handle.write((char*)out_data, data_byte_size);
+                        file_path_handle.close();
+                    }
                 }
                 else{
                     // 恢复stdout
                     fflush(stdout);
                     dup2(original_stdout, STDOUT_FILENO);
 
+                    char* temp_ptr = (char*)(malloc(sizeof(size_t)*(2+out_data_dims) + data_byte_size));
                     size_t t = out_data_type;
-                    fwrite(&t, sizeof(size_t), 1, stdout);
+                    int offset = 0;
+                    memcpy(temp_ptr+offset, &t, sizeof(size_t));
                     t = out_data_dims;
-                    fwrite(&t, sizeof(size_t), 1, stdout);
-                    fwrite(out_data_size, sizeof(size_t), out_data_dims, stdout);
+                    offset += sizeof(size_t);
+                    memcpy(temp_ptr+offset, &t, sizeof(size_t));
+                    offset += sizeof(size_t);
+                    memcpy(temp_ptr+offset, out_data_size, sizeof(size_t)*out_data_dims);
+                    offset += sizeof(size_t)*out_data_dims;
                     if(data_byte_size > 0){
-                        fwrite(out_data, sizeof(char), data_byte_size, stdout);
+                        memcpy(temp_ptr+offset, out_data, data_byte_size);
                     }
-                    fflush(stdout);
+
+                    setbuf(stdout, NULL);
+                    fwrite(temp_ptr, sizeof(char), sizeof(size_t)*(2+out_data_dims) + data_byte_size, stdout);
+                    free(temp_ptr);
 
                     // 关闭stdout
                     close(STDOUT_FILENO);
@@ -226,7 +313,7 @@ int main(int argc, char** argv){
         }
         */
 
-        if(run_mode == "file"){
+        if(run_mode == "file" || run_mode == "image"){
             break;
         }
     }

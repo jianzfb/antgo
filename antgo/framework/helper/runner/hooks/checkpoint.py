@@ -66,7 +66,6 @@ class CheckpointHook(Hook):
         self.args = kwargs
         self.sync_buffer = sync_buffer
         self.file_client_args = file_client_args
-
         self.is_ready = False
 
     @master_only
@@ -82,13 +81,22 @@ class CheckpointHook(Hook):
         # 添加固定路径格式
         self.out_dir = osp.join(self.out_dir, 'output', 'checkpoint')
 
-        # 设置文件日志存储根目录
-        mlogger.FileLogger.root_folder = self.out_dir
+        # 记录地址（对disk后端有效）
+        self.disk_address = None
 
+        # 设置文件日志存储根目录
         if mlogger.is_ready():
             self.is_ready = True
-        self.file_logger = mlogger.Container()
-        self.file_logger.file = mlogger.FileLogger('file', 'aliyun', True)
+            backend = 'disk'
+            if self.out_dir.startswith('ali'):
+                backend = 'aliyun'
+            elif self.out_dir.startswith('qiniu'):
+                backend = 'qiniu'
+            elif self.out_dir.startswith('htfs'):
+                backend = 'hdfs'
+            mlogger.FileLogger.root_folder = self.out_dir
+            self.file_logger = mlogger.Container()
+            self.file_logger.file = mlogger.FileLogger('file', backend, True)
 
         runner.logger.info(
             (f'Checkpoints will be saved to {self.out_dir} by '
@@ -125,7 +133,19 @@ class CheckpointHook(Hook):
 
         if self.is_ready:
             # 文件日志
-            self.file_logger.file.update(info)
+            kwargs = {}
+            if self.file_logger.backend == 'disk':
+                # 需要记录当前机器地址 user@ip
+                if self.disk_address is None:
+                    self.disk_address = 'root@127.0.0.1'
+                    if os.path.exists('./address'):
+                        with open('./address', 'r') as fp:
+                            self.disk_address = fp.read()
+
+                kwargs.update({
+                    'address': f'{self.disk_address}'
+                })
+            self.file_logger.file.update(info, **kwargs)
 
         if runner.meta is not None:
             if self.by_epoch:

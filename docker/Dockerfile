@@ -6,7 +6,7 @@
 # require Docker Engine >= 17.05
 #
 # builder stage
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.6.0-devel-ubuntu22.04
 
 # 基础容器镜像的默认用户已经是 root
 # USER root
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y build-essential autoconf libtool pkg-co
 cd /tmp && git clone --recurse-submodules -b v1.62.0 --depth 1 --shallow-submodules http://github.com/grpc/grpc && \
 cd grpc && mkdir -p cmake/build && cd cmake/build && \
 cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF ../.. && \
-make -j 8 && make install && cd /tmp && rm grpc -rf
+make -j 8 && make install && cd /tmp && rm grpc -rf && pip3 install grpcio
 
 # install vcpkg && minio-cpp
 RUN cd /opt && git clone -b master --depth 1 http://github.com/microsoft/vcpkg.git && \
@@ -67,8 +67,11 @@ apt-get install libcudnn8-dev=8.9.5.*-1+cuda12.2
 
 # install trt
 RUN mkdir -p /root/.3rd && cd /root/.3rd && \
-wget http://192.168.1.182:9000/sdk/3rd/TensorRT-8.6.1.6.tar.gz && \
-tar -zvxf TensorRT-8.6.1.6.tar.gz && rm TensorRT-8.6.1.6.tar.gz
+wget https://file.vibstring.com/TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && \
+tar -zvxf TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz && rm TensorRT-8.6.1.6.Linux.x86_64-gnu.cuda-12.0.tar.gz
+
+# update zlib
+RUN cd /opt && wget https://www.zlib.net/zlib-1.3.1.tar.gz && tar -zxvf zlib-1.3.1.tar.gz && cd zlib-1.3.1 && ./configure && make -j 4  && make install
 
 ENV LD_LIBRARY_PATH=/root/.3rd/TensorRT-8.6.1.6/lib:$LD_LIBRARY_PATH
 

@@ -141,8 +141,7 @@ class BaseCocoStyleDataset(Dataset):
             if self.data_mode == 'topdown':
                 data_list = self._get_topdown_data_infos(instance_list)
             else:
-                data_list = self._get_bottomup_data_infos(
-                    instance_list, image_list)
+                data_list = self._get_bottomup_data_infos(instance_list, image_list)
 
         return data_list
 
@@ -175,7 +174,7 @@ class BaseCocoStyleDataset(Dataset):
                 # skip invalid instance annotation.
                 if not instance_info:
                     continue
-                
+
                 # skip crowd instance
                 if int(instance_info['iscrowd']):
                     continue
@@ -276,6 +275,14 @@ class BaseCocoStyleDataset(Dataset):
         """Organize the data list in top-down mode."""
         # sanitize data samples
         data_list_tp = list(filter(self._is_valid_instance, instance_list))
+        for data_info in data_list_tp:
+            # rename key
+            if 'bbox' in data_info:
+                data_info['bboxes'] = data_info['bbox']
+                data_info.pop('bbox')
+            if 'bbox_score' in data_info:
+                data_info['bboxes_score'] = data_info['bbox_score']
+                data_info.pop('bbox_score')
 
         return data_list_tp
 
@@ -301,12 +308,21 @@ class BaseCocoStyleDataset(Dataset):
                 'img_path': img_path,
             }
 
+            # group all instance in one image
             for key in data_infos[0].keys():
                 if key not in data_info_bu:
                     seq = [d[key] for d in data_infos]
                     if isinstance(seq[0], np.ndarray):
                         seq = np.concatenate(seq, axis=0)
                     data_info_bu[key] = seq
+
+            # rename key
+            if 'bbox' in data_info_bu:
+                data_info_bu['bboxes'] = data_info_bu['bbox']
+                data_info_bu.pop('bbox')
+            if 'bbox_score' in data_info_bu:
+                data_info_bu['bboxes_score'] = data_info_bu['bbox_score']
+                data_info_bu.pop('bbox_score')
 
             # The segmentation annotation of invalid objects will be used
             # to generate valid region mask in the pipeline.

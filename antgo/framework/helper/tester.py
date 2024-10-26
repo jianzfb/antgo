@@ -31,12 +31,13 @@ from antgo.framework.helper.task_flag import *
 from thop import profile
 from antgo.framework.helper.runner.dist_utils import master_only
 import antvis.client.mlogger as mlogger
+from .base_trainer import *
 import json
 import zlib
 
 
 class Tester(object):
-    def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False):
+    def __init__(self, cfg, work_dir='./', gpu_id=-1, distributed=False, **kwargs):
         if isinstance(cfg, dict):
             self.cfg = Config.fromstring(json.dumps(cfg), '.json')
         else:
@@ -93,53 +94,8 @@ class Tester(object):
             self.dataset.append(dataset)
             self.data_loader.append(data_loader)
 
-        self.is_support_logger_platform = False
-
-    @master_only
-    def _finding_from_logger(self, experiment_name, checkpoint_name):
-        # step 1: 检测当前路径下收否有token缓存
-        token = None
-        if os.path.exists('./.token'):
-            with open('./.token', 'r') as fp:
-                token = fp.readline()
-
-        # step 2: 检查antgo配置目录下的配置文件中是否有token
-        if token is None or token == '':
-            config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-            config.AntConfig.parse_xml(config_xml)
-            token = getattr(config.AntConfig, 'server_user_token', '')
-        if token == '' or token is None:
-            print('No valid vibstring token, directly return')
-            return
-
-        # 创建实验
-        mlogger.config(token=token)
-        project_name = self.cfg.get('project_name', os.path.abspath(os.path.curdir).split('/')[-1])
-        status = mlogger.activate(project_name, experiment_name)
-        if status is None:
-            print(f'Couldnt find {project_name}/{experiment_name}, from logger platform')
-            exit(-1)
-
-        file_logger = mlogger.Container()
-        local_config_path = None
-        local_checkpoint_path = None
-        # 下载配置文件
-        mlogger.FileLogger.cache_folder = f'./logger/cache/{experiment_name}'
-        file_logger.cfg_file = mlogger.FileLogger('config', 'qiniu')
-        file_list = file_logger.cfg_file.get()
-        if len(file_list) > 0:
-           local_config_path = file_list[0]
-
-        # 下载checkpoint文件
-        file_logger.checkpoint_file = mlogger.FileLogger('file', 'aliyun')
-        file_list = file_logger.checkpoint_file.get(checkpoint_name)
-        for file_name in file_list:
-            if file_name.endswith(checkpoint_name):
-                local_checkpoint_path = file_name
-                break
-        print(f'Found {local_config_path} {local_checkpoint_path}')
-        self.is_support_logger_platform = True
-        return local_config_path, local_checkpoint_path
+        self.is_ready = False
+        self.use_logger_platform = False
 
     def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False, strict=True):
         # build the model and load checkpoint
@@ -148,23 +104,16 @@ class Tester(object):
         else:
             self.model = build_model(self.cfg.model)
 
-        if checkpoint == '':
+        if checkpoint is None or checkpoint == '':
             checkpoint = self.cfg.get('checkpoint', checkpoint)
-
-        # checkpoint路径格式
-        # 1: local path                 本地目录
-        # 2: ali://                     直接从阿里云盘下载
-        # 3: experiment/checkpoint      日志平台（推荐）
-        if not os.path.exists(checkpoint):
-            # 尝试解析来自于日志平台
-            self.experiment_name, self.checkpoint_name = checkpoint[1:].split('/')
-            _, checkpoint = self._finding_from_logger(self.experiment_name, self.checkpoint_name)
 
         if checkpoint is None or checkpoint == '':
             logger.error('Missing checkpoint file')
+            return
         else:
             checkpoint = load_checkpoint(self.model, checkpoint, map_location='cpu', revise_keys=revise_keys, strict=strict)
 
+        self.is_ready = True
         if is_fuse_conv_bn:
             print('use fuse conv_bn')
             self.model = fuse_conv_bn(self.model)
@@ -180,6 +129,9 @@ class Tester(object):
                 broadcast_buffers=False)
 
     def evaluate(self, json_file=None):
+        if not self.is_ready:
+            return
+
         rank, _ = get_dist_info()        
         if json_file is None and self.work_dir is not None and rank == 0:
             if not os.path.exists(osp.abspath(self.work_dir)):
@@ -220,7 +172,9 @@ class Tester(object):
                 all_metric.append(metric)
 
         # 上传测试报告到日志平台
-        if self.is_support_logger_platform:
+        if BaseTrainer.running_mode == 'debug':
+            print('In debug mode')        
+        if self.use_logger_platform and BaseTrainer.running_mode != 'debug':
             report = {
                 self.checkpoint_name: {
                     'measure': []

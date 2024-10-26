@@ -23,14 +23,14 @@ sudo bash docker/build_dev.sh with-android-ndk with-vscode-server
 ### 创建运行环境容器
 可以直接以命令行方式，运行相关实验
 ```
-# sudo docker run -it --rm --name antgo-env-runtime --shm-size="20G" --gpus all --privileged antgo-env /bin/bash
+# docker run -it --rm --shm-size="20G" --gpus all --privileged registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env-runtime /bin/bash
 
 ```
 
 ### 创建vscode-server服务
 在线IDE环境，运行后你可以访问http://IP:8080，开始在线开发吧
 ```
-sudo docker run --rm -d --name antgo-env-ide --shm-size="20G" -p 8080:8080 -e PASSWORD=123 -v /data:/dataset -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all,capabilities=video --privileged antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
+docker run -d --shm-size="20G" -p 8080:8080 -e PASSWORD=123 -v /data:/dataset -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all --privileged registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env-dev /opt/code-server-4.92.2-linux-amd64/bin/code-server --host 0.0.0.0 --auth password
 ```
 
 
@@ -64,7 +64,7 @@ no-cgroups = false
 然后，重启docker以及容器，
 ```
 sudo systemctl restart docker
-sudo docker run --rm -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all --privileged antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
+docker run -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v $(pwd):/workspace -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --gpus all --privileged antgo-env-dev /opt/code-server --host 0.0.0.0 --auth password
 ```
 
 3. 如果Code Server页面 对于图片和markdown无法正常预览，可以通过如下方式解决
@@ -96,3 +96,13 @@ sudo docker run --rm -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tm
         pip install opencv-python
     * 安装 opencv-python-headless
         pip install opencv-python-headless
+
+6. 遇到编译运行ffmepg问题
+    启动容器时添加 --gpus all,capabilities=video
+
+7. 遇到nodejs版本问题
+    ```
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.38.0/install.sh | bash
+    source ~/.bashrc
+    nvm install 19.7.0
+    ```

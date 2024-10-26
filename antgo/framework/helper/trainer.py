@@ -144,7 +144,7 @@ def calculate_quantsim(model, val_dataloader, dummy_input, use_cuda, path, prefi
     return quantsim
 
 class Trainer(BaseTrainer):
-    def __init__(self, cfg, work_dir="./", gpu_id=-1, distributed=False, diff_seed=True, deterministic=True, find_unused_parameters=False):
+    def __init__(self, cfg, work_dir="./", gpu_id=-1, distributed=False, diff_seed=True, deterministic=True, find_unused_parameters=False, **kwargs):
         if isinstance(cfg, dict):
             self.cfg = Config.fromstring(json.dumps(cfg), '.json')
         else:
@@ -196,8 +196,13 @@ class Trainer(BaseTrainer):
                 print('No valid vibstring token, directly return')
                 return
 
+            # step 3: 检查是否标准训练流程
+            if BaseTrainer.running_mode == 'debug':
+                print('In debug mode')
+                return
+
             # 创建实验
-            project = self.cfg.get('project_name', os.path.abspath(os.path.curdir).split('/')[-1])
+            project = self.cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
             experiment = cfg.filename.split('/')[-1].split('.')[0]
             mlogger.config(project, experiment, token=token, auto_suffix=True, server="BASELINE")
 

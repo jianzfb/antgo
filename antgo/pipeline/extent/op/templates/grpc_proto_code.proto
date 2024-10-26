@@ -6,42 +6,112 @@ package ${package};
 
 // The service definition.
 service ${servername} {
-  rpc ${servername}Start (${servername}StartRequest) returns (${servername}StartReply) {}
+  // sync 
+  rpc ${servername}SyncStart (${servername}SyncStartRequest) returns (${servername}SyncStartReply) {}
 
-  rpc ${servername}Stop (${servername}StopRequest) returns (${servername}StopReply) {}
+  rpc ${servername}SyncStop (${servername}SyncStopRequest) returns (${servername}SyncStopReply) {}
 
-  rpc ${servername}Call(${servername}CallRequest) returns (${servername}CallReply) {}
+  rpc ${servername}SyncCall(${servername}SyncCallRequest) returns (${servername}SyncCallReply) {}
+
+  // asyn
+  rpc ${servername}AsynStart (${servername}AsynStartRequest) returns (${servername}AsynStartReply) {}
+
+  rpc ${servername}AsynStop (${servername}AsynStopRequest) returns (${servername}AsynStopReply) {}
+
+  rpc ${servername}AsynPush(${servername}AsynPushRequest) returns (${servername}AsynPushReply) {}
+
+  rpc ${servername}AsynStream(${servername}AsynStreamRequest) returns (${servername}AsynStreamReply) {}
+
+  rpc ${servername}AsynMessage(${servername}AsynMessageRequest) returns (stream ${servername}AsynMessageReply) {}
 }
 
-message ${servername}StartRequest {
+message ${servername}AsynStartRequest {
   string serverpipeline = 1;            // 服务管线
   string serverid = 2;                  // 唯一ID
   string servercfg = 3;                 // 服务配置
 }
 
 
-message ${servername}StartReply {
+message ${servername}AsynStartReply {
   string message = 1;                   // 返回的消息例如 success
   int32 code = 2;                       // 返回的code 0 成功，非0失败
-  string serverkey = 3;                 // 服务关键字  
+  string serverkey = 3;                 // 服务关键字
 }
 
-message ${servername}CallRequest{
+message ${servername}AsynPushRequest{
   string serverkey = 1;                 // 服务关键字
   string serverrequest = 2;             // 服务请求
 }
 
-message ${servername}CallReply{
+message ${servername}AsynPushReply{
   string message = 1;                   // 返回的消息例如 success
   int32 code = 2;                       // 返回的code 0 成功，非0失败
   string data = 3;                      // 里面是json 见json配置文件
 }
 
-message ${servername}StopRequest {
+message ${servername}AsynStreamRequest{
+  string serverkey = 1;                 // 服务关键字
+  bytes package_data = 2;               // 包数据
+  int32 package_size = 3;               // 包大小
+}
+
+message ${servername}AsynStreamReply{
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string data = 3;                      // 里面是json 见json配置文件
+}
+
+
+message ${servername}AsynMessageRequest{
+  string serverkey = 1;                 // 服务关键字
+  string serverrequest = 2;             // 服务请求
+}
+
+message ${servername}AsynMessageReply{
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string data = 3;                      // 里面是json 见json配置文件
+}
+
+message ${servername}AsynStopRequest {
     string serverkey = 1;               // 服务关键字
 }
 
-message ${servername}StopReply {
+message ${servername}AsynStopReply {
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+}
+
+
+message ${servername}SyncStartRequest {
+  string serverpipeline = 1;            // 服务管线
+  string serverid = 2;                  // 唯一ID
+  string servercfg = 3;                 // 服务配置
+}
+
+
+message ${servername}SyncStartReply {
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string serverkey = 3;                 // 服务关键字
+}
+
+message ${servername}SyncCallRequest{
+  string serverkey = 1;                 // 服务关键字
+  string serverrequest = 2;             // 服务请求
+}
+
+message ${servername}SyncCallReply{
+  string message = 1;                   // 返回的消息例如 success
+  int32 code = 2;                       // 返回的code 0 成功，非0失败
+  string data = 3;                      // 里面是json 见json配置文件
+}
+
+message ${servername}SyncStopRequest {
+    string serverkey = 1;               // 服务关键字
+}
+
+message ${servername}SyncStopReply {
   string message = 1;                   // 返回的消息例如 success
   int32 code = 2;                       // 返回的code 0 成功，非0失败
 }

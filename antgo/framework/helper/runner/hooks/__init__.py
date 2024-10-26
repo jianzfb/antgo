@@ -1,10 +1,10 @@
 
+from .hook import HOOKS, Hook, rsetattr, rgetattr
 from .checkpoint import CheckpointHook
 from .closure import ClosureHook
 from .ema import EMAHook
 from .evaluation import DistEvalHook, EvalHook
 from .submodules_evaluation import SubModulesDistEvalHook, SubModulesEvalHook
-from .hook import HOOKS, Hook, rsetattr, rgetattr
 from .iter_timer import IterTimerHook
 from .logger import ( LoggerHook, TextLoggerHook, VibSLoggerHook)
 from .lr_updater import (CosineAnnealingLrUpdaterHook,

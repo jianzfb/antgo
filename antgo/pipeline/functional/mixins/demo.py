@@ -13,6 +13,7 @@ import threading
 import concurrent.futures
 import uuid
 import imagesize
+import pathlib
 
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
@@ -26,6 +27,10 @@ from fastapi import Response
 from fastapi import File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
+from fastapi.responses import RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
+import secrets
+
 import json
 import numpy as np
 import cv2
@@ -85,10 +90,38 @@ class DemoMixin:
 
     from fastapi import FastAPI, Request
     DemoMixin.app = FastAPI()
+    DemoMixin.app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 
-    if os.path.exists(static_folder):
-      shutil.rmtree(static_folder)
-    shutil.copytree(os.path.join(resource_dir, 'resource', 'app'), static_folder)
+    if not os.path.exists(static_folder):
+      os.makedirs(static_folder, exist_ok=True)
+      antgo_depend_root = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
+      if not os.path.exists(os.path.join(antgo_depend_root, 'antgo-web')):
+        os.system(f'cd {antgo_depend_root} ; git clone https://github.com/jianzfb/antgo-web.git ; cd antgo-web ; npm install')
+
+      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('/{DEMONAME}/', '/')
+      print(config_content)
+      with open(os.path.join(antgo_depend_root, 'antgo-web', 'vue.config.js'), 'w') as fp:
+        fp.write(config_content)
+
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('/{DEMONAME}', '/')
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src', 'main.js'), 'w') as fp:
+        fp.write(config_content)
+
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js.default'), 'r') as fp:
+        config_content = fp.read()
+        config_content = config_content.replace('/{DEMONAME}/', '/')
+      with open(os.path.join(antgo_depend_root, 'antgo-web/src/router', 'index.js'), 'w') as fp:
+        fp.write(config_content)
+
+      os.system(f'cd {antgo_depend_root}/antgo-web ; npm run build ; cd -; cp -r {antgo_depend_root}/antgo-web/dist/* {static_folder}')
+
+    # if os.path.exists(static_folder):
+    #   shutil.rmtree(static_folder)
+    # shutil.copytree(os.path.join(resource_dir, 'resource', 'app'), static_folder)
 
     if not os.path.exists(os.path.join(static_folder, 'image', 'query')):
       os.makedirs(os.path.join(static_folder, 'image', 'query'))
@@ -114,7 +147,12 @@ class DemoMixin:
     )
 
     @DemoMixin.app.post('/antgo/api/demo/submit/')
-    async def wrapper(req: Request):        
+    async def wrapper(req: Request, response: RedirectResponse):        
+        if(req.session.get("session_id") is None):
+          session_id = req.session["session_id"] = secrets.token_urlsafe(32)
+          response.set_cookie(key="Authorization", value=session_id)
+
+        session_id = req.session.get("session_id")
         req = await _decode_content(req)
         req = json.loads(req['query'])
 
@@ -168,6 +206,9 @@ class DemoMixin:
             interactive_info[InteractiveMixin.interactive_elements[f'{demo_name}/{bind_name}']['target']] = data
 
         feed_info.update(interactive_info)
+        feed_info.update(
+          {'session_id': session_id}
+        )
         rsp_value = DemoMixin.pipeline_info[demo_name]['exe'].execute(feed_info)
 
         if rsp_value is None:
@@ -395,7 +436,6 @@ class DemoMixin:
 
       t = threading.Thread(target=search_func[search_engine], args=(target_folder, keys, None, 50))
       t.start()
-
 
     @DemoMixin.app.get('/antgo/api/demo/searchprocess/')
     async def process(req: Request):

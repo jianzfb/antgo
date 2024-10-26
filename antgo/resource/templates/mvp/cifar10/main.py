@@ -335,6 +335,9 @@ def main():
             for eval_cfg in cfg.evaluation:
                 eval_cfg.out_dir = cfg.root
 
+    # 设置运行模式（debug/normal）
+    BaseTrainer.running_mode = nn_args.running
+
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程

@@ -202,6 +202,47 @@ class tensor_int32_op(object):
         else:
             return self.init_val
 
+
+@register
+class tensor_int8_op(object):
+    def __init__(self, init_val, is_placeholder=False, is_mutable=True):
+        assert(init_val.dtype == np.int8)
+        self.init_val = init_val
+        self.is_placeholder = is_placeholder
+        self.is_mutable = is_mutable
+        self.first_call = True
+
+    def __call__(self, *args):
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
+
+
+@register
+class tensor_uint8_op(object):
+    def __init__(self, init_val, is_placeholder=False, is_mutable=True):
+        assert(init_val.dtype == np.uint8)
+        self.init_val = init_val
+        self.is_placeholder = is_placeholder
+        self.is_mutable = is_mutable
+        self.first_call = True
+
+    def __call__(self, *args):
+        if self.is_mutable:
+            if self.first_call:
+                self.first_call = False
+                return self.init_val
+
+            return NoUpdate()
+        else:
+            return self.init_val
+
+
 @register
 class tensor_float32_op(object):
     def __init__(self, init_val, is_placeholder=False, is_mutable=True):
@@ -240,6 +281,15 @@ class tensor_float64_op(object):
             return NoUpdate()
         else:
             return self.init_val
+
+
+@register
+class placeholder_int32_op(object):
+    def __init__(self, init_val=0):
+        self.init_val = np.array([init_val]).astype(np.int32)
+
+    def __call__(self, *args):
+        return self.init_val
 
 
 @register
@@ -330,6 +380,23 @@ class init_op(object):
         if self.value is None:
             self.value = args
         return self.value if len(self.value) > 1 else self.value[0]
+
+
+@register
+class init_by_tensor_int32_op(object):
+    def __init__(self, init_val, other_val):
+        assert(init_val.dtype == np.int32)
+        assert(other_val.dtype == np.int32)
+        self.init_val = init_val
+        self.other_val = other_val
+        self.first_call = True
+
+    def __call__(self, *args):
+        if self.first_call:
+            self.first_call = False
+            return self.init_val
+        else:
+            return self.other_val
 
 
 @register

@@ -2,14 +2,18 @@ FROM registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest
 
 COPY ./ /workspace/
 
-# eagleeye 环境更新
-RUN mkdir -p /root/.3rd && cd /root/.3rd && rm -rf eagleeye && git clone https://github.com/jianzfb/eagleeye.git
 
 # antgo 环境
-RUN pip3 install --upgrade --upgrade-strategy=only-if-needed git+https://github.com/jianzfb/antgo.git@{{version}}
+ARG IS_ANTGO_UPGRADE="{{version}}"
+RUN if [ "$IS_ANTGO_UPGRADE" != "master" ]; then \
+        pip3 install --upgrade --upgrade-strategy=only-if-needed git+https://github.com/jianzfb/antgo.git@{{version}}; \
+    fi
 
-# eagleeye python 编译
-RUN antgo install eagleeye && antgo install opencv && antgo install eigen
+# eagleeye 环境更新
+ARG IS_EAGLEEYE_UPGRADE="{{is_upgrade}}"
+RUN if [ "$IS_EAGLEEYE_UPGRADE" = "upgrade" ]; then \
+        mkdir -p /root/.3rd && cd /root/.3rd && rm -rf eagleeye && git clone https://github.com/jianzfb/eagleeye.git && antgo install eagleeye; \
+    fi
 
 # 修正环境信息
 RUN rm /miniconda3/bin/../lib/libstdc++.so.6;ln /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /miniconda3/bin/../lib/libstdc++.so.6

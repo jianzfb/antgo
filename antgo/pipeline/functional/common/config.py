@@ -9,7 +9,7 @@ def add_op_info(op_name, op_index, op_args, op_kwargs):
     global __graph_info
     if 'op' not in __graph_info:
         __graph_info['op'] = []
-    
+
     # for k in op_kwargs.keys():
     #     if isinstance(op_kwargs[k], np.ndarray):
     #         op_kwargs[k] = op_kwargs[k].tolist()
@@ -35,3 +35,8 @@ def add_output_config(output_config):
 def get_graph_info():
     global __graph_info
     return __graph_info
+
+
+def clear_grap_info():
+    global __graph_info
+    __graph_info.clear()

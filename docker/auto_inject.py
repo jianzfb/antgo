@@ -37,9 +37,9 @@ def main():
             content = content.strip()
             
             while True:
-                if content == '# COPY code-server-4.0.2-linux-amd64  /opt/':
-                    cmd_list.append('COPY code-server-4.0.2-linux-amd64  /opt/')
-                if content == 'COPY code-server-4.0.2-linux-amd64  /opt/':
+                if content == '# COPY code-server-4.92.2-linux-amd64  /opt/':
+                    cmd_list.append('COPY code-server-4.92.2-linux-amd64  /opt/')
+                if content == 'COPY code-server-4.92.2-linux-amd64  /opt/':
                     content = fp.readline()
                     content = content.strip()                    
                     continue

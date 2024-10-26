@@ -93,9 +93,15 @@ public:
 
         while(1){
             std::string server_reply;
-            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, "", server_reply, timeout);
+            eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_call(server_key, std::vector<eagleeye::RequestData>{}, server_reply, timeout);
 
             ${servername}MessageReply reply;
+            if(result == eagleeye::SERVER_NOT_EXIST){
+                reply.set_code(1);
+                writer->Write(reply);
+                return Status::OK;
+            }
+
             reply.set_code(0);
             reply.set_data(server_reply);
             writer->Write(reply);

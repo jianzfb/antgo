@@ -4,6 +4,7 @@ from .conv import build_conv_layer
 from .conv2d_adaptive_padding import Conv2dAdaptivePadding
 from .conv_module import ConvModule
 from .inverted_residual import InvertedResidual
+from .se_layer import SELayer
 from .conv_ws import ConvAWS2d, ConvWS2d, conv_ws_2d
 from .depthwise_separable_conv_module import DepthwiseSeparableConvModule
 from .drop import Dropout, DropPath
@@ -33,5 +34,5 @@ __all__ = [
     'conv_ws_2d', 'DepthwiseSeparableConvModule', 'Swish', 'Linear',
     'Conv2dAdaptivePadding', 'Conv2d', 'ConvTranspose2d', 'MaxPool2d',
     'ConvTranspose3d', 'MaxPool3d', 'Conv3d', 'Dropout', 'DropPath', 'InvertedResidual',
-    'MultiheadAttention','FFN','BaseTransformerLayer','TransformerLayerSequence'
+    'MultiheadAttention','FFN','BaseTransformerLayer','TransformerLayerSequence', 'SELayer'
 ]

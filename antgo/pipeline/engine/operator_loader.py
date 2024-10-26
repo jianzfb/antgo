@@ -129,12 +129,12 @@ class OperatorLoader:
                 os.system('cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
 
             if 'darwin' in sys.platform:
-                os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE && mv install py')
+                os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE')
             else:
                 first_comiple = False
                 if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye','py')):
                     first_comiple = True
-                os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_build.sh BUILD_PYTHON_MODULE && mv install py')
+                os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_x86_64_build.sh BUILD_PYTHON_MODULE')
                 if first_comiple:
                     # 增加搜索.so路径
                     cur_abs_path = os.path.abspath(os.curdir)
@@ -286,7 +286,13 @@ class OperatorLoader:
 
             detect_or_tracking_kwargs.update(kws)
             return self.instance_operator(control_op_cls, [], detect_or_tracking_kwargs)
-
+        elif control_op_name == 'Asyn':
+            function_op_name_list = self.split_function(info[2:])
+            function_op_name = function_op_name_list[0]
+            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name.replace('-', '_'), {}), tag)
+            assert(function_op is not None)
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.asyn_op'), 'Asyn', None)
+            return self.instance_operator(control_op_cls, [], dict(func=function_op))
         return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:

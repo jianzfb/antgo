@@ -227,16 +227,20 @@ class ComputerVisionMixin:
         if width is not None and height is not None:
             out = cv2.VideoWriter(output_path, fourcc, rate, (width, height))  # 创建一个写入视频对象
 
-        for array in self:
-            h,w = array.shape[:2]
-            print((h,w))
+        frame_count = 0
+        for data in self:
+            if isinstance(data, Entity):
+                data = list(data.__dict__.values())[0] 
+            h,w = data.shape[:2]
+            print(f'frame {frame_count}, shape ({h}, {w})')
             if out is None:
                 out = cv2.VideoWriter(output_path, fourcc, rate, (w, h))
 
             if width is not None and height is not None:
                 if h != height or w !=width:
-                    array = cv2.resize(array, (width, height))
-            out.write(array)
+                    dataarray = cv2.resize(data, (width, height))
+            out.write(data)
+            frame_count += 1
 
         out.release()
         return output_path
