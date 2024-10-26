@@ -2326,7 +2326,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         print('Compile eagleeye core sdk and collect 3rd dependent')
         compile_props = ['app', 'ffmpeg', 'rk']
         if system_platform.lower().startswith('linux'):
-            compile_props = ['app', 'ffmpeg', 'rk', 'cuda', 'grpc', 'minio', 'opencv']
+            compile_props = ['app', 'ffmpeg', 'rk', 'cuda']
 
         # 检测需要的第三方依赖，并准备环境
         for compile_prop_key, compile_prop_val in eagleeye_config.items():
