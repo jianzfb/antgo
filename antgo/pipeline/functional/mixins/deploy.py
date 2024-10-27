@@ -2322,7 +2322,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         system_prefix = 'linux-arm64-v8a'
         # 检查交叉编译环境是否满足
         if not os.path.exists('/opt/cross_build/linux-arm64'):
-            os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye/env && source prepare_arm_cross_build_env_10.2.sh')
+            os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye/env && bash prepare_arm_cross_build_env_10.2.sh')
 
     eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_prefix}-install'
     if not os.path.exists(eagleeye_path):
