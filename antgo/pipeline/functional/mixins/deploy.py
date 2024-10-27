@@ -2320,6 +2320,9 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
     else:
         # linux/arm64
         system_prefix = 'linux-arm64-v8a'
+        # 检查交叉编译环境是否满足
+        if not os.path.exists('/opt/cross_build/linux-arm64'):
+            os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye/env && source prepare_arm_cross_build_env_10.2.sh')
 
     eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_prefix}-install'
     if not os.path.exists(eagleeye_path):
@@ -2336,21 +2339,19 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                     continue
 
                 root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
-                os.makedirs(root_folder, exist_ok=True)
-                if os.path.exists(os.path.join(root_folder, 'rk')):
-                    print('Exist rk dependent, dont need download and compile')
-                    eagleeye_config[compile_prop_key] = os.path.join(root_folder, 'rk')
-                    continue
                 os.makedirs(os.path.join(root_folder, 'rk'), exist_ok=True)
                 rk_root_folder = os.path.join(root_folder, 'rk')
                 # librga, mpp
-                os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
-                if system_platform.startswith('android'):
-                    # android
-                    os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
-                else:
-                    # linux
-                    os.system(f"cd {rk_root_folder}; git clone https://github.com/rockchip-linux/mpp.git &&  cd mpp/build/linux/aarch64 && sed -i 's/aarch64-linux-gnu-gcc/\/usr\/bin\/gcc/g' arm.linux.cross.cmake && sed -i 's/aarch64-linux-gnu-g++/\/usr\/bin\/g++/g' arm.linux.cross.cmake && bash make-Makefiles.bash && make -j 6 ")
+                if not os.path.exists(os.path.join(rk_root_folder, 'librga')):
+                    os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
+                
+                if not os.path.exists(os.path.join(rk_root_folder, 'mpp')):
+                    if system_platform.startswith('android'):
+                        # android
+                        os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
+                    else:
+                        # linux
+                        os.system(f'cd {rk_root_folder}; git clone https://github.com/rockchip-linux/mpp.git && cd mpp/build/linux/aarch64 &&  sed -i "s/aarch64-linux-gnu-gcc//opt/cross_build/linux-arm64//\//\\/\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-gcc/g" arm.linux.cross.cmake && sed -i "s/aarch64-linux-gnu-g++//opt/cross_build/linux-arm64//\//\\/\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-g++/g" arm.linux.cross.cmake && bash make-Makefiles.bash && make -j 10')
                 eagleeye_config[compile_prop_key] = rk_root_folder
             elif compile_prop_key == 'ffmpeg':
                 if compile_prop_val is not None and compile_prop_val != '':
@@ -2456,11 +2457,11 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         compile_param_suffix = ''
         compile_script_prefix = ''
         if system_platform == 'android':
-            compile_script_prefix = f'{system_platform.lower()}_build' if len(eagleeye_config) == 0 else f'{system_platform.lower()}_build_with'
+            compile_script_prefix = f'{system_platform.lower()}_build' if len([k for k in eagleeye_config.keys() if k in compile_props]) == 0 else f'{system_platform.lower()}_build_with'
         elif system_platform == 'linux' and abi_platform.lower() == 'x86-64':
-            compile_script_prefix = f'{system_platform.lower()}_x86_64_build' if len(eagleeye_config) == 0 else f'{system_platform.lower()}_x86_64_build_with'
+            compile_script_prefix = f'{system_platform.lower()}_x86_64_build' if len([k for k in eagleeye_config.keys() if k in compile_props]) == 0 else f'{system_platform.lower()}_x86_64_build_with'
         elif system_platform == 'linux' and abi_platform.lower().startswith('arm64'):
-            compile_script_prefix = f'{system_platform.lower()}_arm64_v8a_build' if len(eagleeye_config) == 0 else f'{system_platform.lower()}_arm64_v8a_build_with'
+            compile_script_prefix = f'{system_platform.lower()}_arm64_v8a_build' if len([k for k in eagleeye_config.keys() if k in compile_props]) == 0 else f'{system_platform.lower()}_arm64_v8a_build_with'
 
         for compile_prop_key in compile_props:
             if compile_prop_key in eagleeye_config:
