@@ -265,7 +265,7 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     if launch_script != '':
         sys_argv = launch_script
 
-    image_name = 'antgo-env:latest' # 基础镜像
+    image_name = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest' # 基础镜像
     launch_image = ssh_config_info['image'] if 'image' in ssh_config_info else ''
     if launch_image != '':
         image_name = launch_image
