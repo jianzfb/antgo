@@ -432,6 +432,10 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cp
     print(f'project_name {project_name}')
     print(f'target_machine_ips {target_machine_ips}')
 
+    # 记录提交机器地址
+    with open('./address', 'w') as fp:
+        fp.write(f'{username}@{target_machine_info_list[0]["ip"]}')
+
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
     if not is_inner_launch:
         exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
@@ -495,6 +499,8 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cp
     with open('./.project.json', 'w') as fp:
         json.dump(project_info,fp)
 
+    if os.path.exists('./address'):
+        os.remove('./address')
     return True
 
 

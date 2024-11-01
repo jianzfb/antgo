@@ -125,7 +125,7 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
         )
 
     # 记录checkpoint
-    if mlogger.is_ready():
+    if results is not None and mlogger.is_ready():
         backend = 'disk'
         if root.startswith('ali'):
             backend = 'aliyun'
