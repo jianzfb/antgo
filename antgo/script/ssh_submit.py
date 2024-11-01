@@ -347,7 +347,7 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     return True
 
 
-def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp=''):
+def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', env='master', is_inner_launch=False):
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
@@ -417,9 +417,9 @@ def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_n
         apply_gpu_id = [str(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
     apply_gpu_id = ','.join(apply_gpu_id)
 
-    image_name = base_image
-    if image_name is None and ('image' in project_info and project_info['image'] != ''):
-        image_name = project_info['image']
+    image_name = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest' # 基础镜像
+    if base_image is not None and base_image != '':
+        image_name = base_image
 
     if password == '':
         password = 'default'
@@ -427,14 +427,18 @@ def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_n
     print(f'Use image {image_name}')
     project_name = os.path.abspath(os.path.curdir).split("/")[-1]
     submit_time = create_time
-    env = '-'
 
     target_machine_ips = ','.join([v['ip'] for v in target_machine_info_list])
     print(f'project_name {project_name}')
     print(f'target_machine_ips {target_machine_ips}')
 
+    # 记录提交机器地址
+    with open('./address', 'w') as fp:
+        fp.write(f'{username}@{target_machine_info_list[0]["ip"]}')
+
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
-    exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
+    if not is_inner_launch:
+        exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
     submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{exe_script}" {image_name} {project_name} {env} {submit_time}'
 
     # 解析提交后的输出，并解析出container id
@@ -495,7 +499,15 @@ def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_n
     with open('./.project.json', 'w') as fp:
         json.dump(project_info,fp)
 
+    if os.path.exists('./address'):
+        os.remove('./address')
     return True
+
+
+def ssh_submit_yolo_process_func(create_time, mode_name, dataset_name, pretrained_model, device_ids):
+    # 训练和评估过程
+    
+    pass
 
 # 检查任务资源是否满足
 def ssh_submit_resource_check_func(gpu_num, cpu_num, memory_size):
