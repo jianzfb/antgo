@@ -347,7 +347,7 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     return True
 
 
-def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp=''):
+def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', env='master', is_inner_launch=False):
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
@@ -427,14 +427,14 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cp
     print(f'Use image {image_name}')
     project_name = os.path.abspath(os.path.curdir).split("/")[-1]
     submit_time = create_time
-    env = '-'
 
     target_machine_ips = ','.join([v['ip'] for v in target_machine_info_list])
     print(f'project_name {project_name}')
     print(f'target_machine_ips {target_machine_ips}')
 
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
-    exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
+    if not is_inner_launch:
+        exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
     submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{exe_script}" {image_name} {project_name} {env} {submit_time}'
 
     # 解析提交后的输出，并解析出container id
