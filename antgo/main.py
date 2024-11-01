@@ -60,6 +60,7 @@ DEFINE_string("ip", "", "set ip")
 DEFINE_string("remote-ip", None, "")
 DEFINE_string("remote-user", None, "")
 DEFINE_int('port', 0, 'set port')
+DEFINE_string('model', None, '')                # 模型定义 yolo
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
 DEFINE_indicator('data', True, '')
@@ -798,6 +799,7 @@ def main():
       if action_name not in ['train', 'eval']:
         logging.error('Antgo remote task submit mode only support train and eval')
         return
+
       if args.root.startswith('ali:'):
         # 尝试进行认证，从而保证当前路径下生成认证信息
         ali = Aligo()
@@ -854,6 +856,12 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
+      if args.model == 'yolo':
+        gpu_id = '0' if args.gpu_id == '' else args.gpu_id
+        exec_script = f'antgo {action_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id} --model=yolo'
+        ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
+        return
+
       filter_sys_argv_cp = []
       for t in sys_argv_cp:
         if t.startswith('--project'):
@@ -889,7 +897,7 @@ def main():
       elif args.ssh and args.script is not None:
         # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
         assert(args.image is not None and args.image != '')
-        ssh_submit2_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
+        ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
       elif args.k8s:
         # TODO,基于k8s远程管理
         logging.error('Not support k8s now.')
@@ -996,6 +1004,17 @@ def main():
 
       with open('./.project.json', 'w') as fp:
         json.dump(project_info,fp)
+
+      if args.model in ['yolo']:
+        # 第三方框架支持
+        if args.model == 'yolo':
+          # config 文件
+          # 1. model: 模型名字
+          # 2. data: {path: '', imgsz: 640}
+          # 3. log_config: 日志记录频次
+          # 4. max_epochs: 迭代次数
+          tools.yolo_model_train(args.exp, args.config, args.root, args.gpu_id, args.checkpoint)
+        return
 
       # 根据执行环境决定是否进行自定义依赖环境安装
       if args.remote:
@@ -1116,6 +1135,12 @@ def main():
       if os.path.exists('./evalresult.json'):
         os.remove('./evalresult.json')
 
+      if args.model in ['yolo']:
+        # 第三方框架支持
+        if args.model == 'yolo':
+          tools.yolo_model_eval(args.exp, args.config, args.root, args.gpu_id, args.checkpoint)
+        return
+
       # 获得实验root
       if args.exp not in args.root:
         with open('./.project.json', 'r') as fp:
@@ -1204,6 +1229,12 @@ def main():
         logging.error('Must set --checkpoint=')
         return
 
+      if args.model in ['yolo']:
+        # 第三方框架支持
+        if args.model == 'yolo':
+          tools.yolo_model_export(args.exp, args.checkpoint)
+        return
+
       # 获得实验root
       if args.exp not in args.root:
         with open('./.project.json', 'r') as fp:
@@ -1228,9 +1259,6 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      # 根据执行环境决定是否进行自定义依赖环境安装
-      if args.remote:
-        os.system('bash install.sh')
       os.system(f'python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
   else:
     if action_name == 'create':

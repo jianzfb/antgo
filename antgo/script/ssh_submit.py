@@ -347,7 +347,7 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     return True
 
 
-def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp=''):
+def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp=''):
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
@@ -417,9 +417,9 @@ def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_n
         apply_gpu_id = [str(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
     apply_gpu_id = ','.join(apply_gpu_id)
 
-    image_name = base_image
-    if image_name is None and ('image' in project_info and project_info['image'] != ''):
-        image_name = project_info['image']
+    image_name = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest' # 基础镜像
+    if base_image is not None and base_image != '':
+        image_name = base_image
 
     if password == '':
         password = 'default'
@@ -496,6 +496,12 @@ def ssh_submit2_process_func(create_time, exe_script, base_image, gpu_num, cpu_n
         json.dump(project_info,fp)
 
     return True
+
+
+def ssh_submit_yolo_process_func(create_time, mode_name, dataset_name, pretrained_model, device_ids):
+    # 训练和评估过程
+    
+    pass
 
 # 检查任务资源是否满足
 def ssh_submit_resource_check_func(gpu_num, cpu_num, memory_size):
