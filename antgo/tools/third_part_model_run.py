@@ -85,7 +85,7 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
         epochs=cfg.get('max_epochs', 100), 
         imgsz=data_imgsz, 
         device=device,
-        batch_size=batch_size
+        batch=batch_size
     )
     save_dir = str(model.trainer.save_dir)
     if not root.startswith('ali'):
