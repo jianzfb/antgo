@@ -26,6 +26,11 @@ import numpy as np
 class inference_model_op(object):
   def __init__(self, cfg_file=None, checkpoint='', gpu_id=-1, is_fuse_conv_bn=False, output=None):
     self.device = 'cpu' if gpu_id < 0 else 'cuda'
+    if self.device == 'cuda':
+      if not torch.cuda.is_available():
+        print('cuda not available, use cpu inference')
+        self.device = 'cpu'
+  
     self.cfg = Config.fromfile(cfg_file)
 
     # build model

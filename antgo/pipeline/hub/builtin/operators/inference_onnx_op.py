@@ -25,7 +25,7 @@ import shutil
 class inference_onnx_op(object):
     def __init__(self, onnx_path, input_fields=None, device_id=0, **kwargs):
         privider = []
-        if device_id >= 0:
+        if device_id >= 0 and torch.cuda.is_available():
             privider.append(('CUDAExecutionProvider', {'device_id': device_id}))
         privider.append('CPUExecutionProvider')
 
@@ -228,7 +228,10 @@ class inference_onnx_op(object):
 
 def __session_run_in_process(onnx_path, device_id, input_fields, input_queue, output_queue):
     sess = ort.InferenceSession(onnx_path)
-    sess.set_providers(['CUDAExecutionProvider'], [{'device_id': device_id}])
+    if device_id >= 0 and torch.cuda.is_available():
+        sess.set_providers(['CUDAExecutionProvider'], [{'device_id': device_id}])
+    else:
+        sess.set_providers(['CPUExecutionProvider'])
 
     while True:
         data = input_queue.get()
