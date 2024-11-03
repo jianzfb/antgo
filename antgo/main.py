@@ -176,6 +176,9 @@ def main():
 
     if args.root is not None:
       config_data['FACTORY'] = args.root
+    if config_data['FACTORY'] == '':
+      # use default factory path
+      config_data['FACTORY'] = os.environ['HOME']
     if args.token is not None:
       config_data['USER_TOKEN'] = args.token
 
@@ -183,6 +186,7 @@ def main():
     config_template = env.get_template('config.xml')
     config_content = config_template.render(**config_data)
 
+    os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'), exist_ok=True)
     with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
       fp.write(config_content)
 
