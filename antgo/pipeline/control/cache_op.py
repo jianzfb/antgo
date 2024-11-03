@@ -3,36 +3,12 @@ import sys
 import copy
 import numpy as np
 import pathlib
-
-ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
-if not os.path.exists(ANTGO_DEPEND_ROOT):
-    os.makedirs(ANTGO_DEPEND_ROOT)
-
-if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', 'py')):
-    if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')):
-        os.system('cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
-
-    if 'darwin' in sys.platform:
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE')
-    else:
-        first_comiple = False
-        if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye','py')):
-            first_comiple = True
-        os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash linux_x86_64_build.sh BUILD_PYTHON_MODULE')
-        if first_comiple:
-            # 增加搜索.so路径
-            cur_abs_path = os.path.abspath(os.curdir)
-            so_abs_path = os.path.join(cur_abs_path, f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64")
-            os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
-
-if f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64' not in sys.path:
-    sys.path.append(f'{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64')
-import eagleeye
-
+from antgo.pipeline.eagleeye.build import build_eagleeye_env
 # usage:
 # control.Cache.xxx[(), ()]()
 
 class Cache(object):
+    is_finish_import_eagleeye = False
     def __init__(self, func, **kwargs):
         self.func = func
         self.cache_map = {}
@@ -42,6 +18,12 @@ class Cache(object):
         self.prefix = kwargs.get('prefix', '')
 
     def __call__(self, *args, **kwargs):
+        # 准备eagleeye环境，并加载
+        if not Cache.is_finish_import_eagleeye:
+            build_eagleeye_env()
+            Cache.is_finish_import_eagleeye = True
+        import eagleeye
+
         cache_key = int(args[0][0])
         if cache_key not in self.cache_map:
             # 尝试加载本地文件
