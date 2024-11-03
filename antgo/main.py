@@ -169,9 +169,10 @@ def main():
     config_data = {'FACTORY': '', 'USER_TOKEN': ''}
     # 读取现有数值
     config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-    config.AntConfig.parse_xml(config_xml)
-    config_data['FACTORY'] = getattr(config.AntConfig, 'factory', '')
-    config_data['USER_TOKEN'] = getattr(config.AntConfig, 'token', '')
+    if os.path.exists(config_xml):
+      config.AntConfig.parse_xml(config_xml)
+      config_data['FACTORY'] = getattr(config.AntConfig, 'factory', '')
+      config_data['USER_TOKEN'] = getattr(config.AntConfig, 'token', '')
 
     if args.root is not None:
       config_data['FACTORY'] = args.root
@@ -561,9 +562,24 @@ def main():
       # 更新任务提交配置
       has_config_file = not (args.config == '' or args.config == 'config.py')
       has_config_file = has_config_file and os.path.exists(args.config)
+
       if not has_config_file:
-        logging.error('Need set --config=')
-        return
+        # 使用args.ip, args.user 进行配置
+        if args.ip == '' or args.user is None:
+          print('Must set (--config) or (--ip and --user)')
+          return
+
+        env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'script')))
+        config_template = env.get_template('ssh-submit-config.yaml')
+        config_data = {
+          'username': args.user,
+          'ip': args.ip
+        }
+        config_content = config_template.render(**config_data)
+
+        with open('./ssh-submit-config.yaml', 'w') as fp:
+          fp.write(config_content)
+        args.config = './ssh-submit-config.yaml'
 
       if args.ssh:
         if not os.path.exists(os.path.join(os.environ['HOME'], '.ssh')):
