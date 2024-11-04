@@ -2337,14 +2337,14 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 if compile_prop_val is not None and compile_prop_val != '':
                     print('Exist rk dependent, dont need download and compile')
                     continue
-
+                
                 root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
                 os.makedirs(os.path.join(root_folder, 'rk'), exist_ok=True)
                 rk_root_folder = os.path.join(root_folder, 'rk')
                 # librga, mpp
                 if not os.path.exists(os.path.join(rk_root_folder, 'librga')):
                     os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
-                
+
                 if not os.path.exists(os.path.join(rk_root_folder, 'mpp')):
                     if system_platform.startswith('android'):
                         # android
@@ -2497,6 +2497,11 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 ffmpeg_install_folder = f'{compile_prop_val}/android-install'
 
             eagleeye_config[compile_prop_key] = ffmpeg_install_folder
+        elif compile_prop_key == 'rk':
+            if compile_prop_val is None:
+                compile_prop_val =  os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'rk')
+
+            eagleeye_config[compile_prop_key] = compile_prop_val
         elif compile_prop_key == 'opencv':
             # install folder
             opencv_install_folder = ''
