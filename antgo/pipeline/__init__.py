@@ -48,9 +48,6 @@ def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
     project_plugin_folder = os.path.join(plugin_folder, project)
     os.makedirs(project_plugin_folder, exist_ok=True)
 
-    # depedent_folder = os.path.join(package_folder, 'dependents')
-    # os.makedirs(depedent_folder, exist_ok=True)
-
     os.makedirs(os.path.join(package_folder, 'config'), exist_ok=True)
     os.makedirs(os.path.join(package_folder, 'models'), exist_ok=True)
 
@@ -95,7 +92,7 @@ def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
     # 检查是否需要ffmpeg依赖
     if 'ffmpeg' in project_info['eagleeye']:
         # 仅对android/windows处理（linux平台下，镜像中默认已经安装）
-        os.system(f'cp -r {project_info["eagleeye"]["ffmpeg"]}/install/lib/*.so {depedent_folder}')
+        os.system(f'cp -r {project_info["eagleeye"]["ffmpeg"]}/install/lib/*.so {package_folder}/')
 
     # 检查是否需要rk依赖
     if 'rk' in project_info['eagleeye']:
@@ -109,8 +106,10 @@ def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
             os.system(f'cp -r {project_info["eagleeye"]["rk"]}/rknpu2/runtime/RK3588/Android/librknn_api/arm64-v8a/librknnrt.so {package_folder}/')
 
     # 检查是否需要minio依赖
+    # 默认minio安装到系统
 
     # 检查是否需要grpc依赖
+    # 默认grpc安装到系统
 
     # 检查是否需要opencv依赖
     if 'opencv' in project_info['eagleeye']:
