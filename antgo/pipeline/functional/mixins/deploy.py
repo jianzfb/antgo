@@ -2626,15 +2626,22 @@ class DeployMixin:
                         if proto_tool_dir.endswith('/'):
                             proto_tool_dir = proto_tool_dir[:-1]
                     proto_out_dir = os.path.join(output_folder, 'proto')
+                    if proto_tool_dir is None:
+                        # 检查系统目录下是否存在protoc工具，如果不存在需要下载并编译
+                        status = os.system('which protoc')
+                        if status != 0:
+                            print('Dont install grpc in system, please set proto tool.')
+                            return
 
-                    print(f'proto_tool_dir {proto_tool_dir}')
                     # C++ proto
                     if proto_tool_dir is not None:
                         # 非系统目录，用户指定目录
+                        print(f'use proto_tool_dir {proto_tool_dir}')
                         proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
                         os.system(proto_compile_cmd)
                     else:
                         # 系统目录
+                        print(f'use system protoc')
                         proto_compile_cmd = f'cd {proto_out_dir}; protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc=/usr/local/bin/grpc_cpp_plugin {project_name.lower()}.proto'
                         os.system(proto_compile_cmd)
 
@@ -2764,4 +2771,3 @@ class DeployMixin:
         with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
             json.dump(project_info, fp)
 
-        return True
