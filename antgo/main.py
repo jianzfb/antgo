@@ -414,12 +414,11 @@ def main():
         remote_ip=args.remote_ip,
         remote_user=args.remote_user
       )
-      return
     elif args.mode in['android/sdk', 'linux/sdk', 'windows/sdk']:
       # 管线由C++代码构建
       import antgo.pipeline
       antgo.pipeline.pipeline_cplusplus_package(args.name)
-      return
+
     return
 
   # 镜像发布服务
