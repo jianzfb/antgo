@@ -60,7 +60,6 @@ DEFINE_string("ip", "", "set ip")
 DEFINE_string("remote-ip", None, "")
 DEFINE_string("remote-user", None, "")
 DEFINE_int('port', 0, 'set port')
-DEFINE_string('model', None, '')                # 模型定义 yolo
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
 DEFINE_string('main', None, '')
 DEFINE_indicator('data', True, '')
@@ -128,6 +127,11 @@ def main():
 
   # 解析参数
   action_name = sys.argv[1]
+  action_model_name = None
+  if action_name.startswith('train') or action_name.startswith('eval') or action_name.startswith('export'):
+    if '/' in action_name:
+      action_name, action_model_name = action_name.split('/')
+
   sub_action_name = None
   if action_name in action_level_1:
     sys.argv = [sys.argv[0]] + sys.argv[2:]
@@ -871,10 +875,12 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      if args.model == 'yolo':
-        gpu_id = '0' if args.gpu_id == '' else args.gpu_id
-        exec_script = f'antgo {action_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id} --model=yolo'
-        ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True)
+      if action_model_name is not None:
+        if action_model_name == 'yolo':
+          # 第三方框架支持
+          gpu_id = '0' if args.gpu_id == '' else args.gpu_id
+          exec_script = f'antgo {action_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id} --model=yolo'
+          ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True)
         return
 
       filter_sys_argv_cp = []
@@ -1020,9 +1026,9 @@ def main():
       with open('./.project.json', 'w') as fp:
         json.dump(project_info,fp)
 
-      if args.model in ['yolo']:
+      if action_model_name is not None:
         # 第三方框架支持
-        if args.model == 'yolo':
+        if action_model_name == 'yolo':
           # config 文件
           # 1. model: 模型名字
           # 2. data: {path: '', imgsz: 640}
@@ -1150,9 +1156,9 @@ def main():
       if os.path.exists('./evalresult.json'):
         os.remove('./evalresult.json')
 
-      if args.model in ['yolo']:
+      if action_model_name is not None:
         # 第三方框架支持
-        if args.model == 'yolo':
+        if action_model_name == 'yolo':
           tools.yolo_model_eval(args.exp, args.config, args.root, args.gpu_id, args.checkpoint)
         return
 
@@ -1244,9 +1250,9 @@ def main():
         logging.error('Must set --checkpoint=')
         return
 
-      if args.model in ['yolo']:
+      if action_model_name is not None:
         # 第三方框架支持
-        if args.model == 'yolo':
+        if action_model_name == 'yolo':
           tools.yolo_model_export(args.exp, args.checkpoint)
         return
 
