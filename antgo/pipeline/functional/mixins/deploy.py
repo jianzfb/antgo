@@ -2346,15 +2346,21 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 rk_root_folder = os.path.join(root_folder, 'rk')
                 # librga, mpp
                 if not os.path.exists(os.path.join(rk_root_folder, 'librga')):
+                    # download librga source code
                     os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
 
                 if not os.path.exists(os.path.join(rk_root_folder, 'mpp')):
-                    if system_platform.startswith('android'):
-                        # android
-                        os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
-                    else:
-                        # linux
-                        os.system(f'cd {rk_root_folder}; git clone https://github.com/rockchip-linux/mpp.git && cd mpp/build/linux/aarch64 &&  sed -i "s/aarch64-linux-gnu-gcc/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-gcc/g" arm.linux.cross.cmake && sed -i "s/aarch64-linux-gnu-g++/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-g++/g" arm.linux.cross.cmake && bash make-Makefiles.bash && make -j 10')                        
+                    # download mpp source code
+                    os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git')
+
+                if system_platform.startswith('android') and \
+                    not os.path.exists(os.path.join(rk_root_folder, 'mpp/build/android/mpp/librockchip_mpp.so')):
+                    # android(编译此平台mpp)
+                    os.system(f'cd {rk_root_folder} ; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
+                elif system_platform.startswith('linux') and \
+                    not os.path.exists(os.path.join(rk_root_folder, 'mpp/build/linux/aarch64/mpp/librockchip_mpp.so')):
+                    # linux(编译此平台mpp)
+                    os.system(f'cd {rk_root_folder}; cd mpp/build/linux/aarch64 &&  sed -i "s/aarch64-linux-gnu-gcc/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-gcc/g" arm.linux.cross.cmake && sed -i "s/aarch64-linux-gnu-g++/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-g++/g" arm.linux.cross.cmake && bash make-Makefiles.bash && make -j 10')                        
                 eagleeye_config[compile_prop_key] = rk_root_folder
             elif compile_prop_key == 'ffmpeg':
                 if compile_prop_val is not None and compile_prop_val != '':
