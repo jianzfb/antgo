@@ -1472,8 +1472,11 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
-                std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
+                mean_values = ''
+                std_values = ''
+                if op_kwargs.get('mean', None) is not None and op_kwargs.get('std', None) is not None:
+                    mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
+                    std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
                 os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/rknnconvert:latest bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
