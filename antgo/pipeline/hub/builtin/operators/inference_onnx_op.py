@@ -58,7 +58,8 @@ class inference_onnx_op(object):
             if data.shape[0] == 0:
                 continue
 
-            if self.mean_val is not None:
+            if self.mean_val is not None and self.std_val is not None and data.dtype==np.uint8 and data.shape[-1] == 3:
+                # 均值方差内部处理，仅对图像类型输入有效
                 if len(data.shape) == 4:
                     # NxHxWx3
                     if self.reverse_channel:
@@ -68,7 +69,7 @@ class inference_onnx_op(object):
 
                     # Nx3xHxW
                     data = np.transpose(data, (0,3,1,2))
-                else:
+                elif len(data.shape) == 3:
                     # HxWx3
                     if self.reverse_channel:
                         data = data[:,:,::-1]

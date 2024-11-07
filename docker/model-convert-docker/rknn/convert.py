@@ -13,15 +13,15 @@ from rknn.api import RKNN
 # python3 convert.py --i xx.onnx --outnode --innode --quantize --gpu --cpu --npu --o name --image-folder --data-folder
 
 def main():
-    parser = argparse.ArgumentParser(description=f'SNPE-CONVERT')
+    parser = argparse.ArgumentParser(description=f'RKNN-CONVERT')
     parser.add_argument('--i', type=str, help='onnx model file')
     parser.add_argument('--o', type=str, default='model', help='device model file')
     parser.add_argument('--quantize', action='store_true', help='int8')
     parser.add_argument('--device', choices=['rk3568', 'rk3588'], default='rk3588',help='device type')
     parser.add_argument('--image-folder', type=str, default='image folder (for calibration)', help='image file folder')
-    parser.add_argument('--mean-values', type=str, default='0,0,0')         # 仅支持3通道
-    parser.add_argument('--std-values', type=str, default='255,255,255')    # 仅支持3通道
-    parser.add_argument('--version', type=str, default="1.0")               # 模型版本
+    parser.add_argument('--mean-values', type=str, default='0,0,0')          # pass_through: 设置默认值为 None，表示所有输入都不透传。非透传模式下，在将输入传给 NPU 驱动之前，工具会对输入进行减均值、除方差等操作；而透传模式下，不会做这些操作，而是直接将输入传给NPU
+    parser.add_argument('--std-values', type=str, default='1,1,1')           # 
+    parser.add_argument('--version', type=str, default="1.0")           # 模型版本
         
     args = parser.parse_args()
     if not os.path.exists(args.i):
@@ -29,20 +29,18 @@ def main():
         return -1
 
     # mean values
-    mean_values = args.mean_values.split(',')
-    mean_values = [float(v) for v in mean_values]
-
-    # auto group
-    input_num = len(mean_values) // 3
-    mean_values = np.array(mean_values).reshape((input_num, -1)).astype(np.float32).tolist()
+    mean_values = []
+    for input_i_mean_values in args.mean_values.split(';'):
+        info = input_i_mean_values.split(',')
+        info = [float(v) for v in info]
+        mean_values.append(info)
 
     # std values
-    std_values = args.std_values.split(',')
-    std_values = [float(v) for v in std_values]
-
-    # auto group
-    input_num = len(std_values) // 3
-    std_values = np.array(std_values).reshape((input_num, -1)).astype(np.float32).tolist()
+    std_values = []
+    for input_i_std_values in args.std_values.split(';'):
+        info = input_i_std_values.split(',')
+        info = [float(v) for v in info]
+        std_values.append(info)
 
     # Create RKNN object
     rknn = RKNN(verbose=True)
@@ -82,7 +80,7 @@ def main():
 
         # Build model
         print('--> Building model')
-        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt', pre_compile=True)
+        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt')
         if ret != 0:
             print('Build model failed!')
             exit(ret)
@@ -91,7 +89,7 @@ def main():
         # 导出浮点模型（fp16）
         # Build model
         print('--> Building model')
-        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt', pre_compile=True)
+        ret = rknn.build(do_quantization=args.quantize, dataset='./rknn_calibration_data.txt')
         if ret != 0:
             print('Build model failed!')
             exit(ret)
