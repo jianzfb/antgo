@@ -136,6 +136,7 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
         # step2: 推送依赖库到包为止
         os.makedirs(os.path.join(output_folder, '3rd', 'arm64-v8a'), exist_ok=True)
         shutil.copyfile(os.path.join(RKNN_API_PATH, 'aarch64', 'librknnrt.so'), os.path.join(output_folder, '3rd', 'arm64-v8a', 'librknnrt.so'))
+
         # step3: 生成cmake代码片段
         rknn_cmake_code_snippet = f'set(RKNN_API_PATH {RKNN_API_PATH})\n'
         rknn_cmake_code_snippet += 'add_definitions(-DRKNN_NN_ENGINE)\n'
@@ -313,7 +314,6 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
         'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
         'CBTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_BOOL DataFormat::AUTO,%s->data);',
-
     }
 
     # 初始化C*Tensor
@@ -321,7 +321,6 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         '<f4': 'init_cftensor',
         '<i4': 'init_citensor',
         '|u1': 'init_cuctensor',
-
     }
 
     input_define = ''
@@ -1500,7 +1499,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                     if file_name[0] != '.':
                         converted_model_file = file_name
                         break
-                
+
                 os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.rknn')
         elif platform_engine == 'tnn':
@@ -1559,8 +1558,8 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     output_names = []
     output_shapes = []
     output_types = []
-    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else './models/'          # 考虑将转好的模型放置的位置
-    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else './models/'           # 考虑到 设备可写权限位置(android)
+    model_folder = f'/sdcard/models/' if platform == 'android' else './models/'          # 考虑将转好的模型放置的位置
+    writable_path = f'/sdcard/models/' if platform == 'android' else './models/'           # 考虑到 设备可写权限位置(android)
 
     # 更新setup.sh（仅设备端运行时需要添加推送模型代码）
     if platform.lower() == 'android':
@@ -2213,6 +2212,34 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             temp_info.append(f'cp {eagleeye_config["ffmpeg"]}/lib/*.so* bin/{abi.lower()}')
         setup_info = temp_info
 
+    if 'rk' in eagleeye_config:
+        temp_info = []
+        is_found = False
+        for line_i, line_info in enumerate(setup_info):
+            if line_info == '#rk':
+                temp_info.append('#rk')
+                if platform.lower() == 'android':
+                    # android
+                    temp_info.append(f'adb push {eagleeye_config["rk"]}/mpp/build/android/mpp/*.so /data/local/tmp/{project_name}/')
+                else:
+                    # linux
+                    temp_info.append(f'cp -r {eagleeye_config["rk"]}/mpp/build/linux/aarch64/mpp/*.so* bin/{abi.lower()}')
+
+                is_found = True
+            else:
+                temp_info.append(line_info)
+
+        if not is_found:
+            temp_info.append('#rk')
+            if platform.lower() == 'android':
+                # android
+                temp_info.append(f'adb push {eagleeye_config["rk"]}/mpp/build/android/mpp/*.so /data/local/tmp/{project_name}/')
+            else:
+                # linux
+                temp_info.append(f'cp -r {eagleeye_config["rk"]}/mpp/build/linux/aarch64/mpp/*.so* bin/{abi.lower()}')
+
+        setup_info = temp_info
+
     if ('opencv' in eagleeye_config) and (platform.lower() != 'android'):
         # 对于android平台，opencv使用eagleeye自身携带的简化版本
         temp_info = []
@@ -2489,7 +2516,6 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
 
         print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
-
 
     # 第三方依赖信息so库整理
     for compile_prop_key, compile_prop_val in eagleeye_config.items():
