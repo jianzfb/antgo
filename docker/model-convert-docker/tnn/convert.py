@@ -47,6 +47,9 @@ def main():
         model_file_name = args.i.split('/')[-1].replace('.onnx', '.opt')
         tnn_model_name = f'{args.o}.{args.version}'
 
+        if not os.path.exists(f'/workspace/{model_file_name}.tnnmodel'):
+            model_file_name = args.i.split('/')[-1].replace('.onnx', '')
+
         os.system(f'mv /workspace/{model_file_name}.tnnmodel /workspace/{tnn_model_name}.tnnmodel')
         os.system(f'mv /workspace/{model_file_name}.tnnproto /workspace/{tnn_model_name}.tnnproto')
         return 0

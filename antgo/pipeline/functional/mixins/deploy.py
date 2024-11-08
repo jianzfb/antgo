@@ -2340,7 +2340,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 if compile_prop_val is not None and compile_prop_val != '':
                     print('Exist rk dependent, dont need download and compile')
                     continue
-                
+
                 root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
                 os.makedirs(os.path.join(root_folder, 'rk'), exist_ok=True)
                 rk_root_folder = os.path.join(root_folder, 'rk')
