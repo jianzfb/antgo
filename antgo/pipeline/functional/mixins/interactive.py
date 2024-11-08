@@ -49,7 +49,6 @@ class InteractiveMixin:
 				yield x
 		return self._factory(inner())
 
-
 	def interactive_lines(self, bind_src, bind_tgt, num=1, config={}):
 		InteractiveMixin.interactive_elements[f'{_APIWrapper.tls.placeholder._name}/{bind_src}'] = {
 			'mode': 'LINE',
