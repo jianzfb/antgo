@@ -4,11 +4,12 @@ import copy
 from typing import Any
 import uuid
 import pathlib
-import eagleeye
 import numpy as np
+from .build import build_eagleeye_env
 
 
 class CoreOp(object):
+    is_finish_import_eagleeye = False
     def __init__(self, func_op_name, **kwargs):
         if '_' in func_op_name:
             a,b = func_op_name.split('_')
@@ -45,6 +46,12 @@ class CoreOp(object):
                 self.param_1[var_key] = [float(var_value)]
 
     def __call__(self, *args):
+        # 准备eagleeye环境，并加载
+        if not CoreOp.is_finish_import_eagleeye:
+            build_eagleeye_env()
+            CoreOp.is_finish_import_eagleeye = True
+        import eagleeye
+
         input_tensors = []
         for tensor in args:
             if isinstance(tensor, str):

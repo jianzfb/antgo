@@ -95,8 +95,8 @@ DEFINE_string("tags", None, "tag info")
 DEFINE_string("no-tags", None, "tag info")
 DEFINE_indicator("feedback", True, "")
 DEFINE_indicator("user-input", True, "")
-DEFINE_indicator('ngrok', True, "whether enable network tunnel")
-DEFINE_string("authtoken", "", "3rd platform token")
+DEFINE_string('ngrok-token', None, "network tunnel ngrok")
+
 DEFINE_int('num', 0, "number")
 DEFINE_indicator("to", True, "")
 DEFINE_indicator("from", True, "")
@@ -127,6 +127,11 @@ def main():
 
   # 解析参数
   action_name = sys.argv[1]
+  action_model_name = None
+  if action_name.startswith('train') or action_name.startswith('eval') or action_name.startswith('export'):
+    if '/' in action_name:
+      action_name, action_model_name = action_name.split('/')
+
   sub_action_name = None
   if action_name in action_level_1:
     sys.argv = [sys.argv[0]] + sys.argv[2:]
@@ -168,12 +173,16 @@ def main():
     config_data = {'FACTORY': '', 'USER_TOKEN': ''}
     # 读取现有数值
     config_xml = os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml')
-    config.AntConfig.parse_xml(config_xml)
-    config_data['FACTORY'] = getattr(config.AntConfig, 'factory', '')
-    config_data['USER_TOKEN'] = getattr(config.AntConfig, 'token', '')
+    if os.path.exists(config_xml):
+      config.AntConfig.parse_xml(config_xml)
+      config_data['FACTORY'] = getattr(config.AntConfig, 'factory', '')
+      config_data['USER_TOKEN'] = getattr(config.AntConfig, 'token', '')
 
     if args.root is not None:
       config_data['FACTORY'] = args.root
+    if config_data['FACTORY'] == '':
+      # use default factory path
+      config_data['FACTORY'] = os.environ['HOME']
     if args.token is not None:
       config_data['USER_TOKEN'] = args.token
 
@@ -181,6 +190,7 @@ def main():
     config_template = env.get_template('config.xml')
     config_content = config_template.render(**config_data)
 
+    os.makedirs(os.path.join(os.environ['HOME'], '.config', 'antgo'), exist_ok=True)
     with open(os.path.join(os.environ['HOME'], '.config', 'antgo', 'config.xml'), 'w') as fp:
       fp.write(config_content)
 
@@ -248,21 +258,17 @@ def main():
   # web服务
   if action_name == 'web':
     if args.port == 0:
-      args.port = 8000
+      args.port = 8080
 
     if args.ip == "":
       args.ip = '0.0.0.0'
-    if args.ngrok:
-      if args.authtoken == "":
-        print('Mut set --authtoken')
-        return
-
-      os.system(f'ngrok authtoken {args.authtoken}')
+    if args.ngrok_token is not None:
+      os.system(f'ngrok authtoken {args.ngrok_token}')
       from pyngrok import ngrok
       public_url = ngrok.connect(args.port).public_url
       print(f'ngrok public url {public_url}')
 
-      os.system(f'NGROK_AUTHTOKEN={args.authtoken} uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
+      os.system(f'NGROK_AUTHTOKEN={args.ngrok_token} uvicorn {args.main} --reload --port {args.port} --host {args.ip}')
       return
 
     if args.name is None or args.name == '':
@@ -412,12 +418,11 @@ def main():
         remote_ip=args.remote_ip,
         remote_user=args.remote_user
       )
-      return
     elif args.mode in['android/sdk', 'linux/sdk', 'windows/sdk']:
       # 管线由C++代码构建
       import antgo.pipeline
       antgo.pipeline.pipeline_cplusplus_package(args.name)
-      return
+
     return
 
   # 镜像发布服务
@@ -560,9 +565,24 @@ def main():
       # 更新任务提交配置
       has_config_file = not (args.config == '' or args.config == 'config.py')
       has_config_file = has_config_file and os.path.exists(args.config)
+
       if not has_config_file:
-        logging.error('Need set --config=')
-        return
+        # 使用args.ip, args.user 进行配置
+        if args.ip == '' or args.user is None:
+          print('Must set (--config) or (--ip and --user)')
+          return
+
+        env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'script')))
+        config_template = env.get_template('ssh-submit-config.yaml')
+        config_data = {
+          'username': args.user,
+          'ip': args.ip
+        }
+        config_content = config_template.render(**config_data)
+
+        with open('./ssh-submit-config.yaml', 'w') as fp:
+          fp.write(config_content)
+        args.config = './ssh-submit-config.yaml'
 
       if args.ssh:
         if not os.path.exists(os.path.join(os.environ['HOME'], '.ssh')):
@@ -798,6 +818,7 @@ def main():
       if action_name not in ['train', 'eval']:
         logging.error('Antgo remote task submit mode only support train and eval')
         return
+
       if args.root.startswith('ali:'):
         # 尝试进行认证，从而保证当前路径下生成认证信息
         ali = Aligo()
@@ -854,6 +875,14 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
+      if action_model_name is not None:
+        if action_model_name == 'yolo':
+          # 第三方框架支持
+          gpu_id = '0' if args.gpu_id == '' else args.gpu_id
+          exec_script = f'antgo {action_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id} --model=yolo'
+          ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True)
+        return
+
       filter_sys_argv_cp = []
       for t in sys_argv_cp:
         if t.startswith('--project'):
@@ -889,7 +918,7 @@ def main():
       elif args.ssh and args.script is not None:
         # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
         assert(args.image is not None and args.image != '')
-        ssh_submit2_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
+        ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
       elif args.k8s:
         # TODO,基于k8s远程管理
         logging.error('Not support k8s now.')
@@ -996,6 +1025,17 @@ def main():
 
       with open('./.project.json', 'w') as fp:
         json.dump(project_info,fp)
+
+      if action_model_name is not None:
+        # 第三方框架支持
+        if action_model_name == 'yolo':
+          # config 文件
+          # 1. model: 模型名字
+          # 2. data: {path: '', imgsz: 640}
+          # 3. log_config: 日志记录频次
+          # 4. max_epochs: 迭代次数
+          tools.yolo_model_train(args.exp, args.config, args.root, args.gpu_id, args.checkpoint)
+        return
 
       # 根据执行环境决定是否进行自定义依赖环境安装
       if args.remote:
@@ -1116,6 +1156,12 @@ def main():
       if os.path.exists('./evalresult.json'):
         os.remove('./evalresult.json')
 
+      if action_model_name is not None:
+        # 第三方框架支持
+        if action_model_name == 'yolo':
+          tools.yolo_model_eval(args.exp, args.config, args.root, args.gpu_id, args.checkpoint)
+        return
+
       # 获得实验root
       if args.exp not in args.root:
         with open('./.project.json', 'r') as fp:
@@ -1204,6 +1250,12 @@ def main():
         logging.error('Must set --checkpoint=')
         return
 
+      if action_model_name is not None:
+        # 第三方框架支持
+        if action_model_name == 'yolo':
+          tools.yolo_model_export(args.exp, args.checkpoint)
+        return
+
       # 获得实验root
       if args.exp not in args.root:
         with open('./.project.json', 'r') as fp:
@@ -1228,9 +1280,6 @@ def main():
         if found_exp_info is None:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      # 根据执行环境决定是否进行自定义依赖环境安装
-      if args.remote:
-        os.system('bash install.sh')
       os.system(f'python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
   else:
     if action_name == 'create':

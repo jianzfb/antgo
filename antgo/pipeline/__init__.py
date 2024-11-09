@@ -48,19 +48,14 @@ def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
     project_plugin_folder = os.path.join(plugin_folder, project)
     os.makedirs(project_plugin_folder, exist_ok=True)
 
-    # depedent_folder = os.path.join(package_folder, 'dependents')
-    # os.makedirs(depedent_folder, exist_ok=True)
-
     os.makedirs(os.path.join(package_folder, 'config'), exist_ok=True)
     os.makedirs(os.path.join(package_folder, 'models'), exist_ok=True)
 
     project_compile_folder = ''
     project_platform = project_info['platform']
     if project_info['platform'] == 'linux':
-        # 以镜像形式打包
         project_compile_folder = os.path.join(project_folder, 'bin', project_info['abi'])
     elif project_info['platform'] == 'android':
-        # 以sdk形式打包
         project_compile_folder = os.path.join(project_folder, 'bin', 'arm64-v8a')
 
     if project_compile_folder == '':
@@ -82,62 +77,64 @@ def pipeline_cplusplus_package(project, folder='./deploy', **kwargs):
     # 复制依赖文件
     print('install 3rd .so')
     os.system(f'cp -r {ANTGO_DEPEND_ROOT}/eagleeye/{project_info["platform"]}-{project_info["abi"]}-install/libs/{project_info["abi"]}/* {package_folder}')
-    os.system(f'cp -r ./3rd/{project_info["abi"]}/* bin/{project_info["abi"]}/')
+    os.system(f'cp -r {project_folder}/3rd/{project_info["abi"]}/* {package_folder}/')
 
     # 复制配置文件
     if os.path.exists(os.path.join(project_folder, 'config')):
         print('install config files')
-        try:
-            os.system(f'cp -r {os.path.join(project_folder, "config")}/* {os.path.join(package_folder, "config")}/')
-        except:
-            pass
+        os.system(f'cp -r {os.path.join(project_folder, "config")}/* {os.path.join(package_folder, "config")}/')
 
     # 复制模型文件
     if os.path.exists(os.path.join(project_folder, 'models')):
         print('install model files')
-        try:
-            os.system(f'cp -r {os.path.join(project_folder, "models")}/* {os.path.join(package_folder, "models")}/')
-        except:
-            pass
+        os.system(f'cp -r {os.path.join(project_folder, "models")}/* {os.path.join(package_folder, "models")}/')
 
     # 检查是否需要ffmpeg依赖
-    if ('ffmpeg' in project_info['eagleeye']) and (project_platform != 'linux'):
+    if 'ffmpeg' in project_info['eagleeye']:
         # 仅对android/windows处理（linux平台下，镜像中默认已经安装）
-        os.system(f'cp -r {project_info["eagleeye"]["ffmpeg"]}/install/lib/*.so {depedent_folder}')
+        os.system(f'cp -r {project_info["eagleeye"]["ffmpeg"]}/install/lib/*.so {package_folder}/')
 
     # 检查是否需要rk依赖
-    if ('rk' in project_info['eagleeye']) and (project_platform != 'linux'):
-        os.system(f'cp -r {project_info["eagleeye"]["rk"]}/librga/libs/AndroidNdk/arm64-v8a/librga.so {depedent_folder}')
-        os.system(f'cp -r {project_info["eagleeye"]["rk"]}/mpp/build/android/mpp/librockchip_mpp.so {depedent_folder}')
+    if 'rk' in project_info['eagleeye']:
+        if project_info['platform'] == 'linux':
+            # linux platform
+            os.system(f'cp -r {project_info["eagleeye"]["rk"]}/librga/libs/Linux/gcc-aarch64/librga.so {package_folder}/')
+            os.system(f'cp -r {project_info["eagleeye"]["rk"]}/rknpu2/runtime/RK3588/Linux/librknn_api/aarch64/librknnrt.so {package_folder}/')
+        elif project_info['platform'] == 'android':
+            # android platform
+            os.system(f'cp -r {project_info["eagleeye"]["rk"]}/librga/libs/AndroidNdk/arm64-v8a/librga.so {package_folder}/')
+            os.system(f'cp -r {project_info["eagleeye"]["rk"]}/rknpu2/runtime/RK3588/Android/librknn_api/arm64-v8a/librknnrt.so {package_folder}/')
 
     # 检查是否需要minio依赖
+    # 默认minio安装到系统
 
     # 检查是否需要grpc依赖
+    # 默认grpc安装到系统
 
     # 检查是否需要opencv依赖
+    if 'opencv' in project_info['eagleeye']:
+        if project_info['platform'] == 'linux':
+            os.system(f'cp -r {project_info["eagleeye"]["opencv"]}/lib/*.so* {package_folder}/')
+        elif project_info['platform'] == 'android':
+            os.system(f'cp {ANTGO_DEPEND_ROOT}/eagleeye/{project_info["platform"]}-{project_info["abi"]}-install/3rd/opencv/lib/{project_info["abi"]}/libopencv_java3.so {package_folder}')
 
-    if project_platform == 'linux':
+    if project_platform == 'linux' and project_info['mode'] == 'server':
         # 对于linux平台，创建启动脚本
         with open(f'{package_folder}/server-launch.sh', 'w') as fp:
-            fp.write(f'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./;./leshipro_demo $1') 
+            fp.write(f'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./;./{project}_demo $1') 
 
 
 def pipeline_build_image(project, folder='./deploy', **kwargs):
-    eagleeye_version = kwargs.get('version', 'master')
-    dockerfile_data = {
-        'version': 'master' if eagleeye_version == '-' else eagleeye_version
-    }
-
     project_folder = os.path.join(folder, f'{project}_plugin')
     if not os.path.exists(project_folder):
         print(f'Project {project} not exist.')
         return
 
+    # 解析项目信息
     project_file = os.path.join(project_folder, '.project.json')
     if not os.path.exists(project_file):
         print(f'Project {project} file not exist.')
         return
-
     with open(project_file, 'r') as fp:
         project_info = json.load(fp)
 
@@ -149,18 +146,11 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
         print('Only support linux')
         return
 
-    # 解析第三方依赖信息（ffmpeg, rk, minio）
-    eagleeye_config = project_info['eagleeye']
-    compile_suffix = project_abi.replace('-', '_')+'_build_with'
-    for env_key in eagleeye_config.keys():
-        compile_suffix += f'_{env_key}'
+    # 创建dockerfile
+    dockerfile_data = {}
     dockerfile_data.update(
         {
-            'eagleeye_compile_suffix': compile_suffix,
-            "project_compile_suffix": project_abi.replace('-', '_'),
-            'abi': project_abi,
-            'project': project,
-            'server_port': kwargs.get('port', 9002)
+            'server_port': kwargs.get('port', 8080)
         }
     )
 
@@ -170,65 +160,42 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
         dockerfile_template = env.get_template('script/DockerfileArm64-V8a')
 
     dockerfile_content = dockerfile_template.render(**dockerfile_data)
-
     with open(f'Dockerfile', 'w') as fp:
         fp.write(dockerfile_content)
 
-    # 服务镜像基本信息
-    image_pro = kwargs.get('image_repo', None)
-    image_version = kwargs.get('image_version', None)
-    user = kwargs.get('user', None)
-    password = kwargs.get('password', None)
-    server_port = kwargs.get('port', 9002)
-    if image_pro is None or user is None or password is None:
-        # logging.warn("No set image repo and user name, If need to deploy, must set --image-repo=xxxx --user=xxx --password=xxx.")
-        logging.warn("No image_repo, only use local image file")
-        image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
-        server_config_info = {
-            'image_repo': '',
-            'create_time': image_time,
-            'update_time': image_time,
-            'server_port': server_port,
-            'name': project,
-            'mode': 'grpc'
-        }
+    logging.info(f"prepare project {project} image info")
+    image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
+    server_config_info = {
+        'image_repo': '',
+        'create_time': image_time,
+        'update_time': image_time,
+        'server_port': kwargs.get('port', 8080),
+        'name': project,
+        'mode': 'grpc'
+    }
 
-        if os.path.exists('./server_config.json'):
-            with open('./server_config.json', 'r') as fp:
-                info = json.load(fp)
-                server_config_info['create_time'] = info['create_time']
+    if os.path.exists('./server_config.json'):
+        with open('./server_config.json', 'r') as fp:
+            info = json.load(fp)
+            server_config_info['create_time'] = info['create_time']
 
-        # 更新服务配置
-        with open('./server_config.json', 'w') as fp:
-            json.dump(server_config_info, fp)
+    # 更新服务配置
+    with open('./server_config.json', 'w') as fp:
+        json.dump(server_config_info, fp)
 
-    # 是否启动远程编译（可能需要输入用户密码）
-    if kwargs.get('remote_ip', None) is not None and kwargs.get('remote_user', None) is not None:
-        remote_ip = kwargs.get('remote_ip')
-        remote_user = kwargs.get('remote_user')
-        print(f'start remote image build {remote_user}@{remote_ip}')
-        print(f'step 1: tar project files')
-        project_dir = os.path.abspath(os.curdir).split('/')[-1]
-        os.system(f'cd .. && tar -cf project.tar ./{project_dir} && scp project.tar {remote_user}@{remote_ip}:~/')
-        print(f'step 2: docker build project')
-
-        env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-2])))
-        server_image_build_template = env.get_template('script/docker-build.sh')
-        server_image_build = {
-            'project': project
-        }
-        server_image_build_content = server_image_build_template.render(**server_image_build)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with open(os.path.join(temp_dir, 'docker-build.sh'), 'w') as fp:
-                fp.write(server_image_build_content)
-            docker_build_cmd = f'ssh {remote_user}@{remote_ip} bash -s < {os.path.join(temp_dir, "docker-build.sh")}'
-            logging.info(docker_build_cmd)
-            os.system(docker_build_cmd)
+    if project_abi == 'arm64-v8a':
+        # 宿主机不能创建linux/arm64-v8a镜像
+        logging.info('Could build linux/arm64-v8a image on x86-64 host')
         return
 
     # 构建镜像
     os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} build -t {project} .')
+
+    # 服务镜像基本信息
+    image_pro = kwargs.get('image_repo', None)
+    image_version = kwargs.get('image_version', 'latest')
+    user = kwargs.get('user', None)
+    password = kwargs.get('password', None)
 
     # 发布镜像
     if image_pro is None or user is None or password is None:
@@ -240,21 +207,15 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
     os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} tag {project}:latest {image_repo}:{image_version}')
     os.system(f'{"docker" if not is_in_colab() else "udocker --allow-root"} push {image_repo}:{image_version}')
 
-    image_time = time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))
-    server_config_info = {
+    # 更新服务配置
+    server_config_info.update({
         'image_repo': f'{image_repo}:{image_version}',
-        'create_time': image_time,
-        'update_time': image_time,
-        'server_port': server_port,
-        'name': project,
-        'mode': 'grpc'
-    }
+    })
 
     if os.path.exists('./server_config.json'):
         with open('./server_config.json', 'r') as fp:
             info = json.load(fp)
             server_config_info['create_time'] = info['create_time']
 
-    # 更新服务配置
     with open('./server_config.json', 'w') as fp:
         json.dump(server_config_info, fp)

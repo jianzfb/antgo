@@ -136,6 +136,7 @@ def rknn_import_config(output_folder, project_name, platform, abi, device='rk358
         # step2: 推送依赖库到包为止
         os.makedirs(os.path.join(output_folder, '3rd', 'arm64-v8a'), exist_ok=True)
         shutil.copyfile(os.path.join(RKNN_API_PATH, 'aarch64', 'librknnrt.so'), os.path.join(output_folder, '3rd', 'arm64-v8a', 'librknnrt.so'))
+
         # step3: 生成cmake代码片段
         rknn_cmake_code_snippet = f'set(RKNN_API_PATH {RKNN_API_PATH})\n'
         rknn_cmake_code_snippet += 'add_definitions(-DRKNN_NN_ENGINE)\n'
@@ -313,7 +314,6 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
         'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
         'CBTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_BOOL DataFormat::AUTO,%s->data);',
-
     }
 
     # 初始化C*Tensor
@@ -321,7 +321,6 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         '<f4': 'init_cftensor',
         '<i4': 'init_citensor',
         '|u1': 'init_cuctensor',
-
     }
 
     input_define = ''
@@ -1472,8 +1471,11 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
 
                 prefix = os.path.basename(onnx_file_path)[:-5]
                 onnx_dir_path = os.path.dirname(onnx_file_path)
-                mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
-                std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
+                mean_values = ''
+                std_values = ''
+                if op_kwargs.get('mean', None) is not None and op_kwargs.get('std', None) is not None:
+                    mean_values = ','.join([str(v) for v in  op_kwargs.get('mean')])
+                    std_values = ','.join([str(v) for v in  op_kwargs.get('std')])
                 os.system(f'cd /tmp/onnx ; {"docker" if not is_in_colab() else "udocker --allow-root"} run --rm -v $(pwd):/workspace registry.cn-hangzhou.aliyuncs.com/vibstring/rknnconvert:latest bash convert.sh --i={prefix}.onnx --quantize --image-folder=./calibration-images --o=./rknn/{prefix} --device={platform_device} --mean-values={mean_values} --std-values={std_values}')
                 converted_model_file = ''
                 for file_name in os.listdir('/tmp/onnx/rknn/'):
@@ -1497,7 +1499,7 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
                     if file_name[0] != '.':
                         converted_model_file = file_name
                         break
-                
+
                 os.system(f'cp -r /tmp/onnx/rknn/{converted_model_file} {onnx_dir_path}/{converted_model_file.split(".")[0]}.rknn ; rm -rf /tmp/onnx/')
                 platform_model_path = os.path.join(onnx_dir_path, f'{converted_model_file.split(".")[0]}.rknn')
         elif platform_engine == 'tnn':
@@ -1556,8 +1558,8 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
     output_names = []
     output_shapes = []
     output_types = []
-    model_folder = f'/sdcard/{project_name}/.model/' if platform == 'android' else './models/'          # 考虑将转好的模型放置的位置
-    writable_path = f'/sdcard/{project_name}/.tmp/' if platform == 'android' else './models/'           # 考虑到 设备可写权限位置(android)
+    model_folder = f'/sdcard/models/' if platform == 'android' else './models/'          # 考虑将转好的模型放置的位置
+    writable_path = f'/sdcard/models/' if platform == 'android' else './models/'           # 考虑到 设备可写权限位置(android)
 
     # 更新setup.sh（仅设备端运行时需要添加推送模型代码）
     if platform.lower() == 'android':
@@ -2210,6 +2212,34 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             temp_info.append(f'cp {eagleeye_config["ffmpeg"]}/lib/*.so* bin/{abi.lower()}')
         setup_info = temp_info
 
+    if 'rk' in eagleeye_config:
+        temp_info = []
+        is_found = False
+        for line_i, line_info in enumerate(setup_info):
+            if line_info == '#rk':
+                temp_info.append('#rk')
+                if platform.lower() == 'android':
+                    # android
+                    temp_info.append(f'adb push {eagleeye_config["rk"]}/mpp/build/android/mpp/*.so /data/local/tmp/{project_name}/')
+                else:
+                    # linux
+                    temp_info.append(f'cp -r {eagleeye_config["rk"]}/mpp/build/linux/aarch64/mpp/*.so* bin/{abi.lower()}')
+
+                is_found = True
+            else:
+                temp_info.append(line_info)
+
+        if not is_found:
+            temp_info.append('#rk')
+            if platform.lower() == 'android':
+                # android
+                temp_info.append(f'adb push {eagleeye_config["rk"]}/mpp/build/android/mpp/*.so /data/local/tmp/{project_name}/')
+            else:
+                # linux
+                temp_info.append(f'cp -r {eagleeye_config["rk"]}/mpp/build/linux/aarch64/mpp/*.so* bin/{abi.lower()}')
+
+        setup_info = temp_info
+
     if ('opencv' in eagleeye_config) and (platform.lower() != 'android'):
         # 对于android平台，opencv使用eagleeye自身携带的简化版本
         temp_info = []
@@ -2343,15 +2373,21 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 rk_root_folder = os.path.join(root_folder, 'rk')
                 # librga, mpp
                 if not os.path.exists(os.path.join(rk_root_folder, 'librga')):
+                    # download librga source code
                     os.system(f'cd {rk_root_folder} ; git clone https://github.com/airockchip/librga.git')
-                
+
                 if not os.path.exists(os.path.join(rk_root_folder, 'mpp')):
-                    if system_platform.startswith('android'):
-                        # android
-                        os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
-                    else:
-                        # linux
-                        os.system(f'cd {rk_root_folder}; git clone https://github.com/rockchip-linux/mpp.git && cd mpp/build/linux/aarch64 &&  sed -i "s/aarch64-linux-gnu-gcc/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-gcc/g" arm.linux.cross.cmake && sed -i "s/aarch64-linux-gnu-g++/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-g++/g" arm.linux.cross.cmake && bash make-Makefiles.bash && make -j 10')                        
+                    # download mpp source code
+                    os.system(f'cd {rk_root_folder} ; git clone https://github.com/rockchip-linux/mpp.git')
+
+                if system_platform.startswith('android') and \
+                    not os.path.exists(os.path.join(rk_root_folder, 'mpp/build/android/mpp/librockchip_mpp.so')):
+                    # android(编译此平台mpp)
+                    os.system(f'cd {rk_root_folder} ; cd mpp/build/android; cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_NDK=$ANDROID_NDK_HOME -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a {rk_root_folder}/mpp; cmake --build .')
+                elif system_platform.startswith('linux') and \
+                    not os.path.exists(os.path.join(rk_root_folder, 'mpp/build/linux/aarch64/mpp/librockchip_mpp.so')):
+                    # linux(编译此平台mpp)
+                    os.system(f'cd {rk_root_folder}; cd mpp/build/linux/aarch64 &&  sed -i "s/aarch64-linux-gnu-gcc/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-gcc/g" arm.linux.cross.cmake && sed -i "s/aarch64-linux-gnu-g++/\/opt\/cross_build\/linux-arm64\/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu\/bin\/aarch64-none-linux-gnu-g++/g" arm.linux.cross.cmake && bash make-Makefiles.bash && make -j 10')                        
                 eagleeye_config[compile_prop_key] = rk_root_folder
             elif compile_prop_key == 'ffmpeg':
                 if compile_prop_val is not None and compile_prop_val != '':
@@ -2481,7 +2517,6 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
 
-
     # 第三方依赖信息so库整理
     for compile_prop_key, compile_prop_val in eagleeye_config.items():
         if compile_prop_key == 'ffmpeg':
@@ -2497,6 +2532,11 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 ffmpeg_install_folder = f'{compile_prop_val}/android-install'
 
             eagleeye_config[compile_prop_key] = ffmpeg_install_folder
+        elif compile_prop_key == 'rk':
+            if compile_prop_val is None:
+                compile_prop_val =  os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'rk')
+
+            eagleeye_config[compile_prop_key] = compile_prop_val
         elif compile_prop_key == 'opencv':
             # install folder
             opencv_install_folder = ''
@@ -2621,15 +2661,22 @@ class DeployMixin:
                         if proto_tool_dir.endswith('/'):
                             proto_tool_dir = proto_tool_dir[:-1]
                     proto_out_dir = os.path.join(output_folder, 'proto')
+                    if proto_tool_dir is None:
+                        # 检查系统目录下是否存在protoc工具，如果不存在需要下载并编译
+                        status = os.system('which protoc')
+                        if status != 0:
+                            print('Dont install grpc in system, please set proto tool.')
+                            return
 
-                    print(f'proto_tool_dir {proto_tool_dir}')
                     # C++ proto
                     if proto_tool_dir is not None:
                         # 非系统目录，用户指定目录
+                        print(f'use proto_tool_dir {proto_tool_dir}')
                         proto_compile_cmd = f'cd {proto_out_dir}; {proto_tool_dir}/bin/protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc={proto_tool_dir}/bin/grpc_cpp_plugin {project_name.lower()}.proto'
                         os.system(proto_compile_cmd)
                     else:
                         # 系统目录
+                        print(f'use system protoc')
                         proto_compile_cmd = f'cd {proto_out_dir}; protoc --grpc_out=./ --cpp_out=./ --plugin=protoc-gen-grpc=/usr/local/bin/grpc_cpp_plugin {project_name.lower()}.proto'
                         os.system(proto_compile_cmd)
 
@@ -2759,4 +2806,3 @@ class DeployMixin:
         with open(os.path.join(output_folder, '.project.json'), 'w') as fp:
             json.dump(project_info, fp)
 
-        return True

@@ -9,6 +9,7 @@ from .upload_funcs import (upload_to_aliyun)
 from .check_device import (check_device_info)
 from .ls_funcs import (ls_from_aliyun)
 from .operate_funcs import (operate_on_running_status)
+from .third_part_model_run import (yolo_model_train, yolo_model_eval, yolo_model_export)
 
 __all__ = [
     'extract_from_videos', 
@@ -34,5 +35,8 @@ __all__ = [
     'share_data_func',
     'check_device_info',
     'ls_from_aliyun',
-    'operate_on_running_status'
+    'operate_on_running_status',
+    'yolo_model_train', 
+    'yolo_model_eval', 
+    'yolo_model_export'
 ]

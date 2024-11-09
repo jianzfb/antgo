@@ -75,6 +75,10 @@ for(size_t i=0; i<in_port_list.size(); ++i){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_UCMATRIX);
         }
     }
+    else if(type_str == "EAGLEEYE_SIGNAL_TENSOR"){
+        input_node = new Placeholder<TensorSignal>();        
+        input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_TENSOR);
+    }
     else if(type_str == "EAGLEEYE_SIGNAL_DET" ||
             type_str == "EAGLEEYE_SIGNAL_DET_EXT" ||
             type_str == "EAGLEEYE_SIGNAL_TRACKING" ||

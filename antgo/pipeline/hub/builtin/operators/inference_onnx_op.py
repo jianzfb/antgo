@@ -25,7 +25,7 @@ import shutil
 class inference_onnx_op(object):
     def __init__(self, onnx_path, input_fields=None, device_id=0, **kwargs):
         privider = []
-        if device_id >= 0:
+        if device_id >= 0 and torch.cuda.is_available():
             privider.append(('CUDAExecutionProvider', {'device_id': device_id}))
         privider.append('CPUExecutionProvider')
 
@@ -58,7 +58,8 @@ class inference_onnx_op(object):
             if data.shape[0] == 0:
                 continue
 
-            if self.mean_val is not None:
+            if self.mean_val is not None and self.std_val is not None and data.dtype==np.uint8 and data.shape[-1] == 3:
+                # 均值方差内部处理，仅对图像类型输入有效
                 if len(data.shape) == 4:
                     # NxHxWx3
                     if self.reverse_channel:
@@ -68,7 +69,7 @@ class inference_onnx_op(object):
 
                     # Nx3xHxW
                     data = np.transpose(data, (0,3,1,2))
-                else:
+                elif len(data.shape) == 3:
                     # HxWx3
                     if self.reverse_channel:
                         data = data[:,:,::-1]
@@ -228,7 +229,10 @@ class inference_onnx_op(object):
 
 def __session_run_in_process(onnx_path, device_id, input_fields, input_queue, output_queue):
     sess = ort.InferenceSession(onnx_path)
-    sess.set_providers(['CUDAExecutionProvider'], [{'device_id': device_id}])
+    if device_id >= 0 and torch.cuda.is_available():
+        sess.set_providers(['CUDAExecutionProvider'], [{'device_id': device_id}])
+    else:
+        sess.set_providers(['CPUExecutionProvider'])
 
     while True:
         data = input_queue.get()
