@@ -1,32 +1,29 @@
 ======================
-Antgo
+ANTGO
 ======================
 
-Target
+目标
 ----------------------
-Antgo provides a one-stop "AI Model" development,  deployment, analyze, auto-optimize and manage environment.
+ANTGO 提供了一个一站式AI模型训练、分析、部署、优化管理平台。
 
 
-Installation
+安装
 ----------------------
-1. (RECOMMENDED) use docker
+1. (RECOMMENDED)使用Docker环境
 
-    `docker environment <docker/README.md>`__.
+    docker pull registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env-dev:latest
 
-2. install from source
+2. install
 
-    1. git clone https://github.com/jianzfb/antgo.git
-    2. cd antgo
-    3. pip install -r requirements.txt
-    4. python setup.py build_ext install
+    pip3 install antgo@git+https://github.com/jianzfb/antgo.git
 
 
-Model Train
+模型训练
 -----------------------
     `模型训练教程 <doc/一站式开发新手教程.md>`__.
 
 
-Model Deploy
+算法管线
 -----------------------
-    `管线部署教程 <doc/管线构建和发布.md>`__.
+    `管线部署教程 <doc/算法管线开发10分钟入门.md>`__.
 
