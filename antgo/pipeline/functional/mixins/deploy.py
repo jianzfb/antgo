@@ -2020,8 +2020,12 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     # 初始化计算图
     op_graph_code += 'op_graph->init(NULL);'
 
+    # 构建插件源码
+    plugin_code_template = 'plugin_code.cpp'
+    if project_config['mode'] == 'server':
+        plugin_code_template = 'server_plugin_code.cpp'
     eagleeye_plugin_code_content = \
-        gen_code('./templates/plugin_code.cpp')(        
+        gen_code(f'./templates/{plugin_code_template}')(        
             project=pipeline_name,
             version=project_config.get('version', '1.0.0.0'),
             signature=project_config.get('signature', 'xxx'),

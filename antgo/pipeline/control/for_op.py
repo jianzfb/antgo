@@ -14,6 +14,9 @@ class For(object):
     def __call__(self, *args):
         out_list = None
         loop_num = max([v.shape[0] for v in args])
+        if min([v.shape[0] for v in args]) == 0:
+            return np.empty((0), dtype=np.float32)
+
         for loop_i in range(loop_num):
             data_tuple = [v[loop_i%v.shape[0]] for v in args]
             out = self.func(*data_tuple)
