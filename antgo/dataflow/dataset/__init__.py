@@ -25,6 +25,7 @@ from .jhmdb_dataset import JhmdbDataset
 from .mpii_dataset import MpiiDataset
 from .ochuman_dataset import OCHumanDataset
 from .aic_dataset import AicDataset
+from .episode import Episode
 
 __all__ = [
   'Mnist', 
@@ -51,5 +52,6 @@ __all__ = [
   'JhmdbDataset',
   'MpiiDataset',
   'OCHumanDataset',
-  'AicDataset'
+  'AicDataset',
+  'Episode'
 ]
