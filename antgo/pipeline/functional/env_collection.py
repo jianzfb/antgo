@@ -33,6 +33,7 @@ def maniskill_env(*args, **kwargs):
 
     # 场景定义
     scene_name = kwargs.get('scene_name', None)
+    seed = kwargs.get('seed', 0)
     assert(scene_name is not None)
 
     if not isinstance(scene_name, list):
@@ -48,7 +49,11 @@ def maniskill_env(*args, **kwargs):
                 reward_mode="dense",
                 sensor_configs=dict(shader_pack='default'),
             )
-            yield Entity()(**{index: env})
+            obs, _ = env.reset(seed=seed)
+            env_entity = Entity()(**{index[0]: {'env': env, 'name': 'maniskill', 'status': 'running'}, index[1]: obs})
+            while env_entity.env['status'] == 'running':
+                yield env_entity
+            env_entity.env['env'].close()
 
     return DataFrame(inner())
 

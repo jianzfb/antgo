@@ -447,8 +447,15 @@ class ComputerVisionMixin:
         if is_tfrecord:
             package_to_tfrecord(os.path.join(folder, f'{prefix}.json'), tfrecord_folder, prefix, size_in_shard=10000)
 
-    def record(self, output_dir='./record', prefix='trajectory', save_video=True, episode_num=1, mode='maniskill'):
-        if mode == 'maniskill':
-            for env_info in self:
-                env = list(env_info.__dict__.values())[0]
-                _maniskill_episode_record(env, output_dir, prefix, save_video, episode_num)
+    # for robot env
+    def solve(self, output_dir='./record', prefix='trajectory', save_video=True, episode_num=1):
+        for env_info in self:
+            env = list(env_info.__dict__.values())[0]
+            if env['name'] == 'maniskill':
+                _maniskill_episode_record(env['env'], output_dir, prefix, save_video, episode_num)
+            env_info.env['status'] = 'done'
+
+    # for robot env
+    def drive(self):
+        for env_ifo in self:
+            pass
