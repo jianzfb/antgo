@@ -14,6 +14,7 @@ from antgo.pipeline.hparam import HyperParameter as State
 from antgo.pipeline.hparam import param_scope
 from antgo.pipeline.hparam import dynamic_dispatch
 from antgo.pipeline.functional.common.config import *
+from .env_collection import *
 import numpy as np
 import json
 import os
