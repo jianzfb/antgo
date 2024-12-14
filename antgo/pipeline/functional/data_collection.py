@@ -382,11 +382,13 @@ class DataCollection(Iterable, DCMixins):
     function is a datasink that consumes the data without any operations.
     """
     count = 0
-    for _ in self._iterable:
-      count += 1
-      if early_stop > 0 and count >= early_stop:
-        break
-
+    try:
+      for _ in self._iterable:
+        count += 1
+        if early_stop > 0 and count >= early_stop:
+          break
+    except:
+      return
 
   def to_df(self) -> 'DataFrame':
     """Turn a DataCollection into a DataFrame.

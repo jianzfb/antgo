@@ -4,9 +4,9 @@ from copy import deepcopy
 from itertools import filterfalse, groupby
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from antgo.dataflow.dataset import *
+from antgo.dataflow.dataset.parse_metainfo import parse_pose_metainfo
 import numpy as np
 from pycocotools.coco import COCO
-from antgo.dataflow.dataset.parse_metainfo import parse_pose_metainfo
 import cv2
 
 
@@ -121,10 +121,8 @@ class BaseCocoStyleDataset(Dataset):
         ]
 
         for key in metainfo_keys:
-            assert key not in data_info, (
-                f'"{key}" is a reserved key for `metainfo`, but already '
-                'exists in the `data_info`.')
-
+            if key not in self._metainfo:
+                continue
             data_info[key] = deepcopy(self._metainfo[key])
 
         return data_info

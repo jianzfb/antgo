@@ -39,39 +39,44 @@ class plot_bbox(object):
     if detbbox.shape[0] == 0:
       return image
 
-    assert(detbbox.shape[1] == 6 or detbbox.shape[1] == 5)
-    if detbbox.shape[1] == 6:
-      for (*xyxy, conf, cls), label in zip(detbbox, detlabel):
-        if self.ignore_category >= 0:
-          if int(cls) == self.ignore_category:
-            continue
-        
-        bbox_label = str(int(cls))
-        if label != '':
-          bbox_label = label
+    if detlabel is not None:
+      if detlabel.shape[0] == 0:
+        return image
+      if len(detlabel.shape) == 1:
+        detlabel = detlabel[:,None]
+      detbbox = np.concatenate([detbbox, detlabel], -1)
 
+    # format 1: x0,y0,x1,y1,c
+    # format 2: x0,y0,x1,y1,score,c
+    assert(detbbox.shape[1] == 5 or detbbox.shape[1] == 6)
+
+    if detbbox.shape[1] == 6:
+      for (*xyxy, conf, class_id) in detbbox:
+        if self.ignore_category >= 0:
+          if int(class_id) == self.ignore_category:
+            continue
+    
+        bbox_label = str(int(class_id))
         if self.category_map is not None:
           bbox_label = self.category_map[bbox_label]
-          
+
         bbox_color = [random.randint(0, 255) for _ in range(3)]
         if self.color is not None:
-          bbox_color = self.color[int(cls)]
+          bbox_color = self.color[int(bbox_label)]
         plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
     else:
-      for (*xyxy, conf), label in zip(detbbox, detlabel):
-        if conf < self.thres:
-          continue
+      for (*xyxy, class_id) in detbbox:
         if self.ignore_category >= 0:
-          if int(label) == self.ignore_category:
+          if int(class_id) == self.ignore_category:
             continue
-                
-        bbox_label = str(int(label))
+  
+        bbox_label = str(int(class_id))
         if self.category_map is not None:
           bbox_label = self.category_map[bbox_label]
         
         bbox_color = [random.randint(0, 255) for _ in range(3)]
         if self.color is not None:
-          bbox_color = self.color[int(label)]
+          bbox_color = self.color[int(bbox_label)]
         plot_one_box(xyxy, image, label=bbox_label, color=bbox_color, line_thickness=self.line_thickness)
 
     return image
@@ -102,7 +107,7 @@ class plot_text(object):
 
 
 @register
-class fillpoly(object):
+class plot_poly(object):
   def __init__(self, fill=1, is_overlap=False):
     self.fill = fill
     self.is_overlap = is_overlap
