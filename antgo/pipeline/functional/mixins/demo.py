@@ -198,7 +198,7 @@ class DemoMixin:
 
                 value = rsp_value.__dict__[b]
                 image_width, image_height = 0, 0
-                
+
                 if output_selection_types[i] == 'image':
                     if type(value) == str:
                         shutil.copyfile(value, os.path.join(static_folder, 'image', 'response'))
@@ -287,7 +287,7 @@ class DemoMixin:
             contents = file.file.read()
             filename = file.filename
             query_folder = os.path.join(static_folder, 'image', 'query')
-            
+
             random_id = str(uuid.uuid4())
             with open(os.path.join(query_folder, f'{random_id}_{filename}'), 'wb') as f:
                 f.write(contents)
@@ -445,6 +445,77 @@ class DemoMixin:
         return {
            'imagelist': ready_file_list
         }
+
+    @DemoMixin.app.post("/{server_name}/execute")
+    async def execute(server_name: str, req: Request):
+        input_req = await _decode_content(req)
+        try:
+            input_req = json.loads(input_req)
+        except:
+            logging.error('Fail to parsing request.')
+            raise HTTPException(status_code=404, detail="请求不合规")
+
+        if server_name not in DemoMixin.pipeline_info:
+            raise HTTPException(status_code=404, detail="服务不存在")
+
+        input_selection_types = DemoMixin.pipeline_info[server_name]['input_selection_types']
+        input_selection = DemoMixin.pipeline_info[server_name]['input_selection']
+        for input_name, input_type in zip(input_selection, input_selection_types):
+            if input_type == 'image':
+              decoded_data = base64.b64decode(input_req[input_name])
+              decoded_data = np.frombuffer(decoded_data, dtype='uint8')
+              input_req[input_name] = cv2.imdecode(decoded_data, 1)
+            elif input_type == 'video':
+              # TODO
+              pass
+
+        feed_info = {}
+        for input_name in input_selection:
+          feed_info[input_name] = input_req[input_name]
+        feed_info.update(
+          {'session_id': uuid.uuid4()}
+        )
+
+        rsp_value = DemoMixin.pipeline_info[server_name]['exe'].execute(feed_info)
+        if rsp_value is None:
+            raise HTTPException(status_code=500, detail="管线执行错误")
+
+        output_selection_types = DemoMixin.pipeline_info[server_name]['output_selection_types']
+        output_selection = DemoMixin.pipeline_info[server_name]['output_selection']
+
+        output_info = {}
+        for i, b in enumerate(output_selection):
+            if output_selection_types[i] in ['image', 'video', 'file']:
+                if b not in rsp_value.__dict__:
+                   continue
+
+                value = rsp_value.__dict__[b]
+                if output_selection_types[i] == 'image':
+                    # 图像存储方式
+                    if value.dtype == np.uint8:
+                        transfer_result = value
+                    else:
+                        data_min = np.min(value)
+                        data_max = np.max(value)
+                        transfer_result = ((value - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+
+                    if len(value.shape) == 3:
+                        assert (value.shape[2] == 3 or value.shape[2] == 4)
+
+                    assert (len(value.shape) == 2 or len(value.shape) == 3)
+                    file_name = f'{uuid.uuid4()}.png'
+                    cv2.imwrite(os.path.join(static_folder, 'image', 'response', file_name), transfer_result)
+                    output_info[b] = f'image/response/{file_name}'
+                else:
+                    # 视频或其他文件处理方式
+                    assert(isinstance(value, str))
+                    shutil.copyfile(value, os.path.join(static_folder, 'image', 'response', value.split('/')[-1]))
+                    output_info[b] = os.path.join(static_folder, 'image', 'response', value.split('/')[-1])
+                    output_info[b] = f'image/response/{value.split("/")[-1]}'
+            else:
+                output_info[b] = rsp_value.__dict__[b]
+
+        return output_info
 
     # static resource
     DemoMixin.app.mount("/", StaticFiles(directory=static_folder), name="static")
