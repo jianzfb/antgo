@@ -14,6 +14,7 @@ import concurrent.futures
 import uuid
 import imagesize
 import pathlib
+import logging
 
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
@@ -446,7 +447,7 @@ class DemoMixin:
            'imagelist': ready_file_list
         }
 
-    @DemoMixin.app.post("/{server_name}/execute")
+    @DemoMixin.app.post("/{server_name}/execute/")
     async def execute(server_name: str, req: Request):
         input_req = await _decode_content(req)
         try:
@@ -465,9 +466,8 @@ class DemoMixin:
               decoded_data = base64.b64decode(input_req[input_name])
               decoded_data = np.frombuffer(decoded_data, dtype='uint8')
               input_req[input_name] = cv2.imdecode(decoded_data, 1)
-            elif input_type == 'video':
-              # TODO
-              pass
+            elif input_type in ['video', 'file']:
+              input_req[input_name] = os.path.join(static_folder, 'image', 'query', input_req[input_name])
 
         feed_info = {}
         for input_name in input_selection:
@@ -516,6 +516,24 @@ class DemoMixin:
                 output_info[b] = rsp_value.__dict__[b]
 
         return output_info
+
+    @DemoMixin.app.get("/file/download/")
+    async def download(req: Request):
+      file_path = req.query_params['file_name']
+      return FileResponse(os.path.join(static_folder, file_path))
+
+    @DemoMixin.app.post("/file/upload/")
+    async def upload(file: UploadFile):
+      filename = file.filename
+      file_size = file.size
+      fileid = str(uuid.uuid4())
+
+      unique_filename = f'{fileid}-{filename}'
+      os.makedirs(os.path.join(static_folder, 'image', 'query'), exist_ok=True)
+      with open(os.path.join(static_folder, 'image', 'query', unique_filename), "wb") as f:
+          for chunk in iter(lambda: file.file.read(1024), b''):
+              f.write(chunk)
+      return {"fileid": unique_filename}
 
     # static resource
     DemoMixin.app.mount("/", StaticFiles(directory=static_folder), name="static")

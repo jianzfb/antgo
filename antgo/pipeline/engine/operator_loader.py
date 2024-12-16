@@ -308,7 +308,19 @@ class OperatorLoader:
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
         # 使用云端API
-        return None
+        if not function.startswith('remote'):
+            return None
+
+        module, server_name, function_name = function.split('/')
+        op = getattr(importlib.import_module('antgo.pipeline.remote.remote_api'), 'RemoteApiOp', None)
+        if op is None:
+            return None
+
+        kws.update({
+            'server_name': server_name,
+            'function_name': function_name
+        })
+        return self.instance_operator(op, arg, kws) if op is not None else None
 
     def load_operator(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
         """Attempts to load an operators from cache. If it does not exist, looks up the

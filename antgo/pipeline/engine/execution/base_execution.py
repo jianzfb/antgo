@@ -9,6 +9,7 @@ import traceback
 from antgo.pipeline.engine.execution.base_data import *
 from antgo.pipeline.deploy.cpp_op import CppOp
 from antgo.pipeline.control.ifnotnone_op import IfNotNone
+from antgo.pipeline.remote.remote_api import RemoteApiOp
 
 
 class BaseExecution:
@@ -30,6 +31,8 @@ class BaseExecution:
         if isinstance(self._op, CppOp):
             self._op._index = self._index
         if isinstance(self._op, IfNotNone):
+            self._op._index = self._index
+        if isinstance(self._op, RemoteApiOp):
             self._op._index = self._index
         return self._op(*args, **kws)
 
@@ -64,7 +67,8 @@ class BaseExecution:
                     self._op._index = self._index  
                 if isinstance(self._op, IfNotNone):
                     self._op._index = self._index
-   
+                if isinstance(self._op, RemoteApiOp):
+                    self._op._index = self._index
                 res = self._op(*arg, **kws)
                 return res
         except Exception:
