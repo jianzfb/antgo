@@ -31,7 +31,11 @@ class RemoteApiOp(object):
 
         self.function_name = function_name
         server_ip = kwargs.get('server_ip', 'research.vibstring.com')
+        if 'server_ip' in kwargs:
+            kwargs.pop('server_ip')
         server_port = kwargs.get('server_port', 80)
+        if 'server_port' in kwargs:
+            kwargs.pop('server_port')
         self.rpc = HttpRpc("v1", server_name, server_ip, server_port, token=token)
         self.rpc.headers.update(
             {
@@ -40,7 +44,9 @@ class RemoteApiOp(object):
         )
 
         self._index = None
-        self.args_config = kwargs
+        self.input_config = None
+        self.output_config = None
+        self.kwargs = kwargs
 
     def __call__(self, *args):
         if self.rpc is None:
@@ -53,10 +59,21 @@ class RemoteApiOp(object):
         if isinstance(output_names, str):
             output_names = [output_names]
 
+        if self.input_config is None:
+            self.input_config = {}
+            for input_name in input_names:
+                self.input_config[input_name] = self.kwargs[input_name]
+                self.kwargs.pop(input_name)
+        if self.output_config is None:
+            self.output_config = {}
+            for output_name in output_names:
+                self.output_config[output_name] = self.kwargs[output_name]
+                self.kwargs.pop(output_name)
+
         input_req = {}
         for index, value in enumerate(args):
             arg_name = input_names[index]
-            arg_type = self.args_config[arg_name]
+            arg_type = self.input_config[arg_name]
             if arg_type == 'image':
                 # 转换成base64编码
                 _, buffer = cv2.imencode('.png', value)
@@ -73,13 +90,16 @@ class RemoteApiOp(object):
                 # 其他类型均按照字符串对待
                 input_req[arg_name] = value
 
+        # 补充参数
+        input_req.update(self.kwargs)
+
         content = getattr(self.rpc, self.function_name).execute.post(**input_req)
         out_values = []
         for arg_name, arg_value in content.items():
             if arg_name not in output_names:
                 continue
 
-            arg_type = self.args_config[arg_name]
+            arg_type = self.output_config[arg_name]
             if arg_type == 'image':
                 # 图像类型
                 content = self.rpc.file.download(file_folder='./temp', file_name=arg_value, is_bytes_io=True)
@@ -94,5 +114,6 @@ class RemoteApiOp(object):
                 out_values.append(os.path.join('./temp', content['file']))
             else:
                 # 其他类型
-                out_vales.append(arg_value)
+                out_values.append(arg_value)
+
         return out_values[0] if len(out_values) == 1 else out_values
