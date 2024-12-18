@@ -47,4 +47,3 @@ xtcocotools
 pyngrok
 itsdangerous
 grpcio-tools==1.67.0
-h5py

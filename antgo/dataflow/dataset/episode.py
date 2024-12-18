@@ -8,26 +8,25 @@ import random
 import numpy as np
 from antgo.dataflow.dataset.dataset import *
 from functools import partial
-from h5py import File, Group, Dataset
 import numpy as np
 import time
 import copy
-
 __all__ = ['Episode']
-
-
-def load_content_from_h5_file(file):
-    if isinstance(file, (File, Group)):
-        return {key: load_content_from_h5_file(file[key]) for key in list(file.keys())}
-    elif isinstance(file, Dataset):
-        return file[()]
-    else:
-        raise NotImplementedError(f"Unspported h5 file type: {type(file)}")
 
 
 def load_traj_hdf5(path, num_traj=None):
     print('Loading HDF5 file', path)
-    file = File(path, 'r')
+    import h5py
+
+    def load_content_from_h5_file(file):
+        if isinstance(file, (h5py.File, h5py.Group)):
+            return {key: load_content_from_h5_file(file[key]) for key in list(file.keys())}
+        elif isinstance(file, h5py.Dataset):
+            return file[()]
+        else:
+            raise NotImplementedError(f"Unspported h5 file type: {type(file)}")
+
+    file = h5py.File(path, 'r')
     keys = list(file.keys())
     if num_traj is not None:
         assert num_traj <= len(keys), f"num_traj: {num_traj} > len(keys): {len(keys)}"

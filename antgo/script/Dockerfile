@@ -18,6 +18,11 @@ RUN if [ "$IS_EAGLEEYE_UPGRADE" = "upgrade" ]; then \
 # 修正环境信息
 RUN rm /miniconda3/bin/../lib/libstdc++.so.6;ln /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /miniconda3/bin/../lib/libstdc++.so.6
 
+# 安装自定义
+RUN if [ -e /workspace/install.sh ]; then \
+        cd /workspace && bash install.sh; \
+    fi
+
 # 创建并设置工作目录
 WORKDIR /workspace
 

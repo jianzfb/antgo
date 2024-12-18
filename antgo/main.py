@@ -879,7 +879,7 @@ def main():
         if action_model_name == 'yolo':
           # 第三方框架支持
           gpu_id = '0' if args.gpu_id == '' else args.gpu_id
-          exec_script = f'antgo {action_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id} --model=yolo'
+          exec_script = f'antgo {action_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id}'
           ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True)
         return
 
