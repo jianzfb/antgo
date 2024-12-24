@@ -8,7 +8,7 @@ from antgo.pipeline.deploy.cpp_op import CppOp
 # control.IfNotNone.xxx[(), ()]()
 
 class IfNotNone(object):
-    def __init__(self, func):
+    def __init__(self, func, **kwargs):
         self.func = func
         self._index = []
 

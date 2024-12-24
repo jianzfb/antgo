@@ -7,7 +7,7 @@ import numpy as np
 # control.Once.xxx[(), ()]()
 
 class Once(object):
-    def __init__(self, func):
+    def __init__(self, func, **kwargs):
         self.func = func
         self.is_success_call = False
         self.value = None

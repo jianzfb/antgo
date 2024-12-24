@@ -150,7 +150,7 @@ class DemoMixin:
                 if b == 'image':
                    if input_req[i] is not None:
                     input_req[i] = '/'.join(input_req[i].split('/')[2:])
-                    input_req[i] = cv2.imread(f'{query_folder}/{input_req[i]}')
+                    input_req[i] = cv2.imread(f'{query_folder}/{input_req[i]}', cv2.IMREAD_UNCHANGED)
                 else:
                    if input_req[i] is not None:
                     input_req[i] = '/'.join(input_req[i].split('/')[2:])
@@ -465,7 +465,7 @@ class DemoMixin:
             if input_type == 'image':
               decoded_data = base64.b64decode(input_req[input_name])
               decoded_data = np.frombuffer(decoded_data, dtype='uint8')
-              input_req[input_name] = cv2.imdecode(decoded_data, 1)
+              input_req[input_name] = cv2.imdecode(decoded_data, cv2.IMREAD_UNCHANGED)
             elif input_type in ['video', 'file']:
               input_req[input_name] = os.path.join(static_folder, 'image', 'query', input_req[input_name])
 

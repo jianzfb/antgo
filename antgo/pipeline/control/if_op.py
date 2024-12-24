@@ -7,7 +7,7 @@ import numpy as np
 # control.If.true_func.xxx.false_func.yyy[(), ()]()
 
 class If(object):
-    def __init__(self, true_func, false_func):
+    def __init__(self, true_func, false_func, **kwargs):
         self.true_func = true_func
         self.false_func = false_func
 

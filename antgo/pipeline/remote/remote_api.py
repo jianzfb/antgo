@@ -106,7 +106,7 @@ class RemoteApiOp(object):
                 if content['status'] == 'ERROR':
                     out_values.append(None)
                     continue
-                image = cv2.imdecode(np.frombuffer(content['file'], dtype='uint8'), 1)
+                image = cv2.imdecode(np.frombuffer(content['file'], dtype='uint8'), cv2.IMREAD_UNCHANGED)
                 out_values.append(image)
             elif arg_type in ['video', 'file']:
                 # 文件类型

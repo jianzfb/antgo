@@ -29,10 +29,12 @@ class COCOFormatGen(object):
         self.image_id = 0
         self.anno_id = 0
         self.prefix = prefix
+        self.stage = ''
  
-    def add(self, sample_info):
+    def add(self, sample_info, stage='train'):
         image = sample_info.image
         image_h, image_w = image.shape[:2]
+        self.stage = stage
 
         image_path = os.path.join(self.image_folder, f'{self.image_id}.webp')
         cv2.imwrite(image_path, image, [int(cv2.IMWRITE_WEBP_QUALITY), 20])
@@ -62,7 +64,7 @@ class COCOFormatGen(object):
         self.coco["annotations"] = self.annotations
     
         instances_train2017 = json.dumps(self.coco)
-        f = open(os.path.join(self.anno_folder, f'{self.prefix}.json'), 'w')
+        f = open(os.path.join(self.anno_folder, f'{self.prefix}-{self.stage}.json'), 'w')
         f.write(instances_train2017)
         f.close()
 

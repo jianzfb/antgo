@@ -7,7 +7,7 @@ import numpy as np
 # control.DetectOrTracking.xxx[]()
 
 class DetectOrTracking(object):
-    def __init__(self, det_func, tracking_func=None, interval=1, only_once=False):
+    def __init__(self, det_func, tracking_func=None, interval=1, only_once=False, **kwargs):
         self.det_func = det_func
         self.tracking_func = tracking_func
         self.count = 0

@@ -7,7 +7,7 @@ import numpy as np
 # control.Asyn.xxx[(),()]()
 
 class Asyn(object):
-    def __init__(self, func):
+    def __init__(self, func, **kwargs):
         self.func = func
 
     def __call__(self, *args):

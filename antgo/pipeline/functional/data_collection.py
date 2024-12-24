@@ -13,6 +13,8 @@ from antgo.pipeline.hparam import param_scope, dynamic_dispatch
 from antgo.pipeline.functional.entity import EntityView
 from antgo.pipeline.functional.option import Option, Some
 from antgo.pipeline.functional.common.config import *
+import logging
+
 
 class DataCollection(Iterable, DCMixins):
   """A pythonic computation and processing framework.
@@ -55,8 +57,11 @@ class DataCollection(Iterable, DCMixins):
       >>> ge3.to_list()
       [8, 10]
   """
+  # 存储全局占位
+  _g_index = {}
+  _g_placeholder = {}
 
-  def __init__(self, iterable: Iterable) -> None:
+  def __init__(self, iterable: Iterable, **kwargs) -> None:
     """Initializes a new DataCollection instance.
 
     Args:
@@ -390,6 +395,12 @@ class DataCollection(Iterable, DCMixins):
     except:
       return
 
+  def __call__(self, early_stop=0, **kwargs):
+    for key in self._g_index[self.data_id]:
+      DataCollection._g_placeholder[f'{self.data_id}-{key}'] = kwargs.get(key, None)
+
+    self.run(early_stop=early_stop)
+
   def to_df(self) -> 'DataFrame':
     """Turn a DataCollection into a DataFrame.
 
@@ -417,7 +428,6 @@ class DataFrame(DataCollection, DataFrameMixin):
       >>> DataFrame([Entity(id=a) for a in [1,2,3]])
       [<Entity dict_keys(['id'])>, <Entity dict_keys(['id'])>, <Entity dict_keys(['id'])>]
   """
-
   def __init__(self, iterable: Iterable = None, **kws) -> None:
     """Initializes a new DataFrame instance.
 
@@ -425,6 +435,7 @@ class DataFrame(DataCollection, DataFrameMixin):
         iterable (Iterable, optional): The data to be encapsualted by the DataFrame.
             Defaults to None.
     """
+    self.data_id = kws.get('data_id', None)
     if iterable is not None:
       super().__init__(iterable)
       self._mode = self.ModeFlag.ROWBASEDFLAG
@@ -459,7 +470,7 @@ class DataFrame(DataCollection, DataFrameMixin):
 
     with param_scope() as hp:
       hp().data_collection.parent = self
-      df = DataFrame(iterable)
+      df = DataFrame(iterable, data_id=self.data_id)
       df._mode = self._mode if mode is None else mode
       return df
 

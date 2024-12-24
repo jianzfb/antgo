@@ -18,10 +18,13 @@ import imagesize
 
 @register
 class image_decode(object):
-  def __init__(self, to_rgb=False) -> None:
+  def __init__(self, to_rgb=False, folder=None) -> None:
     self.to_rgb = to_rgb
+    self.folder = folder
 
   def __call__(self, x):
+    if self.folder is not None:
+      x = os.path.join(self.folder, x)
     image = cv2.imread(x)
     if self.to_rgb:
       image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)    

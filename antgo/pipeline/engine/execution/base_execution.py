@@ -43,7 +43,7 @@ class BaseExecution:
                 res = self.__apply__(*arg, **kws)
 
                 # Multi outputs.
-                if isinstance(res, tuple) or isinstance(res, list):
+                if (isinstance(self._index, tuple) or isinstance(self._index, list)) and (isinstance(self._index[1], tuple) or isinstance(self._index[1], list)):
                     if not isinstance(self._index[1],
                                     tuple) or len(self._index[1]) != len(res):
                         raise IndexError(
@@ -60,7 +60,6 @@ class BaseExecution:
                         setattr(arg[0], self._index, res)
                     else:
                         setattr(arg[0], self._index[1], res)
-
                 return arg[0]
             else:
                 if isinstance(self._op, CppOp):

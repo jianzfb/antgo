@@ -20,6 +20,8 @@ import numpy as np
 import json
 import os
 import cv2
+import uuid
+
 
 read_camera = DataCollection.read_camera
 read_video = DataCollection.read_video
@@ -215,41 +217,43 @@ def _dc(iterable):
 dc = dynamic_dispatch(_dc)
 
 
-def _placeholder(*arg):
+def _placeholder(*args):
   index = param_scope()._index
 
   # clear grap record info
   clear_grap_info()
 
-  # 
-  if isinstance(index, tuple):
-    for ii,xx in zip(index, arg):
-      
+  # config type
+  if isinstance(index, str):
+    index = [index]
+
+  if len(args) > 0:
+    for arg_i, arg_type in zip(index, args):
       data_type = -1
       data_shape = []
-      if isinstance(xx, np.ndarray):
-        data_shape = list(xx.shape)
-        if xx.dtype == np.float32:
+      if arg_type in [np.float32, np.float64, np.int32, np.uint8]:
+        data_shape = [64,64,3]    # 默认大小
+        if arg_type == np.float32:
           data_type = 6
-        elif xx.dtype == np.float64:
+        elif arg_type == np.float64:
           data_type = 7
-        elif xx.dtype == np.int32:
+        elif arg_type == np.int32:
           data_type = 4
-        elif xx.dtype == np.uint8:
+        elif arg_type == np.uint8:
           data_type = 1
-      elif isinstance(xx, str):
+      elif arg_type == str:
         data_shape = []
         data_type = 11
-      elif isinstance(xx, bool):
+      elif arg_type == bool:
         data_shape = []
         data_type = 10
 
       if data_type < 0:
         print('placeholder type abnormal.')
-      
+
       add_op_info(
         'placeholder_op', 
-        (None, (ii,)), 
+        (None, (arg_i,)), 
         (), 
         {
           'memory_type': 2,     # CPU_BUFFER
@@ -259,44 +263,15 @@ def _placeholder(*arg):
         }
       )
 
-    temp = list((x,y) for x,y in zip(index, arg))
-    return DataFrame.placeholder(temp).map(
-      lambda mm: Entity(**{ii: xx for ii, xx in mm })
-    )
-  else:
-    for ii, xx in zip([index], arg):
-      data_shape = []
-      data_type = -1
-      if isinstance(xx, np.ndarray):
-        data_shape = list(xx.shape)
-        if xx.dtype == np.float32:
-          data_type = 6
-        elif xx.dtype == np.int32:
-          data_type = 4
-        elif xx.dtype == np.uint8:
-          data_type = 1
-      elif isinstance(xx, str):
-        data_shape = []
-        data_type = 11
-      elif isinstance(xx, bool):
-        data_shape = []
-        data_type = 10
+  data_id = str(uuid.uuid4())
+  def inner():
+    info = {}
+    for key in index:
+      info[key] = DataCollection._g_placeholder.get(f'{data_id}-{key}', None)
+    yield Entity()(**info)
 
-      if data_type < 0:
-        print('placeholder type abnormal.')
+  DataCollection._g_index[data_id] = index
+  return DataFrame(inner(), data_id=data_id)
 
-      add_op_info(
-        'placeholder_op', 
-        (None, (ii,)), 
-        (), 
-        {
-          'memory_type': 2,               # CPU_BUFFER
-          'data_format': 1000,            # AUTO
-          'data_type': data_type,         # EAGLEEYE_UCHAR, EAGLEEYE_FLOAT
-          'shape': data_shape,        # 
-        }
-      )
-
-    return DataFrame.placeholder(*arg).map(lambda x: Entity(**{index: x }))
 
 placeholder = dynamic_dispatch(_placeholder)

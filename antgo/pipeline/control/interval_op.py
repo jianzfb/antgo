@@ -7,7 +7,7 @@ import numpy as np
 # control.Interval.xxx[(), ()]()
 
 class Interval(object):
-    def __init__(self, func, interval=1):
+    def __init__(self, func, interval=1, **kwargs):
         self.func = func
         self.value = None
         self.count = 0

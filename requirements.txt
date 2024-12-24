@@ -36,8 +36,8 @@ onnxruntime-gpu==1.19.2
 pandas
 aligo
 python-multipart
-fastapi
-uvicorn
+fastapi==0.115.6
+uvicorn==0.22.0
 httpx
 portalocker
 filelock

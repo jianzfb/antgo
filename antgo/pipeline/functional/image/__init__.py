@@ -13,5 +13,5 @@ from .sync import *
 
 
 __all__ = [
-    'image_decode', 'image_save','plot_bbox', 'image_base64_decode', 'plot_text', 'image_download', 'resize_op', 'keep_ratio_op', 'preprocess_op', 'sync_layout_op', 'sync_op', 'LayoutTemplateGenerator'
+    'image_decode', 'image_save','plot_bbox', 'image_base64_decode', 'plot_text', 'image_download', 'resize_op', 'keep_ratio_op', 'preprocess_op', 'sync_op', 'save_sync_info_op'
 ]

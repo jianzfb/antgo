@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 2022/9/6 23:17
-# @File    : __init__.py.py
+# @File    : __init__.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -35,12 +35,15 @@ class GroupDef(object):
         self.op_creator_map = {
             'inner': self.create_inner_op,
             'eagleeye': self.create_eagleeye_op,
-            'deploy': self.create_deploy_op
+            'deploy': self.create_deploy_op,
+            'remote': self.create_remote_op
         }
         self.op_name_list = []
         self.op_args_list = []
         self.op_category_list = []
         self.op_relation = []
+        self.op_input = []
+        self.op_output = []
 
         self.op_name_cache = ''
         self.op_prefix = ''
@@ -90,6 +93,17 @@ class GroupDef(object):
 
         return op_cls_gen(**op_params)
 
+    def create_remote_op(self, op_name, op_params):
+        # 加入算子
+        module, server_name, function_name = op_name.split('/')
+        op_cls_gen = getattr(importlib.import_module('antgo.pipeline.remote.remote_api'), 'RemoteApiOp', None)
+        op_params.update({
+            'server_name': server_name,
+            'function_name': function_name
+        })
+
+        return op_cls_gen(**op_params)
+
     def create_inner_op(self, op_name, op_params):
         op_name = op_name.replace('_','-')
         op_cls = OperatorRegistry.resolve(op_name)
@@ -100,9 +114,11 @@ class GroupDef(object):
             op = op_cls(**op_params)        
         return op
 
-    def __call__(self, params, relation):
+    def __call__(self, params, relation, input, output):
         # 定义图结构
         self.op_relation = relation
+        self.op_input = input
+        self.op_output = output
 
         # 定义算子
         group_op_list = []
@@ -117,13 +133,15 @@ class GroupDef(object):
         # 动态创建类
         group_name = self.name
         group_op_relation = relation
+        group_op_input = input
+        group_op_output = output
         group_cls = \
             type(
                 group_name, 
                 (Group,), 
                 {
-                    '__init__': lambda self: 
-                        Group.__init__(self, group_op_list, group_op_relation)
+                    '__init__': lambda self, **kwargs: 
+                        Group.__init__(self, group_op_list, group_op_relation, group_op_input, group_op_output, **kwargs)
                 }
             )
 
@@ -156,6 +174,29 @@ class GroupDef(object):
 
             self.op_name_list.append(name)
             self.op_category_list.append('deploy')
+            return self
+        elif (name.startswith('remote')) or self.op_prefix == 'remote':
+            # remote.xxx.yyy
+            if self.op_name_cache == '':
+                self.op_name_cache = name
+            else:
+                self.op_name_cache += '/'+name
+
+            if self.op_prefix == '':
+                self.op_prefix = 'remote'
+
+            self.op_offset += 1
+            if self.op_offset != 3:
+                return self
+
+            # 已经获得完整名字
+            name = self.op_name_cache
+            self.op_name_cache = ''
+            self.op_prefix = ''
+            self.op_offset = 0
+
+            self.op_name_list.append(name)
+            self.op_category_list.append('remote')
             return self
         elif (name.startswith('eagleeye') or self.op_prefix == 'eagleeye'):
             # eagleeye.xxx.yyy
