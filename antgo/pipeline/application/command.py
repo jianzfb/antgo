@@ -19,20 +19,21 @@ class BackgroundTask(object):
         pass
 
     def _info(self):
-        return ['db', 'user']
+        # 设置需要使用隐信息（数据库、session_id）
+        return ['db', 'session_id']
 
     def _config(self):
         # 自定义db设计
         {
-            'table': 'task',    # 构建新表名字
-            'link': 'user',      # 关联表
+            'table': 'task',        # 构建新表名字
+            'link': 'user',         # 关联表
             'fields': {
                 'task_name': 'str',
                 'task_create_time': 'date'
             }
         }
 
-    def __call__(self, *args, db=None, user=None):
+    def __call__(self, *args, db=None):
         # input
         # db, user, params
 

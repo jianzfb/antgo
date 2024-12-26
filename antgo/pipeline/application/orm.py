@@ -164,7 +164,6 @@ class User(Base):
     task = relationship('Task',
                         back_populates='user',
                         cascade="all,delete, delete-orphan")                # 用户创建的项目
-
     login_time = Column(DateTime, default=datetime.datetime.now)
     last_login_time = Column(DateTime, default=datetime.datetime.now)
 
