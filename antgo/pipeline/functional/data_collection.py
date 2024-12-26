@@ -113,10 +113,10 @@ class DataCollection(Iterable, DCMixins):
         # pylint: disable=protected-access
         path = hp._name
         index = hp._index
-
-      # 添加算子节点信息到全局配置
-      add_op_info(path, index, arg, kws)
+      # 解析算子对象
       op = self.resolve(path, index, *arg, **kws)
+      # 添加算子节点信息到全局配置
+      add_op_info(path, index, arg, kws, op._config() if getattr(op, '_config', None) else None)
       return self.map(op)
 
     return getattr(wrapper, name)

@@ -11,6 +11,7 @@ import threading
 import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
+from antgo.pipeline.functional.common.config import *
 from fastapi import HTTPException
 import logging
 import json
@@ -142,6 +143,16 @@ class ServeMixin:
                 'input_config': input_config,
             }
         )
+
+        # 重组建数据库基本信息
+        op_infos = get_graph_info()
+        for op_info in op_infos:
+            if op_info['op_config'] is not None:
+                pass
+
+        # 动态生成orm（基于管线算子需求）
+        # 创建/加载数据库
+
         if ServeMixin.server_app is not None:
             return ServeMixin.server_app
 

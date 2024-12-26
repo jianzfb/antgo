@@ -34,6 +34,11 @@ class BaseExecution:
             self._op._index = self._index
         if isinstance(self._op, RemoteApiOp):
             self._op._index = self._index
+
+        if hasattr(self._op, '_info'):
+            info = self._op.info()
+            for key in self._op._info():
+                kws.update({key: getattr(arg[0], key, None)})
         return self._op(*args, **kws)
 
     def __call__(self, *arg, **kws):
@@ -68,6 +73,11 @@ class BaseExecution:
                     self._op._index = self._index
                 if isinstance(self._op, RemoteApiOp):
                     self._op._index = self._index
+
+                if hasattr(self._op, '_info'):
+                    info = self._op.info()
+                    for key in self._op._info():
+                        kws.update({key: getattr(arg[0], key, None)})
                 res = self._op(*arg, **kws)
                 return res
         except Exception:
