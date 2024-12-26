@@ -4,7 +4,9 @@ from antgo.utils.config_dashboard import *
 from antgo.framework.helper.utils.config import Config
 import zlib
 import subprocess
+import shutil
 import json
+import yaml
 import os
 
 
@@ -75,13 +77,19 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
 
     # 启动训练
     data_path = data.get('path', None)
+    with open(data_path, 'r') as fp:
+        data_info = yaml.safe_load(fp)
+    data_info['path'] = os.path.dirname(data_path)
+    with open('./data.yaml', 'w') as fp:
+        yaml.safe_dump(data_info, fp)
+
     data_imgsz = data.get('imgsz', 640)
     batch_size = data.get('batch_size', 32)
     workers = data.get('workers', 1)
 
     device = [int(k) for k in gpu_id.split(',')]
     results = model.train(
-        data=data_path, 
+        data='./data.yaml', 
         epochs=cfg.get('max_epochs', 100), 
         imgsz=data_imgsz, 
         device=device,
