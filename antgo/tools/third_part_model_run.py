@@ -177,4 +177,98 @@ def yolo_model_export(exp_name, pretrained_model):
 
 
 def yolo_model_eval(exp_name, cfg, root, gpu_id, pretrained_model):
-    yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model)
+    # 配置信息转换
+    if isinstance(cfg, str):
+        cfg = Config.fromfile(cfg)
+    elif isinstance(cfg, dict):
+        cfg = Config.fromstring(json.dumps(cfg), '.json')
+
+    # 检查是否安装ultralytics
+    p = subprocess.Popen("pip3 show ultralytics", shell=True, encoding="utf-8", stdout=subprocess.PIPE)
+    if p.stdout.read() == '':
+        print('Install ultralytics')
+        os.system('pip3 install ultralytics')
+        os.system('pip3 uninstall -y opencv-python-headless')
+        os.system('pip3 install opencv-python-headless')
+    from ultralytics import YOLO
+
+    # 激活dashboard
+    project = cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
+    activate_project_in_dashboard(project, exp_name)
+
+    if mlogger.is_ready() and (pretrained_model is None or pretrained_model == ''):
+        # 下载checkpoint
+        pass
+
+    # 构建模型
+    model_name = cfg.get('model', None)
+    assert(model_name is not None)
+    data = cfg.get('data', None)
+    assert(data is not None)
+    model = None
+    if pretrained_model is not None and pretrained_model != '':
+        model = YOLO(pretrained_model)
+
+    if model is None:
+        print('no pretrined model')
+        return
+
+    data_path = data.get('path', None)
+    with open(data_path, 'r') as fp:
+        data_info = yaml.safe_load(fp)
+
+    data_info['path'] = os.path.dirname(data_path)
+    data_name = os.path.basename(data_info['path'])
+    with open('./data.yaml', 'w') as fp:
+        yaml.safe_dump(data_info, fp)
+
+    data_imgsz = data.get('imgsz', 640)
+    batch_size = data.get('batch_size', 32)
+    workers = data.get('workers', 1)
+
+    device = [int(k) for k in gpu_id.split(',')]
+    results = model.val(
+            data = './data.yaml',
+            imgsz=data_imgsz, 
+            device=device,
+            batch=batch_size,
+    )
+
+    # 记录指标
+    if results is not None and mlogger.is_ready():
+        report_name = data_name
+        report = {
+            report_name: {
+                'measure': []
+            }
+        }
+
+        for k,v in results.results_dict.items():
+            metric_name = str(k)
+            metric_value = float(v)
+
+            report[report_name]['measure'].append({
+                'statistic': {
+                    'value': [{
+                        'interval': [0,0],
+                        'value': metric_value,
+                        'type': 'SCALAR',
+                        'name': metric_name
+                    }]
+                }
+            })
+        mlogger.info.experiment.patch(
+            experiment_data=zlib.compress(
+                json.dumps(
+                    {
+                        'REPORT': report,
+                        'APP_STAGE': 'TEST'
+                    }
+                ).encode()
+            )
+        )
+        return
+
+    print('report')
+    print(results.results_dict)
+

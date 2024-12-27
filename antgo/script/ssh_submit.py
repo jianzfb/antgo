@@ -283,9 +283,15 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     # 解析提交后的输出，并解析出container id
     print('submit command')
     print(submit_cmd)
+
+    print('\n\n')
+    print('remote execute process')
     ret = subprocess.Popen(submit_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     content = ret.stdout.read()
     content = content.decode('utf-8')
+
+    print('\n\n')
+    print('remote execute response')
     print(content)
 
     # 检查返回的容器ID和机器IP对应关系
