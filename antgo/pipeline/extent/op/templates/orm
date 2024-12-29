@@ -29,7 +29,7 @@ from sqlalchemy.pool import SingletonThreadPool
 import time
 
 Base = declarative_base()
-Base.log = app_log
+# Base.log = app_log
 
 
 class APIToken(Base):
@@ -38,7 +38,7 @@ class APIToken(Base):
     
     @declared_attr
     def user_id(cls):
-        return Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=True)
+        return Column(Integer, ForeignKey('user.id', ondelete="CASCADE"), nullable=True)
     user = relationship('User', back_populates="api_token")
     
     id = Column(Integer, primary_key=True)
@@ -85,7 +85,7 @@ class APIToken(Base):
 
         Returns None if not found.
 
-        `kind='user'` only returns API tokens for users
+        `kind='user'` only returns API tokens for user
         `kind='service'` only returns API tokens for services
         """
         prefix = token[:cls.prefix_length]
@@ -140,12 +140,12 @@ class Task(Base):
 
     task_progress = Column(Unicode(2048), default="")
     task_create_time = Column(DateTime, default=datetime.datetime.now)
-    task_stop_time = Column(DataTime, default=datetime.datetime.now)
+    task_stop_time = Column(DateTime, default=datetime.datetime.now)
     task_is_finish = Column(Boolean, default=False)
 
     @declared_attr
     def user_id(cls):
-        return Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+        return Column(Integer, ForeignKey('user.id', ondelete='CASCADE'), nullable=True)
     user = relationship('User', back_populates="task")
 
     def __repr__(self):
@@ -156,11 +156,11 @@ class Task(Base):
 
 
 class User(Base):
-    __tablename__ = 'users'
+    __tablename__ = 'user'
     id = Column(Integer, primary_key=True)
     name = Column(Unicode(50), unique=True)                                 # 用户名
     password = Column(Unicode(4096), default="")                            # 用户密码
-
+    admin = Column(Boolean, default=False)
     task = relationship('Task',
                         back_populates='user',
                         cascade="all,delete, delete-orphan")                # 用户创建的项目
@@ -170,6 +170,8 @@ class User(Base):
     api_token = relationship("APIToken", back_populates="user")
     api_token_str = Column(Unicode(4096), default="")
     cookie_id = Column(Unicode(1023), default="")
+
+    ${custom_inverse_links_in_user}
 
     @classmethod
     def find(cls, db, name):
@@ -196,6 +198,9 @@ class User(Base):
             cls=self.__class__.__name__,
             name=self.name
         )
+
+
+${custom_tables}
 
 
 def new_session_factory(url="sqlite:///:memory:", reset=False, **kwargs):

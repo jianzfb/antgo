@@ -116,7 +116,7 @@ class DataCollection(Iterable, DCMixins):
       # 解析算子对象
       op = self.resolve(path, index, *arg, **kws)
       # 添加算子节点信息到全局配置
-      add_op_info(path, index, arg, kws, op._config() if getattr(op, '_config', None) else None)
+      add_op_info(path, index, arg, kws)
       return self.map(op)
 
     return getattr(wrapper, name)

@@ -10,7 +10,7 @@ from antgo.pipeline.engine.execution.base_data import *
 from antgo.pipeline.deploy.cpp_op import CppOp
 from antgo.pipeline.control.ifnotnone_op import IfNotNone
 from antgo.pipeline.remote.remote_api import RemoteApiOp
-
+from antgo.pipeline.functional.common.env import *
 
 class BaseExecution:
     """
@@ -35,14 +35,23 @@ class BaseExecution:
         if isinstance(self._op, RemoteApiOp):
             self._op._index = self._index
 
-        if hasattr(self._op, '_info'):
+        if hasattr(self._op, 'info'):
             info = self._op.info()
-            for key in self._op._info():
+            for key in self._op.info():
                 kws.update({key: getattr(arg[0], key, None)})
         return self._op(*args, **kws)
 
+    def __is_need_exit__(self, session_id=None):
+        if session_id is None:
+            return None
+        exit_condition = get_context_exit_info(session_id, None)
+        return exit_condition
+
     def __call__(self, *arg, **kws):
         self.__check_init__()
+        if self.__is_need_exit__(arg[0].__dict__.get('session_id', None)):
+            return None
+
         try:
             if bool(self._index):
                 res = self.__apply__(*arg, **kws)
@@ -74,9 +83,9 @@ class BaseExecution:
                 if isinstance(self._op, RemoteApiOp):
                     self._op._index = self._index
 
-                if hasattr(self._op, '_info'):
+                if hasattr(self._op, '__info'):
                     info = self._op.info()
-                    for key in self._op._info():
+                    for key in self._op.__info():
                         kws.update({key: getattr(arg[0], key, None)})
                 res = self._op(*arg, **kws)
                 return res
