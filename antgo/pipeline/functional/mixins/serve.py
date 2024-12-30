@@ -11,7 +11,17 @@ import threading
 import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
+from antgo.pipeline.functional.common.config import *
+from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.functional.common.env import *
+from fastapi.responses import RedirectResponse,HTMLResponse, FileResponse
 from fastapi import HTTPException
+from fastapi import File, UploadFile
+from fastapi import Response
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+
+import secrets
 import logging
 import json
 
@@ -58,7 +68,6 @@ class _PipeWrapper:
     """
     Wrapper for execute pipeline as function
     """
-
     def __init__(self, pipe, placeholder) -> None:
         self._pipe = pipe
         self._placeholder = placeholder
@@ -102,8 +111,9 @@ class ServeMixin:
     Mixin for API serve
     """
     server_app = None
+    server_db = None
     pipeline_info = {}
-    def serve(self, input=[], output=[], default_config=None, **kwargs):
+    def serve(self, input=[], output=[], default_config=None, db_config=None, **kwargs):
         """
         Serve the DataFrame as a RESTful API
 
@@ -127,12 +137,12 @@ class ServeMixin:
         output_selection = [cc['data'] for cc in output]
         output_selection_types = [cc['type'] for cc in output]
         for ui_type in output_selection_types:
-            assert (ui_type in ['image', 'video', 'text', 'number', 'file'])
+            assert (ui_type in ['image', 'video', 'text', 'number', 'file', 'json'])
 
         input_config = default_config
         if default_config is None:
             input_config = [{} for _ in range(len(input_selection))]
-        
+
         ServeMixin.pipeline_info[api._name].update(
             {
                 'input_selection': input_selection,
@@ -142,14 +152,39 @@ class ServeMixin:
                 'input_config': input_config,
             }
         )
+
+        # 动态生成orm（基于管线算子需求）
+        # 创建/加载数据库
+        if ServeMixin.server_db is None and db_config is not None:
+            if not os.path.exists('./orm.py'):
+                # 生成db orm
+                table_config_info = []
+                for table_info in get_table_info().values():
+                    table_config_info.append(table_info)
+
+                create_db_orm(table_config_info)
+
+            update_db_orm(__import__('orm'))
+            ServeMixin.server_db = create_db_session(db_config['db_url'])
+
         if ServeMixin.server_app is not None:
             return ServeMixin.server_app
 
         from fastapi import FastAPI, Request
         ServeMixin.server_app = FastAPI()
+        ServeMixin.server_app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 
         @ServeMixin.server_app.post("/{server_name}/execute")
-        async def wrapper(server_name: str, req: Request):
+        async def wrapper(server_name: str, req: Request, response: RedirectResponse):
+            # 获得session_id
+            if(req.session.get("session_id") is None):
+                session_id = req.session["session_id"] = secrets.token_urlsafe(32)
+                response.set_cookie(key="Authorization", value=session_id)
+            session_id = req.session.get("session_id")
+            # 上下文绑定：session_id-cookie
+            update_context_cookie_info(session_id, response)
+
+            # 解析请求
             input_req = await _decode_content(req)
             try:
                 input_req = json.loads(input_req)
@@ -157,11 +192,13 @@ class ServeMixin:
                 logging.error('Fail to parsing request.')
                 raise HTTPException(status_code=404, detail="请求不合规")
 
+            # 判断服务是否存在
             if server_name not in ServeMixin.pipeline_info:
                 raise HTTPException(status_code=404, detail="服务不存在")
 
-            input_selection_types = DemoMixin.pipeline_info[server_name]['input_selection_types']
-            input_selection = DemoMixin.pipeline_info[server_name]['input_selection']
+            # 转换请求数据
+            input_selection_types = ServeMixin.pipeline_info[server_name]['input_selection_types']
+            input_selection = ServeMixin.pipeline_info[server_name]['input_selection']
             for input_name, input_type in zip(input_selection, input_selection_types):
                 if input_type == 'image':
                     decoded_data = base64.b64decode(input_req[input_name])
@@ -170,20 +207,42 @@ class ServeMixin:
                 elif input_type in ['video', 'file']:
                     input_req[input_name] = os.path.join(static_folder, 'image', 'query', input_req[input_name])
 
+            # 填充管线数据（请求参数）
             feed_info = {}
             for input_name in input_selection:
                 feed_info[input_name] = input_req[input_name]
             feed_info.update(
-                {'session_id': uuid.uuid4()}
+                {'session_id': session_id, 'ST': input_req.get('ST', None), 'token': input_req.get('token', None)}
             )
 
+            # 驱动管线处理流程
+            # TODO，加入多线程管线，增强处理能力
             rsp_value = ServeMixin.pipeline_info[server_name]['api'].execute(feed_info)
+
+            # 检查是否需要跳转
+            redirect_url = get_context_redirect_info(session_id, None)
+            if redirect_url is not None:
+                clear_context_env_info(session_id)
+                return RedirectResponse(redirect_url)
+
+            # 检查由是否于不满足条件退出，返回退出原因
+            exit_condition = get_context_exit_info(session_id, None)
+            if exit_condition is not None:
+                clear_context_env_info(session_id)
+                raise HTTPException(status_code=403, detail=exit_condition) 
+
+            # 检查执行异常
+            # 由于计算过程产生BUG
             if rsp_value is None:
+                clear_context_env_info(session_id)
                 raise HTTPException(status_code=500, detail="管线执行错误")
 
-            output_selection_types = DemoMixin.pipeline_info[server_name]['output_selection_types']
-            output_selection = DemoMixin.pipeline_info[server_name]['output_selection']
+            # 清空session_id绑定的上下文
+            clear_context_env_info(session_id)
+            output_selection_types = ServeMixin.pipeline_info[server_name]['output_selection_types']
+            output_selection = ServeMixin.pipeline_info[server_name]['output_selection']
 
+            # 重组返回数据
             output_info = {}
             for i, b in enumerate(output_selection):
                 if output_selection_types[i] in ['image', 'video', 'file']:
@@ -218,12 +277,12 @@ class ServeMixin:
 
             return output_info
 
-        @DemoMixin.app.get("/file/download/")
+        @ServeMixin.server_app.get("/file/download/")
         async def download(req: Request):
             file_path = req.query_params['file_name']
             return FileResponse(os.path.join(static_folder, file_path))
 
-        @DemoMixin.app.post("/file/upload/")
+        @ServeMixin.server_app.post("/file/upload/")
         async def upload(file: UploadFile):
             filename = file.filename
             file_size = file.size

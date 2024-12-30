@@ -329,6 +329,17 @@ class OperatorLoader:
         })
         return self.instance_operator(op, arg, kws) if op is not None else None
 
+    def load_operator_from_application(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str)  -> Operator:
+        if not function.startswith('application'):
+            return None
+
+        module, action_name, obj_name = function.split('/')
+        op = getattr(importlib.import_module(f'antgo.pipeline.application.{action_name}.{obj_name}'), f'{obj_name.capitalize()}Op', None)
+        if op is None:
+            return None
+
+        return self.instance_operator(op, arg, kws) if op is not None else None
+
     def load_operator(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
         """Attempts to load an operators from cache. If it does not exist, looks up the
         operators in a remote location and downloads it to cache instead. By standard
@@ -347,6 +358,7 @@ class OperatorLoader:
         for factory in [self.load_operator_from_internal,
                         self.load_operator_from_registry,
                         self.load_operator_from_remote,
+                        self.load_operator_from_application,
                         self.load_operator_from_packages,
                         self.load_operator_from_eagleeye,
                         self.load_operator_from_deploy,
