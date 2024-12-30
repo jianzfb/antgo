@@ -8,6 +8,7 @@ import shutil
 import json
 import yaml
 import os
+import sys
 
 
 logger_canvas = None
@@ -52,12 +53,9 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
 
     # 创建dashboard
     project = cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
-    experiment = cfg.filename.split('/')[-1].split('.')[0]
-    token = create_project_in_dashboard(project, experiment)
+    create_project_in_dashboard(project, exp_name, False)
 
     if mlogger.is_ready():
-        # dashboard 环境准备好
-        print(f'Show Experiment Dashboard http://ai.vibstring.com/#/ExperimentDashboard?token={token}')
         global logger_canvas
         logger_canvas = mlogger.Container()
 
@@ -170,6 +168,19 @@ def yolo_model_export(exp_name, pretrained_model):
         os.system('pip3 install ultralytics')
         os.system('pip3 uninstall -y opencv-python-headless')
         os.system('pip3 install opencv-python-headless')
+
+    print('Fix export onnx to multi-platform')
+    package_path = ''
+    for check_sys_path in sys.path:
+        if check_sys_path.endswith('site-packages'):
+            package_path = check_sys_path
+            break
+    fix_file_path = os.path.dirname(os.path.dirname(__file__))
+    fix_file_path = os.path.join(fix_file_path, 'resource/fix/yolo/head.py')
+
+    print(f'Copy {fix_file_path} {package_path}/ultralytics/nn/modules')
+    shutil.copy(fix_file_path, f'{package_path}/ultralytics/nn/modules')
+
     from ultralytics import YOLO
 
     model = YOLO(pretrained_model)
@@ -271,4 +282,3 @@ def yolo_model_eval(exp_name, cfg, root, gpu_id, pretrained_model):
 
     print('report')
     print(results.results_dict)
-

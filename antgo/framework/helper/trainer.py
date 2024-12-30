@@ -204,7 +204,7 @@ class Trainer(BaseTrainer):
             # 创建实验
             project = self.cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
             experiment = cfg.filename.split('/')[-1].split('.')[0]
-            mlogger.config(project, experiment, token=token, auto_suffix=True, server="BASELINE")
+            mlogger.config(project, experiment, token=token, auto_suffix=False, server="BASELINE")
 
             # 记录超参配置文件
             file_logger = mlogger.Container()

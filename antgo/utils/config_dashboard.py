@@ -21,8 +21,16 @@ def create_project_in_dashboard(project, experiment, auto_suffix=True):
         print('No valid vibstring token, directly return')
         return None
 
-    mlogger.config(project, experiment, token=token, auto_suffix=auto_suffix, server="BASELINE")
-    return token
+    suggested_experiment = mlogger.config(project, experiment, token=token, auto_suffix=auto_suffix, server="BASELINE")
+    if suggested_experiment is None:
+        print('Couldnt create experiment in dashboard')
+        return None
+
+    # dashboard 环境准备好
+    print(f'Finish create experiment {project}/{experiment} in dashboard')
+    print(f'Show Experiment Dashboard http://ai.vibstring.com/#/ExperimentDashboard?token={token}')
+    return suggested_experiment
+
 
 def activate_project_in_dashboard(project, experiment):
     token = None
@@ -45,4 +53,6 @@ def activate_project_in_dashboard(project, experiment):
         print(f'Couldnt activate {experiment}/{project}')
         return None
 
-    return token
+    # dashboard 环境准备好
+    print(f'Finish activate experiment {project}/{experiment} in dashboard')
+    print(f'Show Experiment Dashboard http://ai.vibstring.com/#/ExperimentDashboard?token={token}')

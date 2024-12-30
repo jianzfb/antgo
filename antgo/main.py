@@ -19,6 +19,7 @@ from antgo.help import *
 from antgo import config
 from antgo import tools
 from antgo.script import *
+from antgo.utils.config_dashboard import *
 from jinja2 import Environment, FileSystemLoader
 import json
 import yaml
@@ -60,7 +61,7 @@ DEFINE_string("ip", "", "set ip")
 DEFINE_string("remote-ip", None, "")
 DEFINE_string("remote-user", None, "")
 DEFINE_int('port', 0, 'set port')
-DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'activelearning', 'label'], '')
+DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'label'], '')
 DEFINE_string('main', None, '')
 DEFINE_indicator('data', True, '')
 DEFINE_choices('mode', 'http/demo', ['http/demo', 'http/api', 'grpc', 'android/sdk', 'linux/sdk', 'windows/sdk', 'applet'], '')
@@ -80,7 +81,6 @@ DEFINE_string('token', None, '')
 ############## project config ##############
 DEFINE_string('semi', "", 'set semi supervised method')
 DEFINE_string("distillation", "", "set distillation method")
-DEFINE_string("activelearning", "", "set activelearning method")
 DEFINE_string("ensemble", "", "set ensemble method")
 
 ############## tool config ##############
@@ -111,7 +111,7 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 #############################################
 DEFINE_nn_args()
 
-action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'activelearning', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package']
+action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package']
 action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric', 'install']
 
 
@@ -834,6 +834,13 @@ def main():
         # train
         # 项目基本信息
         project_info['image'] = args.image      # 镜像名称
+
+        # 可选项: 申请dashboard实验名字(如果发现重名，自动重命名)
+        exp_in_dashboard = create_project_in_dashboard(os.path.abspath(os.path.curdir).split('/')[-1], args.exp, auto_suffix=True)
+        if exp_in_dashboard is not None:
+          args.exp = exp_in_dashboard
+
+        # 创建项目记录（基于实验名字为key）
         if args.exp not in project_info['exp']:
           project_info['exp'][args.exp] = []
 
@@ -852,27 +859,9 @@ def main():
           json.dump(project_info,fp)
       else:
         # eval
-        # 匹配实验记录（exp, config）
-        # (1) root 匹配
-        # (2) 默认匹配最新实验
-        if args.exp not in project_info['exp']:
-          logging.error(f'{args.exp} not in project')
-          return
-
-        if len(project_info['exp'][args.exp]) == 0:
-          logging.error(f'{args.exp} dont have any record in project')
-          return
-
-        found_exp_info = None
-        for exp_info in project_info['exp'][args.exp]:
-          if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
-            continue
-
-          if exp_info['root'] == args.root:
-            found_exp_info = exp_info
-            break
-
-        if found_exp_info is None:
+        # 评测阶段，允许实验是非记录的实验
+        # 如果没有指定args.root，则从本地记录中加载
+        if args.exp in project_info['exp'] and args.root == 'ali:///exp':
           args.root = project_info['exp'][args.exp][-1]['root']
 
       if action_model_name is not None:
@@ -913,7 +902,6 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
-
         ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
       elif args.ssh and args.script is not None:
         # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
@@ -999,7 +987,9 @@ def main():
         return
 
     # 执行任务
-    auto_exp_name = f'{args.exp}.{args.id}' if args.id is not None else args.exp
+    # 关键信息
+    # args.exp: 实验名字，（1）会根据实验名字构建存储目录结构，（2）在dashboard中会以此构建实验记录。
+    # args.root: 实验存储
     script_folder = os.path.join(os.path.dirname(__file__), 'script')
     if action_name == 'train':
       if args.exp not in args.root:
@@ -1014,7 +1004,7 @@ def main():
         project_info = json.load(fp)
       if args.exp not in project_info['exp']:
         project_info['exp'][args.exp] = []
-      
+
       project_info['exp'][args.exp].append({
         'id': f'{os.getpid()}',
         'ip': '',
@@ -1045,7 +1035,7 @@ def main():
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1062,7 +1052,7 @@ def main():
         # single gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1079,7 +1069,7 @@ def main():
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp.split('.')[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1092,60 +1082,6 @@ def main():
           command_str += f' --find-unused-parameters'
         if args.diff_seed:
           command_str += f' --diff-seed'
-        os.system(command_str)
-    elif action_name == 'activelearning':
-      if args.exp not in args.root:
-        # root需要将exp加入点到root中
-        args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
-
-      # 根据执行环境决定是否进行自定义依赖环境安装
-      if args.remote:
-        os.system('bash install.sh')
-
-      # 为主动学习实验，创建存储root
-      if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
-        # cpu run
-        # (1)安装;(2)数据准备;(3)运行
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=activelearning --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
-        if args.no_validate:
-          command_str += ' --no-validate'
-        if args.resume_from is not None:
-          command_str += f' --resume-from={args.resume_from}'
-        if args.checkpoint is not None:
-          command_str += f' --checkpoint={args.checkpoint}'
-        if args.max_epochs > 0:
-          command_str += f' --max-epochs={args.max_epochs}'
-
-        os.system(command_str)
-      elif len(args.gpu_id.split(',')) == 1:
-        # single gpu run
-        # (1)安装;(2)数据准备;(3)运行
-        gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=activelearning --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
-        if args.no_validate:
-          command_str += ' --no-validate'
-        if args.resume_from is not None:
-          command_str += f' --resume-from={args.resume_from}'
-        if args.checkpoint is not None:
-          command_str += f' --checkpoint={args.checkpoint}'
-        if args.max_epochs > 0:
-          command_str += f' --max-epochs={args.max_epochs}'
-
-        os.system(command_str)
-      else:
-        # multi gpu run
-        # (1)安装;(2)数据准备;(3)运行
-        gpu_num = len(args.gpu_id.split(','))
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name}  --process=activelearning --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
-        if args.no_validate:
-          command_str += ' --no-validate'
-        if args.resume_from is not None:
-          command_str += f' --resume-from={args.resume_from}'
-        if args.checkpoint is not None:
-          command_str += f' --checkpoint={args.checkpoint}'
-        if args.max_epochs > 0:
-          command_str += f' --max-epochs={args.max_epochs}'
-
         os.system(command_str)
     elif action_name == 'eval':
       if args.checkpoint is None or args.checkpoint == '':
@@ -1166,24 +1102,9 @@ def main():
       if args.exp not in args.root:
         with open('./.project.json', 'r') as fp:
           project_info = json.load(fp)
-        if args.exp not in project_info['exp']:
-          logging.error(f'{args.exp} not in project')
-          return
 
-        if len(project_info['exp'][args.exp]) == 0:
-          logging.error(f'{args.exp} dont have any record in project')
-          return
-
-        found_exp_info = None
-        for exp_info in project_info['exp'][args.exp]:
-          if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
-            continue
-
-          if exp_info['root'] == args.root:
-            found_exp_info = exp_info
-            break
-
-        if found_exp_info is None:
+        # 从本地的记录中加载args.root
+        if args.exp in project_info['exp']:
           args.root = project_info['exp'][args.exp][-1]['root']
 
       # 根据执行环境决定是否进行自定义依赖环境安装
@@ -1193,21 +1114,21 @@ def main():
       # (1)安装;(2)数据准备;(3)运行
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={-1} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       elif len(args.gpu_id.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp}/main.py --exp={auto_exp_name} --gpu-id={gpu_id} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       else:
         # multi gpu run
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={auto_exp_name} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp.split('.')[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -1218,26 +1139,24 @@ def main():
 
       # 评估结果记录到项目信息中
       if args.exp in project_info['exp']:
-          for exp_info in project_info['exp'][args.exp]:
-            if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
-              if 'metric' not in exp_info:
-                exp_info['metric'] = []
+        if project_info['exp'][args.exp][-1]['config'].split('/')[-1] == args.config.split('/')[-1]:
+          if 'metric' not in project_info['exp'][args.exp][-1]:
+            project_info['exp'][args.exp][-1]['metric'] = []
 
-              # {'checkpoint': '', 'metric': {}, 'time': ''}
-              if not os.path.exists('./evalresult.json'):
-                logging.error("Not found eval result file.")
-              else:
-                with open("./evalresult.json", 'r') as fp:
-                  metric_info = json.load(fp)
+          # {'checkpoint': '', 'metric': {}, 'time': ''}
+          if not os.path.exists('./evalresult.json'):
+            logging.error("Not found eval result file.")
+          else:
+            with open("./evalresult.json", 'r') as fp:
+              metric_info = json.load(fp)
 
-              exp_info['metric'].append(
-                {
-                  'checkpoint': args.checkpoint,
-                  'time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time())),
-                  'metric': metric_info
-                }
-              )
-              break
+          project_info['exp'][args.exp][-1]['metric'].append(
+            {
+              'checkpoint': args.checkpoint,
+              'time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time())),
+              'metric': metric_info
+            }
+          )
 
       with open('./.project.json', 'w') as fp:
         json.dump(project_info, fp)
@@ -1260,27 +1179,12 @@ def main():
       if args.exp not in args.root:
         with open('./.project.json', 'r') as fp:
           project_info = json.load(fp)
-        if args.exp not in project_info['exp']:
-          logging.error(f'{args.exp} not in project')
-          return
 
-        if len(project_info['exp'][args.exp]) == 0:
-          logging.error(f'{args.exp} dont have any record in project')
-          return
-
-        found_exp_info = None
-        for exp_info in project_info['exp'][args.exp]:
-          if exp_info['config'].split('/')[-1] == args.config.split('/')[-1]:
-            continue
-
-          if exp_info['root'] == args.root:
-            found_exp_info = exp_info
-            break
-
-        if found_exp_info is None:
+        # 从本地记录加载args.root
+        if args.exp in project_info['exp']:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      os.system(f'python3 {args.exp}/main.py --exp={auto_exp_name} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
+      os.system(f'python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
   else:
     if action_name == 'create':
       if sub_action_name == 'project':
@@ -1308,7 +1212,6 @@ def main():
         # 设置自动优化工具
         project_config['tool']['semi']['method'] = args.semi
         project_config['tool']['distillation']['method'] = args.distillation
-        project_config['tool']['activelearning']['method'] = args.activelearning
         project_config['tool']['ensemble']['method'] = args.ensemble
 
         # 在本地存储项目信息
