@@ -181,6 +181,7 @@ class ServeMixin:
                 session_id = req.session["session_id"] = secrets.token_urlsafe(32)
                 response.set_cookie(key="Authorization", value=session_id)
             session_id = req.session.get("session_id")
+            # 上下文绑定：session_id-cookie
             update_context_cookie_info(session_id, response)
 
             # 解析请求
@@ -224,17 +225,19 @@ class ServeMixin:
                 clear_context_env_info(session_id)
                 return RedirectResponse(redirect_url)
 
-            # 检查由是否于不满足条件退出
+            # 检查由是否于不满足条件退出，返回退出原因
             exit_condition = get_context_exit_info(session_id, None)
             if exit_condition is not None:
                 clear_context_env_info(session_id)
                 raise HTTPException(status_code=403, detail=exit_condition) 
 
             # 检查执行异常
+            # 由于计算过程产生BUG
             if rsp_value is None:
                 clear_context_env_info(session_id)
                 raise HTTPException(status_code=500, detail="管线执行错误")
 
+            # 清空session_id绑定的上下文
             clear_context_env_info(session_id)
             output_selection_types = ServeMixin.pipeline_info[server_name]['output_selection_types']
             output_selection = ServeMixin.pipeline_info[server_name]['output_selection']

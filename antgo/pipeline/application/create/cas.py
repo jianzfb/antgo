@@ -21,18 +21,6 @@ import re
 auth_header_pat = re.compile(r'^token\s+([^\s]+)$')
 
 
-get_table_info().update({
-    'application/create/cas': {
-            'table': 'world',        # 构建新表名字
-            'links': ['user'],         # 关联表
-            'fields': {
-                'world_name': 'str',
-                'world_progress': 'str',
-            }
-    }
-})
-
-
 class CasOp(object):
     def __init__(self, cas_ip, cas_port, cas_proto='http', cas_prefix='antvis', server_router="/#/Login"):
         self.cas_url = f'{cas_proto}://{cas_ip}:{cas_port}/{cas_prefix}'
