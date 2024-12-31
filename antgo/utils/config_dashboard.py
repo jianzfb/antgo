@@ -27,7 +27,7 @@ def create_project_in_dashboard(project, experiment, auto_suffix=True):
         return None
 
     # dashboard 环境准备好
-    print(f'Finish create experiment {project}/{experiment} in dashboard')
+    print(f'Finish create experiment {project}/{suggested_experiment} in dashboard')
     print(f'Show Experiment Dashboard http://ai.vibstring.com/#/ExperimentDashboard?token={token}')
     return suggested_experiment
 
