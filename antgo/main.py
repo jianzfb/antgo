@@ -1035,7 +1035,7 @@ def main():
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1052,7 +1052,7 @@ def main():
         # single gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1069,7 +1069,7 @@ def main():
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp.split('.')[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp.split(".")[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1114,21 +1114,21 @@ def main():
       # (1)安装;(2)数据准备;(3)运行
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       elif len(args.gpu_id.split(',')) == 1:
         # single gpu run
         gpu_id = args.gpu_id.split(',')[0]
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
       else:
         # multi gpu run
         gpu_num = len(args.gpu_id.split(','))
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp.split('.')[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp.split(".")[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -1184,7 +1184,7 @@ def main():
         if args.exp in project_info['exp']:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      os.system(f'python3 {args.exp.split('.')[0]}/main.py --exp={args.exp} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
+      os.system(f'python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
   else:
     if action_name == 'create':
       if sub_action_name == 'project':
