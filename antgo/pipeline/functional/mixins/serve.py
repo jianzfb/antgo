@@ -12,6 +12,7 @@ import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
 from antgo.pipeline.functional.common.config import *
+from antgo.pipeline.application.table.table import *
 from antgo.pipeline.functional.mixins.db import *
 from antgo.pipeline.functional.common.env import *
 from fastapi.responses import RedirectResponse,HTMLResponse, FileResponse
@@ -158,11 +159,11 @@ class ServeMixin:
         if ServeMixin.server_db is None and db_config is not None:
             if not os.path.exists('./orm.py'):
                 # 生成db orm
-                table_config_info = []
-                for table_info in get_table_info().values():
-                    table_config_info.append(table_info)
+                # table_config_info = []
+                # for table_info in get_table_info().values():
+                #     table_config_info.append(table_info)
 
-                create_db_orm(table_config_info)
+                create_db_orm(get_table_info())
 
             update_db_orm(__import__('orm'))
             ServeMixin.server_db = create_db_session(db_config['db_url'])
@@ -210,6 +211,8 @@ class ServeMixin:
             # 填充管线数据（请求参数）
             feed_info = {}
             for input_name in input_selection:
+                if input_name not in input_req:
+                    raise HTTPException(status_code=403, detail="request params not match")
                 feed_info[input_name] = input_req[input_name]
             feed_info.update(
                 {'session_id': session_id, 'ST': input_req.get('ST', None), 'token': input_req.get('token', None)}
@@ -235,7 +238,7 @@ class ServeMixin:
             # 由于计算过程产生BUG
             if rsp_value is None:
                 clear_context_env_info(session_id)
-                raise HTTPException(status_code=500, detail="管线执行错误")
+                raise HTTPException(status_code=500, detail="pipeline execute abnormal")
 
             # 清空session_id绑定的上下文
             clear_context_env_info(session_id)

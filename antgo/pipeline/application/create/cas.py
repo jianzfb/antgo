@@ -80,7 +80,7 @@ class CasOp(object):
         with thread_session_context(get_db_session()) as db:
             current_user = self.get_current_user(db, token, username, password)
             if current_user is not None:
-                return True
+                return current_user
 
             if ST is None:
                 # 无票据信息，需要重新登录
@@ -97,44 +97,44 @@ class CasOp(object):
                 set_context_exit_info(session_id, detail="login or re-auth user")
                 return None
 
-        if current_user is None or current_user.service_ticket != ST:
-            # 从CAS获得登录信息
-            response = HttpRpc('', self.cas_prefix, self.cas_ip, self.cas_port).cas.auth.post(ST=ST)
-            if response['status'] == 'OK':
-                # 当前用户登录成功
-                user_name = response['content']['user']
-                is_admin = response['content']['admin']
-                # 记录当前用户信息，如果不存在则创建
-                user = db.query(get_db_orm().User).filter(get_db_orm().User.name == user_name).one_or_none()
+            if current_user is None or current_user.service_ticket != ST:
+                # 从CAS获得登录信息
+                response = HttpRpc('', self.cas_prefix, self.cas_ip, self.cas_port).cas.auth.post(ST=ST)
+                if response['status'] == 'OK':
+                    # 当前用户登录成功
+                    user_name = response['content']['user']
+                    is_admin = response['content']['admin']
+                    # 记录当前用户信息，如果不存在则创建
+                    user = db.query(get_db_orm().User).filter(get_db_orm().User.name == user_name).one_or_none()
 
-                if user is None:
-                    # 创建用户
-                    user = get_db_orm().User(name=user_name, admin=is_admin)
-                    db.add(user)
+                    if user is None:
+                        # 创建用户
+                        user = get_db_orm().User(name=user_name, admin=is_admin)
+                        db.add(user)
+                        db.commit()
+
+                    if user.admin != is_admin:
+                        user.admin = is_admin
+
+                    # 设置登录状态
+                    user.cookie_id = str(uuid.uuid4()) + '/' + str(uuid.uuid4())
                     db.commit()
+                    set_context_cookie_info(session_id, 'antgo-user', user.cookie_id)
+                    return user
+                else:
+                    # 票据失效，需要重新登录
+                    s_server_router = self.server_router
+                    if self.server_router.startswith('/'):
+                        s_server_router = self.server_router[1:]
 
-                if user.admin != is_admin:
-                    user.admin = is_admin
+                    server_url = ''
+                    if s_server_router.startswith('#'):
+                        server_url = '{}/{}'.format(self.web_url, quote_plus(s_server_router))
 
-                # 设置登录状态
-                user.cookie_id = str(uuid.uuid4()) + '/' + str(uuid.uuid4())
-                db.commit()
-                set_context_cookie_info(session_id, 'antgo-user', user.cookie_id)
-                return user
-            else:
-                # 票据失效，需要重新登录
-                s_server_router = self.server_router
-                if self.server_router.startswith('/'):
-                    s_server_router = self.server_router[1:]
+                    cas_url = '{}/cas/auth/?redirect={}'.format(self.cas_url, server_url)
 
-                server_url = ''
-                if s_server_router.startswith('#'):
-                    server_url = '{}/{}'.format(self.web_url, quote_plus(s_server_router))
+                    set_context_redirect_info(session_id, cas_url)
+                    set_context_exit_info(session_id, detail="login or re-auth user")
+                    return None
 
-                cas_url = '{}/cas/auth/?redirect={}'.format(self.cas_url, server_url)
-
-                set_context_redirect_info(session_id, cas_url)
-                set_context_exit_info(session_id, detail="login or re-auth user")
-                return None
-
-        return current_user
+            return current_user

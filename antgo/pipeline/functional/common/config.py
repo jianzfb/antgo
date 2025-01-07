@@ -4,7 +4,6 @@ from __future__ import print_function
 import numpy as np
 
 __graph_info = {}
-__table_info = {}
 
 
 def add_op_info(op_name, op_index, op_args, op_kwargs):
@@ -42,8 +41,3 @@ def get_graph_info():
 def clear_grap_info():
     global __graph_info
     __graph_info.clear()
-
-
-def get_table_info():
-    global __table_info
-    return __table_info

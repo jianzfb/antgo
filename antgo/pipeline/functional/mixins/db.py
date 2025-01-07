@@ -12,6 +12,7 @@ from sqlalchemy import (
     Column, Integer, ForeignKey, Unicode, Boolean,
     DateTime
 )
+from sqlalchemy.dialects.mysql import FLOAT
 from antgo.pipeline.extent.op.loader import *
 from contextlib import contextmanager
 import datetime
@@ -50,15 +51,32 @@ def get_db_orm():
 
 
 filed_type_map = {
-    'str': ('Unicode(1024)', '""'),
-    'date': ('DateTime', 'datetime.datetime.now'),
-    'int': ('Integer', 0),
-    'bool': ('Boolean', False)
+    'str': 'Unicode(1024)',
+    'date': 'DateTime', 
+    'int': 'Integer', 
+    'bool': 'Boolean',
+    'float': 'FLOAT(precision=32, scale=4)'
 }
 
 
 def create_db_orm(configs):
     custom_tables = ''
+    # 搜集反向关联信息
+    inverse_link_info = {}
+    for config_info in configs:
+        if config_info['table'] in ['task', 'user']:
+            # 内部已经构建
+            continue
+        
+        table_cls_name = config_info['table'].capitalize()
+        table_name = config_info['table'].lower()
+        for link_name in config_info['links']:
+            # code in ref table
+            if link_name not in inverse_link_info:
+                inverse_link_info[link_name] = []
+            inverse_link_info[link_name].append(f'{table_name} = relationship("{table_cls_name}", back_populates="{link_name}", cascade="all,delete, delete-orphan")')
+
+    # 搜集表信息，并构建
     for config_info in configs:
         if config_info['table'] in ['task']:
             # 内部已经构建
@@ -67,11 +85,18 @@ def create_db_orm(configs):
         table_cls_name = config_info['table'].capitalize()
         table_name = config_info['table'].lower()
         table_field_info = ''
-        for field_name, field_type in config_info['fields'].items():
-            table_field_info += f'    {field_name} = Column({filed_type_map[field_type][0]}, default={filed_type_map[field_type][1]})\n'
+        for field_name, field_info in config_info['fields'].items():
+            field_type = field_info['type']
+            if field_type == 'date':
+                field_default = 'datetime.datetime.now'
+            elif field_type in ['int', 'float', 'bool']:
+                field_default = field_info["default"]
+            else:
+                field_default = f'"{field_info["default"]}"'
+
+            table_field_info += f'    {field_name} = Column({filed_type_map[field_type]}, default={field_default})\n'
 
         table_link_info = ''
-        inverse_link_info = {}
         for link_name in config_info['links']:
             # code in table
             table_link_info += f'''
@@ -81,10 +106,10 @@ def create_db_orm(configs):
     {link_name} = relationship('{link_name.capitalize()}', back_populates="{table_name}")
             '''
 
-            # code in ref table
-            if link_name not in inverse_link_info:
-                inverse_link_info[link_name] = []
-            inverse_link_info[link_name].append(f'{table_name} = relationship("{table_cls_name}", back_populates="{link_name}", cascade="all,delete, delete-orphan")')
+        table_inverse_info = ''
+        if table_name in inverse_link_info:
+            for inverse_code in inverse_link_info[table_name]:
+                table_inverse_info += f'{inverse_code}\n'
 
         table_template = f'''
 class {table_cls_name}(Base):
@@ -92,9 +117,10 @@ class {table_cls_name}(Base):
     id = Column(Integer, primary_key=True)
 {table_field_info}
 {table_link_info}
+    {table_inverse_info}
 
     def __repr__(self):
-        return '{table_cls_name}'/self.id
+        return '{table_cls_name}'
         '''
 
         custom_tables += f'{table_template}\n'
@@ -105,9 +131,14 @@ class {table_cls_name}(Base):
             custom_inverse_links_in_user += f'''
     {info}
             '''
-
+    custom_inverse_links_in_task = ''
+    if 'task' in inverse_link_info:
+        for info in inverse_link_info['task']:
+            custom_inverse_links_in_task += f'''
+    {info}
+            '''
     orm_content = \
-        gen_code('./templates/orm')(custom_tables=custom_tables, custom_inverse_links_in_user=custom_inverse_links_in_user)
+        gen_code('./templates/orm')(custom_tables=custom_tables, custom_inverse_links_in_user=custom_inverse_links_in_user, custom_inverse_links_in_task=custom_inverse_links_in_task)
 
     with open('./orm.py', 'w') as fp:
         fp.write(orm_content)

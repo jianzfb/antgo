@@ -333,8 +333,17 @@ class OperatorLoader:
         if not function.startswith('application'):
             return None
 
-        module, action_name, obj_name = function.split('/')
-        op = getattr(importlib.import_module(f'antgo.pipeline.application.{action_name}.{obj_name}'), f'{obj_name.capitalize()}Op', None)
+        keys = function.split('/')
+        if len(keys) == 3:
+            module, action_name, obj_name = keys
+            op = getattr(importlib.import_module(f'antgo.pipeline.application.{action_name}.{obj_name}'), f'{obj_name.capitalize()}Op', None)
+        else:
+            module, prefix, table_name, action_name = keys
+            op = getattr(importlib.import_module(f'antgo.pipeline.application.{prefix}.{action_name}'), f'{action_name.capitalize()}Op', None)
+            kws.update({
+                'table': table_name,
+            })
+
         if op is None:
             return None
 

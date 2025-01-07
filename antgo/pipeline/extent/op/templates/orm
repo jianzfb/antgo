@@ -138,6 +138,7 @@ class Task(Base):
     id = Column(Integer, primary_key=True)
     task_name = Column(Unicode(50), default="", unique=True)
 
+    task_script = Column(Unicode(2048), default="")
     task_progress = Column(Unicode(2048), default="")
     task_create_time = Column(DateTime, default=datetime.datetime.now)
     task_stop_time = Column(DateTime, default=datetime.datetime.now)
@@ -147,6 +148,8 @@ class Task(Base):
     def user_id(cls):
         return Column(Integer, ForeignKey('user.id', ondelete='CASCADE'), nullable=True)
     user = relationship('User', back_populates="task")
+
+    ${custom_inverse_links_in_task}
 
     def __repr__(self):
         return "<{cls}('{name}')>".format(
