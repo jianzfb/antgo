@@ -10,11 +10,13 @@ from antgo.pipeline.application.table.table import *
 from antgo.pipeline.functional.mixins.db import *
 from antgo import config
 import threading
+import logging
 import os
 import cv2
 import base64
 import numpy as np
 from sqlalchemy import and_, or_
+import traceback
 
 
 # 配置数据库表示例
@@ -31,9 +33,21 @@ from sqlalchemy import and_, or_
 #     })
 
 
-class CommandOp(object):
+class SafeCall(object):
     def __init__(self, func):
         self.func = func
+
+    def __call__(self, *argc, **kwargs):
+        try:
+            self.func(*argc, **kwargs)
+        except Exception as e:  # swallow any exception
+            print(e)
+            traceback.print_exc()
+
+
+class CommandOp(object):
+    def __init__(self, func):
+        self.func = SafeCall(func)
 
     def info(self):
         # 设置需要使用隐信息（数据库、session_id）
