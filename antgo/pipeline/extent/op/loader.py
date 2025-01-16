@@ -698,9 +698,9 @@ class OpLoader:
             args = (ctypes.c_ulong(self.init_handler),) +args
 
         result = self.func(*args)
-        if self.destroy is not None:
-            self.destroy(ctypes.c_ulong(self.init_handler))
-            self.init_handler = None
+        # if self.destroy is not None:
+        #     self.destroy(ctypes.c_ulong(self.init_handler))
+        #     self.init_handler = None
 
         return result
 

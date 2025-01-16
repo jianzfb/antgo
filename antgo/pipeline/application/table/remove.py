@@ -19,11 +19,11 @@ class RemoveOp(object):
     def __call__(self, *args):
         orm = get_db_orm()
         orm_table = getattr(orm, self.table)
-        with thread_session_context(get_db_session()) as db:
-            objs = db.query(orm_table).filter(getattr(orm_table, self.fields[self.key_i]) == args[self.key_i]).all()
-            for obj in objs:
-                db.delete(obj)
-            if len(objs) > 0:
-                db.commit()
+        db = get_thread_session()
+        objs = db.query(orm_table).filter(getattr(orm_table, self.fields[self.key_i]) == args[self.key_i]).all()
+        for obj in objs:
+            db.delete(obj)
+        if len(objs) > 0:
+            db.commit()
 
         return True

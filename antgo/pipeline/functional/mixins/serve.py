@@ -25,6 +25,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import secrets
 import logging
 import json
+import uuid
 
 
 class _APIWrapper:
@@ -73,26 +74,23 @@ class _PipeWrapper:
         self._pipe = pipe
         self._placeholder = placeholder
         self._futures = queue.Queue()
-        self._lock = threading.Lock()
         self._executor = threading.Thread(target=self.worker, daemon=True)
         self._executor.start()
 
     def worker(self):
         while True:
             future = self._futures.get()
-            try:
+            # 驱动管线执行(线程内绑定db)
+            result = None
+            with thread_session_context():
                 result = next(self._pipe)
-            except:
-                logging.error('pipeline execute error.')
-                result = None
 
             future.set_result(result)
 
     def execute(self, x):
-        with self._lock:
-            future = concurrent.futures.Future()
-            self._futures.put(future)
-            self._placeholder.feed(x)
+        future = concurrent.futures.Future()
+        self._futures.put(future)
+        self._placeholder.feed(x)
         return future.result()
 
 
@@ -171,6 +169,7 @@ class ServeMixin:
         if ServeMixin.server_app is not None:
             return ServeMixin.server_app
 
+        static_folder = './dump'
         from fastapi import FastAPI, Request
         ServeMixin.server_app = FastAPI()
         ServeMixin.server_app.add_middleware(SessionMiddleware, secret_key="your_secret_key")

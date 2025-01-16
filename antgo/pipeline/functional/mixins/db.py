@@ -20,6 +20,7 @@ import datetime
 __global_db_session = None
 __global_db_orm = None
 
+
 def create_db_session(db_url, **db_kwargs):
     import orm
     global __global_db_session
@@ -145,11 +146,33 @@ class {table_cls_name}(Base):
 
 
 @contextmanager
-def thread_session_context(session_db):
-    sess = session_db()
+def local_session_context():
+    global __global_db_session
+    sess = __global_db_session()
     try:
         yield sess
     except Exception as e:  # swallow any exception
         sess.rollback()
     finally:
         sess.close()
+
+
+__thread_db_info = threading.local()
+
+
+@contextmanager
+def thread_session_context():
+    global __global_db_session
+    global __thread_db_info
+    __thread_db_info.sess = __global_db_session()
+    try:
+        yield __thread_db_info.sess
+    except Exception as e:  # swallow any exception
+        __thread_db_info.sess.rollback()
+    finally:
+        __thread_db_info.sess.close()
+
+
+def get_thread_session():
+    global __thread_db_info
+    return __thread_db_info.sess

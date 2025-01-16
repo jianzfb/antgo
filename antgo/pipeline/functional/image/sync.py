@@ -173,7 +173,7 @@ class sync_op(object):
 
 @register
 class save_sync_info_op(object):
-    def __init__(self, folder, category_map={}, dataset_format='yolo', mode='detect', prefix="data", stage='train', sample_num=None):
+    def __init__(self, folder, category_map={}, dataset_format='yolo', mode='detect', prefix="data", stage='train', sample_num=None, callback=None):
         self.folder = folder
         self.index = 0
         self.gen_op = None
@@ -182,6 +182,7 @@ class save_sync_info_op(object):
         self.stage = stage
         self.dataset_format = dataset_format
         self.sample_num = None
+        self.callback = callback
 
     def __call__(self, sync_info):
         if self.gen_op is None:
@@ -201,6 +202,8 @@ class save_sync_info_op(object):
 
         self.gen_op.add(Entity(**info), self.stage)
         self.index += 1
+        if self.callback is not None:
+            self.callback(self.index)
 
         if self.sample_num is not None:
             if self.index >= self.sample_num:

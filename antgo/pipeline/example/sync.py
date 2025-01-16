@@ -145,7 +145,7 @@ with GroupRegister('anygs') as anygs_group:
     )
 
 
-def create_data_gen_base_pipe(folder, sample_num=10000, dataset_format='yolo'):
+def create_data_gen_base_pipe(folder, sample_num=10000, dataset_format='yolo', stage='train', callback=None):
     data_gen_base_pipe = placeholder['bg_list', 'obj_list'](). \
         control.For.layoutg['obj_list', 'layout_info_list'](). \
         control.RandomChoice.syncg[('bg_list', 'layout_info_list'), 'sync_out'](
@@ -155,13 +155,15 @@ def create_data_gen_base_pipe(folder, sample_num=10000, dataset_format='yolo'):
                     'folder': folder,
                     'category_map':  {'obj': 0},
                     'sample_num': sample_num,
-                    'dataset_format': dataset_format
+                    'dataset_format': dataset_format,
+                    'callback': callback,
+                    'stage': stage
                 }
             }
         )
     return data_gen_base_pipe
 
-def create_data_gen_pro_pipe(folder, sample_num=10000, dataset_format='yolo'):
+def create_data_gen_pro_pipe(folder, sample_num=10000, dataset_format='yolo', stage='train', callback=None):
     data_gen_pro_pipe = placeholder['obj_list', 'prompt', 'weather_list', 'min_obj_ratio', 'max_obj_ratio'](). \
         control.For.removebg['obj_list', ('obj_mask', 'obj_wo_bg')](). \
         control.For.augprompt[('prompt', 'weather_list'), 'prompt_list'](). \
@@ -172,7 +174,9 @@ def create_data_gen_pro_pipe(folder, sample_num=10000, dataset_format='yolo'):
                     'folder': folder,
                     'category_map':  {'object': 0},
                     'sample_num': sample_num,
-                    'dataset_format': dataset_format
+                    'dataset_format': dataset_format,
+                    'callback': callback,
+                    'stage': stage
                 }
             }
         )

@@ -32,21 +32,21 @@ class AddorgetOp(object):
         orm_handler = get_db_orm()
         orm_table = getattr(orm_handler, self.table.capitalize())
         record = None
-        with thread_session_context(get_db_session()) as db:
-            # 检查是否已经存在
-            if len(self.key_i) == 1:
-                record = db.query(orm_table).filter(getattr(orm_table, self.fields[self.key_i[0]]) == args[self.key_i[0]]).one_or_none()
-            elif len(self.key_i) == 2:
-                record = db.query(orm_table).filter(and_(getattr(orm_table, self.fields[self.key_i[0]]) == args[self.key_i[0]], getattr(orm_table, self.fields[self.key_i[1]]) == args[self.key_i[1]])).one_or_none()
+        db = get_thread_session()
+        # 检查是否已经存在
+        if len(self.key_i) == 1:
+            record = db.query(orm_table).filter(getattr(orm_table, self.fields[self.key_i[0]]) == args[self.key_i[0]]).one_or_none()
+        elif len(self.key_i) == 2:
+            record = db.query(orm_table).filter(and_(getattr(orm_table, self.fields[self.key_i[0]]) == args[self.key_i[0]], getattr(orm_table, self.fields[self.key_i[1]]) == args[self.key_i[1]])).one_or_none()
 
-            # 添加一条记录
-            if record is None:
-                field_info = {}
-                for key, value in zip(self.fields, args):
-                    field_info[key] = value
-                record = orm_table(**field_info)
-                db.add(record)
-                db.commit()
+        # 添加一条记录
+        if record is None:
+            field_info = {}
+            for key, value in zip(self.fields, args):
+                field_info[key] = value
+            record = orm_table(**field_info)
+            db.add(record)
+            db.commit()
 
         # 如果不需要提取指定字段，则返回对象
         if self.data is None:

@@ -77,7 +77,7 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
     data_path = data.get('path', None)
     with open(data_path, 'r') as fp:
         data_info = yaml.safe_load(fp)
-    data_info['path'] = os.path.dirname(data_path)
+    data_info['path'] = os.path.dirname(os.path.abspath(data_path))
     with open('./data.yaml', 'w') as fp:
         yaml.safe_dump(data_info, fp)
 

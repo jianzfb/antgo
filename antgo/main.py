@@ -112,7 +112,7 @@ DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使�
 DEFINE_nn_args()
 
 action_level_1 = ['train', 'eval', 'export', 'config', 'server', 'device', 'stop', 'ls', 'log', 'web', 'dataserver', 'deploy', 'package']
-action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'share', 'download', 'upload', 'submitter', 'dataset', 'metric', 'install']
+action_level_2 = ['add', 'del', 'create', 'register','update', 'show', 'get', 'tool', 'download', 'upload', 'submitter', 'dataset', 'metric', 'install']
 
 
 def main():
@@ -1329,6 +1329,18 @@ def main():
         # args.src 本地路径
         # args.tgt 远程目录
         tool_func(args.tgt, src_path=args.src)
+      elif sub_action_name.startswith('share'):
+        # share/aliyun
+        tool_func = getattr(tools, f'share_data_in_{sub_action_name.split("/")[1]}', None)
+        if tool_func is None:
+          logging.error(f'Tool {sub_action_name} not exist.')
+          return
+
+        # args.src 远程文件路径
+        share_info = tool_func(args.src)
+        print('share info')
+        print(share_info)
+
       elif sub_action_name.startswith('ls'):
         tool_func = getattr(tools, f'ls_from_{sub_action_name.split("/")[1]}', None)
 
@@ -1365,9 +1377,6 @@ def main():
       get_action(sub_action_name, args)
     elif action_name == 'update':
       update_project_config(sub_action_name, args)
-    elif action_name == 'share':
-      if sub_action_name == 'data':
-        tools.share_data_func(args)
     else:
       logging.error(f'Dont support {action_name}')
       logging.info(f'All support action {action_level_1 + action_level_2}')

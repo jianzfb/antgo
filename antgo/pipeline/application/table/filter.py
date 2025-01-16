@@ -25,13 +25,13 @@ class FilterOp(object):
         orm_table = getattr(orm, self.table.capitalize())
         prefix_op = and_ if self.prefix == 'and' else or_
         objs = None
-        with thread_session_context(get_db_session()) as db:
-            if len(self.fields) == 1:
-                objs = db.query(orm_table).filter(getattr(orm_table, self.fields[0]) == args[0]).all()
-            elif len(self.fields) == 2:
-                objs = db.query(orm_table).filter(
-                    prefix_op(getattr(orm_table, self.fields[0]) == args[0], getattr(orm_table, self.fields[1]) == args[1])
-                ).all()
+        db = get_thread_session()
+        if len(self.fields) == 1:
+            objs = db.query(orm_table).filter(getattr(orm_table, self.fields[0]) == args[0]).all()
+        elif len(self.fields) == 2:
+            objs = db.query(orm_table).filter(
+                prefix_op(getattr(orm_table, self.fields[0]) == args[0], getattr(orm_table, self.fields[1]) == args[1])
+            ).all()
 
         if self.data is None:
             return objs
