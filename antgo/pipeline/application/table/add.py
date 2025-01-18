@@ -15,6 +15,8 @@ from sqlalchemy import and_, or_
 
 class AddOp(object):
     def __init__(self, table, fields, data=None, keys=None):
+        # fields:   对应输入的字段名字
+        # keys:     标记过滤关键字段
         self.table = table
         self.fields = fields if isinstance(fields, list) else [fields]
         self.data = data
@@ -59,5 +61,15 @@ class AddOp(object):
         # 返回指定字段数据
         obj_info = {}
         for data_name in self.data:
-            obj_info[data_name] = getattr(record, data_name)
+            if '/' not in data_name:
+                # 表内属性
+                obj_info[data_name] = getattr(record, data_name)
+            else:
+                # 跨表属性
+                related_obj,related_field = data_name.split('/')
+                related_obj = getattr(record, related_obj)
+                obj_info[data_name] = None
+                if related_obj is not None:
+                    obj_info[data_name] = getattr(related_obj, related_field)
+
         return obj_info

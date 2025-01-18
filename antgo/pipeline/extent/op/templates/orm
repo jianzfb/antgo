@@ -143,6 +143,8 @@ class Task(Base):
     task_create_time = Column(DateTime, default=datetime.datetime.now)
     task_stop_time = Column(DateTime, default=datetime.datetime.now)
     task_is_finish = Column(Boolean, default=False)
+    task_is_success = Column(Boolean, default=False)
+    task_is_pending = Column(Boolean, default=False)
 
     @declared_attr
     def user_id(cls):

@@ -18,4 +18,15 @@ class FieldOp(object):
         self.data = data
 
     def __call__(self, *args):
-        return getattr(args[0], self.data)
+        if '/' not in self.data:
+            # 表内属性
+            return getattr(args[0], self.data)
+        else:
+            # 跨表属性
+            related_obj,related_field = data_name.split('/')
+            related_obj = getattr(args[0], related_obj)
+            if related_obj is not None:
+                return getattr(related_obj, related_field)
+
+            return None
+

@@ -40,6 +40,16 @@ class FilterOp(object):
         for filter_obj in objs:
             info_dict = {}
             for data_name in self.data:
-                info_dict[data_name] = getattr(filter_obj, data_name)
+                if '/' not in data_name:
+                    # 表内属性
+                    info_dict[data_name] = getattr(filter_obj, data_name)
+                else:
+                    # 跨表属性
+                    related_obj,related_field = data_name.split('/')
+                    related_obj = getattr(filter_obj, related_obj)
+                    info_dict[data_name] = None
+                    if related_obj is not None:
+                        info_dict[data_name] = getattr(related_obj, related_field)
+
             obj_infos.append(info_dict)
         return obj_infos

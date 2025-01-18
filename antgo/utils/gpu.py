@@ -44,7 +44,6 @@ def gpu_running_info(pid=None):
     if len(gpu_basic_info) == 0:
         gpu_basic_info = re.findall('(?<=\|)[ ]+N/A[ ]+\d+C[]+\w+\d+W / /d+W[ ]+(?=\|)', content)
         is_plan_b = True
-    
     gpu_num = len(gpu_basic_info)
     gpus=[]
 
@@ -52,17 +51,22 @@ def gpu_running_info(pid=None):
         result = re.split('\s+', gpu_basic_info[gpu_index].strip())
         gpus.append(result[2])
 
-    gpu_pwr_info = re.findall('\d+W / \d+W',content)
+    gpu_pwr_info = re.findall('\d+W|N/A +/ +\d+W',content)
     gpu_pwr_usage=[]
     gpu_pwr_cap=[]
     for gpu_index in range(gpu_num):
-        result = re.split('/',gpu_pwr_info[gpu_index])
+        if 'N/A' in gpu_pwr_info[gpu_index]:
+            gpu_pwr_usage.append('N/A')
+            gpu_pwr_cap.append('N/A')
+            continue
+
+        result = re.split('/', gpu_pwr_info[gpu_index])
         pwr_usage = re.findall('\d+',result[0])[0]
+        gpu_pwr_usage.append(pwr_usage)
         pwr_cap = re.findall('\d+',result[1])[0]
-        gpu_pwr_usage.append(int(pwr_usage))
         gpu_pwr_cap.append(int(pwr_cap))
 
-    gpu_mem_info = re.findall('\d+MiB / \d+MiB',content)
+    gpu_mem_info = re.findall('\d+MiB / +\d+MiB',content)
     gpu_mem_usage=[]
     gpu_mem_max=[]
     for gpu_index in range(gpu_num):

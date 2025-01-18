@@ -8,6 +8,7 @@ from __future__ import print_function
 from antvis.client.httprpc import *
 from antgo.pipeline.application.table.table import *
 from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.functional.common.env import *
 from antgo import config
 import threading
 import logging
@@ -46,14 +47,15 @@ class SafeCall(object):
 
 
 class CommandOp(object):
-    def __init__(self, func):
+    def __init__(self, func, bind):
         self.func = SafeCall(func)
+        self.bind = bind
 
     def info(self):
         # 设置需要使用隐信息（数据库、session_id）
         return ['session_id']
 
-    def progress(self, user_name, task_name, task_progress, task_finish):
+    def progress(self, user_name, task_name, task_progress, task_finish, task_success=True):
         orm_handler = get_db_orm()
         orm_table = orm_handler.Task
         with local_session_context() as db:
@@ -65,6 +67,7 @@ class CommandOp(object):
             task.task_progress = task_progress
             if task_finish:
                 task.task_is_finish = True
+                task.task_is_success = task_success
                 task.task_stop_time = datetime.datetime.now()
 
             db.commit()
@@ -74,16 +77,17 @@ class CommandOp(object):
         orm_handler = get_db_orm()
         orm_table = orm_handler.Task
         db = get_thread_session()
-        current_user, task_name, task_script = args[:3]
+        current_user, task_name, bind_obj, task_script = args[:4]
         task = db.query(orm_table).filter(and_(orm_table.user == current_user, orm_table.task_name == task_name)).one_or_none()
         if task is not None:
-            # 返回任务进度
-            return {'status': 'running', 'progress': task.task_progress, 'create_time': task.task_create_time.strftime('%Y-%m-%d %H:%M:%S'), 'stop_time': task.task_stop_time.strftime('%Y-%m-%d %H:%M:%S') if task.task_is_finish else ''}
+            set_context_exit_info(session_id, detail="task has existed in db")
+            return None
 
         # 创建新任务
         params = {'user': current_user}
         params['task_name'] = task_name
         params['task_script'] = task_script
+        params[self.bind] = [bind_obj]
         task = orm_table(**params)
         db.add(task)
         db.commit()

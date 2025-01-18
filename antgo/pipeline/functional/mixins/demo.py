@@ -533,7 +533,7 @@ class DemoMixin:
       with open(os.path.join(static_folder, 'image', 'query', unique_filename), "wb") as f:
           for chunk in iter(lambda: file.file.read(1024), b''):
               f.write(chunk)
-      return {"fileid": unique_filename}
+      return {"fileid": unique_filename, 'filepath': f'/image/query/{unique_filename}'}
 
     # static resource
     DemoMixin.app.mount("/", StaticFiles(directory=static_folder), name="static")
