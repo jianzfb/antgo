@@ -16,7 +16,6 @@ imageio
 scikit-learn
 matplotlib
 prettytable
-opencv-contrib-python
 antviscli@git+https://github.com/jianzfb/antvis-cli.git@master
 qiniu
 pycocotools
@@ -48,3 +47,5 @@ pyngrok
 itsdangerous
 grpcio-tools==1.67.0
 sqlalchemy
+opencv-contrib-python
+opencv-python-headless

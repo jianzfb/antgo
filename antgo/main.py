@@ -427,22 +427,81 @@ def main():
 
   # 镜像发布服务
   if action_name == 'deploy':
-    # step 1: 检查是否存在指定镜像(需要给予镜像仓库)
+    #（1）存在部署镜像
+    #     通过构建的镜像，远程部署运行
+    #（2）不存在部署镜像
+    #     直接指定镜像，远程运行
+    # 考虑情景（2）
     if not os.path.exists('./server_config.json'):
-      logging.error('Need to antgo package ..., before.')
+      if args.ssh:
+        # 基于ssh远程部署
+        if args.ip == '' or args.port == 0:
+          logging.error('Must set remote ip and port (--ip=xxx --port=yyy).')
+          return
+        # 获得指定ip的配置信息
+        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
+        if not os.path.exists(ssh_submit_config_file):
+          logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml config, couldnt remote deploy')
+          return
+        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+            ssh_config_info = yaml.safe_load(fp)
+
+        # 推送项目文件
+        project_name = os.path.abspath(os.curdir).split('/')[-1]
+        os.system(f'cd .. && tar -cf {project_name}.tar ./{project_name}')
+        os.system(f'cd .. && scp {project_name}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
+        os.system(f'cd .. && rm {project_name}.tar')
+
+        # 生成服务部署脚本
+        command = ''
+        if args.mode.startswith('http'):
+          command = f'antgo web --main={args.main} --port={args.port}'
+
+        if os.path.exists('launch.sh'):
+          # 项目存在执行脚本
+          command = 'bash launch.sh'
+        if os.path.exists('install.sh'):
+          # 项目存在安装脚本，则运行命令时，先进行环境安装
+          command = 'bash install.sh && '+command
+
+        env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
+        server_deploy_template = env.get_template('script/server-deploy.sh')
+        server_deploy_data = {
+          'user': args.user,
+          'password': args.password,
+          'image_registry': args.image_repo.split('/')[0] if args.image_repo is not None else '\"\"',
+          'image': args.image,
+          'gpu_id': 0 if args.gpu_id == '' else args.gpu_id,
+          'outer_port': args.port,
+          'inner_port': args.port,
+          'name': project_name,
+          'workspace': '/workspace',
+          'project_name': project_name,
+          'command': command,
+        }
+        server_deploy_content = server_deploy_template.render(**server_deploy_data)
+        print(server_deploy_content)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+          with open(os.path.join(temp_dir, 'deploy.sh'), 'w') as fp:
+            fp.write(server_deploy_content)
+          deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
+          logging.info(deploy_cmd)
+          os.system(deploy_cmd)
+      elif args.k8s:
+        logging.error('K8s deploy in comming.')
+        return
+
       return
+
+    # 考虑情景（1）
+    # 加载服务镜像配置信息（需要调用package后构建）
     with open('./server_config.json', 'r') as fp:
       server_info = json.load(fp)
 
     if server_info['mode'] not in ['http/demo', 'http/api', 'grpc']:
       logging.error('Only support mode = http, grpc')
       return
-
-    assert('image_repo' in server_info)
-    assert('server_port' in server_info)
-    assert('create_time' in server_info)
-    assert('update_time' in server_info)
-    assert('name' in server_info)
 
     print('Server Info.')
     print(server_info)
@@ -451,14 +510,10 @@ def main():
     if not args.no_launch:
       if args.ssh:
         # 基于ssh远程部署
-        if args.ip == '':
-          logging.error('Must set remote ip (--ip=xxx).')
+        if args.ip == '' or args.port == 0:
+          logging.error('Must set remote ip and port (--ip=xxx --port=yyy).')
           return
-
-        if args.port == 0:
-          logging.error('Must set remote server port (--ip=xxx).')
-          return
-
+        # 获得指定ip的配置信息
         ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{args.ip}-submit-config.yaml')
         if not os.path.exists(ssh_submit_config_file):
           logging.error(f'Dont exist ssh-{args.ip}-submit-config.yaml config, couldnt remote deploy')
@@ -484,7 +539,9 @@ def main():
           'outer_port': args.port,
           'inner_port': server_info['server_port'],
           'name': server_info['name'],
-          'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/'
+          'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/',
+          'project_name': '',
+          'command': '',
         }
         server_deploy_content = server_deploy_template.render(**server_deploy_data)
 
@@ -1029,7 +1086,8 @@ def main():
 
       # 根据执行环境决定是否进行自定义依赖环境安装
       if args.remote:
-        os.system('bash install.sh')
+        if os.path.exists('install.sh'):
+          os.system('bash install.sh')
 
       # 训练过程
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
@@ -1109,7 +1167,8 @@ def main():
 
       # 根据执行环境决定是否进行自定义依赖环境安装
       if args.remote:
-        os.system('bash install.sh')
+        if os.path.exists('install.sh'):
+          os.system('bash install.sh')
 
       # (1)安装;(2)数据准备;(3)运行
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
