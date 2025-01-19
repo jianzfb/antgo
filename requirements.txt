@@ -9,7 +9,7 @@ msgpack-numpy
 psutil
 jinja2
 pyyaml
-requests==2.27.1
+requests
 tornado
 beautifulsoup4
 imageio
