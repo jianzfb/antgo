@@ -171,6 +171,8 @@ class ServeMixin:
             return ServeMixin.server_app
 
         static_folder = './dump'
+        os.makedirs(static_folder, exist_ok=True)
+
         from fastapi import FastAPI, Request
         ServeMixin.server_app = FastAPI()
         ServeMixin.server_app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
