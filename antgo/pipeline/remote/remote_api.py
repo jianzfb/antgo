@@ -93,7 +93,6 @@ class RemoteApiOp(object):
         # 补充参数
         input_req.update(self.kwargs)
 
-        print(input_req)
         content = getattr(self.rpc, self.function_name).execute.post(**input_req)
         out_values = []
         for arg_name, arg_value in content.items():
