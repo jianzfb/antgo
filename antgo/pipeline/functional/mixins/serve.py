@@ -177,7 +177,7 @@ class ServeMixin:
         ServeMixin.server_app = FastAPI()
         ServeMixin.server_app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 
-        @ServeMixin.server_app.post("/{server_name}/execute")
+        @ServeMixin.server_app.post("/{server_name}/execute/")
         async def wrapper(server_name: str, req: Request, response: RedirectResponse):
             # 获得session_id
             if(req.session.get("session_id") is None):

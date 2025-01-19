@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-if [ {{image_registry}} != "" ]; then
+if [ "{{image_registry}}" != "" ]; then
     # 使用镜像中心加载镜像
     docker login --username={{user}} --password={{password}} {{image_registry}}
     docker pull {{image}}
@@ -23,7 +23,7 @@ docker stop {{name}}
 mkdir -p /data/{{project_name}}
 
 # launch in container
-if [ {{command}} != "" ]; then
+if [ "{{command}}" != "" ]; then
     docker run --name {{name}} --rm -d --shm-size="50G" -w {{workspace}} --gpus '"device={{gpu_id}}"' -p {{outer_port}}:{{inner_port}} -v $(pwd)/{{project_name}}:{{workspace}} -v /data/{{project_name}}:/data --privileged {{image}} sh -c "{{command}}"
 else
     docker run --name {{name}} --rm -d --shm-size="50G" -w {{workspace}} --gpus '"device={{gpu_id}}"' -p {{outer_port}}:{{inner_port}} -v /data/{{project_name}}:/data --privileged {{image}}
