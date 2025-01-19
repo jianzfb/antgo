@@ -25,7 +25,7 @@ mkdir -p /data/{{project_name}}
 # launch in container
 if [ {{command}} != "" ]; then
     project_dir=$(pwd)
-    docker run --name {{name}} --rm -d --shm-size="50G" -w {{workspace}} --gpus "device={{gpu_id}}" -p {{outer_port}}:{{inner_port}} -v {project_dir}/{{project_name}}:{{workspace}} -v /data/{{project_name}}:/data --privileged {{image}} {{command}}
+    docker run --name {{name}} --rm -d --shm-size="50G" -w {{workspace}} --gpus "device={{gpu_id}}" -p {{outer_port}}:{{inner_port}} -v {project_dir}/{{project_name}}:{{workspace}} -v /data/{{project_name}}:/data --privileged {{image}} sh -c "{{command}}"
 else
     docker run --name {{name}} --rm -d --shm-size="50G" -w {{workspace}} --gpus "device={{gpu_id}}" -p {{outer_port}}:{{inner_port}} -v /data/{{project_name}}:/data --privileged {{image}}
 fi
