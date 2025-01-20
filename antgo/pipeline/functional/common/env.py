@@ -15,6 +15,8 @@ def get_context_env_info():
 
 def update_context_env_info(session_id, **kwargs):
     global __global_context_env_info
+    if session_id is None:
+        return
     if session_id not in __global_context_env_info:
         __global_context_env_info[session_id] = kwargs
         return
@@ -24,6 +26,8 @@ def update_context_env_info(session_id, **kwargs):
 
 def set_context_exit_info(session_id, detail=None):
     global __global_context_env_info
+    if session_id is None:
+        return
     if session_id not in __global_context_env_info:
         __global_context_env_info[session_id] = {}
 
@@ -32,6 +36,8 @@ def set_context_exit_info(session_id, detail=None):
 
 def get_context_exit_info(session_id, default=None):
     global __global_context_env_info
+    if session_id is None:
+        return default
     if session_id not in __global_context_env_info:
         return default
     if 'exit' not in __global_context_env_info[session_id]:
@@ -42,6 +48,8 @@ def get_context_exit_info(session_id, default=None):
 
 def set_context_redirect_info(session_id, redirect_url):
     global __global_context_env_info
+    if session_id is None:
+        return
     if session_id not in __global_context_env_info:
         __global_context_env_info[session_id] = {}
 
@@ -50,6 +58,8 @@ def set_context_redirect_info(session_id, redirect_url):
 
 def get_context_redirect_info(session_id, default=None):
     global __global_context_env_info
+    if session_id is None:
+        return default
     if session_id not in __global_context_env_info:
         return default
     if 'redirect' not in __global_context_env_info[session_id]:
@@ -60,6 +70,8 @@ def get_context_redirect_info(session_id, default=None):
 
 def set_context_cookie_info(session_id, key, value):
     global __global_context_env_info
+    if session_id is None:
+        return False
     if session_id not in __global_context_env_info:
         return False
     
@@ -72,6 +84,8 @@ def set_context_cookie_info(session_id, key, value):
 
 def update_context_cookie_info(session_id, cookie):
     global __global_context_env_info
+    if session_id is None:
+        return
     if session_id not in __global_context_env_info:
         __global_context_env_info[session_id] = {}
 
@@ -80,5 +94,7 @@ def update_context_cookie_info(session_id, cookie):
 
 def clear_context_env_info(session_id):
     global __global_context_env_info
+    if session_id is None:
+        return
     __global_context_env_info.pop(session_id)
 

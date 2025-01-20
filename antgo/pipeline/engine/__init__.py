@@ -122,13 +122,14 @@ class GroupDef(object):
 
         # 定义算子
         group_op_list = []
+        group_args_list = []
         for op_name, op_category, op_param in zip(self.op_name_list, self.op_category_list, params):
             # 复制一份
             self.op_args_list.append(copy.deepcopy(op_param))
 
-            # 生成op
-            op = self.op_creator_map[op_category](op_name, op_param)
-            group_op_list.append(op)
+            # 构建op信息
+            group_op_list.append(self.op_creator_map[op_category])
+            group_args_list.append((op_name, op_param))
 
         # 动态创建类
         group_name = self.name
@@ -141,7 +142,7 @@ class GroupDef(object):
                 (Group,), 
                 {
                     '__init__': lambda self, **kwargs: 
-                        Group.__init__(self, group_op_list, group_op_relation, group_op_input, group_op_output, **kwargs)
+                        Group.__init__(self, group_op_list, group_args_list, group_op_relation, group_op_input, group_op_output, **kwargs)
                 }
             )
 
@@ -161,7 +162,7 @@ class GroupDef(object):
 
             if self.op_prefix == '':
                 self.op_prefix = 'deploy'
-            
+
             self.op_offset += 1
             if self.op_offset != 2:
                 return self
@@ -230,6 +231,7 @@ class GroupDef(object):
 @contextmanager
 def GroupRegister(name):
   try:
+    global GroupDefMap
     assert(name not in GroupDefMap)
     groupdef = GroupDef(name)
     yield groupdef

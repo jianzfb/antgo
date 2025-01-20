@@ -9,12 +9,13 @@ import numpy as np
 # relation [(),()],[(),()],[(),()]
 
 class Group(object):
-    def __init__(self, func_list, relation, input, output, **kwargs):
-        self.func_list = func_list
-        for func_op in self.func_list:
-            # 更新参数
+    def __init__(self, func_list, arg_list, relation, input, output, **kwargs):
+        self.func_list = []
+        for func_op_info, func_arg_info in zip(func_list, arg_list):
+            func_op = func_op_info(*func_arg_info)
             func_name = func_op.__class__.__name__ 
             func_op.__dict__.update(kwargs.get(func_name, {}))
+            self.func_list.append(func_op)
 
         self.relation = relation
         self.input_map = {}

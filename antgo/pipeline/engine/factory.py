@@ -40,8 +40,7 @@ def op(operator_src: str,
   return loader.load_operator(operator_src, arg, kwargs, tag)
 
 
-class _OperatorLazyWrapper(  #
-  BaseExecution):
+class _OperatorLazyWrapper(BaseExecution):
   """
   operators wrapper for lazy initialization.
   """

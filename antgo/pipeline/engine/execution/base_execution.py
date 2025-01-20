@@ -48,8 +48,8 @@ class BaseExecution:
         return exit_condition
 
     def __call__(self, *arg, **kws):
-        self.__check_init__()
         if self.__is_need_exit__(arg[0].__dict__.get('session_id', None)):
+            # 检查退出标记
             return None
 
         try:
@@ -90,4 +90,7 @@ class BaseExecution:
                 res = self._op(*arg, **kws)
                 return res
         except Exception:
+            # 打印异常信息
             traceback.print_exc()
+            # 设置退出标记
+            set_context_exit_info(arg[0].__dict__.get('session_id', None), detail='pipeline run abnormal')
