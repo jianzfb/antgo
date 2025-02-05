@@ -349,6 +349,29 @@ class OperatorLoader:
 
         return self.instance_operator(op, arg, kws) if op is not None else None
 
+    def load_operator_from_ui(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str)  -> Operator:
+        if not function.startswith('ui'):
+            return None
+        
+        keys = function.split('/')
+        if len(keys) == 3:
+            # 除button控件外
+            _, framework_name, component_name = keys
+            op = getattr(importlib.import_module(f'antgo.pipeline.ui.{framework_name}.{component_name}'), f'{component_name.capitalize()}Op', None)
+        elif len(keys) == 4:
+            # button控件
+            _, framework_name, component_name, function_op_name = keys
+            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name.replace('-', '_'), {}), tag)
+            kws.update({
+                'func': function_op
+            })
+            op = getattr(importlib.import_module(f'antgo.pipeline.ui.{framework_name}.{component_name}'), f'{component_name.capitalize()}Op', None)
+
+        if op is None:
+            return None
+        
+        return self.instance_operator(op, arg, kws) if op is not None else None
+
     def load_operator(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
         """Attempts to load an operators from cache. If it does not exist, looks up the
         operators in a remote location and downloads it to cache instead. By standard
@@ -372,7 +395,8 @@ class OperatorLoader:
                         self.load_operator_from_eagleeye,
                         self.load_operator_from_deploy,
                         self.load_operator_from_control,
-                        self.load_operator_from_robot]:
+                        self.load_operator_from_robot,
+                        self.load_operator_from_ui]:
             op = factory(function, arg, kws, tag)
             if op is not None:
                 return op

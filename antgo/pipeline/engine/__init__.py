@@ -29,8 +29,9 @@ LOCAL_OPERATOR_CACHE = DEFAULT_LOCAL_CACHE_ROOT / 'operators'
 GroupDefMap = dict()
 
 class GroupDef(object):
-    def __init__(self, name):
+    def __init__(self, name, index=None):
         self.name = name
+        self.index = index
 
         self.op_creator_map = {
             'inner': self.create_inner_op,
@@ -114,11 +115,18 @@ class GroupDef(object):
             op = op_cls(**op_params)        
         return op
 
-    def __call__(self, params, relation, input, output):
+    def __call__(self, params, relation, input=None, output=None):
         # 定义图结构
-        self.op_relation = relation
-        self.op_input = input
-        self.op_output = output
+        if self.index is not None:
+            if isinstance(self.index, tuple) and len(self.index) == 2:
+                self.op_input = self.index[0]
+                self.op_output = self.index[1]
+            else:
+                self.op_input = None
+                self.op_output = self.index[0]
+        else:
+            self.op_input = input
+            self.op_output = output
 
         # 定义算子
         group_op_list = []
@@ -134,8 +142,8 @@ class GroupDef(object):
         # 动态创建类
         group_name = self.name
         group_op_relation = relation
-        group_op_input = input
-        group_op_output = output
+        group_op_input = self.op_input
+        group_op_output = self.op_output
         group_cls = \
             type(
                 group_name, 
@@ -228,14 +236,37 @@ class GroupDef(object):
         return self
 
 
-@contextmanager
-def GroupRegister(name):
-  try:
-    global GroupDefMap
-    assert(name not in GroupDefMap)
-    groupdef = GroupDef(name)
-    yield groupdef
-    GroupDefMap[name] = groupdef
-  except:
-    traceback.print_exc()
-    raise sys.exc_info()[0]
+# @contextmanager
+# def GroupRegister(name):
+#   try:
+#     global GroupDefMap
+#     assert(name not in GroupDefMap)
+#     groupdef = GroupDef(name)
+#     yield groupdef
+#     GroupDefMap[name] = groupdef
+#   except:
+#     traceback.print_exc()
+#     raise sys.exc_info()[0]
+
+class _GroupRegister(object):
+    def __init__(self):
+        self.index = None
+
+    def __getitem__(self, index):
+        self.index = index
+        return self
+
+    @contextmanager
+    def __call__(self, name):
+        try:
+            global GroupDefMap
+            assert(name not in GroupDefMap)
+            groupdef = GroupDef(name, index=self.index)
+            yield groupdef
+            GroupDefMap[name] = groupdef
+        except:
+            traceback.print_exc()
+            raise sys.exc_info()[0]
+
+
+GroupRegister = _GroupRegister()

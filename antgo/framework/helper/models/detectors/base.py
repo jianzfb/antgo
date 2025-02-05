@@ -1,7 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 import numpy as np
-from numpy.lib.function_base import insert
 import torch
 import torch.distributed as dist
 from antgo.framework.helper.runner import BaseModule

@@ -37,7 +37,7 @@ def performance_statistic_region(running_block):
   running_mem_usage = [now_cpu_status['cpu_mem_usage']]
   running_cpu_util = [now_cpu_status['cpu_util']]
   running_cpu_occupy = [now_cpu_status['occupy_cpus']]
-  cpu_model = [now_cpu_status['cpus']]
+  cpu_arc = now_cpu_status['cpu_arc']
 
   def _cpu_info_func(pid):
     try:
@@ -125,7 +125,7 @@ def performance_statistic_region(running_block):
   _RUNNING_STATISTIC[statistic_tree_block]['cpu']['cpu_mean_usage'] = running_cpu_util_mean
   _RUNNING_STATISTIC[statistic_tree_block]['cpu']['cpu_median_usage'] = running_cpu_util_median
   _RUNNING_STATISTIC[statistic_tree_block]['cpu']['cpu_max_usage'] = running_cpu_util_max
-  _RUNNING_STATISTIC[statistic_tree_block]['cpu']['cpu_model'] = cpu_model[0][0]
+  _RUNNING_STATISTIC[statistic_tree_block]['cpu']['cpu_model'] = cpu_arc
 
   if len(gpu_model) > 0:
     # sampling gpu

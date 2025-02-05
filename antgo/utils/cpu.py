@@ -9,7 +9,8 @@ import re
 import psutil
 import os
 from antgo.utils import timer
-import numpy.distutils.cpuinfo
+import psutil
+import platform
 unit = {'b':1, 'k':2**10, 'm':2**20, 'g':2**30}
 
 
@@ -28,33 +29,28 @@ def cpu_running_info(pid=None,interval=1):
     :return: 
     '''
     mem_max = psutil.virtual_memory().total / unit['m']
-
-    cpus = []
-    cpu_info = numpy.distutils.cpuinfo.cpu.info
-    if type(cpu_info) == list:
-        for cpu_index in range(len(cpu_info)):
-            if 'model name' in cpu_info[cpu_index]:
-                cpus.append(cpu_info[cpu_index]['model name'])
-            else:
-                cpus.append('unkown')
-    else:
-        if 'model name' in cpu_info:
-            cpus.append(cpu_info['model name'])
-        else:
-            cpus.append('unkown')
-
+    cpu_core_num = psutil.cpu_count()
     if pid is not None:
         p = psutil.Process(pid)
-        mem_usage = p.memory_percent() * 0.01 * mem_max
         cpu_usage = p.cpu_percent(interval=interval)
+        mem_usage = p.memory_percent() * 0.01 * mem_max
         num_threads = p.num_threads()
         if getattr(p,'cpu_affinity',None) is not None:
             occupy_cpus = p.cpu_affinity()
         else:
             occupy_cpus = [0]
+        return {
+            'cpu_arc': platform.processor(), 
+            'cpu_core_num': cpu_core_num,
+            'cpu_mem_usage':mem_usage,
+            'cpu_mem_max': mem_max,
+            'cpu_util': cpu_usage,
+            'occupy_cpus': occupy_cpus,
+            'num_threads': num_threads
+        }
 
-        return {'cpus': cpus,'cpu_mem_usage':mem_usage,
-                'cpu_mem_max':mem_max,'cpu_util':cpu_usage,
-                'occupy_cpus':occupy_cpus,'num_threads':num_threads}
-
-    return {'cpus': cpus,'cpu_mem_max':mem_max}
+    return {
+        'cpu_arc': platform.processor(), 
+        'cpu_mem_max': mem_max,
+        'cpu_util': psutil.cpu_percent(interval=1),
+    }

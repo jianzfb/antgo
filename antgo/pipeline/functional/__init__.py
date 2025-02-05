@@ -15,6 +15,7 @@ from antgo.pipeline.hparam import param_scope
 from antgo.pipeline.hparam import dynamic_dispatch
 from antgo.pipeline.functional.common.config import *
 from .env_collection import *
+from .gui_collection import *
 from .dataset_collection import *
 import numpy as np
 import json
@@ -275,3 +276,4 @@ def _placeholder(*args):
 
 
 placeholder = dynamic_dispatch(_placeholder)
+

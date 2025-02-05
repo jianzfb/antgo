@@ -220,3 +220,4 @@ def pipeline_build_image(project, folder='./deploy', **kwargs):
 
     with open('./server_config.json', 'w') as fp:
         json.dump(server_config_info, fp)
+
