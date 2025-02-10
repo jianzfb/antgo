@@ -148,6 +148,10 @@ class {table_cls_name}(Base):
 @contextmanager
 def local_session_context():
     global __global_db_session
+    if __global_db_session is None:
+        yield None
+        return
+
     sess = __global_db_session()
     try:
         yield sess
@@ -164,6 +168,10 @@ __thread_db_info = threading.local()
 def thread_session_context():
     global __global_db_session
     global __thread_db_info
+    if __global_db_session is None:
+        yield None
+        return
+
     __thread_db_info.sess = __global_db_session()
     try:
         yield __thread_db_info.sess

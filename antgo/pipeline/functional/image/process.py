@@ -27,12 +27,53 @@ class resize_op(object):
         self.interp = interp
 
     def __call__(self, image):
-        image = cv2.resize(
-            image, 
-            (self.resize_w, self.resize_h), 
-            interpolation=self.interp_dict[self.interp])
-        return image
+        image_h, image_w = image.shape[:2]
+        new_height, new_width = self.resize_h, self.resize_w
 
+        new_image = cv2.resize(
+            image, 
+            (new_width, new_height), 
+            interpolation=self.interp_dict[self.interp])
+        return new_image
+
+
+@register
+class resize_keep_ratio_op(object):
+    interp_dict = {
+        'NEAREST': cv2.INTER_NEAREST,
+        'LINEAR': cv2.INTER_LINEAR,
+        'CUBIC': cv2.INTER_CUBIC,
+        'AREA': cv2.INTER_AREA,
+        'LANCZOS4': cv2.INTER_LANCZOS4
+    }
+    def __init__(self, out_size, interp='LINEAR') -> None:
+        self.resize_w = out_size[0]
+        self.resize_h = out_size[1]
+        self.interp = interp
+
+    def __call__(self, image):
+        image_h, image_w = image.shape[:2]
+        new_height, new_width = self.resize_h, self.resize_w
+        im_ratio = float(image_h) / float(image_w)
+        target_ratio = float(self.resize_h) / float(self.resize_w)
+        if im_ratio > target_ratio:
+            new_height = self.resize_h
+            new_width = int(new_height / im_ratio)
+        else:
+            new_width = self.resize_w
+            new_height = int(new_width * im_ratio)
+
+        scale = float(image_h) / float(new_height)
+        new_image = cv2.resize(
+            image, 
+            (new_width, new_height), 
+            interpolation=self.interp_dict[self.interp])
+        if new_height != self.resize_h or new_width != self.resize_w:
+            canvas = np.zeros((self.resize_h, self.resize_w, image.shape[2]), dtype=np.uint8)
+            canvas[:new_height, :new_width, :] = new_image
+            new_image = canvas
+
+        return new_image, np.array([scale], dtype=np.float32)
 
 @register
 class keep_ratio_op(object):
@@ -52,7 +93,6 @@ class keep_ratio_op(object):
                 nhi = rhi
                 nwi = int(rhi * self.aspect_ratio)
 
-            # 随机填充
             assert(nhi >= rhi)
             top_padding = (nhi - rhi) // 2
             bottom_padding = (nhi - rhi) - top_padding
