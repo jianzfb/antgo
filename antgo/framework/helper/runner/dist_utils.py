@@ -66,6 +66,14 @@ def master_only(func):
     return wrapper
 
 
+def broadcast_params(params):
+    rank, world_size = get_dist_info()
+    if world_size == 1:
+        return
+    for param in params:
+        dist.broadcast(param.data, src=0)
+
+
 def allreduce_params(params, coalesce=True, bucket_size_mb=-1):
     """Allreduce parameters.
 

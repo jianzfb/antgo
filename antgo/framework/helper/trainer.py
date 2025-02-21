@@ -20,7 +20,7 @@ from antgo.framework.helper.dataset import (build_dataset, build_dataloader, bui
 from antgo.framework.helper.utils.util_distribution import build_ddp, build_dp, get_device
 from antgo.framework.helper.utils import get_logger
 from antgo.framework.helper.runner import *
-from antgo.framework.helper.runner import get_dist_info, init_dist
+from antgo.framework.helper.runner import get_dist_info, init_dist, broadcast_params, allreduce_params
 from antgo.framework.helper.runner.builder import *
 from antgo.framework.helper.utils.setup_env import *
 from antgo.framework.helper.models.builder import *
@@ -292,15 +292,21 @@ class Trainer(BaseTrainer):
         model.init_weights()
 
         if self.distributed:
+            # 同步所有卡模型参数
+            broadcast_params(model.parameters())
+
+            # 替换模型的bn为Syncbn
             if self.cfg.get('syncBN', True):
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(self.device)
 
+            # 包装model(兼容dataparall，目前无用)
             model = build_ddp(
                 model,
                 self.device,
                 device_ids=[int(os.environ['LOCAL_RANK'])],
                 find_unused_parameters=self.find_unused_parameters)
         else:
+            # 包装model(兼容dataparall，目前无用)
             model = build_dp(model, self.device, device_ids=self.cfg.gpu_ids)
 
         # 自动调整单设备下的学习率到多设备下的学习率
