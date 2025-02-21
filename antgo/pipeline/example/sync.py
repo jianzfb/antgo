@@ -12,7 +12,7 @@ def layoutg_func(image_wo_bg):
     }
 
 
-with GroupRegister('layoutg') as layoutg_group:
+with GroupRegister['layout_image_path', 'layout_info']('layoutg') as layoutg_group:
     layoutg_group.image_decode.remote.removebg.demo.runas_op(
             [
                 {
@@ -31,13 +31,11 @@ with GroupRegister('layoutg') as layoutg_group:
                 ['layout_image_path','image'],
                 ['image', ('image_mask', 'image_wo_bg')],
                 ['image_wo_bg', 'layout_info']
-            ],
-            input=['layout_image_path'],
-            output=['layout_info']
+            ]
         )
 
 
-with GroupRegister('syncg') as syncg_group:
+with GroupRegiste[('image_path', 'layout_info'), 'sync_out']('syncg') as syncg_group:
     syncg_group.image_decode.sync_op.save_sync_info_op(
         [
             {
@@ -55,15 +53,13 @@ with GroupRegister('syncg') as syncg_group:
             ['image_path', 'image'],
             [('image', 'layout_info'), 'sync_info'],
             ['sync_info', 'sync_out']
-        ],
-        input=['image_path', 'layout_info'],
-        output=['sync_out']
+        ]
     )
 
 
 
 # 数据模式生成2（基于AnyGS数据服务引擎）
-with GroupRegister('removebg') as removebg_group:
+with GroupRegister['image_path', ('image_mask', 'image_wo_bg')]('removebg') as removebg_group:
     removebg_group.image_decode.remote.removebg.demo(
             [
                 {
@@ -75,9 +71,7 @@ with GroupRegister('removebg') as removebg_group:
                     'image_wo_bg': 'image'
                 }
             ],
-            relation=[['image_path','image'],['image', ('image_mask', 'image_wo_bg')]],
-            input=['image_path'],
-            output=['image_mask', 'image_wo_bg']
+            relation=[['image_path','image'],['image', ('image_mask', 'image_wo_bg')]]
         )
 
 
@@ -86,16 +80,14 @@ def augprompt_func(prompt, weather):
     return aug_prompt
 
 
-with GroupRegister('augprompt') as augprompt_group:
+with GroupRegister[('prompt', 'weather_list'), 'prompt_list']('augprompt') as augprompt_group:
     augprompt_group.runas_op(
         [
             {
                 'func': augprompt_func
             }
         ],
-        relation=[[('0','1'), '0']],
-        input=['0', '1'],
-        output=['0']
+        relation=[[('0','1'), '0']]
     )
 
 
@@ -108,7 +100,7 @@ def warp_info_func(image, info, message):
     return warp_info
 
 
-with GroupRegister('anygs') as anygs_group:
+with GroupRegister[('image','prompt','min_obj_ratio','max_obj_ratio'), 'sync_out']('anygs') as anygs_group:
     anygs_group.remote.anygs.demo.runas_op.save_sync_info_op(
         [
             {

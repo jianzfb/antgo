@@ -3,8 +3,6 @@ import collections
 import copy
 import math
 from collections import defaultdict
-from xml.etree.ElementTree import iselement
-
 import numpy as np
 from antgo.framework.helper.utils import build_from_cfg, print_log
 import torch
@@ -43,6 +41,7 @@ class ConcatDataset(_ConcatDataset):
             self.flag.append(np.ones(len(dataset), dtype=np.int64) * index)
         self.flag = np.concatenate(self.flag)
 
+        self._epoch = 0
         self.pipeline = []
         if pipeline is not None:
             from antgo.framework.helper.dataset import PIPELINES
@@ -68,7 +67,7 @@ class ConcatDataset(_ConcatDataset):
     def _arrange(self, sample, fields, alias):
         if fields is None:
             return sample      
-          
+
         if type(fields[0]) == list or type(fields[0]) == tuple:
             warp_ins = []
             for alia, field in zip(alias, fields):
@@ -78,7 +77,7 @@ class ConcatDataset(_ConcatDataset):
                 
                 warp_ins.append(one_ins)
             return warp_ins
-        
+
         warp_ins = {}
         for alia, field in zip(alias, fields):
             warp_ins[alia] = sample[field]
@@ -144,6 +143,8 @@ class ConcatDataset(_ConcatDataset):
                 # arange warp
                 sample = self._arrange(sample, self._fields, self._alias)
 
+            if 'dataset' in sample:
+                sample.pop('dataset')
             processed_sample_list.append(sample)
 
         if isinstance(idx, list):
@@ -203,6 +204,16 @@ class ConcatDataset(_ConcatDataset):
     def is_kv(self):
         return getattr(self.datasets[0], 'is_kv', False)
 
+    @property
+    def epoch(self):
+        return self._epoch
+
+    @epoch.setter
+    def epoch(self, val):
+        for dataset in self.datasets:
+            if hasattr(dataset, 'epoch'):
+                dataset.epoch = val
+        self._epoch = val
 
 @DATASETS.register_module()
 class IterConcatDataset(torch.utils.data.ChainDataset):
@@ -297,3 +308,38 @@ class RepeatDataset:
         """Length after repetition."""
         return self.times * self._ori_len
 
+
+@DATASETS.register_module()
+class CircleDataset:
+    def __init__(self, dataset, sample_num):
+        self.CLASSES = getattr(dataset, 'CLASSES', None)
+        self.PALETTE = getattr(dataset, 'PALETTE', None)
+        self.flag = np.ones(len(dataset), dtype=np.int64)
+
+        self.dataset = dataset
+        self.dataset_size = len(self.dataset)
+        self.sample_num = sample_num
+        self._epoch = 0
+        self._epoch_for_shuffle = 0
+        self.index_shuffle_list = list(range(self.dataset_size))
+        np.random.shuffle(self.index_shuffle_list)
+        print(f'hold dataset size {self.dataset_size} in circle dataset')
+
+    @property
+    def epoch(self):
+        return self._epoch
+
+    @epoch.setter
+    def epoch(self, val):
+        self._epoch = val
+
+    def __getitem__(self, idx):
+        if self.epoch != self._epoch_for_shuffle:
+            # update shuffle index
+            self.index_shuffle_list = list(range(self.dataset_size))
+            self._epoch_for_shuffle = self.epoch
+
+        return self.dataset[self.index_shuffle_list[idx % self.dataset_size]]
+
+    def __len__(self):
+        return self.sample_num

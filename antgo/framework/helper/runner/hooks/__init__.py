@@ -21,8 +21,7 @@ from .momentum_updater import (CosineAnnealingMomentumUpdaterHook,
                                MomentumUpdaterHook,
                                OneCycleMomentumUpdaterHook,
                                StepMomentumUpdaterHook)
-from .optimizer import (Fp16OptimizerHook, GradientCumulativeFp16OptimizerHook,
-                        GradientCumulativeOptimizerHook, OptimizerHook)
+from .optimizer import (GradientCumulativeOptimizerHook, OptimizerHook)
 from .profiler import ProfilerHook
 from .sampler_seed import DistSamplerSeedHook
 from .sync_buffer import SyncBuffersHook
@@ -34,14 +33,14 @@ __all__ = [
     'PolyLrUpdaterHook', 'InvLrUpdaterHook', 'CosineAnnealingLrUpdaterHook',
     'FlatCosineAnnealingLrUpdaterHook', 'CosineRestartLrUpdaterHook',
     'CyclicLrUpdaterHook', 'OneCycleLrUpdaterHook', 'OptimizerHook',
-    'Fp16OptimizerHook', 'IterTimerHook', 'DistSamplerSeedHook',
+    'IterTimerHook', 'DistSamplerSeedHook',
     'EmptyCacheHook', 'LoggerHook', 
     'TextLoggerHook', 'VibSLoggerHook',
     'MomentumUpdaterHook',
     'StepMomentumUpdaterHook', 'CosineAnnealingMomentumUpdaterHook',
     'CyclicMomentumUpdaterHook', 'OneCycleMomentumUpdaterHook',
     'SyncBuffersHook', 'EMAHook', 'EvalHook', 'DistEvalHook', 'ProfilerHook',
-    'GradientCumulativeOptimizerHook', 'GradientCumulativeFp16OptimizerHook',
+    'GradientCumulativeOptimizerHook',
     'LinearAnnealingLrUpdaterHook',
     'LinearAnnealingMomentumUpdaterHook', 'Weighter',
     'SubModulesDistEvalHook', 'SubModulesEvalHook'

@@ -7,6 +7,7 @@ from antgo.dataflow.dataset import *
 from antgo.dataflow.dataset.parse_metainfo import parse_pose_metainfo
 import numpy as np
 from pycocotools.coco import COCO
+import antgo.utils.mask as mask_util
 import cv2
 
 
@@ -224,6 +225,26 @@ class BaseCocoStyleDataset(Dataset):
         else:
             num_keypoints = np.count_nonzero(keypoints.max(axis=2))
 
+        # 实例分割图
+        segmentation = None
+        if 'segmentation' in ann:
+            if 'counts' in ann['segmentation'] and isinstance(ann['segmentation']['counts'], list):
+                # rle格式存储(非压缩)
+                rle = ann['segmentation']
+                compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
+                segmentation = mask_util.decode(compressed_rle)
+            elif 'counts' in ann['segmentation']:
+                # rle格式存储(压缩)
+                compressed_rle = ann['segmentation']
+                segmentation = mask_util.decode([compressed_rle])
+                segmentation = segmentation[:,:,0]
+            else:
+                # ply格式存储
+                polys = ann['segmentation']
+                segmentation = np.zeros((img_h, img_w), dtype=np.uint8)
+                for i in range(len(polys)):
+                    cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
+
         data_info = {
             'img_id': ann['image_id'],
             'img_path': img['img_path'],
@@ -234,7 +255,7 @@ class BaseCocoStyleDataset(Dataset):
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,
             'iscrowd': ann.get('iscrowd', 0),
-            'segmentation': ann.get('segmentation', None),
+            'segmentation': segmentation,
             'id': ann['id'],
             'category_id': np.array([ann.get('category_id',1)]),
             # store the raw annotation of the instance
@@ -273,14 +294,14 @@ class BaseCocoStyleDataset(Dataset):
         """Organize the data list in top-down mode."""
         # sanitize data samples
         data_list_tp = list(filter(self._is_valid_instance, instance_list))
-        for data_info in data_list_tp:
-            # rename key
-            if 'bbox' in data_info:
-                data_info['bboxes'] = data_info['bbox']
-                data_info.pop('bbox')
-            if 'bbox_score' in data_info:
-                data_info['bboxes_score'] = data_info['bbox_score']
-                data_info.pop('bbox_score')
+        # for data_info in data_list_tp:
+        #     # rename key
+        #     if 'bbox' in data_info:
+        #         data_info['bboxes'] = data_info['bbox']
+        #         data_info.pop('bbox')
+        #     if 'bbox_score' in data_info:
+        #         data_info['bboxes_score'] = data_info['bbox_score']
+        #         data_info.pop('bbox_score')
 
         return data_list_tp
 

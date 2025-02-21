@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from antgo.framework.helper.runner import (DistSamplerSeedHook, EpochBasedRunner,
-                         Fp16OptimizerHook, OptimizerHook, build_optimizer,
+                         OptimizerHook, build_optimizer,
                          build_runner, get_dist_info)
 from antgo.framework.helper.dataset import (build_dataloader, build_dataset)
 from antgo.framework.helper.utils.compat_config import *
@@ -176,12 +176,7 @@ def train_model(model,
     # an ugly workaround to make .log and .log.json filenames the same
     runner.timestamp = timestamp
 
-    # fp16 setting
-    fp16_cfg = cfg.get('fp16', None)
-    if fp16_cfg is not None:
-        optimizer_config = Fp16OptimizerHook(
-            **cfg.optimizer_config, **fp16_cfg, distributed=distributed)
-    elif distributed and 'type' not in cfg.optimizer_config:
+    if distributed and 'type' not in cfg.optimizer_config:
         optimizer_config = OptimizerHook(**cfg.optimizer_config)
     else:
         optimizer_config = cfg.optimizer_config

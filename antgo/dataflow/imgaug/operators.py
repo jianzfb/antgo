@@ -177,6 +177,16 @@ class Meta(BaseOperator):
         return sample
 
 
+class ExtendMeta(BaseOperator):
+    def __init__(self, update_func):
+        self.update_func = update_func
+
+    def __call__(self, sample, context=None):
+        sample.update(
+            self.update_func(sample)
+        )
+        return sample
+
 class ConvertRandomObjJointsAndOffset(BaseOperator):
     def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.1, center_factor=0.25, rot_factor=30, skeleton=[], with_random=True, use_bbox=False,inputs=None):
         super().__init__(inputs=inputs)
@@ -225,7 +235,6 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         return offset_x, offset_y, weight
 
     def _target_generator(self, joints_25d, num_joints, _feat_stride, jonits_vis):
-        # print(np.max(joints_3d))
         target_weight = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
         target = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
 
@@ -354,9 +363,9 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         bbox = np.zeros((4), dtype=np.int32)
         if len(joints2d.shape) == 3:
             obj_num = joints2d.shape[0]
-            obj_i = np.random.randint(0, obj_num)
-            if not self.with_random:
-                obj_i = 0
+            obj_i = 0
+            if self.with_random:
+                obj_i = np.random.randint(0, obj_num)
             joints2d = joints2d[obj_i]
             joints_vis = joints_vis[obj_i]
 
@@ -445,6 +454,11 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         #     x, y = int(x), int(y)
         #     cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
         #     cv2.putText(image, f'{joint_i}', (x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,255), 1)
+
+        #     if 'segments' in sample:
+        #         image = image * sample['segments'][:,:,np.newaxis]
+        #         image = image.astype(np.uint8)
+
         # for s,e in self.skeleton:
         #     if joints_vis[s,0] and joints_vis[e,0]:
         #         start_x,start_y = joints2d[s]
@@ -473,6 +487,230 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
             'heatmap_weight': target_weight,
             'joints_vis': joints_vis,
             'joints2d': joints2d,
+            'bboxes': bbox
+        })
+        return out_sample
+
+
+class ConvertRandomObjJoints25DAndOffset(ConvertRandomObjJointsAndOffset):
+    def __init__(self, input_size, heatmap_size, num_joints, sigma=2, scale_factor=0.1, center_factor=0.25, rot_factor=30, skeleton=[], with_random=True, use_bbox=False, inputs=None):
+        super().__init__(input_size, heatmap_size, num_joints, sigma=sigma, scale_factor=scale_factor, center_factor=center_factor, rot_factor=rot_factor, skeleton=skeleton, with_random=with_random, use_bbox=use_bbox, inputs=inputs)
+
+    def _cal_offset(self, heatmap, zmap, roi, pt_ori):
+        offset_x = np.zeros((heatmap.shape[0], heatmap.shape[1]))
+        offset_y = np.zeros((heatmap.shape[0], heatmap.shape[1]))
+        offset_z = np.zeros((1, 16))
+        weight = np.zeros((heatmap.shape[0], heatmap.shape[1]))
+        weight[heatmap != 0] = 1
+        weight_z = np.zeros((1, 16))
+        weight_z[zmap.reshape(1, -1) != 0] = 1
+
+        for x in range(roi[0], roi[2]):
+            offset_x[roi[1] : roi[3], x] = pt_ori[0] - x
+        for y in range(roi[1], roi[3]):
+            offset_y[y, roi[0] : roi[2]] = pt_ori[1] - y
+        for z in range(roi[4], roi[5]):
+            offset_z[0, z] = pt_ori[2] - z
+        return offset_x, offset_y, offset_z, weight, weight_z
+
+    def _target_generator(self, joints_25d, num_joints, _feat_stride, jonits_vis):
+        target_weight = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+        target = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+        target_z = np.zeros((num_joints, 16), dtype=np.float32)
+        target_z_weight = np.zeros((num_joints, 16), dtype=np.float32)
+        offset_z = np.zeros((num_joints, 16), dtype=np.float32)
+        offset_x = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+        offset_y = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
+        tmp_size = 4  # self._sigma * 4
+        for i in range(num_joints):
+            mu_x = int(joints_25d[i, 0] / _feat_stride[0] + 0.5)
+            mu_y = int(joints_25d[i, 1] / _feat_stride[1] + 0.5)
+            fmu_x = joints_25d[i, 0] / _feat_stride[0]
+            fmu_y = joints_25d[i, 1] / _feat_stride[1]
+
+            pt_ori = [
+                joints_25d[i, 0] / _feat_stride[0],
+                joints_25d[i, 1] / _feat_stride[1],
+                joints_25d[i, 2] * 8 + 8,
+            ]
+
+            # check if any part of the gaussian is in-bounds
+            ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]
+            br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]
+            if ul[0] >= self._heatmap_size[1] or ul[1] >= self._heatmap_size[0] or br[0] < 0 or br[1] < 0:
+                continue
+            
+            # generate gaussian
+            size = 2 * tmp_size + 1
+            x = np.arange(0, size, 1, np.float32)
+            y = x[:, np.newaxis]
+            x0 = y0 = size // 2
+            # the gaussian is not normalized, we want the center value to be equal to 1
+            g = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * (self._sigma**2)))
+
+            fx = np.array([-1, 0, 1])
+            fy = fx[:, np.newaxis]
+            fg = np.exp(-((fx - (fmu_x - mu_x)) ** 2 + (fy - (fmu_y - mu_y)) ** 2) / (2 * (self._sigma**2)))
+            g[y0 - 1 : y0 + 2, x0 - 1 : x0 + 2] += fg
+            g /= g.max()
+
+            # usable gaussian range
+            g_x = max(0, -ul[0]), min(br[0], self._heatmap_size[1]) - ul[0]
+            g_y = max(0, -ul[1]), min(br[1], self._heatmap_size[0]) - ul[1]
+            # image range
+            img_x = max(0, ul[0]), min(br[0], self._heatmap_size[1])
+            img_y = max(0, ul[1]), min(br[1], self._heatmap_size[0])
+
+            target[i, img_y[0] : img_y[1], img_x[0] : img_x[1]] = g[g_y[0] : g_y[1], g_x[0] : g_x[1]]
+
+            z_size = 4
+            z0 = z_size
+            z = np.arange(0, z_size * 2 + 1, 1, np.float32)
+            zg = np.exp(-((z - z0) ** 2))
+            mu_z = int(joints_25d[i, 2] * 8 + 8 + 0.5)
+            lr = [int(mu_z - z_size), int(mu_z + z_size + 1)]
+            zg_z = max(0, -lr[0]), min(lr[1], 16) - lr[0]
+            img_z = max(0, lr[0]), min(lr[1], 16)
+            if zg_z[1] > zg_z[0] and img_z[1] > img_z[0]:
+                target_z[i, img_z[0] : img_z[1]] = zg[zg_z[0] : zg_z[1]]
+
+            offset_x[i], offset_y[i], offset_z[i], target_weight[i], target_z_weight[i] = self._cal_offset(
+                target[i], target_z[i], [img_x[0], img_y[0], img_x[1], img_y[1], img_z[0], img_z[1]], pt_ori
+            )
+
+        return target, target_z, offset_x, offset_y, offset_z, target_weight, target_z_weight
+
+    def __call__(self, sample, context=None):
+        image = sample['image']
+        joints25d = sample['joints25d']
+        joints_vis = sample['joints_vis']
+        bbox = np.zeros((4), dtype=np.int32)
+
+        if len(joints25d.shape) == 3:
+            obj_num = joints25d.shape[0]
+            obj_i = 0
+            if self.with_random:
+                obj_i = np.random.randint(0, obj_num)
+            joints25d = joints25d[obj_i]
+            joints_vis = joints_vis[obj_i]
+
+            if 'bboxes' in sample and len(sample['bboxes']) > 0 and self.use_bbox:
+                bbox = sample['bboxes'][obj_i]
+            else:
+                valid_index_0 = joints25d[:, 0] > 0
+                valid_index_1 = joints25d[:, 1] > 0
+                valid_index = valid_index_0 * valid_index_1
+                if np.max(valid_index) != True:
+                    # 没有有效关键点，使用默认bbox
+                    # 放心设置，由于joints2d是无效坐标，所以target为0
+                    bbox = [0,0,10,10]
+                else:
+                    x1, y1, x2, y2 = [joints25d[valid_index, 0].min(), joints25d[valid_index, 1].min(), joints25d[valid_index, 0].max(), joints25d[valid_index, 1].max()]
+                    bbox = [x1-10, y1-10, x2+10, y2+10]
+        else:
+            if 'bboxes' in sample and len(sample['bboxes']) > 0 and self.use_bbox:
+                bbox = sample['bboxes']
+            else:
+                valid_index_0 = joints25d[:, 0] > 0
+                valid_index_1 = joints25d[:, 1] > 0
+                valid_index = valid_index_0 * valid_index_1    
+                if np.max(valid_index) != True:
+                    # 没有有效关键点，使用默认bbox
+                    # 放心设置，由于joints2d是无效坐标，所以target为0
+                    bbox = [0,0,10,10]
+                else:
+                    x1, y1, x2, y2 = [joints25d[valid_index, 0].min(), joints25d[valid_index, 1].min(), joints25d[valid_index, 0].max(), joints25d[valid_index, 1].max()]
+                    bbox = [x1-10, y1-10, x2+10, y2+10]
+
+        xmin, ymin, xmax, ymax = bbox
+        center, scale = self._box_to_center_scale(xmin, ymin, xmax - xmin, ymax - ymin, 1.0)
+        if self.with_random:
+            sf = self._scale_factor
+            ran_tmp = np.clip((np.random.rand() - 0.5) * 2.0 * sf + 1.0, 1 - sf, 1 + sf)
+            scale = scale * ran_tmp
+
+        r = 0.0
+        if self.with_random:
+            rf = self._rot_factor
+            r = np.clip(np.random.randn() * rf, -rf * 2, rf * 2) if np.random.uniform(0, 1) <= 0.5 else 0
+
+        inp_h, inp_w = self.input_size
+        trans = self.get_affine_transform(center, scale, r, [inp_w, inp_h])
+
+        # 裁减图像
+        image = cv2.warpAffine(image, trans, (int(inp_w), int(inp_h)), flags=cv2.INTER_LINEAR)
+        if 'segments' in sample:
+            sample['segments'] = \
+                cv2.warpAffine(
+                    sample['segments'], 
+                    trans, (int(inp_w), int(inp_h)), 
+                    flags=cv2.INTER_NEAREST, 
+                    borderMode=cv2.BORDER_CONSTANT, 
+                    borderValue=255
+                )
+
+        # 转换2D关键点
+        for i in range(self.num_joints):
+            joints25d[i, 0:2] = self.affine_transform(joints25d[i, 0:2], trans)
+
+        # 转换bbox
+        bbox_corner_x0, bbox_corner_y0 = self.affine_transform([bbox[0], bbox[1]], trans)
+        bbox_corner_x1, bbox_corner_y1 = self.affine_transform([bbox[2], bbox[3]], trans)
+        bbox_corner_x2, bbox_corner_y2 = self.affine_transform([bbox[0], bbox[3]], trans)
+        bbox_corner_x3, bbox_corner_y3 = self.affine_transform([bbox[2], bbox[1]], trans)
+
+        bbox_left_upper_x = np.min([bbox_corner_x0, bbox_corner_x1, bbox_corner_x2, bbox_corner_x3])
+        bbox_left_upper_y = np.min([bbox_corner_y0, bbox_corner_y1, bbox_corner_y2, bbox_corner_y3])
+        bbox_right_bottom_x = np.max([bbox_corner_x0, bbox_corner_x1, bbox_corner_x2, bbox_corner_x3])
+        bbot_right_bottom_y = np.max([bbox_corner_y0, bbox_corner_y1, bbox_corner_y2, bbox_corner_y3])
+
+        bbox = np.array([bbox_left_upper_x, bbox_left_upper_y, bbox_right_bottom_x, bbot_right_bottom_y])
+        bbox[0::2] = np.clip(bbox[0::2], 0, inp_w)
+        bbox[1::2] = np.clip(bbox[1::2], 0, inp_h)
+
+        check_mask = (joints25d[:,0] >= 0) * (joints25d[:, 0] < inp_w) * (joints25d[:,1] >= 0) * (joints25d[:, 1] < inp_h)
+        joints_vis[np.where(check_mask == False)] = 0
+
+        # generate training targets
+        target, target_z, offset_x, offset_y, offset_z, target_weight, target_z_weight = self._target_generator(
+            joints25d, self.num_joints, self._feat_stride, joints_vis
+        )
+
+        # for joint_i, (x,y,z) in enumerate(joints25d):
+        #     x, y = int(x), int(y)
+        #     cv2.circle(image, (x, y), radius=2, color=(0,0,255), thickness=1)
+        #     cv2.putText(image, f'{joint_i}', (x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,0,255), 1)
+        # for s,e in self.skeleton:
+        #     if joints_vis[s,0] and joints_vis[e,0]:
+        #         start_x,start_y, _ = joints25d[s]
+        #         end_x, end_y, _ = joints25d[e]
+        #         if start_x < 0 or end_x < 0:
+        #             continue
+
+        #         cv2.line(image, (int(start_x), int(start_y)), (int(end_x), int(end_y)), (255,0,0), 1)
+        # cv2.imwrite(f'./check.png', image)
+
+        out_sample = {}
+        if 'segments' in sample:
+            out_sample['segments'] = sample['segments']
+            sample.pop('segments')
+
+        sample.pop('image')
+        sample.pop('joints25d')
+        sample.pop('joints_vis')
+
+        out_sample.update(sample)
+        out_sample.update({
+            'image': image,
+            'heatmap': target,
+            'label_z': target_z,
+            'label_z_weight': target_z_weight,
+            'offset_x': offset_x,
+            'offset_y': offset_y,
+            'offset_z': offset_z,
+            'heatmap_weight': target_weight,
+            'joints_vis': joints_vis,
+            'joints25d': joints25d,
             'bboxes': bbox
         })
         return out_sample
@@ -934,6 +1172,8 @@ class RandomFlipImage(BaseOperator):
                 is_normalized=False,
                 swap_ids=[[1,3,19,5,7,9,11,13,15],[2,4,20,6,8,10,12,14,16]], 
                 swap_labels=[[0,1],[1,0]],
+                keypoints_key='joints2d',
+                keypoints_visible='joints_vis',
                 inputs=None):
         """
         Args:
@@ -945,6 +1185,8 @@ class RandomFlipImage(BaseOperator):
         self.is_normalized = is_normalized
         self.swap_ids = swap_ids
         self.swap_labels = swap_labels
+        self.keypoints_key = keypoints_key
+        self.keypoints_visible = keypoints_visible
         if not (isinstance(self.prob, float) and
                 isinstance(self.is_normalized, bool)):
             raise TypeError("{}: input type is invalid.".format(self))
@@ -1029,8 +1271,8 @@ class RandomFlipImage(BaseOperator):
                         temp[selected_ids] = after_label
                     sample['labels'] = temp
 
-            if 'joints2d' in sample.keys() and sample['joints2d'].shape[0] > 0:
-                gt_keypoints = sample['joints2d']
+            if self.keypoints_key in sample.keys() and sample[self.keypoints_key].shape[0] > 0:
+                gt_keypoints = sample[self.keypoints_key]
                 gt_keypoints[:, :, 0] = width - gt_keypoints[:, :, 0] - 1.0
 
                 # 更换keypoints位置 (图像水平翻转后，需要对调关键点位置)
@@ -1043,10 +1285,10 @@ class RandomFlipImage(BaseOperator):
                     gt_keypoints[:,swap_k1,:] = gt_keypoints[:,swap_k2,:]
                     gt_keypoints[:,swap_k2,:] = temp
 
-                sample['joints2d'] = gt_keypoints.copy()
+                sample[self.keypoints_key] = gt_keypoints.copy()
 
-            if 'joints_vis' in sample.keys() and sample['joints_vis'].shape[0] > 0:
-                gt_keypoints_vis = sample['joints_vis']
+            if self.keypoints_visible in sample.keys() and sample[self.keypoints_visible].shape[0] > 0:
+                gt_keypoints_vis = sample[self.keypoints_visible]
 
                 # 更换keypoints位置 (图像水平翻转后，需要对调关键点位置)
                 # swap_k1 = [1,3,19,5,7,9,11,13,15]
@@ -1058,7 +1300,7 @@ class RandomFlipImage(BaseOperator):
                     gt_keypoints_vis[:,swap_k1] = gt_keypoints_vis[:,swap_k2]
                     gt_keypoints_vis[:,swap_k2] = temp
 
-                sample['joints_vis'] = gt_keypoints_vis.copy()
+                sample[self.keypoints_visible] = gt_keypoints_vis.copy()
 
             if 'segments' in sample and sample['segments'].size > 0:
                 sample['segments'] = sample['segments'][:, ::-1].copy()

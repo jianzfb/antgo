@@ -53,7 +53,9 @@ class EpochBasedRunner(BaseRunner):
 
         self.call_hook('after_train_epoch')
         self._epoch += 1
+
         # 更新data_loader中dataset记录的epoch计数
+        # TODO, 无法有效设置Dataset epoch属性，需要查找解决方案
         self.data_loader.dataset.epoch = self._epoch    # 仅在iterator dataset数据集有效
 
     @torch.no_grad()

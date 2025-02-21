@@ -1358,7 +1358,7 @@ def main():
         if tool_func is None:
           logging.error(f'Tool {sub_action_name} not exist.')
           return
-        
+
         # src: json文件路径
         # tgt: 打包数据存放目录
         # prefix: 打包数据的文件前缀

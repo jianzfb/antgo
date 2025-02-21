@@ -370,14 +370,6 @@ def main():
             distributed=nn_args.distributed)
         tester.config_model(checkpoint=nn_args.checkpoint, strict=False)
         tester.evaluate(nn_args.json)
-    elif nn_args.process == 'activelearning':
-        # 创建主动学习过程,挑选等待标注样本
-        print(f'nn_args.distributed {nn_args.distributed}')
-        print(f'nn_args.gpu-id {nn_args.gpu_id}')
-        print(f'nn_args.checkpoint {nn_args.checkpoint}')        
-        ac = Activelearning(cfg, './', int(nn_args.gpu_id), distributed=nn_args.distributed)
-        ac.config_model(checkpoint=nn_args.checkpoint, revise_keys=[('^','model.')])
-        ac.select(nn_args.exp)
     elif nn_args.process == 'export':
         # 创建导出模型过程
         tester = Exporter(cfg, './')

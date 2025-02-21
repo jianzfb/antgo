@@ -37,8 +37,10 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         # define default value of init_cfg instead of hard code
         # in init_weights() function
         self._is_init = False
-
         self.init_cfg = copy.deepcopy(init_cfg)
+        self.use_amp = True
+        if init_cfg is not None:
+            self.use_amp = init_cfg.get('amp', True)
 
     @property
     def is_init(self):
@@ -143,23 +145,23 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                 raise TypeError(
                     f'{loss_name} is not a tensor or list of tensors')
 
-        # loss = sum(_value for _key, _value in log_vars.items())
-        loss = sum(_value for _key, _value in log_vars.items()
-                   if 'loss' in _key)
+        # 累计损失和
+        loss = sum(_value for _key, _value in log_vars.items() if 'loss' in _key)
 
         # If the loss_vars has different length, GPUs will wait infinitely
-        if dist.is_available() and dist.is_initialized():
-            log_var_length = torch.tensor(len(log_vars), device=loss.device)
-            dist.all_reduce(log_var_length)
-            message = (f'rank {dist.get_rank()}' +
-                       f' len(log_vars): {len(log_vars)}' + ' keys: ' +
-                       ','.join(log_vars.keys()))
-            assert log_var_length == len(log_vars) * dist.get_world_size(), \
-                'loss log variables are different across GPUs!\n' + message
+        # if dist.is_available() and dist.is_initialized():
+        #     log_var_length = torch.tensor(len(log_vars), device=loss.device)
+        #     dist.all_reduce(log_var_length)
+        #     message = (f'rank {dist.get_rank()}' +
+        #                f' len(log_vars): {len(log_vars)}' + ' keys: ' +
+        #                ','.join(log_vars.keys()))
+        #     assert log_var_length == len(log_vars) * dist.get_world_size(), \
+        #         'loss log variables are different across GPUs!\n' + message
 
         log_vars['loss'] = loss
         for loss_name, loss_value in log_vars.items():
             # reduce loss when distributed training
+            # 获得所有所有卡的平均损失值（仅日志使用）
             if dist.is_available() and dist.is_initialized():
                 loss_value = loss_value.data.clone()
                 dist.all_reduce(loss_value.div_(dist.get_world_size()))
@@ -194,15 +196,27 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
                   DDP, it means the batch size on each GPU), which is used for
                   averaging the logs.
         """
+
         num_samples = 1
         losses = None
-        if type(data) == list or type(data) == tuple:
-            num_samples = len(data[0]['image'])
-            losses = self(*data, **kwargs)
+        # forward run
+        if not self.use_amp:
+            if type(data) == list or type(data) == tuple:
+                num_samples = len(data[0]['image'])
+                losses = self(*data, **kwargs)
+            else:
+                num_samples = len(data['image'])
+                losses = self(**data, **kwargs)
         else:
-            num_samples = len(data['image'])
-            losses = self(**data, **kwargs)
+            with torch.autocast(device_type="cuda" if torch.cuda.is_available() else "cpu"):
+                if type(data) == list or type(data) == tuple:
+                    num_samples = len(data[0]['image'])
+                    losses = self(*data, **kwargs)
+                else:
+                    num_samples = len(data['image'])
+                    losses = self(**data, **kwargs)                
 
+        # parse losses dict
         loss, log_vars = self._parse_losses(losses)
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=num_samples)
@@ -218,13 +232,23 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         """
         num_samples = 1
         losses = None
-        if type(data) == list or type(data) == tuple:
-            num_samples = len(data[0]['image'])
-            losses = self(*data, **kwargs)
-        else:
-            num_samples = len(data['image'])
-            losses = self(**data, **kwargs)
 
+        if not self.use_amp:        
+            if type(data) == list or type(data) == tuple:
+                num_samples = len(data[0]['image'])
+                losses = self(*data, **kwargs)
+            else:
+                num_samples = len(data['image'])
+                losses = self(**data, **kwargs)
+        else:
+            with torch.autocast(device_type="cuda" if torch.cuda.is_available() else "cpu"):
+                if type(data) == list or type(data) == tuple:
+                    num_samples = len(data[0]['image'])
+                    losses = self(*data, **kwargs)
+                else:
+                    num_samples = len(data['image'])
+                    losses = self(**data, **kwargs)
+        # 是否返回损失标记
         return_loss = kwargs.get('return_loss', False)
 
         log_vars = {}
@@ -246,7 +270,6 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
 
         for loss_name, loss_value in log_vars.items():
             # reduce loss when distributed training
-            # TODO, 需要进行多节点损失的reduce?
             if dist.is_available() and dist.is_initialized():
                 loss_value = loss_value.data.clone()
                 dist.all_reduce(loss_value.div_(dist.get_world_size()))

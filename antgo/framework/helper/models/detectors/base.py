@@ -123,23 +123,13 @@ class BaseDetector(BaseModule):
         loss = sum(_value for _key, _value in log_vars.items()
                    if 'loss' in _key)
 
-        # If the loss_vars has different length, GPUs will wait infinitely
-        if dist.is_available() and dist.is_initialized():
-            log_var_length = torch.tensor(len(log_vars), device=loss.device)
-            dist.all_reduce(log_var_length)
-            message = (f'rank {dist.get_rank()}' +
-                       f' len(log_vars): {len(log_vars)}' + ' keys: ' +
-                       ','.join(log_vars.keys()))
-            assert log_var_length == len(log_vars) * dist.get_world_size(), \
-                'loss log variables are different across GPUs!\n' + message
-
         log_vars['loss'] = loss
         for loss_name, loss_value in log_vars.items():
             # TODO, 仅用于统计作用，有时存在数值不稳定，不清楚为什么？
-            # # reduce loss when distributed training
-            # if dist.is_available() and dist.is_initialized():
-            #     loss_value = loss_value.data.clone()
-            #     dist.all_reduce(loss_value.div_(dist.get_world_size()))
+            # reduce loss when distributed training
+            if dist.is_available() and dist.is_initialized():
+                loss_value = loss_value.data.clone()
+                dist.all_reduce(loss_value.div_(dist.get_world_size()))
             log_vars[loss_name] = loss_value.item()
 
         return loss, log_vars
@@ -172,11 +162,18 @@ class BaseDetector(BaseModule):
                   averaging the logs.
         """
         losses =  None
-        if type(data) == list or type(data) == tuple:
-            losses = self(*data, **kwargs)
+        if not self.use_amp:
+            if type(data) == list or type(data) == tuple:
+                losses = self(*data, **kwargs)
+            else:
+                losses = self(**data, **kwargs)
         else:
-            losses = self(**data, **kwargs)
-                
+            with torch.autocast(device_type="cuda" if torch.cuda.is_available() else "cpu"):
+                if type(data) == list or type(data) == tuple:
+                    losses = self(*data, **kwargs)
+                else:
+                    losses = self(**data, **kwargs)
+
         loss, log_vars = self._parse_losses(losses)
         outputs = dict(
             loss=loss, log_vars=log_vars, num_samples=len(data['image_meta']))
@@ -191,11 +188,17 @@ class BaseDetector(BaseModule):
         not implemented with this method, but an evaluation hook.
         """
         results = None
-        if type(data) == list or type(data) == tuple:
-            results = self(*data, **kwargs)
+        if not self.use_amp:
+            if type(data) == list or type(data) == tuple:
+                results = self(*data, **kwargs)
+            else:
+                results = self(**data, **kwargs)
         else:
-            results = self(**data, **kwargs)
-
+            with torch.autocast(device_type="cuda" if torch.cuda.is_available() else "cpu"):
+                if type(data) == list or type(data) == tuple:
+                    results = self(*data, **kwargs)
+                else:
+                    results = self(**data, **kwargs)
         return results
         
     def onnx_export(self, image, image_meta):

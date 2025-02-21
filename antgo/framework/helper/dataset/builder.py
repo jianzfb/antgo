@@ -32,7 +32,7 @@ PIPELINES = Registry('pipeline')
 
 
 def build_dataset(cfg, default_args=None):
-    from .dataset_wrappers import (ConcatDataset, RepeatDataset, IterConcatDataset)
+    from .dataset_wrappers import (ConcatDataset, RepeatDataset, IterConcatDataset, CircleDataset)
     if isinstance(cfg, (list, tuple)):
         type_list = [cfg[i].type for i in range(len(cfg)) if isinstance(cfg[i], dict)]
         if 'TFDataset' in type_list:
@@ -47,6 +47,10 @@ def build_dataset(cfg, default_args=None):
     elif cfg['type'] == 'RepeatDataset':
         dataset = RepeatDataset(
             build_dataset(cfg['dataset'], default_args), cfg['times'])
+    elif cfg['type'] == 'CircleDataset':
+        dataset = CircleDataset(
+            build_dataset(cfg['dataset'], default_args), cfg['sample_num']
+        )
     else:
         dataset = build_from_cfg(cfg, DATASETS, default_args)
 
@@ -183,9 +187,9 @@ def build_dataloader(dataset,
         sampler=sampler,
         num_workers=num_workers,
         batch_sampler=batch_sampler,
-        prefetch_factor=prefetch_factor,
+        prefetch_factor=prefetch_factor,            # 预读取配置
         collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
-        pin_memory=kwargs.pop('pin_memory', False),
+        pin_memory=kwargs.pop('pin_memory', True),  # 固定内存并启用从主机到 GPU 的更快和异步内存复制
         worker_init_fn=init_fn,
         **kwargs)
 
@@ -254,7 +258,7 @@ def build_kv_dataloader(dataset,
         num_workers=num_workers,
         prefetch_factor=prefetch_factor,
         batch_sampler=None,
-        pin_memory=kwargs.pop('pin_memory', False),
+        pin_memory=kwargs.pop('pin_memory', True),
         collate_fn=partial(collate, samples_per_gpu=samples_per_gpu, ignore_stack=ignore_stack),
         worker_init_fn=init_fn)
 
@@ -274,7 +278,7 @@ def build_iter_dataloader(dataset,
         batch_size=batch_size, 
         num_workers=workers_per_gpu,
         prefetch_factor=prefetch_factor,
-        pin_memory=kwargs.pop('pin_memory', False),
+        pin_memory=kwargs.pop('pin_memory', True),
         collate_fn=partial(collate, samples_per_gpu=batch_size, ignore_stack=ignore_stack),
         drop_last=kwargs.get('drop_last', True))
 
