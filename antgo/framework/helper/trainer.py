@@ -292,9 +292,6 @@ class Trainer(BaseTrainer):
         model.init_weights()
 
         if self.distributed:
-            # 同步所有卡模型参数
-            broadcast_params(model.parameters())
-
             # 替换模型的bn为Syncbn
             if self.cfg.get('syncBN', True):
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(self.device)
@@ -305,6 +302,9 @@ class Trainer(BaseTrainer):
                 self.device,
                 device_ids=[int(os.environ['LOCAL_RANK'])],
                 find_unused_parameters=self.find_unused_parameters)
+
+            # 同步所有卡模型参数
+            broadcast_params(model.module.parameters())
         else:
             # 包装model(兼容dataparall，目前无用)
             model = build_dp(model, self.device, device_ids=self.cfg.gpu_ids)
