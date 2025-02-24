@@ -95,10 +95,9 @@ class TextLoggerHook(LoggerHook):
                  f'{self.file_client.name} after the training process.'))
 
         self.start_iter = runner.iter
-        self.json_log_path = osp.join(runner.work_dir,
-                                      f'{runner.timestamp}.log.json')
-        if runner.meta is not None:
-            self._dump_log(runner.meta, runner)
+        # self.json_log_path = osp.join(runner.work_dir, f'{runner.timestamp}.log.json')
+        # if runner.meta is not None:
+        #     self._dump_log(runner.meta, runner)
 
     def _get_max_memory(self, runner):
         device = getattr(runner.model, 'output_device', None)
@@ -147,8 +146,8 @@ class TextLoggerHook(LoggerHook):
                 log_str += f'time: {log_dict["time"]:.3f}, ' \
                            f'data_time: {log_dict["data_time"]:.3f}, '
                 # statistic memory
-                if torch.cuda.is_available():
-                    log_str += f'memory: {log_dict["memory"]}, '
+                # if torch.cuda.is_available():
+                #     log_str += f'memory: {log_dict["memory"]}, '
         else:
             # val/test time
             # here 1000 is the length of the val dataloader
@@ -176,16 +175,16 @@ class TextLoggerHook(LoggerHook):
 
         runner.logger.info(log_str)
 
-    def _dump_log(self, log_dict, runner):
-        # dump log in json format
-        json_log = OrderedDict()
-        for k, v in log_dict.items():
-            json_log[k] = self._round_float(v)
-        # only append log at last line
-        if runner.rank == 0:
-            with open(self.json_log_path, 'a+') as f:
-                json.dump(json_log, f)
-                f.write('\n')
+    # def _dump_log(self, log_dict, runner):
+    #     # dump log in json format
+    #     json_log = OrderedDict()
+    #     for k, v in log_dict.items():
+    #         json_log[k] = self._round_float(v)
+    #     # only append log at last line
+    #     if runner.rank == 0:
+    #         with open(self.json_log_path, 'a+') as f:
+    #             json.dump(json_log, f)
+    #             f.write('\n')
 
     def _round_float(self, items):
         if isinstance(items, list):
@@ -218,15 +217,15 @@ class TextLoggerHook(LoggerHook):
                 assert isinstance(lr_, list)
                 log_dict['lr'].update({k: lr_[0]})
 
-        if 'time' in runner.log_buffer.output:
-            # statistic memory
-            if torch.cuda.is_available():
-                log_dict['memory'] = self._get_max_memory(runner)
+        # if 'time' in runner.log_buffer.output:
+        #     # statistic memory
+        #     if torch.cuda.is_available():
+        #         log_dict['memory'] = self._get_max_memory(runner)
 
         log_dict = dict(log_dict, **runner.log_buffer.output)
 
         self._log_info(log_dict, runner)
-        self._dump_log(log_dict, runner)
+        # self._dump_log(log_dict, runner)
         return log_dict
 
     def after_run(self, runner):
