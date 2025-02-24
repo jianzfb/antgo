@@ -127,9 +127,9 @@ class BaseDetector(BaseModule):
         for loss_name, loss_value in log_vars.items():
             # TODO, 仅用于统计作用，有时存在数值不稳定，不清楚为什么？
             # reduce loss when distributed training
-            if dist.is_available() and dist.is_initialized():
-                loss_value = loss_value.data.clone()
-                dist.all_reduce(loss_value.div_(dist.get_world_size()))
+            # if dist.is_available() and dist.is_initialized():
+            #     loss_value = loss_value.data.clone()
+            #     dist.all_reduce(loss_value.div_(dist.get_world_size()))
             log_vars[loss_name] = loss_value.item()
 
         return loss, log_vars

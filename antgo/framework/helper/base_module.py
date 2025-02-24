@@ -162,9 +162,9 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         for loss_name, loss_value in log_vars.items():
             # reduce loss when distributed training
             # 获得所有所有卡的平均损失值（仅日志使用）
-            if dist.is_available() and dist.is_initialized():
-                loss_value = loss_value.data.clone()
-                dist.all_reduce(loss_value.div_(dist.get_world_size()))
+            # if dist.is_available() and dist.is_initialized():
+            #     loss_value = loss_value.data.clone()
+            #     dist.all_reduce(loss_value.div_(dist.get_world_size()))
             log_vars[loss_name] = loss_value.item()
 
         return loss, log_vars

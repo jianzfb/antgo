@@ -67,7 +67,7 @@ def build_dataloader(dataset,
                      runner_type='EpochBasedRunner',
                      persistent_workers=False,
                      class_aware_sampler=None,
-                     prefetch_factor=10,                # 预加载prefetch_factor * num_workers samples prefetched across all workers
+                     prefetch_factor=2,                # 预加载prefetch_factor * num_workers samples prefetched across all workers
                      ignore_stack=[],
                      **kwargs):
     """Build PyTorch DataLoader.
