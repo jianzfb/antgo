@@ -41,6 +41,7 @@ class ConcatDataset(_ConcatDataset):
             self.flag.append(np.ones(len(dataset), dtype=np.int64) * index)
         self.flag = np.concatenate(self.flag)
 
+        print(f'Dataset concat number {len(self.flag)}')
         self._epoch = 0
         self.pipeline = []
         if pipeline is not None:
