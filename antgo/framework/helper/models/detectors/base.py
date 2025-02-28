@@ -125,7 +125,7 @@ class BaseDetector(BaseModule):
 
         log_vars['loss'] = loss
         for loss_name, loss_value in log_vars.items():
-            # TODO, 仅用于统计作用，有时存在数值不稳定，不清楚为什么？
+            # 仅做日志记录使用，会降低速度，取消
             # reduce loss when distributed training
             # if dist.is_available() and dist.is_initialized():
             #     loss_value = loss_value.data.clone()

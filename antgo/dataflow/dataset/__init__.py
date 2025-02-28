@@ -26,6 +26,7 @@ from .mpii_dataset import MpiiDataset
 from .ochuman_dataset import OCHumanDataset
 from .aic_dataset import AicDataset
 from .episode import Episode
+from .yolo_dataset import YoloDataset
 
 __all__ = [
   'Mnist', 
@@ -53,5 +54,6 @@ __all__ = [
   'MpiiDataset',
   'OCHumanDataset',
   'AicDataset',
-  'Episode'
+  'Episode',
+  'YoloDataset'
 ]

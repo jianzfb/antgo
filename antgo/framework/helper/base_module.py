@@ -148,6 +148,7 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         # 累计损失和
         loss = sum(_value for _key, _value in log_vars.items() if 'loss' in _key)
 
+        # 仅做日志记录使用，会降低速度，取消
         # If the loss_vars has different length, GPUs will wait infinitely
         # if dist.is_available() and dist.is_initialized():
         #     log_var_length = torch.tensor(len(log_vars), device=loss.device)
@@ -161,7 +162,7 @@ class BaseModule(nn.Module, metaclass=ABCMeta):
         log_vars['loss'] = loss
         for loss_name, loss_value in log_vars.items():
             # reduce loss when distributed training
-            # 获得所有所有卡的平均损失值（仅日志使用）
+            # 仅做日志记录使用，会降低速度，取消
             # if dist.is_available() and dist.is_initialized():
             #     loss_value = loss_value.data.clone()
             #     dist.all_reduce(loss_value.div_(dist.get_world_size()))
