@@ -42,7 +42,6 @@ import json
 
 
 class BaseTrainer(object):
-    running_mode = 'debug'
     def __init__(self, cfg_dict, work_dir="./", device='cuda', distributed=False, diff_seed=True, deterministic=True):
         self.cfg = Config.fromstring(json.dumps(cfg_dict), '.json')
 

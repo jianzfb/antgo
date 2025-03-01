@@ -95,7 +95,11 @@ class Tester(object):
             self.data_loader.append(data_loader)
 
         self.is_ready = False
-        self.use_logger_platform = False
+        # 是否使用实验管理
+        self.use_exp_manage = False
+        if kwargs.get('no_manage', False):
+            return
+        self.use_exp_manage = True
 
     def config_model(self, model_builder=None, checkpoint='', revise_keys=[(r'^module\.', '')], is_fuse_conv_bn=False, strict=True):
         # build the model and load checkpoint
@@ -172,9 +176,7 @@ class Tester(object):
                 all_metric.append(metric)
 
         # 上传测试报告到日志平台
-        if BaseTrainer.running_mode == 'debug':
-            print('In debug mode')        
-        if self.use_logger_platform and BaseTrainer.running_mode != 'debug':
+        if self.use_exp_manage:
             report = {
                 self.checkpoint_name: {
                     'measure': []

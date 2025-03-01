@@ -171,6 +171,11 @@ def DEFINE_nn_args():
         action='store_true',
         help='only work on multi gpu training process'
     )
+    parser.add_argument(
+        '--no-manage',
+        action='store_true',
+        help='whether not to manage experiment by vibstring'
+    )
     parser.add_argument('--ext-module', type=str, default='', help='introduce ext module py file')
 
 

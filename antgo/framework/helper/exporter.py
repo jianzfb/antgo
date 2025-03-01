@@ -27,7 +27,12 @@ class Exporter(object):
         else:
             self.cfg = cfg
         self.work_dir = work_dir
-        self.use_logger_platform = False
+
+        # 是否使用实验管理
+        self.use_exp_manage = False
+        if kwargs.get('no_manage', False):
+            return
+        self.use_exp_manage = True
 
     def export(self, input_tensor_list, input_name_list, output_name_list=None, checkpoint=None, model_builder=None, prefix='model', opset_version=12, revise_keys=[], strict=True, is_dynamic=False, skip_flops_stats=False):
         # 构建模型
@@ -50,7 +55,7 @@ class Exporter(object):
         state_dict = ckpt
         if 'state_dict' in ckpt:
             state_dict = ckpt['state_dict']
-        
+
         for p, r in revise_keys:
             state_dict = OrderedDict(
                 {re.sub(p, r, k): v
@@ -95,7 +100,7 @@ class Exporter(object):
                 dynamic_axes=dynamic_axes
         )
 
-        if self.use_logger_platform:
+        if self.use_exp_manage:
             file_logger = mlogger.Container()
             file_logger.onnx_file = mlogger.FileLogger('onnx', 'aliyun')
             file_logger.onnx_file.update(os.path.join(self.work_dir, f'{prefix}.onnx'))

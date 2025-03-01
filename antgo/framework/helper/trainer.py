@@ -196,9 +196,8 @@ class Trainer(BaseTrainer):
                 print('No valid vibstring token, directly return')
                 return
 
-            # step 3: 检查是否标准训练流程
-            if BaseTrainer.running_mode == 'debug':
-                print('In debug mode')
+            # step 3: 检查是否弦·实验平台 管理
+            if kwargs.get('no_manage', False):
                 return
 
             # 创建实验

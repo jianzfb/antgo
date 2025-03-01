@@ -893,9 +893,11 @@ def main():
         project_info['image'] = args.image      # 镜像名称
 
         # 可选项: 申请dashboard实验名字(如果发现重名，自动重命名)
-        exp_in_dashboard = create_project_in_dashboard(os.path.abspath(os.path.curdir).split('/')[-1], args.exp, auto_suffix=True)
-        if exp_in_dashboard is not None:
-          args.exp = exp_in_dashboard
+        if not args.no_manage:
+          exp_in_dashboard = \
+            create_project_in_dashboard(os.path.abspath(os.path.curdir).split('/')[-1], args.exp, auto_suffix=True)
+          if exp_in_dashboard is not None:
+            args.exp = exp_in_dashboard
 
         # 创建项目记录（基于实验名字为key）
         if args.exp not in project_info['exp']:
@@ -1081,7 +1083,7 @@ def main():
           # 2. data: {path: '', imgsz: 640}
           # 3. log_config: 日志记录频次
           # 4. max_epochs: 迭代次数
-          tools.yolo_model_train(args.exp, args.config, args.root, args.gpu_id, args.checkpoint)
+          tools.yolo_model_train(args.exp, args.config, args.root, args.gpu_id, args.checkpoint, no_manage=args.no_manage)
         return
 
       # 根据执行环境决定是否进行自定义依赖环境安装
@@ -1153,7 +1155,7 @@ def main():
       if action_model_name is not None:
         # 第三方框架支持
         if action_model_name == 'yolo':
-          tools.yolo_model_eval(args.exp, args.config, args.root, args.gpu_id, args.checkpoint)
+          tools.yolo_model_eval(args.exp, args.config, args.root, args.gpu_id, args.checkpoint, no_manage=args.no_manage)
         return
 
       # 获得实验root
@@ -1231,7 +1233,7 @@ def main():
       if action_model_name is not None:
         # 第三方框架支持
         if action_model_name == 'yolo':
-          tools.yolo_model_export(args.exp, args.checkpoint)
+          tools.yolo_model_export(args.exp, args.checkpoint, no_manage=args.no_manage)
         return
 
       # 获得实验root

@@ -35,7 +35,7 @@ def logger_training_info(trainer):
     getattr(logger_canvas, 'loss').update(log_value)
 
 
-def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
+def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None, **kwargs):
     # 配置信息转换
     if isinstance(cfg, str):
         cfg = Config.fromfile(cfg)
@@ -51,9 +51,10 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
         os.system('pip3 install opencv-python-headless')
     from ultralytics import YOLO
 
-    # 创建dashboard
     project = cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
-    create_project_in_dashboard(project, exp_name, False)
+    if not kwargs.get('no_manage', False):
+        # 创建dashboard        
+        create_project_in_dashboard(project, exp_name, False)
 
     if mlogger.is_ready():
         global logger_canvas
@@ -160,7 +161,7 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None):
         file_logger.file.update(f'{exp_name}.tar', **kwargs)
 
 
-def yolo_model_export(exp_name, pretrained_model):
+def yolo_model_export(exp_name, pretrained_model, **kwargs):
     # 检查是否安装ultralytics
     p = subprocess.Popen("pip3 show ultralytics", shell=True, encoding="utf-8", stdout=subprocess.PIPE)
     if p.stdout.read() == '':
@@ -187,7 +188,7 @@ def yolo_model_export(exp_name, pretrained_model):
     model.export(format="onnx", simplify=True)
 
 
-def yolo_model_eval(exp_name, cfg, root, gpu_id, pretrained_model):
+def yolo_model_eval(exp_name, cfg, root, gpu_id, pretrained_model, **kwargs):
     # 配置信息转换
     if isinstance(cfg, str):
         cfg = Config.fromfile(cfg)
@@ -205,7 +206,8 @@ def yolo_model_eval(exp_name, cfg, root, gpu_id, pretrained_model):
 
     # 激活dashboard
     project = cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
-    activate_project_in_dashboard(project, exp_name)
+    if not kwargs.get('no_manage', False):
+        activate_project_in_dashboard(project, exp_name)
 
     if mlogger.is_ready() and (pretrained_model is None or pretrained_model == ''):
         # 下载checkpoint

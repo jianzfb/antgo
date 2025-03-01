@@ -335,9 +335,6 @@ def main():
             for eval_cfg in cfg.evaluation:
                 eval_cfg.out_dir = cfg.root
 
-    # 设置运行模式（debug/normal）
-    BaseTrainer.running_mode = nn_args.running
-
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程
@@ -348,7 +345,8 @@ def main():
             distributed=nn_args.distributed, 
             diff_seed=nn_args.diff_seed, 
             deterministic=nn_args.deterministic, 
-            find_unused_parameters=nn_args.find_unused_parameters)
+            find_unused_parameters=nn_args.find_unused_parameters,
+            no_manage=nn_args.no_manage)
 
         trainer.config_dataloader(with_validate=not nn_args.no_validate)
         trainer.config_model(resume_from=nn_args.resume_from, load_from=nn_args.checkpoint)
@@ -367,12 +365,15 @@ def main():
             cfg, 
             './',
             int(nn_args.gpu_id), # 对于多卡运行环境,会自动忽略此参数数值
-            distributed=nn_args.distributed)
+            distributed=nn_args.distributed,
+            no_manage=nn_args.no_manage)
+
         tester.config_model(checkpoint=nn_args.checkpoint, strict=False)
         tester.evaluate(nn_args.json)
     elif nn_args.process == 'export':
         # 创建导出模型过程
-        tester = Exporter(cfg, './')
+        tester = Exporter(cfg, './', no_manage=nn_args.no_manage)
+
         checkpoint_file_name = nn_args.checkpoint.split('/')[-1].split('.')[0]
         tester.export(
             input_tensor_list=[torch.zeros(shape, dtype=torch.float32) for shape in cfg.export.input_shape_list], 
