@@ -42,10 +42,12 @@ class LrUpdaterHook(Hook):
         self.warmup = warmup
         self.warmup_iters = warmup_iters
         self.warmup_ratio = warmup_ratio
-        self.warmup_by_epoch = by_epoch     # warmup_by_epoch 和 by_epoch保持一致
+        self.warmup_by_epoch = self.by_epoch    # warmup_by_epoch 和 by_epoch 一致
         self.begin = begin
         self.end = end
 
+        # warmup_epochs 在 warmup_by_epoch时使用
+        # warmup_iters 在 warmup_by_iters时使用
         if self.warmup_by_epoch:
             # 如果warmup采用by_epoch，则将warmup_iters赋值给warmup_epochs
             self.warmup_epochs = self.warmup_iters
@@ -140,8 +142,10 @@ class LrUpdaterHook(Hook):
             cur_iter = runner.iter
             self.regular_lr = self.get_regular_lr(runner)
             if self.warmup is None or cur_iter >= self.warmup_iters:
+                # 进入正常学习率调整
                 self._set_lr(runner, self.regular_lr)
             else:
+                # 进入warmup学习率调整
                 warmup_lr = self.get_warmup_lr(cur_iter)
                 self._set_lr(runner, warmup_lr)
         elif self.by_epoch:
@@ -151,6 +155,7 @@ class LrUpdaterHook(Hook):
             elif cur_iter == self.warmup_epochs:
                 self._set_lr(runner, self.regular_lr)
             else:
+                # 进入warmup学习率调整
                 warmup_lr = self.get_warmup_lr(cur_iter)
                 self._set_lr(runner, warmup_lr)
 
@@ -159,7 +164,7 @@ class LrUpdaterHook(Hook):
 class WarmupLrUpdaterHook(LrUpdaterHook):
     def __init__(self, **kwargs):
         super(WarmupLrUpdaterHook, self).__init__(**kwargs)
-    
+
     def get_lr(self, runner, base_lr):
         return base_lr
 
@@ -904,4 +909,5 @@ class ComposerLrUpdaterHook(LrUpdaterHook):
                         self.lr_updater_list[policy_i].base_lr = self.lr_updater_list[self.cur_policy_i].regular_lr
                         self.cur_policy_i = policy_i
                     break
+
         self.lr_updater_list[self.cur_policy_i].before_train_iter(runner)
