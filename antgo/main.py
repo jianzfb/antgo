@@ -106,7 +106,6 @@ DEFINE_int("max-size", 0, "")
 DEFINE_float("ext-ratio", 0.35, "")
 DEFINE_int("ext-size", 0, "")
 DEFINE_indicator("ignore-incomplete", True, "")
-DEFINE_indicator("clear", True, "")   # 清理现场（用于远程提交时使用）
 
 #############################################
 DEFINE_nn_args()
@@ -907,12 +906,14 @@ def main():
         args.root = f'{args.root}/{args.exp}/'+time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time))
 
         # 配置新增实验信息
+        # mode: local, ssh, k8s(需要定制)
         project_info['exp'][args.exp].append({
           'id': '',
           'ip': '',
           'create_time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)),
           'config': args.config,
-          'root': args.root
+          'root': args.root,
+          'mode': 'ssh' if args.ssh else 'k8s'
         })
         with open('./.project.json', 'w') as fp:
           json.dump(project_info,fp)
@@ -928,7 +929,7 @@ def main():
           # 第三方框架支持
           gpu_id = '0' if args.gpu_id == '' else args.gpu_id
           exec_script = f'antgo {action_name}/{action_model_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id}'
-          ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True)
+          ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True)
         return
 
       filter_sys_argv_cp = []
@@ -961,11 +962,11 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
-        ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
+        ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
       elif args.ssh and args.script is not None:
         # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
         assert(args.image is not None and args.image != '')
-        ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, 0 if args.gpu_id == '' else len(args.gpu_id.split(',')), args.cpu, args.memory, ip=args.ip, exp=args.exp)
+        ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), f'bash {args.script}', args.image, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp)
       elif args.k8s:
         # TODO,基于k8s远程管理
         logging.error('Not support k8s now.')
@@ -991,13 +992,14 @@ def main():
     if args.resume_from is None:
       args.resume_from = ''
 
-    # 下载依赖checkpoint
-    if args.checkpoint != '':
-      # checkpoint路径格式
-      # 1: local path                           本地目录
-      # 2: ali://                               直接从阿里云盘下载
-      # 3: logger://experiment/checkpoint       日志平台（推荐）     
-      print(args.checkpoint)
+    # 下载依赖checkpoint(args.checkpoint, args.resume_from)
+    # checkpoint路径格式
+    # 1: local path                           本地目录
+    # 2: ali://                               直接从阿里云盘下载
+    # 3: logger://experiment/checkpoint       日志平台（推荐），需要启动试验管理（如果 --no-manage，则关闭试验管理）   
+    # 4: project://experiment/checkpoint     
+    if args.checkpoint != '': 
+      logging.info(f'receive checkpoint {args.checkpoint}')
       if args.checkpoint.startswith('ali://'):
         # 阿里云盘路径
         os.makedirs('./checkpoint', exist_ok=True)
@@ -1014,6 +1016,10 @@ def main():
           checkpoint_name = args.checkpoint.split('/')[-1]
           tools.download_from_logger('./checkpoint', None, args.checkpoint)
           args.checkpoint = os.path.join('./checkpoint', checkpoint_name)
+      elif args.checkpoint.startswith('project://'):
+        # 从本地项目(./.project.json)记录中查询
+        # 如何定位实验记录？实验名字
+        args.checkpoint = tools.download_from_project('./checkpoint', None, src_path=args.checkpoint, exp=args.exp)
 
       # checkpoint（可能具体路径存储在日志平台，需要实际运行时获取具体路径并下载）
       logging.info(f'use checkpoint {args.checkpoint}')
@@ -1039,6 +1045,10 @@ def main():
             tools.download_from_logger('./checkpoint', None, args.resume_from)
             checkpoint_name = args.resume_from.split('/')[-1]
             args.resume_from = os.path.join('./checkpoint', checkpoint_name)
+        elif args.resume_from.startswith('project://'):
+          # 从本地项目(./.project.json)记录中查询
+          # 如何定位实验记录？实验名字
+          args.resume_from = tools.download_from_project('./checkpoint', None, src_path=args.resume_from, exp=args.exp)
 
       logging.info(f'use resume_from {args.resume_from}')
       if not os.path.exists(args.resume_from):
@@ -1069,7 +1079,8 @@ def main():
         'ip': '',
         'create_time': time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)),
         'config': args.config,
-        'root': args.root
+        'root': args.root,
+        'mode': 'local'
       })
 
       with open('./.project.json', 'w') as fp:
@@ -1096,6 +1107,8 @@ def main():
         # cpu run
         # (1)安装;(2)数据准备;(3)运行
         command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_manage:
+          command_str += ' --no-manage'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1113,6 +1126,8 @@ def main():
         # (1)安装;(2)数据准备;(3)运行
         gpu_id = args.gpu_id.split(',')[0]
         command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_manage:
+          command_str += ' --no-manage'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1130,6 +1145,8 @@ def main():
         # (1)安装;(2)数据准备;(3)运行
         gpu_num = len(args.gpu_id.split(','))
         command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp.split(".")[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        if args.no_manage:
+          command_str += ' --no-manage'
         if args.no_validate:
           command_str += ' --no-validate'
         if args.resume_from is not None:
@@ -1176,6 +1193,8 @@ def main():
       if args.gpu_id == '' or int(args.gpu_id.split(',')[0]) == -1:
         # cpu run
         command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={-1} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        if args.no_manage:
+          command_str += ' --no-manage'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -1183,6 +1202,8 @@ def main():
         # single gpu run
         gpu_id = args.gpu_id.split(',')[0]
         command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --gpu-id={gpu_id} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        if args.no_manage:
+          command_str += ' --no-manage'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -1190,6 +1211,8 @@ def main():
         # multi gpu run
         gpu_num = len(args.gpu_id.split(','))
         command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp.split(".")[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        if args.no_manage:
+          command_str += ' --no-manage'
         if args.checkpoint is not None:
           command_str += f' --checkpoint={args.checkpoint}'
         os.system(command_str)
@@ -1245,7 +1268,10 @@ def main():
         if args.exp in project_info['exp']:
           args.root = project_info['exp'][args.exp][-1]['root']
 
-      os.system(f'python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}')
+      command_str = f'python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}'
+      if args.no_manage:
+        command_str += ' --no-manage'
+      os.system(command_str)
   else:
     if action_name == 'create':
       if sub_action_name == 'project':

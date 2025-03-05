@@ -138,12 +138,13 @@ def analyze_all_dependent_data(config_file_path):
     return dependent_data_list
 
 
-def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False, env='master'):   
+def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False, env='master'):   
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
         project_info = json.load(fp)
 
+    gpu_num = len(gpu_ids)
     dependent_data_list= []
     if check_data:
         exp_info = project_info['exp'][exp][-1]
@@ -225,9 +226,20 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
         return
     logging.info(f"Apply target machine resource {target_machine_info_list}")
 
+    # 对于多机多卡模式，不可自定义指定GPU编号
+    # 对于单机多卡模式，可以自定义指定GPU编号
     apply_gpu_id = [str(i) for i in range(gpu_num)]
     if len(target_machine_info_list) == 1:
-        apply_gpu_id = [str(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
+        candidate_gpu_ids = [int(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
+        apply_gpu_id = []
+        for gd in gpu_ids:
+            if gd in candidate_gpu_ids:
+                apply_gpu_id.append(str(gd))
+        
+        if len(apply_gpu_id) != gpu_num:
+            logging.error(f"gpus {gpu_ids} not all free")
+            return
+
     apply_gpu_id = ','.join(apply_gpu_id)
     sys_argv = f'{sys_argv} --gpu-id={apply_gpu_id}'
 
@@ -254,9 +266,6 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
             json.dump(extra_config, fp)    
         sys_argv += " --extra-config=./extra-config.py"
 
-    # 自动添加清理命令
-    sys_argv += " --clear"
-
     # 执行提交命令
     if password == '':
         password = 'default'
@@ -275,7 +284,7 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     print(f'Use image {image_name}')
     project_name = os.path.abspath(os.path.curdir).split("/")[-1]
     submit_time = create_time
-    
+
     target_machine_ips = ','.join([v['ip'] for v in target_machine_info_list])
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
     submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name} {env} {submit_time}'
@@ -353,12 +362,13 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_num, cpu_num, memory_size
     return True
 
 
-def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cpu_num, memory_size, task_name=None, ip='', exp='', env='master', is_inner_launch=False):
+def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cpu_num, memory_size, task_name=None, ip='', exp='', env='master', is_inner_launch=False):
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
         project_info = json.load(fp)
 
+    gpu_num = len(gpu_ids)
     username = ''
     password = ''
     ssh_config_info = None
@@ -418,9 +428,20 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_num, cp
         return
     logging.info(f"Apply target machine resource {target_machine_info_list}")
 
+
+    # 对于多机多卡模式，不可自定义指定GPU编号
+    # 对于单机多卡模式，可以自定义指定GPU编号
     apply_gpu_id = [str(i) for i in range(gpu_num)]
     if len(target_machine_info_list) == 1:
-        apply_gpu_id = [str(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
+        candidate_gpu_ids = [int(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
+        apply_gpu_id = []
+        for gd in gpu_ids:
+            if gd in candidate_gpu_ids:
+                apply_gpu_id.append(str(gd))
+        
+        if len(apply_gpu_id) != gpu_num:
+            logging.error(f"gpus {gpu_ids} not all free")
+            return
     apply_gpu_id = ','.join(apply_gpu_id)
 
     image_name = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest' # 基础镜像

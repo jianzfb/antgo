@@ -177,3 +177,61 @@ def download_from_logger(target_folder, keys=None, src_path=None, **kwargs):
             break
 
     return local_checkpoint_path
+
+
+def download_from_project(target_folder, keys, src_path, exp=None, **kwargs):
+    # only for checkpoint
+    if not os.path.exists('./.project.json'):
+        print('No ./.project.json')
+        return None
+
+    os.makedirs(target_folder, exist_ok=True)
+    with open('./.project.json', 'r') as fp:
+        project_info = json.load(fp)
+
+    # src_path format: project://exp/checkpoint or project://checkpoint
+    src_path = src_path.replace('project://', '')
+    terms = src_path.split('/')
+    checkpoint = terms[-1]
+    if len(terms) != 1:
+        exp = terms[0]
+
+    if exp is None:
+        print('Need set --exp')
+        return
+
+    print(f"exp {exp} -> checkpoint {checkpoint}")
+    # 从project_info中，找到实验所有配置信息
+    for exp_name, exp_info_list in project_info['exp'].items():
+        if exp_name != exp:
+            continue
+
+        exp_info = exp_info_list[-1]
+        exp_root = exp_info['root']
+        exp_create_time = exp_info['create_time']
+        exp_mode = exp_info.get('mode', 'ssh')  # 历史实验，均默认ssh提交
+        if exp_mode == 'ssh':
+            exp_ip = exp_info['ip']
+            ssh_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{exp_ip}-submit-config.yaml')
+            with open(ssh_config_file, encoding='utf-8', mode='r') as fp:
+                ssh_config = yaml.safe_load(fp)
+
+            login_name = ssh_config["config"]["username"]
+            project_name = os.getcwd().split('/')[-1]
+            checkpoint_file = os.path.join(f'~/{exp_create_time}', project_name, exp_root, 'output', 'checkpoint', checkpoint)
+            os.system(f'scp {login_name}@{exp_ip}:{checkpoint_file} {target_folder}')
+
+            checkpoint_file = os.path.join(target_folder, checkpoint)
+            print(f'checkpoint filepath {checkpoint_file}')
+            return checkpoint_file
+        elif exp_mode == 'local':
+            checkpoint_file = os.path.join(exp_root, 'output', 'checkpoint', checkpoint)
+            print(f'checkpoint filepath {checkpoint_file}')
+            return checkpoint_file
+        else:
+            # TODO, k8s
+            print(f'Do nothing, support in future')
+            pass
+        break
+    
+    return None
