@@ -45,7 +45,5 @@ class LayoutOp(object):
             'columnspan': self._spanx,
             'sticky': self._stick
         }
-        print(layout_params)
-
         self._layout.grid(**layout_params)
         return self

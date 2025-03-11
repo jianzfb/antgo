@@ -355,16 +355,21 @@ class OperatorLoader:
         
         keys = function.split('/')
         if len(keys) == 3:
-            # 除button控件外
             _, framework_name, component_name = keys
             op = getattr(importlib.import_module(f'antgo.pipeline.ui.{framework_name}.{component_name}'), f'{component_name.capitalize()}Op', None)
         elif len(keys) == 4:
-            # button控件
             _, framework_name, component_name, function_op_name = keys
-            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name.replace('-', '_'), {}), tag)
-            kws.update({
-                'func': function_op
-            })
+            if component_name == 'canvas':
+                # canvas控件
+                kws.update({
+                    'elem_type': function_op_name,
+                })
+            if component_name == 'button':
+                # button控件
+                function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name.replace('-', '_'), {}), tag)
+                kws.update({
+                    'func': function_op
+                })
             op = getattr(importlib.import_module(f'antgo.pipeline.ui.{framework_name}.{component_name}'), f'{component_name.capitalize()}Op', None)
 
         if op is None:
