@@ -9,60 +9,62 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from tkinter import PhotoImage
 import numpy as np
+from antgo.pipeline.ui.smart.data import DataS, AttrMap
 
 
 class LabelOp(object):
-    def __init__(self, text=None, gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):  
-        self._text = text
-        self._gridx = gridx
-        self._gridy = gridy
-        self._spanx = spanx
-        self._spany = spany
-        self._padx = padx
-        self._pady = pady
-        self._stick = stick
-
+    def __init__(self, text=None, image=None, gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):
+        self._attr = AttrMap(
+            text    =DataS(default=text) if not isinstance(text, DataS) else text,
+            gridx   =DataS(default=gridx) if not isinstance(gridx, DataS) else gridx,
+            gridy   =DataS(default=gridy) if not isinstance(gridy, DataS) else gridy,
+            spanx   =DataS(default=spanx) if not isinstance(spanx, DataS) else spanx,
+            spany   =DataS(default=spany) if not isinstance(spany, DataS) else spany,
+            padx    =DataS(default=padx) if not isinstance(padx, DataS) else padx,
+            pady    =DataS(default=pady) if not isinstance(pady, DataS) else pady,
+            stick   =DataS(default=stick) if not isinstance(stick, DataS) else stick,
+            image   =DataS(default=image) if not isinstance(image, DataS) else image
+        )
         self._label = None
 
+    @property
     def element(self):
         return self._label
 
-    def __getattr__(self, name):
-        if name not in ['text']:
-            return super(LabelOp, self).__getattribute__(name)
-        return None
+    @property
+    def attr(self):
+        return self._attr
 
-    def __setattr__(self, name, value):
-        if name not in ['text', 'image']:
-            super(LabelOp, self).__setattr__(name, value)
-            return
-        if name == 'text':
-            self._label.config(text=value)
-        if name == 'image':
-            # 支持numpy, pil, path
-            if isinstance(value, np.ndarray):
-                value = Image.fromarray(value)
-                value = ImageTk.PhotoImage(value)
-            elif isinstance(value, Image.Image):
-                value = ImageTk.PhotoImage(value)
-            else:
-                value = PhotoImage(file=value)
-            self._label.config(image=value)
+    def setImage(self, value):
+        if isinstance(value, np.ndarray):
+            value = Image.fromarray(value)
+            value = ImageTk.PhotoImage(value)
+        elif isinstance(value, Image.Image):
+            value = ImageTk.PhotoImage(value)
+        else:
+            value = PhotoImage(file=value)
+        self._label.config(image=value)
 
     def __call__(self, *args, **kwds):
-        parent_node = args[0].element()
+        parent_node = args[0].element
         params = {}
-        if self._text is not None:
-            params['text'] = self._text
+        if self._attr.text.get() is not None:
+            params['text'] = self._attr.text.get()
+        if self._attr.image.get() is not None:
+            params['image'] = ImageTk.PhotoImage(Image.open(self._attr.image.get()))
+
         self._label = tk.Label(parent_node, **params)
+        self._attr.text.watch(lambda value: self._label.config(text=value))
+        self._attr.image.watch(lambda value: self.setImage(value))
+
         layout_params = {
-            'row': self._gridy, 
-            'column': self._gridx,
-            'padx': self._padx,
-            'pady': self._pady,
-            'rowspan': self._spany,
-            'columnspan': self._spanx,
-            'sticky': self._stick
+            'row': self._attr.gridy.get(), 
+            'column': self._attr.gridx.get(),
+            'padx': self._attr.padx.get(),
+            'pady': self._attr.pady.get(),
+            'rowspan': self._attr.spany.get(),
+            'columnspan': self._attr.spanx.get(),
+            'sticky': self._attr.stick.get()
         }
 
         self._label.grid(**layout_params)

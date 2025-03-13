@@ -7,11 +7,12 @@ from antgo.pipeline.hparam import HyperParameter as State
 from antgo.pipeline.hparam import param_scope
 from antgo.pipeline.hparam import dynamic_dispatch
 from antgo.pipeline.functional.common.config import *
+from antgo.pipeline.ui.smart.data import *
 import numpy as np
 import json
 import os
 import tkinter as tk  
-from tkinter import messagebox
+
 
 
 @dynamic_dispatch
@@ -27,6 +28,7 @@ def tk_env(*args, **kwargs):
         def loop(self):
             self.root.mainloop()
 
+        @property
         def element(self):
            return self.root
 
