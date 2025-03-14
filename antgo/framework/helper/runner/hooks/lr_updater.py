@@ -15,9 +15,6 @@ class LrUpdaterHook(Hook):
             lasts
         warmup_ratio (float): LR used at the beginning of warmup equals to
             warmup_ratio * initial_lr
-        warmup_by_epoch (bool): When warmup_by_epoch == True, warmup_iters
-            means the number of epochs that warmup lasts, otherwise means the
-            number of iteration that warmup lasts
     """
 
     def __init__(self,

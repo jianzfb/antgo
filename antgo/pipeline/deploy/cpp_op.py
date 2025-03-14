@@ -25,8 +25,15 @@ class CppOp(object):
                     self.args[i] = kwargs.get(var_name)
         else:
             # 类类型算子
+            # self.kwargs = kwargs
+            # self.args = [None] * len(self.func.func.arg_names)
+            self.args = list(args) + [None] * (len(self.func.func.arg_names)-len(args))
+            for i, (var_name, var_type) in enumerate(zip(self.func.func.arg_names, self.func.func.arg_types)):
+                if kwargs.get(var_name, None) is not None and var_type.is_const:
+                    self.args[i] = kwargs.get(var_name)
+                    kwargs.pop(var_name)
+            
             self.kwargs = kwargs
-            self.args = [None] * len(self.func.func.arg_names)
 
     def __call__(self, *args):
         # 输入数据部分
