@@ -21,12 +21,13 @@ def logger_training_info(trainer):
     if logger_canvas is None:
         return
 
-    for log_key, log_value in zip(trainer.loss_names, trainer.loss_items):
-        log_value = (float)(log_value.cpu().numpy())
-        if log_key not in logger_names:
-            setattr(logger_canvas, log_key, mlogger.complex.Line(plot_title=log_key, is_series=True))
-            logger_names.append(log_key)
-        getattr(logger_canvas, log_key).update(log_value)
+    if len(trainer.loss_names) > 1:
+        for log_key, log_value in zip(trainer.loss_names, trainer.loss_items):
+            log_value = (float)(log_value.cpu().numpy())
+            if log_key not in logger_names:
+                setattr(logger_canvas, log_key, mlogger.complex.Line(plot_title=log_key, is_series=True))
+                logger_names.append(log_key)
+            getattr(logger_canvas, log_key).update(log_value)
 
     if 'loss' not in logger_names:
         setattr(logger_canvas, 'loss', mlogger.complex.Line(plot_title='loss', is_series=True))
@@ -62,12 +63,34 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None, **kwarg
 
     # 构建模型
     model_name = cfg.get('model', None)
-    assert(model_name is not None)
     data = cfg.get('data', None)
-    assert(data is not None)
+    if data is None:
+        print('Must set data config.')
+        return
+
+    if model_name is None:
+        model_name = pretrained_model
+    if model_name is None:
+        print('Must set yolo model name')
+        return
+
+    # 解析模型类别（det,cls,seg,pose,obb）
+    model_category = 'det'
+    if 'cls' in model_name:
+        model_category = 'cls'
+    elif 'seg' in model_name:
+        model_category = 'seg'
+    elif 'pose' in model_name:
+        model_category = 'pose'
+    elif 'obb' in model_name:
+        model_category = 'obb'
+    else:
+        model_category = 'det'
+
+    # 构建模型
     model = None
-    if pretrained_model is not None and pretrained_model != '':
-        model = YOLO(pretrained_model)
+    if model_name.endswith('.pt') or model_name.endswith('.yaml'):
+        model = YOLO(model_name)
     else:
         model = YOLO(f'{model_name}.yaml')
 
@@ -75,20 +98,23 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None, **kwarg
     model.add_callback('on_batch_end', func=logger_training_info)
 
     # 启动训练
-    data_path = data.get('path', None)
-    with open(data_path, 'r') as fp:
-        data_info = yaml.safe_load(fp)
-    data_info['path'] = os.path.dirname(os.path.abspath(data_path))
-    with open('./data.yaml', 'w') as fp:
-        yaml.safe_dump(data_info, fp)
+    # 对于分类模型，不需要数据集配置文件
+    if model_category != 'cls':
+        data_path = data.get('path', None)
+        with open(data_path, 'r') as fp:
+            data_info = yaml.safe_load(fp)
+        data_info['path'] = os.path.dirname(os.path.abspath(data_path))
+        with open('./data.yaml', 'w') as fp:
+            yaml.safe_dump(data_info, fp)
 
+    # 解析模型训练必须参数，图像大小，批处理大小
     data_imgsz = data.get('imgsz', 640)
     batch_size = data.get('batch_size', 32)
     workers = data.get('workers', 1)
 
     device = [int(k) for k in gpu_id.split(',')]
     results = model.train(
-        data='./data.yaml', 
+        data='./data.yaml' if model_category != 'cls' else data.get('path', None), 
         epochs=cfg.get('max_epochs', 100), 
         imgsz=data_imgsz, 
         device=device,

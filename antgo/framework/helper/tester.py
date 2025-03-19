@@ -177,6 +177,10 @@ class Tester(object):
 
         # 上传测试报告到日志平台
         if self.use_exp_manage:
+            # 激活试验管理
+            pass
+        
+        if self.use_exp_manage and mlogger.is_ready():
             report = {
                 self.checkpoint_name: {
                     'measure': []

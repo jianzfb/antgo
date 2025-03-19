@@ -101,6 +101,10 @@ class Exporter(object):
         )
 
         if self.use_exp_manage:
+            # 激活试验管理
+            pass
+
+        if self.use_exp_manage and mlogger.is_ready():
             file_logger = mlogger.Container()
             file_logger.onnx_file = mlogger.FileLogger('onnx', 'aliyun')
             file_logger.onnx_file.update(os.path.join(self.work_dir, f'{prefix}.onnx'))

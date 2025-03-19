@@ -152,7 +152,7 @@ class CocoWholeBodyDataset(BaseCocoStyleDataset):
 if __name__ == "__main__":
     # metainfo='/workspace/project/mmpose/configs/_base_/datasets/beta_mediapipe33.py',
     aa = CocoWholeBodyDataset(
-        dir='/workspace/dataset/human_keypoints/coco-wholebody', 
+        dir='/workspace/dataset/human2d/coco-wholebody', 
         ann_file='annotations/coco_wholebody_train_v1.0.json',
         data_prefix=dict(img='coco-wholebody/train2017/'),
     )

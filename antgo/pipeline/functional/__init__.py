@@ -87,6 +87,22 @@ def txt_dc(*args):
 
 
 @dynamic_dispatch
+def line_dc(*args):
+  index = param_scope()._index
+
+  global_entity = Entity()
+  def inner():
+    for json_path in args:
+      with open(json_path, 'r') as fp:
+        string = fp.readline().strip()
+        while string:
+            yield global_entity(**{index: string})
+            string = fp.readline().strip()
+
+  return DataFrame(inner())
+
+
+@dynamic_dispatch
 def video_dc(*args):
     index = param_scope()._index
     if not isinstance(index, tuple):
