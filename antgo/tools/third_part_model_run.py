@@ -53,6 +53,8 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None, **kwarg
     from ultralytics import YOLO
 
     project = cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
+    if exp_name is None or exp_name == '':
+        exp_name = 'yolo'
     if not kwargs.get('no_manage', False):
         # 创建dashboard        
         create_project_in_dashboard(project, exp_name, False)
