@@ -230,7 +230,7 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size
     # 对于单机多卡模式，可以自定义指定GPU编号
     apply_gpu_id = [str(i) for i in range(gpu_num)]
     if len(target_machine_info_list) == 1:
-        candidate_gpu_ids = [int(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
+        candidate_gpu_ids = [int(gpu_id) for gpu_id in target_machine_info_list[0]['gpus']]
         apply_gpu_id = []
         for gd in gpu_ids:
             if gd in candidate_gpu_ids:
@@ -433,17 +433,20 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cp
     # 对于单机多卡模式，可以自定义指定GPU编号
     apply_gpu_id = [str(i) for i in range(gpu_num)]
     if len(target_machine_info_list) == 1:
-        candidate_gpu_ids = [int(target_machine_info_list[0]['gpus'][i]) for i in range(gpu_num)]
+        candidate_gpu_ids = [int(gpu_id) for gpu_id in target_machine_info_list[0]['gpus']]
+        print(f'Candidate GPU-ID {candidate_gpu_ids}')
         apply_gpu_id = []
         for gd in gpu_ids:
             if gd in candidate_gpu_ids:
                 apply_gpu_id.append(str(gd))
-        
+
         if len(apply_gpu_id) != gpu_num:
             logging.error(f"gpus {gpu_ids} not all free")
             return
     apply_gpu_id = ','.join(apply_gpu_id)
 
+    # 申请GPU-ID
+    print(f'Apply GPU-ID {apply_gpu_id}')
     image_name = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest' # 基础镜像
     if base_image is not None and base_image != '':
         image_name = base_image
@@ -466,6 +469,8 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cp
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
     if not is_inner_launch:
         exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
+    # 设置CUDA可见性，第三方yolo框架，缺少精确控制设备能力
+    exe_script = f'export CUDA_VISIBLE_DEVICES={apply_gpu_id}; {exe_script}'
     submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{exe_script}" {image_name} {project_name} {env} {submit_time}'
 
     # 解析提交后的输出，并解析出container id
