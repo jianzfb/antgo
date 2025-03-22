@@ -258,13 +258,15 @@ class BaseCocoStyleDataset(Dataset):
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,
             'iscrowd': ann.get('iscrowd', 0),
-            'segmentation': segmentation,
             'id': ann['id'],
             'category_id': np.array([ann.get('category_id',1)]),
             # store the raw annotation of the instance
             # it is useful for evaluation without providing ann_file
             'raw_ann_info': copy.deepcopy(ann),
         }
+
+        if segmentation is not None:
+            data_info['segmentation'] = segmentation
 
         if 'crowdIndex' in img:
             data_info['crowd_index'] = img['crowdIndex']
@@ -492,6 +494,8 @@ class BaseCocoStyleDataset(Dataset):
                     obj_seg_infos = [obj_seg_infos]
 
                 for obj_i, seg_info in enumerate(obj_seg_infos):
+                    if seg_info is None:
+                        continue
                     if 'counts' in seg_info and isinstance(seg_info['counts'], list):
                         # rle格式存储(非压缩)
                         rle = seg_info
@@ -511,7 +515,8 @@ class BaseCocoStyleDataset(Dataset):
                             cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
                         obj_seg_list.append(segmentation)
 
-                data['segmentation'] = obj_seg_list[0] if len(obj_seg_list) == 1 else np.concatenate(obj_seg_list, 0)
+                if len(obj_seg_list) > 0:
+                    data['segmentation'] = obj_seg_list[0] if len(obj_seg_list) == 1 else np.concatenate(obj_seg_list, 0)
 
             data['image'] = image
             data['image_meta'] = {

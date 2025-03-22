@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, '/workspace/.3rd/antgo')
 import copy
 import os.path as osp
 from typing import Optional
@@ -141,13 +143,15 @@ class CocoWholeBodyDataset(BaseCocoStyleDataset):
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,
             'iscrowd': ann.get('iscrowd', 0),
-            'segmentation': segmentation,
             'id': ann['id'],
             'category_id': np.array([ann.get('category_id', 1)]),
             # store the raw annotation of the instance
             # it is useful for evaluation without providing ann_file
             'raw_ann_info': copy.deepcopy(ann),
         }
+
+        if segmentation is not None:
+            data_info['segmentation'] = segmentation
 
         return data_info
 

@@ -130,11 +130,14 @@ class JhmdbDataset(BaseCocoStyleDataset):
             'keypoints': keypoints,
             'keypoints_visible': keypoints_visible,
             'iscrowd': ann.get('iscrowd', 0),
-            'segmentation': ann.get('segmentation', None),
             'id': ann['id'],
             'category_id': np.array([ann.get('category_id', 1)]),
             'raw_ann_info': copy.deepcopy(ann),
         }
+
+        segmentation = ann.get('segmentation', None)
+        if segmentation is not None:
+            data_info['segmentation'] = segmentation
 
         return data_info
 
