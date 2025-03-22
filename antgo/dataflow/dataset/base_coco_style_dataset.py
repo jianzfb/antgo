@@ -228,22 +228,25 @@ class BaseCocoStyleDataset(Dataset):
         # 实例分割图
         segmentation = None
         if 'segmentation' in ann:
-            if 'counts' in ann['segmentation'] and isinstance(ann['segmentation']['counts'], list):
-                # rle格式存储(非压缩)
-                rle = ann['segmentation']
-                compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
-                segmentation = mask_util.decode(compressed_rle)
-            elif 'counts' in ann['segmentation']:
-                # rle格式存储(压缩)
-                compressed_rle = ann['segmentation']
-                segmentation = mask_util.decode([compressed_rle])
-                segmentation = segmentation[:,:,0]
-            else:
-                # ply格式存储
-                polys = ann['segmentation']
-                segmentation = np.zeros((img_h, img_w), dtype=np.uint8)
-                for i in range(len(polys)):
-                    cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
+            # 直到读取时，才进行分割解析
+            segmentation = ann['segmentation']
+            # 分割结果解析
+            # if 'counts' in ann['segmentation'] and isinstance(ann['segmentation']['counts'], list):
+            #     # rle格式存储(非压缩)
+            #     rle = ann['segmentation']
+            #     compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
+            #     segmentation = mask_util.decode(compressed_rle)
+            # elif 'counts' in ann['segmentation']:
+            #     # rle格式存储(压缩)
+            #     compressed_rle = ann['segmentation']
+            #     segmentation = mask_util.decode([compressed_rle])
+            #     segmentation = segmentation[:,:,0]
+            # else:
+            #     # ply格式存储
+            #     polys = ann['segmentation']
+            #     segmentation = np.zeros((img_h, img_w), dtype=np.uint8)
+            #     for i in range(len(polys)):
+            #         cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
 
         data_info = {
             'img_id': ann['image_id'],
@@ -477,7 +480,39 @@ class BaseCocoStyleDataset(Dataset):
                 idx = self._rand_another()
                 continue
 
+            # 读取图像
             image = cv2.imread(osp.join(self.dir, data['img_path']))
+            img_h, img_w = image.shape[:2]
+
+            # 解析目标分割
+            if 'segmentation' in data:
+                obj_seg_list = []
+                obj_seg_infos = data['segmentation']
+                if self.data_mode == 'topdown':
+                    obj_seg_infos = [obj_seg_infos]
+
+                for obj_i, seg_info in enumerate(obj_seg_infos):
+                    if 'counts' in seg_info and isinstance(seg_info['counts'], list):
+                        # rle格式存储(非压缩)
+                        rle = seg_info
+                        compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
+                        obj_seg_list.append(mask_util.decode(compressed_rle))
+                    elif 'counts' in seg_info:
+                        # rle格式存储(压缩)
+                        compressed_rle = seg_info
+                        segmentation = mask_util.decode([compressed_rle])
+                        segmentation = segmentation[:,:,0]
+                        obj_seg_list.append(segmentation)
+                    else:
+                        # ply格式存储
+                        polys = seg_info
+                        segmentation = np.zeros((img_h, img_w), dtype=np.uint8)
+                        for i in range(len(polys)):
+                            cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
+                        obj_seg_list.append(segmentation)
+
+                data['segmentation'] = obj_seg_list[0] if len(obj_seg_list) == 1 else np.concatenate(obj_seg_list, 0)
+
             data['image'] = image
             data['image_meta'] = {
                 'ori_image_shape': image.shape[:2]

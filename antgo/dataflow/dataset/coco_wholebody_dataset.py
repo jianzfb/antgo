@@ -111,22 +111,25 @@ class CocoWholeBodyDataset(BaseCocoStyleDataset):
         # 实例分割图
         segmentation = None
         if 'segmentation' in ann:
-            if 'counts' in ann['segmentation'] and isinstance(ann['segmentation']['counts'], list):
-                # rle格式存储(非压缩)
-                rle = ann['segmentation']
-                compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
-                segmentation = mask_util.decode(compressed_rle)
-            elif 'counts' in ann['segmentation']:
-                # rle格式存储(压缩)
-                compressed_rle = ann['segmentation']
-                segmentation = mask_util.decode([compressed_rle])
-                segmentation = segmentation[:,:,0]
-            else:
-                # ply格式存储
-                polys = ann['segmentation']
-                segmentation = np.zeros((img_h, img_w), dtype=np.uint8)
-                for i in range(len(polys)):
-                    cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
+            # 直到读取时，才进行分割解析
+            segmentation = ann['segmentation']
+            # 分割结果解析
+            # if 'counts' in ann['segmentation'] and isinstance(ann['segmentation']['counts'], list):
+            #     # rle格式存储(非压缩)
+            #     rle = ann['segmentation']
+            #     compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
+            #     segmentation = mask_util.decode(compressed_rle)
+            # elif 'counts' in ann['segmentation']:
+            #     # rle格式存储(压缩)
+            #     compressed_rle = ann['segmentation']
+            #     segmentation = mask_util.decode([compressed_rle])
+            #     segmentation = segmentation[:,:,0]
+            # else:
+            #     # ply格式存储
+            #     polys = ann['segmentation']
+            #     segmentation = np.zeros((img_h, img_w), dtype=np.uint8)
+            #     for i in range(len(polys)):
+            #         cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
 
         data_info = {
             'img_id': ann['image_id'],
@@ -154,7 +157,7 @@ if __name__ == "__main__":
     aa = CocoWholeBodyDataset(
         dir='/workspace/dataset/human2d/coco-wholebody', 
         ann_file='annotations/coco_wholebody_train_v1.0.json',
-        data_prefix=dict(img='coco-wholebody/train2017/'),
+        data_prefix=dict(img='train2017/'),
     )
     num = len(aa)
     for i in range(num):
