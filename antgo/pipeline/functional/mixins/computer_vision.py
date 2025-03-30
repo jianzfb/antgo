@@ -296,7 +296,8 @@ class ComputerVisionMixin:
             out.write(data)
             frame_count += 1
 
-        out.release()
+        if out is not None:
+            out.release()
         return output_path
 
     def to_json(self, path):

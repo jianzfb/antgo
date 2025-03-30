@@ -35,7 +35,7 @@ with GroupRegister['layout_image_path', 'layout_info']('layoutg') as layoutg_gro
         )
 
 
-with GroupRegiste[('image_path', 'layout_info'), 'sync_out']('syncg') as syncg_group:
+with GroupRegister[('image_path', 'layout_info'), 'sync_out']('syncg') as syncg_group:
     syncg_group.image_decode.sync_op.save_sync_info_op(
         [
             {

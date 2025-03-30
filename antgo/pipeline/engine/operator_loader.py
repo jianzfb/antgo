@@ -402,6 +402,9 @@ class OperatorLoader:
                         self.load_operator_from_control,
                         self.load_operator_from_robot,
                         self.load_operator_from_ui]:
+            # 忽略group_by参数（仅在编译C++模块时启用）
+            if 'group_by' in kws:
+                kws.pop('group_by')
             op = factory(function, arg, kws, tag)
             if op is not None:
                 return op

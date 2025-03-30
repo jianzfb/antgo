@@ -139,9 +139,12 @@ class GroupDef(object):
             group_op_list.append(self.op_creator_map[op_category])
             group_args_list.append((op_name, op_param))
 
+        # relation
+        self.op_relation = relation
+
         # 动态创建类
         group_name = self.name
-        group_op_relation = relation
+        group_op_relation = self.op_relation
         group_op_input = self.op_input
         group_op_output = self.op_output
         group_cls = \

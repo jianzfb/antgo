@@ -243,8 +243,13 @@ class ConvertRandomObjJointsAndOffset(BaseOperator):
         tmp_size = self._sigma * 2  # self._sigma * 4
 
         for i in range(num_joints):
-            if jonits_vis[i,0] == 0:
-                continue
+            if jonits_vis[i].size == 1:
+                if jonits_vis[i] == 0:
+                    continue
+            else:
+                if jonits_vis[i,0] * jonits_vis[i,1] == 0:
+                    continue
+
             mu_x = int(joints_25d[i, 0] / _feat_stride[0] + 0.5)
             mu_y = int(joints_25d[i, 1] / _feat_stride[1] + 0.5)
             fmu_x = joints_25d[i, 0] / _feat_stride[0]
@@ -523,6 +528,13 @@ class ConvertRandomObjJoints25DAndOffset(ConvertRandomObjJointsAndOffset):
         offset_y = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
         tmp_size = 4  # self._sigma * 4
         for i in range(num_joints):
+            if jonits_vis[i].size == 1:
+                if jonits_vis[i] == 0:
+                    continue
+            else:
+                if jonits_vis[i,0] * jonits_vis[i,1] == 0:
+                    continue
+
             mu_x = int(joints_25d[i, 0] / _feat_stride[0] + 0.5)
             mu_y = int(joints_25d[i, 1] / _feat_stride[1] + 0.5)
             fmu_x = joints_25d[i, 0] / _feat_stride[0]
@@ -730,7 +742,7 @@ class UnSqueeze(BaseOperator):
 
 # FINISH FIX
 class KeepRatio(BaseOperator):
-    def __init__(self, aspect_ratio=1, focus_on_center=False, focus_on_objects=False,inputs=None):
+    def __init__(self, aspect_ratio=1, focus_on_center=False, focus_on_objects=False, inputs=None):
         super(KeepRatio, self).__init__(inputs=inputs)
         self.aspect_ratio = aspect_ratio
         self.focus_on_objects = focus_on_objects
@@ -871,6 +883,11 @@ class KeepRatio(BaseOperator):
     def __call__(self, sample, context=None):
         im = sample['image']
         height, width = im.shape[:2]
+        if 'image_meta' not in sample:
+            sample['image_meta'] = {}
+
+        sample['image_meta']['image_shape'] = (height, width)
+        sample['image_meta']['offset'] = [0, 0] * 2
         cur_ratio = width / height
         if abs(cur_ratio - self.aspect_ratio) > 0.000001:
             sample = self._random_crop_or_padding_image(sample)
@@ -2143,11 +2160,10 @@ class ResizeS(BaseOperator):
         w = sample['image'].shape[1]
         h = sample['image'].shape[0]
         resize_w, resize_h = self.target_dim
-        
-        if w == self.target_dim[0] and h == self.target_dim[1]:
-            if 'image_meta' not in sample:
-                sample['image_meta'] = {}
+        if 'image_meta' not in sample:
+            sample['image_meta'] = {}
 
+        if w == self.target_dim[0] and h == self.target_dim[1]:
             sample['height'] = resize_h
             sample['width'] = resize_w
             sample['image_meta']['image_shape'] = (resize_h, resize_w)
@@ -2190,9 +2206,6 @@ class ResizeS(BaseOperator):
         if 'segments' in sample and sample['segments'].size != 0:
             sample['segments'] = \
                 cv2.resize(sample['segments'], (resize_w, resize_h), interpolation=cv2.INTER_NEAREST)
-
-        if 'image_meta' not in sample:
-            sample['image_meta'] = {}
 
         sample['image_meta']['image_shape'] = (resize_h, resize_w)
         sample['image_meta']['scale_factor'] =  [scale_x, scale_y] * 2

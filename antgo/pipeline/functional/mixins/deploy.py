@@ -1625,8 +1625,8 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
             'c++_type': 'std::map<std::string, std::vector<std::string>>'
         },
         {
-            'input_shapes': ['{'+','.join(str(m) for m in n)+'}' for n in input_shapes],
-            'output_shapes': ['{'+','.join(str(m) for m in n)+'}' for n in output_shapes],
+            'input_shapes': ['{'+','.join(str(m) if m != 'None' else str(-1) for m in n)+'}' for n in input_shapes],
+            'output_shapes': ['{'+','.join(str(m) if m != 'None' else str(-1) for m in n)+'}' for n in output_shapes],
             'c++_type': 'std::map<std::string, std::vector<std::vector<float>>>'
         },
         {
@@ -1671,7 +1671,213 @@ def split_function(function_key_name_list):
     return function_list
 
 
-def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None, eagleeye_config={}):    
+def generate_asyn_node_code(group_graph_op_list, deploy_graph_info, group_input, group_output, is_asyn=True):
+    # prefix
+    op_graph_code = 'new AutoNode([&](){\n' if is_asyn else 'new ProxyNode([&](){\n'
+    op_graph_code += 'NNNode* nnnode = new NNNode();\n'
+    op_graph_code += 'dataflow::Graph* op_graph = nnnode->getOpGraph();\n'
+
+    circle_node_list = []
+    deploy_output_data_name_inv_link = {}
+    # 创建算子(有序)
+    for deploy_op_name in group_graph_op_list:
+        deploy_op_info = deploy_graph_info[deploy_op_name]
+        if 'template' in deploy_op_info:
+            node_cls_type = f'{deploy_op_info["type"]}{deploy_op_info["template"]}'
+            is_circle = "true" if deploy_op_name in circle_node_list else "false"
+            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
+        else:
+            node_cls_type = f'{deploy_op_info["type"]}'
+            is_circle = "true" if deploy_op_name in circle_node_list else "false"
+            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
+
+        deploy_op_args_tuple = deploy_op_info['args']
+        if isinstance(deploy_op_args_tuple, dict):
+            deploy_op_args_tuple = (deploy_op_args_tuple,)
+
+        for deploy_op_args in deploy_op_args_tuple:
+            arg_code = ''
+            for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
+                if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                    op_graph_code += f'{deploy_arg_list}\n'
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                    continue
+
+                if deploy_arg_name != 'c++_type':
+                    if arg_code == '':
+                        arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                    else:
+                        arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+
+            if 'c++_type' in deploy_op_args:
+                args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
+                op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
+
+        # print(deploy_op_info['output'])
+        for data_i, data_name in enumerate(deploy_op_info['output']):
+            if data_name not in deploy_output_data_name_inv_link:
+                deploy_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
+
+    # 创建占位算子（graph输入）
+    for data_i, data_name in enumerate(group_input):
+        deploy_op_name = f'placeholder_op_{data_i}'
+        op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<PlaceholderOp>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), false);\n'
+        deploy_output_data_name_inv_link[data_name] = (deploy_op_name, 0)
+
+    # 创建算子连接关系(有序)
+    for deploy_op_name in group_graph_op_list:
+        deploy_op_info = deploy_graph_info[deploy_op_name]
+        if deploy_op_info['input'] is not None:
+            for input_data_i, input_data_name in enumerate(deploy_op_info['input']):
+                if input_data_name is not None and input_data_name in deploy_output_data_name_inv_link:
+                    from_op_name, from_op_out_i = deploy_output_data_name_inv_link[input_data_name]
+                    op_graph_code += f'op_graph->bind("{from_op_name}", {from_op_out_i}, "{deploy_op_name}", {input_data_i});\n'
+
+        # 考虑回环结构
+        if deploy_op_info['output'] is not None:
+            for output_data_i, output_data_name in enumerate(deploy_op_info['output']):
+                if output_data_name in deploy_output_data_name_inv_link and deploy_output_data_name_inv_link[output_data_name][0] != deploy_op_name:
+                    to_op_name, to_op_out_i = deploy_output_data_name_inv_link[output_data_name]
+                    op_graph_code += f'op_graph->bind("{deploy_op_name}", {output_data_i}, "{to_op_name}", {to_op_out_i});\n'
+
+    # 初始化计算图
+    op_graph_code += 'op_graph->init(NULL);\n'
+
+    graph_in_ops = '{'+','.join(['"'+deploy_output_data_name_inv_link[name][0]+'"' for name in group_input])+'}'
+    graph_out_ops = '{'+','.join(['{"'+deploy_output_data_name_inv_link[name][0]+'",'+str(deploy_output_data_name_inv_link[name][1])+'}' for name in group_output])+'}'
+    op_graph_code += f"nnnode->analyze({graph_in_ops}, {graph_out_ops});\n"
+    op_graph_code += 'for(size_t i=0; i<'+str(len(group_output))+'; ++i){\n'
+    op_graph_code += '  nnnode->makeOutputSignal(i, "EAGLEEYE_SIGNAL_TENSOR");'
+    op_graph_code += '}\n'
+    op_graph_code += 'return nnnode;\n'
+
+    # suffix
+    op_graph_code += '}, 5),' if is_asyn else '}),'
+    return op_graph_code, deploy_output_data_name_inv_link
+
+
+def generate_multi_nnnode_pipeline(graph_op_list, graph_op_info, graph_import_outs, graph_export_outs, is_asyn=False):
+    group_list = []
+    group_info_map = {}
+    group_op_map = {}
+    for op_name in graph_op_list:
+        op_info = graph_op_info[op_name]
+        if op_info['type'] == 'PlaceholderOp':
+            continue
+
+        group_name = 'default'
+        for arg_info in op_info['args']:
+            if 'group_by' in arg_info:
+                group_name = arg_info['group_by'][0].replace('"', '')
+                arg_info.pop('group_by')
+                break
+        if group_name not in group_list:
+            group_list.append(group_name)
+        if group_name not in group_info_map:
+            group_info_map[group_name] = {}
+            group_op_map[group_name] = []
+
+        group_info_map[group_name][op_name] = op_info
+        group_op_map[group_name].append(op_name)
+
+    if 'default' in group_info_map and len(group_info_map) > 1:
+        print('default group couldnt exist with developer set customized group_by')
+        return None
+
+    cpp_code = ''
+    global_inputs_map = {}
+    global_outputs_map = {}
+    global_data_inv_link = {}
+    for group_name in group_list:
+        # group nodes
+        # 发现group input and group output
+        group_input_list = []
+        group_output_list = []
+
+        input_list = []
+        output_list = []
+        for op_name in group_op_map[group_name]:
+            op_info = group_info_map[group_name][op_name]
+            input_info = op_info['input']
+            output_info = op_info['output']
+
+            for output_name in output_info:
+                if output_name not in output_list:
+                    output_list.append(output_name)
+
+            for input_name in input_info:
+                if input_name not in input_list:
+                    input_list.append(input_name)
+
+        for input_name in input_list:
+            if input_name not in output_list:
+                group_input_list.append(input_name)
+        for output_name in output_list:
+            if output_name not in input_list:
+                group_output_list.append(output_name)
+
+        # 
+        global_inputs_map[group_name] = group_input_list
+        global_outputs_map[group_name] = group_output_list
+
+        # 生成node C++ 代码
+        code, data_inv_link = generate_asyn_node_code(group_op_map[group_name], group_info_map[group_name], group_input_list, group_output_list, is_asyn)
+
+        cpp_code += code 
+        global_data_inv_link[group_name] = data_inv_link
+
+    # 去除末尾逗号
+    cpp_code = cpp_code[:-1]
+
+    group_in_links = ''       # 记录管线与nnnodes group的链接
+    group_out_links = ''
+    for import_name, _ in graph_import_outs:
+        group_in_links += '{'
+        for group_name in group_list:
+            is_found = False
+            if import_name in global_inputs_map[group_name]:
+                data_i = global_inputs_map[group_name].index(import_name)
+                group_in_links += '{'+'"'+group_name+'",'+str(data_i)+'},'
+                is_found = True
+            if is_found:
+                group_in_links = group_in_links[:-1]
+
+        group_in_links += '},'
+    group_in_links = group_in_links[:-1]
+
+    for export_name, _ in graph_export_outs:
+        # 判断来自于哪个group的第几个输出
+        for group_name in group_list:
+            if export_name in global_outputs_map[group_name]:
+                data_i = global_outputs_map[group_name].index(export_name)
+                group_out_links += '{'+'"'+group_name+'",'+str(data_i)+'},'
+
+    group_between_from_links = ''
+    group_between_to_links = ''
+    for from_group_i in range(len(group_list)):
+        from_group_name = group_list[from_group_i]
+        for to_group_i in range(from_group_i+1, len(group_list)):
+            to_group_name = group_list[to_group_i]
+            union_set = set(global_outputs_map[from_group_name])&set(global_inputs_map[to_group_name])
+            if len(union_set) > 0:
+                for union_name in union_set:
+                    from_i = global_outputs_map[from_group_name].index(union_name)
+                    to_i = global_inputs_map[to_group_name].index(union_name)
+                    group_between_from_links += '{'+'"'+from_group_name+'",'+str(from_i)+'},'
+                    group_between_to_links += '{'+'"'+to_group_name+'",'+str(to_i)+'},'
+
+    group_out_links = group_out_links[:-1]
+    group_between_from_links = group_between_from_links[:-1]
+    group_between_to_links = group_between_to_links[:-1]
+
+    group_names = ','.join(['"'+n+'"' for n in group_list])
+    return cpp_code, group_names, group_in_links, group_out_links, (group_between_from_links, group_between_to_links)
+
+
+def package_build(output_folder, eagleeye_path, project_config, platform, abi=None, generate_demo_code=True, mode=None, call_mode='sync', eagleeye_config={}):    
     project_name = project_config["name"]
     pipeline_name = project_name
     if '/' in project_name:
@@ -1957,72 +2163,91 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     for f in t:
         include_list += f'#include "{f}"\n'
 
-    # 创建算子(有序)
-    op_graph_code = ''
-    deploy_output_data_name_inv_link = {}
-    for deploy_op_name in order_graph_op_list:
-        deploy_op_info = deploy_graph_info[deploy_op_name]
-        if 'template' in deploy_op_info:
-            node_cls_type = f'{deploy_op_info["type"]}{deploy_op_info["template"]}'
-            is_circle = "true" if deploy_op_name in circle_node_list else "false"
-            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
-        else:
-            node_cls_type = f'{deploy_op_info["type"]}'
-            is_circle = "true" if deploy_op_name in circle_node_list else "false"
-            op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
+    # # 创建算子(有序)
+    # op_graph_code = ''
+    # deploy_output_data_name_inv_link = {}
+    # for deploy_op_name in order_graph_op_list:
+    #     deploy_op_info = deploy_graph_info[deploy_op_name]
+    #     if 'template' in deploy_op_info:
+    #         node_cls_type = f'{deploy_op_info["type"]}{deploy_op_info["template"]}'
+    #         is_circle = "true" if deploy_op_name in circle_node_list else "false"
+    #         op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
+    #     else:
+    #         node_cls_type = f'{deploy_op_info["type"]}'
+    #         is_circle = "true" if deploy_op_name in circle_node_list else "false"
+    #         op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
 
-        deploy_op_args_tuple = deploy_op_info['args']
-        if isinstance(deploy_op_args_tuple, dict):
-            deploy_op_args_tuple = (deploy_op_args_tuple,)
+    #     deploy_op_args_tuple = deploy_op_info['args']
+    #     if isinstance(deploy_op_args_tuple, dict):
+    #         deploy_op_args_tuple = (deploy_op_args_tuple,)
 
-        for deploy_op_args in deploy_op_args_tuple:
-            arg_code = ''
-            for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
-                if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
-                    op_graph_code += f'{deploy_arg_list}\n'
-                    if arg_code == '':
-                        arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                    else:
-                        arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-                    continue
+    #     for deploy_op_args in deploy_op_args_tuple:
+    #         arg_code = ''
+    #         for deploy_arg_name, deploy_arg_list in deploy_op_args.items():
+    #             if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+    #                 op_graph_code += f'{deploy_arg_list}\n'
+    #                 if arg_code == '':
+    #                     arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+    #                 else:
+    #                     arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+    #                 continue
 
-                if deploy_arg_name != 'c++_type':
-                    if arg_code == '':
-                        arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
-                    else:
-                        arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+    #             if deploy_arg_name != 'c++_type':
+    #                 if arg_code == '':
+    #                     arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+    #                 else:
+    #                     arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-            if 'c++_type' in deploy_op_args:
-                args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
-                op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
+    #         if 'c++_type' in deploy_op_args:
+    #             args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
+    #             op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
 
-        print(deploy_op_info['output'])
-        for data_i, data_name in enumerate(deploy_op_info['output']):
-            if data_name not in deploy_output_data_name_inv_link:
-                deploy_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
+    #     print(deploy_op_info['output'])
+    #     for data_i, data_name in enumerate(deploy_op_info['output']):
+    #         if data_name not in deploy_output_data_name_inv_link:
+    #             deploy_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
 
-    # 创建算子连接关系(有序)
-    for deploy_op_name in order_graph_op_list:
-        deploy_op_info = deploy_graph_info[deploy_op_name]
-        if deploy_op_info['input'] is not None:
-            for input_data_i, input_data_name in enumerate(deploy_op_info['input']):
-                if input_data_name is not None:
-                    from_op_name, from_op_out_i = deploy_output_data_name_inv_link[input_data_name]
-                    op_graph_code += f'op_graph->bind("{from_op_name}", {from_op_out_i}, "{deploy_op_name}", {input_data_i});\n'
+    # # 创建算子连接关系(有序)
+    # for deploy_op_name in order_graph_op_list:
+    #     deploy_op_info = deploy_graph_info[deploy_op_name]
+    #     if deploy_op_info['input'] is not None:
+    #         for input_data_i, input_data_name in enumerate(deploy_op_info['input']):
+    #             if input_data_name is not None:
+    #                 from_op_name, from_op_out_i = deploy_output_data_name_inv_link[input_data_name]
+    #                 op_graph_code += f'op_graph->bind("{from_op_name}", {from_op_out_i}, "{deploy_op_name}", {input_data_i});\n'
 
-        # 考虑回环结构
-        if deploy_op_info['output'] is not None:
-            for output_data_i, output_data_name in enumerate(deploy_op_info['output']):
-                if output_data_name in deploy_output_data_name_inv_link and deploy_output_data_name_inv_link[output_data_name][0] != deploy_op_name:
-                    to_op_name, to_op_out_i = deploy_output_data_name_inv_link[output_data_name]
-                    op_graph_code += f'op_graph->bind("{deploy_op_name}", {output_data_i}, "{to_op_name}", {to_op_out_i});\n'
+    #     # 考虑回环结构
+    #     if deploy_op_info['output'] is not None:
+    #         for output_data_i, output_data_name in enumerate(deploy_op_info['output']):
+    #             if output_data_name in deploy_output_data_name_inv_link and deploy_output_data_name_inv_link[output_data_name][0] != deploy_op_name:
+    #                 to_op_name, to_op_out_i = deploy_output_data_name_inv_link[output_data_name]
+    #                 op_graph_code += f'op_graph->bind("{deploy_op_name}", {output_data_i}, "{to_op_name}", {to_op_out_i});\n'
 
-    # 初始化计算图
-    op_graph_code += 'op_graph->init(NULL);'
+    # # 初始化计算图
+    # op_graph_code += 'op_graph->init(NULL);'
 
-    # 构建插件源码
+    # # 构建插件源码
+    # plugin_code_template = 'plugin_code.cpp'
+    # if project_config.get('mode', 'server') == 'server':
+    #     plugin_code_template = 'server_plugin_code.cpp'
+    # eagleeye_plugin_code_content = \
+    #     gen_code(f'./templates/{plugin_code_template}')(        
+    #         project=pipeline_name,
+    #         version=project_config.get('version', '1.0.0.0'),
+    #         signature=project_config.get('signature', 'xxx'),
+    #         include_list=include_list,
+    #         in_port='{'+','.join([str(i) for i in range(len(project_config['input']))]) + '}',
+    #         in_signal='{'+','.join(['"'+info[-1]+'"' for info in project_config['input']])+'}',
+    #         out_port='{'+','.join([str(i) for i in range(len(project_config['output']))]) + '}',
+    #         out_signal=','.join(['"'+info[-1]+'"' for info in project_config['output']]),
+    #         graph_in_ops='{'+','.join(['"'+deploy_output_data_name_inv_link[info[0]][0]+'"' for info in project_config['input']])+'}',
+    #         graph_out_ops='{'+','.join(['{"'+deploy_output_data_name_inv_link[info[0]][0]+'",'+str(deploy_output_data_name_inv_link[info[0]][1])+'}' for info in project_config['output']])+'}',
+    #         op_graph=op_graph_code
+    #     )
+
+    nnnode_graph_code, group_names, group_in_links, group_out_links, group_between_links = generate_multi_nnnode_pipeline(order_graph_op_list, deploy_graph_info, project_config['input'], project_config['output'], call_mode=='asyn')
     plugin_code_template = 'plugin_code.cpp'
-    if project_config['mode'] == 'server':
+    if project_config.get('mode', 'server') == 'server':
         plugin_code_template = 'server_plugin_code.cpp'
     eagleeye_plugin_code_content = \
         gen_code(f'./templates/{plugin_code_template}')(        
@@ -2032,11 +2257,15 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             include_list=include_list,
             in_port='{'+','.join([str(i) for i in range(len(project_config['input']))]) + '}',
             in_signal='{'+','.join(['"'+info[-1]+'"' for info in project_config['input']])+'}',
-            out_port='{'+','.join([str(i) for i in range(len(project_config['output']))]) + '}',
-            out_signal=','.join(['"'+info[-1]+'"' for info in project_config['output']]),
-            graph_in_ops='{'+','.join(['"'+deploy_output_data_name_inv_link[info[0]][0]+'"' for info in project_config['input']])+'}',
-            graph_out_ops='{'+','.join(['{"'+deploy_output_data_name_inv_link[info[0]][0]+'",'+str(deploy_output_data_name_inv_link[info[0]][1])+'}' for info in project_config['output']])+'}',
-            op_graph=op_graph_code
+            # out_port='{'+','.join([str(i) for i in range(len(project_config['output']))]) + '}',
+            # out_signal=','.join(['"'+info[-1]+'"' for info in project_config['output']]),
+            nnnames='{'+group_names+'}',
+            is_asyn=1 if call_mode=='asyn' else 0,
+            in_links='{'+group_in_links+'}',
+            out_links='{'+group_out_links+'}',
+            from_links='{'+group_between_links[0]+'}',
+            to_links='{'+group_between_links[1]+'}',
+            node_graph=nnnode_graph_code
         )
 
     # TODO，如何解决之前生成的插件代码，完全冲掉问题（可能已经让开发者添加了部分代码）？
@@ -2056,7 +2285,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
 
             if is_found_start:
                 plugin_header_code_content += f'{code_line_content}\n'
-        
+
         is_found_start = False
         plugin_source_code_content = ''
         for code_line_content in eagleeye_plugin_code_content:
@@ -2068,7 +2297,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
 
             if is_found_start:
                 plugin_source_code_content += f'{code_line_content}\n'
-        
+
         # 解析已存在文件
         existed_plugin_content = ''
         is_found_plugin_header_start = False
@@ -2102,7 +2331,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                     continue
 
                 update_plugin_code_content += code_line_content
-        
+
         with open(os.path.join(output_folder, f'{pipeline_name}_plugin.cpp'), 'w') as fp:
             fp.write(update_plugin_code_content)
     else:
@@ -2799,6 +3028,7 @@ class DeployMixin:
             abi=abi_platform, 
             generate_demo_code=False if enable_project_mode else True,
             mode=project_config['mode'] if 'mode' in project_config else None,
+            call_mode=project_config.get('call_mode', 'sync'),
             eagleeye_config=eagleeye_config)
 
         # 更新.project.json

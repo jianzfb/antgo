@@ -31,6 +31,7 @@ from antgo.framework.helper.task_flag import *
 from thop import profile
 from antgo.framework.helper.runner.dist_utils import master_only
 import antvis.client.mlogger as mlogger
+import logging
 from .base_trainer import *
 import json
 import zlib
@@ -155,8 +156,10 @@ class Tester(object):
                 needed_info = metric_func.keys()['gt']
 
             if not self.distributed:
+                # TODO, 支持增量式评估（例如，分割任务等）
                 outputs = single_gpu_test(self.model, data_loader, needed_info=needed_info)
             else:
+                # TODO, 支持增量式评估（例如，分割任务等）
                 outputs = multi_gpu_test(self.model, data_loader, needed_info=needed_info)
 
             if rank == 0:
@@ -171,6 +174,10 @@ class Tester(object):
                             gt[k] = v
                             sample.pop(k)
                         gts.append(gt)
+
+                    if len(outputs) != len(gts):
+                        logging.error('Predict result num not consistent with sample num.')
+                        return
 
                     metric = metric_func(outputs, gts)
                 all_metric.append(metric)
@@ -215,4 +222,3 @@ class Tester(object):
         if self.work_dir is not None and rank == 0:
             with open(json_file, 'w') as fp:
                 json.dump(all_metric[0] if len(all_metric) == 1 else all_metric, fp)
-        print(all_metric)

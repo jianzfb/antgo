@@ -61,6 +61,8 @@ class COCOCompatibleEval(object):
         bbox_id = 0
         for image_id, gt in enumerate(gts):
             image_file = gt['image_meta']['image_file'] if 'image_file' in gt['image_meta'] else ''
+            if image_file == '':
+                image_file = gt['raw_ann_info']['image_file'] if 'image_file' in gt['raw_ann_info'] else ''
 
             bboxes = [[box[0], box[1], box[2]-box[0], box[3]-box[1]] for box in gt['raw_ann_info']['bboxes'].tolist()]
             areas = [box[2]*box[3] for box in bboxes]
@@ -88,8 +90,8 @@ class COCOCompatibleEval(object):
                 bbox_id += 1
 
             images.append({
-                'height': gt['image_meta']['ori_image_shape'][0],
-                'width': gt['image_meta']['ori_image_shape'][1],
+                'height': gt['raw_ann_info']['image_shape'][0],
+                'width': gt['raw_ann_info']['image_shape'][1],
                 'id': image_id+1,
                 'file_name': image_file
             })
@@ -158,30 +160,3 @@ class COCOCompatibleEval(object):
             tag_and_value[tag] = float(value)
 
         return tag_and_value
-
-
-# cc = COCOBboxEval()
-# gt_ann = '/root/paddlejob/workspace/env_run/portrait/COCO/annotations/instances_val2017.json'
-# with open(gt_ann, 'r') as f:
-#     dataset = json.load(f)
-
-# category_map_id = {}
-# categories = dataset['categories']
-# for ci, c in enumerate(categories):
-#     category_map_id[c['id']] = ci
-
-# image_map_id = {}
-# images = dataset['images']
-# for image_i, image in enumerate(images):
-#     image_map_id[image['id']] = image_i
-
-# annotations = dataset['annotations']
-# det_result = [[] for _ in range(len(images))]
-# for ann in annotations:
-#     image_i = image_map_id[ann['image_id']]
-#     x,y,w,h = ann['bbox']
-#     label = category_map_id[ann['category_id']]
-#     det_result[image_i].append([x,y,x+w,y+h,0.5,label])
-
-# cc(det_result,dataset)
-# print('aa')
