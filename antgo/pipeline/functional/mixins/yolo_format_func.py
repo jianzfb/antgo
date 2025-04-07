@@ -27,8 +27,9 @@ class YOLOFormatGen(object):
             'val': os.path.join(self.save_path, 'labels', 'val')
         }
         self.image_id = 0
+        self.prefix = prefix
 
-        with open(os.path.join(self.save_path, f'{prefix}.yaml'), "w", errors="ignore", encoding="utf-8") as f:
+        with open(os.path.join(self.save_path, f'data.yaml'), "w", errors="ignore", encoding="utf-8") as f:
             data = {
                 'path': './',
                 'train': 'images/train',
@@ -44,11 +45,11 @@ class YOLOFormatGen(object):
             image = sample_info.image
             image_h, image_w = image.shape[:2]
 
-            image_path = os.path.join(self.image_folder[stage], f'{self.image_id}.webp')
+            image_path = os.path.join(self.image_folder[stage], f'{self.prefix}-{self.image_id}.webp')
             cv2.imwrite(image_path, image, [int(cv2.IMWRITE_WEBP_QUALITY), 20])
 
             if len(sample_info.bboxes) > 0:
-                label_path = os.path.join(self.label_folder[stage], f'{self.image_id}.txt')
+                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
                 with open(label_path, 'w') as fp:
                     for box_i, box_info in enumerate(sample_info.bboxes):
                         x0,y0,x1,y1,c = 0, 0, 0, 0, None
@@ -62,6 +63,10 @@ class YOLOFormatGen(object):
 
                         box=[float((x0+x1)/2.0/image_w),float((y0+y1)/2.0/image_h),float((x1-x0)/image_w),float((y1-y0)/image_h)]
                         fp.write(f'{int(c)} {box[0]} {box[1]} {box[2]} {box[3]}\n')
+            else:
+                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
+                with open(label_path, 'w') as fp:
+                    pass
 
             self.image_id += 1
             return

@@ -17,16 +17,19 @@ from antgo.dataflow.dataset.base_coco_style_dataset import BaseCocoStyleDataset
 from tfrecord.reader import *
 from tfrecord import iterator_utils
 from tfrecord import example_pb2
+from antgo.framework.helper.dataset.builder import DATASETS
+from antgo.framework.helper.utils.registry import *
 from antgo.dataflow.datasetio import *
 import numpy as np
 import json
 import os
 import cv2
 import yaml
+import random
 
 
 @dynamic_dispatch
-def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False):
+def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False, is_random=False):
     coco_style_dataset = BaseCocoStyleDataset(
         dir=dir,
         ann_file=ann_file,
@@ -36,7 +39,11 @@ def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False):
 
     def inner():
         sample_num = len(coco_style_dataset)
-        for sample_i in range(sample_num):
+        index_list = list(range(sample_num))
+        if is_random:
+            random.shuffle(index_list)
+
+        for sample_i in index_list:
             sample_info = coco_style_dataset[sample_i]
             
             bboxes = sample_info['bboxes']
@@ -61,8 +68,8 @@ def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False):
 
 
 @dynamic_dispatch
-def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False):
-    assert(stage in ['train', 'val'])
+def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_random=False):
+    assert(stage in ['train', 'val', 'test'])
     with open(ann_file, "r", errors="ignore", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
@@ -78,6 +85,9 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False):
     }
     file_name_list = os.listdir(image_folder_map[stage])
     file_name_list = [name for name in file_name_list if name[0] != '.']
+
+    if is_random:
+        random.shuffle(file_name_list)
 
     category_map = data["names"]
     def inner():
@@ -168,7 +178,7 @@ def _transform(description, sample):
 
 
 @dynamic_dispatch
-def tfrecord_format_dc(dir, mode='detect'):
+def tfrecord_format_dc(dir, mode='detect', is_random=False):
     # 遍历文件夹，发现所有tfrecord数据
     dataset_folders = dir
     if isinstance(dir, str):
@@ -263,8 +273,35 @@ def tfrecord_format_dc(dir, mode='detect'):
     return DataFrame(inner())
 
 
+@dynamic_dispatch
+def common_dataset_dc(dataset, **kwargs):
+    if isinstance(dataset, str):
+        kwargs.update({
+            'type': dataset
+        })
+        dataset = build_from_cfg(dict(kwargs), DATASETS)
+
+    def inner():
+        if (not getattr(dataset, 'size', None)) or (not getattr(dataset, 'sample', None)):
+            sample_num = len(dataset)
+            for sample_i in range(sample_num):
+                data_info = dataset[sample_i]
+                entity = Entity()(**data_info)
+                yield entity
+        else:
+            sample_num = dataset.size
+            for sample_i in range(sample_num):
+                data_info = dataset.sample(sample_i)
+                entity = Entity()(**data_info)
+                yield entity
+
+    return DataFrame(inner())
+
+
 class _dataset_dc(object):
     def __getattr__(self, name):
+        if name == 'dataset':
+            return common_dataset_dc
         if name not in ['coco','yolo','tfrecord']:
             return None
 

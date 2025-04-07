@@ -349,9 +349,10 @@ class ComputerVisionMixin:
         yoloformat_gen = YOLOFormatGen(folder, category_map, mode, prefix)
         try:
             for index, info in enumerate(self):
+                print(f'process {index}')
                 yoloformat_gen.add(info, stage)
         except:
-            pass    
+            pass
         yoloformat_gen.save()
 
     def to_dataset(self, 
