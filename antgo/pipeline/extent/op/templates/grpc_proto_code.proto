@@ -18,9 +18,9 @@ service ${servername} {
 
   rpc ${servername}AsynStop (${servername}AsynStopRequest) returns (${servername}AsynStopReply) {}
 
-  rpc ${servername}AsynPush(${servername}AsynPushRequest) returns (${servername}AsynPushReply) {}
+  rpc ${servername}AsynData(${servername}AsynDataRequest) returns (${servername}AsynDataReply) {}
 
-  rpc ${servername}AsynStream(${servername}AsynStreamRequest) returns (${servername}AsynStreamReply) {}
+  rpc ${servername}AsynPacket(${servername}AsynPacketRequest) returns (${servername}AsynPacketReply) {}
 
   rpc ${servername}AsynMessage(${servername}AsynMessageRequest) returns (stream ${servername}AsynMessageReply) {}
 }
@@ -38,24 +38,24 @@ message ${servername}AsynStartReply {
   string serverkey = 3;                 // 服务关键字
 }
 
-message ${servername}AsynPushRequest{
+message ${servername}AsynDataRequest{
   string serverkey = 1;                 // 服务关键字
   string serverrequest = 2;             // 服务请求
 }
 
-message ${servername}AsynPushReply{
+message ${servername}AsynDataReply{
   string message = 1;                   // 返回的消息例如 success
   int32 code = 2;                       // 返回的code 0 成功，非0失败
   string data = 3;                      // 里面是json 见json配置文件
 }
 
-message ${servername}AsynStreamRequest{
+message ${servername}AsynPacketRequest{
   string serverkey = 1;                 // 服务关键字
   bytes package_data = 2;               // 包数据
   int32 package_size = 3;               // 包大小
 }
 
-message ${servername}AsynStreamReply{
+message ${servername}AsynPacketReply{
   string message = 1;                   // 返回的消息例如 success
   int32 code = 2;                       // 返回的code 0 成功，非0失败
   string data = 3;                      // 里面是json 见json配置文件

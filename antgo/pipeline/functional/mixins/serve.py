@@ -27,6 +27,8 @@ import secrets
 import logging
 import json
 import uuid
+import base64
+import cv2
 
 
 class _APIWrapper:

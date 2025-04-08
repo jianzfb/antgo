@@ -199,13 +199,22 @@ def yolo_model_export(exp_name, pretrained_model, **kwargs):
         os.system('pip3 install opencv-python-headless')
 
     print('Fix export onnx to multi-platform')
-    package_path = ''
-    for check_sys_path in sys.path:
-        if check_sys_path.endswith('site-packages'):
-            package_path = check_sys_path
-            break
     fix_file_path = os.path.dirname(os.path.dirname(__file__))
     fix_file_path = os.path.join(fix_file_path, 'resource/fix/yolo/head.py')
+
+    # analyze prefix
+    prefix_index = 0
+    for index, info in enumerate(fix_file_path.split('/')):
+        if info.startswith('python'):
+            prefix_index = index
+            break
+    prefix = '/'.join(fix_file_path.split("/")[:prefix_index+1])
+
+    package_path = ''
+    for check_sys_path in sys.path:
+        if check_sys_path.endswith('site-packages') and check_sys_path.startswith(prefix):
+            package_path = check_sys_path
+            break
 
     print(f'Copy {fix_file_path} {package_path}/ultralytics/nn/modules')
     shutil.copy(fix_file_path, f'{package_path}/ultralytics/nn/modules')

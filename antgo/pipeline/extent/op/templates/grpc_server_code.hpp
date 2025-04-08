@@ -19,7 +19,9 @@
 using namespace grpc;
 using namespace ${package};
 
-std::map<std::string, std::shared_ptr<eagleeye::RKH264Decoder>> decode_map;
+
+std::mutex g_create_or_stop_mu;
+std::map<std::string, std::mutex> g_call_mu_map;
 class ${servername}ServiceImpl final : public ${servername}::Service{
 public:
     // sync interface
@@ -72,26 +74,37 @@ public:
         }
 
         std::string server_pipeline_config = pipeline_config_obj.ToFormattedString();
-        std::cout<<"server_pipeline_config"<<std::endl;
-        std::cout<<server_pipeline_config<<std::endl;
+        EAGLEEYE_LOGD("server pipeline config %s", server_pipeline_config.c_str());
         std::string server_key;
+        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        // 启动服务
         eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_start(server_pipeline_config, server_key, nullptr);
 
         if(result == eagleeye::SERVER_SUCCESS){
             response->set_code(0);
             response->set_serverkey(server_key);
+
+            // 分配服务锁
+            g_call_mu_map[server_key] = std::mutex();
+            locker.unlock();
             return Status::OK;
         }
+
+        locker.unlock();
         return Status::CANCELLED;
     }
     ::grpc::Status ${servername}SyncCall(::grpc::ServerContext* context, const ::${package}::${servername}SyncCallRequest* request, ::${package}::${servername}SyncCallReply* response){
         std::string server_key = request->serverkey();
         std::string server_request = request->serverrequest();
+        if(g_call_mu_map.find(server_key) == g_call_mu_map.end()){
+            EAGLEEYE_LOGD("No server key");
+            return Status::CANCELLED
+        }
 
         // step 1: 解析服务请求，并处理输入数据
         // image -> base64解码 -> opencv read -> memory
-        // matrix/float -> memory
-        // matrix/int32 -> memory
+        // float -> memory
+        // int32 -> memory
         std::vector<cv::Mat> mat_data_list;
         std::vector<std::shared_ptr<float>> float_data_list;
         std::vector<std::shared_ptr<int>> int_data_list;
@@ -140,7 +153,7 @@ public:
 
                     server_request_data.push_back(request_data);                    
                 }
-                else if(data_type == "matrix/float"){
+                else if(data_type == "float"){
                     int width = 0;
                     int height = 0;
                     data_cfg.Get("width", width);
@@ -162,10 +175,11 @@ public:
                     request_data.width = width;
                     request_data.height = height;
                     request_data.channel = 0;
-                    request_data.type = "matrix/float";
+                    request_data.type = "float";
+
                     server_request_data.push_back(request_data);        
                 }
-                else if(data_type == "matrix/int32"){
+                else if(data_type == "int32"){
                     int width = 0;
                     int height = 0;
                     data_cfg.Get("width", width);
@@ -187,7 +201,8 @@ public:
                     request_data.width = width;
                     request_data.height = height;
                     request_data.channel = 0;
-                    request_data.type = "matrix/float";
+                    request_data.type = "int32";
+
                     server_request_data.push_back(request_data); 
                 }
             }
@@ -195,14 +210,29 @@ public:
 
         // step 2: 执行服务管线
         std::string server_reply;
+        std::unique_lock<std::mutex> locker(this->g_call_mu_map[server_key]);
         eagleeye::eagleeye_pipeline_server_call(server_key, server_request_data, server_reply);
+        locker.unlock();
+
         response->set_code(0);
         response->set_data(server_reply);
         return Status::OK;
     }
     ::grpc::Status ${servername}SyncStop(::grpc::ServerContext* context, const ::${package}::${servername}SyncStopRequest* request, ::${package}::${servername}SyncStopReply* response){
         std::string server_key = request->serverkey();
+        if(g_call_mu_map.find(server_key) == g_call_mu_map.end()){
+            EAGLEEYE_LOGD("No server key");
+            return Status::CANCELLED
+        }
+
+        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        // 停止服务
         eagleeye::eagleeye_pipeline_server_stop(server_key);
+
+        // 删除服务锁
+        g_call_mu_map.erase(server_key);
+        locker.unlock();
+
         response->set_code(0);
         response->set_message("success");
         return Status::OK;
@@ -258,10 +288,12 @@ public:
         }
 
         std::string server_pipeline_config = pipeline_config_obj.ToFormattedString();
-        std::cout<<"server_pipeline_config"<<std::endl;
-        std::cout<<server_pipeline_config<<std::endl;
+        EAGLEEYE_LOGD("server pipeline config %s", server_pipeline_config.c_str());
         std::string server_key;
+        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        // 启动服务
         eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_start(server_pipeline_config, server_key, nullptr);
+        locker.unlock();
 
         if(result == eagleeye::SERVER_SUCCESS){
             response->set_code(0);
@@ -270,15 +302,15 @@ public:
         }
         return Status::CANCELLED;
     }
-    ::grpc::Status ${servername}AsynPush(::grpc::ServerContext* context, const ::${package}::${servername}AsynPushRequest* request, ::${package}::${servername}AsynPushReply* response){
+    ::grpc::Status ${servername}AsynData(::grpc::ServerContext* context, const ::${package}::${servername}AsynDataRequest* request, ::${package}::${servername}AsynDataReply* response){
         // 适合于复杂的请求数据
         std::string server_key = request->serverkey();
         std::string server_request = request->serverrequest();
 
         // step 1: 解析服务请求，并处理输入数据
         // image -> base64解码 -> opencv read -> memory
-        // matrix/float -> memory
-        // matrix/int32 -> memory
+        // float -> memory
+        // int32 -> memory
         std::vector<cv::Mat> mat_data_list;
         std::vector<std::shared_ptr<float>> float_data_list;
         std::vector<std::shared_ptr<int>> int_data_list;
@@ -327,7 +359,7 @@ public:
 
                     server_request_data.push_back(request_data);                    
                 }
-                else if(data_type == "matrix/float"){
+                else if(data_type == "float"){
                     int width = 0;
                     int height = 0;
                     data_cfg.Get("width", width);
@@ -349,10 +381,10 @@ public:
                     request_data.width = width;
                     request_data.height = height;
                     request_data.channel = 0;
-                    request_data.type = "matrix/float";
+                    request_data.type = "float";
                     server_request_data.push_back(request_data);        
                 }
-                else if(data_type == "matrix/int32"){
+                else if(data_type == "int32"){
                     int width = 0;
                     int height = 0;
                     data_cfg.Get("width", width);
@@ -374,7 +406,7 @@ public:
                     request_data.width = width;
                     request_data.height = height;
                     request_data.channel = 0;
-                    request_data.type = "matrix/float";
+                    request_data.type = "int32";
                     server_request_data.push_back(request_data); 
                 }
             }
@@ -382,16 +414,18 @@ public:
 
         // 推送数据到管线队列
         eagleeye::eagleeye_pipeline_server_push(server_key, server_request_data);
+
         response->set_code(0);
         return Status::OK;
     }
-    ::grpc::Status ${servername}AsynStream(::grpc::ServerContext* context, const ::${package}::${servername}AsynStreamRequest* request, ::${package}::${servername}AsynStreamReply* response){
+    ::grpc::Status ${servername}AsynPacket(::grpc::ServerContext* context, const ::${package}::${servername}AsynPacketRequest* request, ::${package}::${servername}AsynPacketReply* response){
         // 仅用于对视频流分析
         std::string server_key = request->serverkey();
 
         // 推送数据到管线队列
         char* package_data = const_cast<char*>(request->package_data().c_str());
         eagleeye::eagleeye_pipeline_server_stream(server_key, (uint8_t*)package_data, request->package_size());
+    
         response->set_code(0);
         return Status::OK;
     }
@@ -429,11 +463,16 @@ public:
     }
     ::grpc::Status ${servername}AsynStop(::grpc::ServerContext* context, const ::${package}::${servername}AsynStopRequest* request, ::${package}::${servername}AsynStopReply* response){
         std::string server_key = request->serverkey();
-        if(decode_map.find(server_key) != decode_map.end()){
-            decode_map.erase(server_key);
+        if(g_call_mu_map.find(server_key) == g_call_mu_map.end()){
+            EAGLEEYE_LOGD("No server key");
+            return Status::CANCELLED
         }
 
+        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        // 停止服务
         eagleeye::eagleeye_pipeline_server_stop(server_key);
+        locker.unlock();
+
         response->set_code(0);
         response->set_message("success");
         return Status::OK;
