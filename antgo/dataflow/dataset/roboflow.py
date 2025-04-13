@@ -203,7 +203,8 @@ class Roboflow(Dataset):
         return {
             'image': image,
             'bboxes': bboxes,
-            'labels': np.zeros((len(bboxes)), dtype=np.int32)
+            'labels': labels,
+            'img_path': anno_info['img_path'],
         }
 
 

@@ -11,13 +11,36 @@ import os
 import numpy as np
 import cv2
 import time
+import yaml
 
 __all__ = ['YoloDataset']
 class YoloDataset(Dataset):
     def __init__(self, train_or_test, dir=None, **kwargs):
+        anno_file = None
+        if dir.endswith('.yaml'):
+            anno_file = dir
+            dir = os.path.dirname(dir)
         super(YoloDataset, self).__init__(train_or_test, dir)
-        self.label_folder = os.path.join(self.dir, 'labels', train_or_test)
-        self.image_folder = os.path.join(self.dir, 'images', train_or_test)
+
+        if anno_file is None:
+            # 默认文件夹结构
+            # dir
+            #   labels
+            #     train
+            #     test
+            #   images
+            #     train
+            #     test
+            self.label_folder = os.path.join(self.dir, 'labels', train_or_test)
+            self.image_folder = os.path.join(self.dir, 'images', train_or_test)
+        else:
+            with open(anno_file) as f:
+                anno = yaml.load(f, Loader=yaml.SafeLoader)
+                # anno[train_or_test] 图像文件夹
+                self.image_folder = os.path.join(self.dir, anno[train_or_test])
+                # anno[train_or_test].replace('images', 'labels') 标签文件夹
+                self.label_folder = os.path.join(self.dir, anno[train_or_test].replace('images', 'labels'))
+
         self.file_list = [file_name for file_name in os.listdir(self.image_folder) if file_name[0] != '.']
         self.sample_num = len(self.file_list)
 
@@ -33,7 +56,8 @@ class YoloDataset(Dataset):
             'labels': []
         }
         file_name = self.file_list[id]
-        pure_name = file_name.split('.')[0]
+        pos = file_name.rfind('.')
+        pure_name = file_name[:pos]
         with open(os.path.join(self.label_folder, f'{pure_name}.txt'), 'r') as fp:
             line = fp.readline()
             line = line.strip()
