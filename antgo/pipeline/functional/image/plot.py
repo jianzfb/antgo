@@ -24,7 +24,7 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3):
     c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
     cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
     cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
-
+  
 
 @register
 class plot_bbox(object):
@@ -73,7 +73,7 @@ class plot_bbox(object):
         bbox_label = str(int(class_id))
         if self.category_map is not None:
           bbox_label = self.category_map[bbox_label]
-        
+
         bbox_color = [random.randint(0, 255) for _ in range(3)]
         if self.color is not None:
           bbox_color = self.color[int(bbox_label)]
@@ -122,3 +122,51 @@ class plot_poly(object):
       mask = cv2.fillPoly(mask, np.array(polygon_points).astype(np.int32), self.fill)
       image_with_mask = np.concatenate([image, np.expand_dims(mask, -1)], -1)
       return image_with_mask
+
+
+@register
+class plot_yolo(object):
+  def __init__(self, mode='detect'):
+    assert(mode in ['detect', 'pose', 'segment', 'classify'])
+    self.mode = mode
+    self.color_map = {}
+
+  def __call__(self, image, *args, **kwargs):
+    if self.mode == 'detect':
+      # bboxes, labels
+      bboxes, labels = args
+      for xyxy, c in zip(bboxes, labels):
+        if c not in self.color_map:
+          self.color_map[c] = [random.randint(0, 255) for _ in range(3)]
+
+        plot_one_box(xyxy, image, label=str(c), color=self.color_map[c], line_thickness=2)
+    elif self.mode == 'pose':
+      # bboxes, labels, keypoints
+      bboxes, labels, keypoints = args
+      for xyxy, c, keypoint_xy in zip(bboxes, labels, keypoints):
+        if c not in self.color_map:
+          self.color_map[c] = [random.randint(0, 255) for _ in range(3)]
+        plot_one_box(xyxy, image, label=str(c), color=self.color_map[c], line_thickness=2)
+
+        for xy in keypoint_xy:
+          cv2.circle(image, (int(xy[0]), int(xy[1])), radius=2, color=(255,0,0), thickness=1)
+    elif self.mode == 'segment':
+      # segments
+      labels, segments = args
+      for c, segment in zip(labels, segments):
+        if c not in self.color_map:
+          self.color_map[c] = random.randint(0, 179)
+
+        # segment draw on image
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        # hue
+        hsv[:,:,0] = hsv[:,:,0] * (1-segment) + segment * self.color_map[c]
+        # saturate
+        hsv[:,:,1] = hsv[:,:,1] * (1-segment) + segment * 255
+
+        image = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    else:
+      # classify
+      pass
+
+    return image

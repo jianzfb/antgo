@@ -95,7 +95,9 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
         for sample_i in range(sample_num):
             file_name = file_name_list[sample_i]
             image_path = f'{image_folder_map[stage]}/{file_name}'
-            label_path = f'{label_folder_map[stage]}/{file_name.split(".")[0]}.txt'
+            p = file_name.rfind('.')
+            pure_name = file_name[:p]
+            label_path = f'{label_folder_map[stage]}/{pure_name}.txt'
 
             image = cv2.imread(image_path)
             image_h, image_w = image.shape[:2]
@@ -125,9 +127,73 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
                         
                         labels.append(int(class_id))
                         content = fp.readline().strip()
-                    
+
                     export_info['bboxes'] = np.array(bboxes)
                     export_info['labels'] = np.array(labels)
+            elif mode == 'pose':
+                kpt_shape = data['kpt_shape']
+                with open(label_path, 'r') as fp:
+                    content = fp.readline().strip()
+                    bboxes = []
+                    labels = []
+                    keypoints = []
+                    while content:
+                        terms = content.split(' ')
+                        class_id, cx,cy,w,h = terms[:5]
+                        cx = float(cx)
+                        cy = float(cy)
+                        w = float(w)
+                        h = float(h)
+
+                        bbox_keypoints = [float(v) for v in terms[5:]]
+                        bbox_keypoints = np.array(bbox_keypoints, dtype=np.float32).reshape(kpt_shape)
+                        if normalize:
+                            x0,y0,x1,y1 = (cx - w/2)*image_w, (cy - h/2)*image_h, (cx + w/2)*image_w, (cy + h/2)*image_h
+                            bboxes.append([
+                                x0,y0,x1,y1
+                            ])
+                            bbox_keypoints[:,0] = bbox_keypoints[:,0] * image_w
+                            bbox_keypoints[:,1] = bbox_keypoints[:,1] * image_h
+                        else:
+                            bboxes.append([
+                                cx,cy,w,h
+                            ])
+                        
+                        labels.append(int(class_id))
+                        keypoints.append(bbox_keypoints)
+                        content = fp.readline().strip()
+
+                    export_info['bboxes'] = np.array(bboxes, dtype=np.float32)
+                    export_info['labels'] = np.array(labels, dtype=np.int32)
+                    export_info['keypoints'] = np.stack(keypoints, 0)
+            elif mode == 'segment':
+                with open(label_path, 'r') as fp:
+                    content = fp.readline().strip()
+                    labels = []
+                    segments = []
+                    while content:
+                        terms = content.split(' ')
+                        class_id = terms[0]
+
+                        polygon_keypoints = [float(v) for v in terms[1:]]
+                        polygon_keypoints = np.array(polygon_keypoints, dtype=np.float32).reshape((-1, 2))
+                        if normalize:
+                            polygon_keypoints[:,0] = polygon_keypoints[:,0] * image_w
+                            polygon_keypoints[:,1] = polygon_keypoints[:,1] * image_h
+
+                        polygon_keypoints = polygon_keypoints.astype(np.int64)
+                        labels.append(int(class_id))
+
+                        segment = np.zeros((image_h, image_w), dtype=np.uint8)
+                        cv2.fillPoly(segment, [polygon_keypoints], 1)
+                        segments.append(segment)
+                        content = fp.readline().strip()
+
+                    export_info['labels'] = np.array(labels, dtype=np.int32)
+                    export_info['segments'] = np.stack(segments, 0)
+                pass
+            elif mode == 'classify':
+                pass
 
             entity = Entity()(**export_info)
             yield entity

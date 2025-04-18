@@ -9,11 +9,13 @@ from __future__ import print_function
 from antgo.pipeline.engine import *
 import cv2
 import os
+import json
 import base64
 import numpy as np
 import requests
 from antgo.utils.sample_gt import *
 import imagesize
+
 
 
 @register
@@ -29,6 +31,21 @@ class image_decode(object):
     if self.to_rgb:
       image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)    
     return image
+
+@register
+class json_load(object):
+  def __init__(self, **kwargs):
+    pass
+
+  def __call__(self, x):
+    if not x.endswith('.json'):
+      p = x.rfind('.')
+      x = x[:p]
+      x = f'{x}.json'
+
+    with open(x, 'r') as fp:
+      content = json.load(fp)
+      return content
 
 
 @register

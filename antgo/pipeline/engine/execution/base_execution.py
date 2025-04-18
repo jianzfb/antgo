@@ -72,7 +72,7 @@ class BaseExecution:
                     if isinstance(res, NoUpdate):
                         return arg[0]
 
-                    if (isinstance(self._index, tuple) or isinstance(self._index, list)) and (isinstance(res, tuple) or isinstance(res, list)):
+                    if (isinstance(self._index, list)) and (isinstance(res, tuple) or isinstance(res, list)):
                         for i, j in zip(self._index, res):
                             setattr(arg[0], i, j)
                     else:

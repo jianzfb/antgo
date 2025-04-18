@@ -36,13 +36,29 @@ class sync_op(object):
         self.hard = hard_paste
         self.layout_label = layout_label
 
-    def __call__(self, image, *args):
+    def isOverlap(self, box_0, box_1):
+        lt = np.maximum(box_0[:, :2], box_1[:, :2])
+        rb = np.minimum(box_0[:, 2:], box_1[:, 2:])
+        wh = rb - lt
+        area = wh[0][0] * wh[0][1]
+        if area < 0:
+            return False
+        else:
+            return True
+
+    def __call__(self, image, layout_info_list):
         image = image.copy()
         image_h, image_w, _ = image.shape        
         mask = np.ones((image_h, image_w), dtype=np.uint8) * self.border_fill
         sync_points = None
+        sync_bboxes = []
+        sync_labels = []
+        sync_segments = []
+        if not isinstance(layout_info_list, list):
+            layout_info_list = [layout_info_list]
 
-        for layout_info in args:
+        layout_pos_record = []
+        for layout_info in layout_info_list:
             layout_image = layout_info['layout_image']
             layout_id = layout_info['layout_id']
             if layout_id.dtype != np.uint8:
@@ -55,7 +71,10 @@ class sync_op(object):
             # step 1. 图像调整到适合尺寸
             random_scale = np.random.random() * (self.max_scale - self.min_scale) + self.min_scale
 
-            obj_scale = (min(image_w, image_h) * random_scale) / min(obj_h, obj_w)
+            obj_scale_along_w = (image_w*random_scale)/obj_w
+            obj_scale_along_h = (image_h*random_scale)/obj_h
+            obj_scale = min(obj_scale_along_w, obj_scale_along_h)
+
             object_image = cv2.resize(object_image, dsize=(int(obj_w * obj_scale), int(obj_h * obj_scale)))
             obj_h, obj_w = object_image.shape[:2]
 
@@ -109,40 +128,90 @@ class sync_op(object):
             if image_h > obj_h:
                 paste_y = np.random.randint(0, image_h - obj_h)
 
+            # 检查粘贴位置，需要避开已覆盖图层
+            try_thres = 5
+            try_i = 0
+            is_found_paste = True
+            while try_i < try_thres:
+                for e_layout_x0, e_layout_y0, e_layout_obj_w, e_layout_obj_h in layout_pos_record:
+                    e_layout_x1, e_layout_y1 = e_layout_x0 + e_layout_obj_w, e_layout_y0 + e_layout_obj_h
+                    if self.isOverlap(np.array([[paste_x, paste_y, paste_x+obj_w, paste_y+obj_h]]), np.array([[e_layout_x0, e_layout_y0, e_layout_x1, e_layout_y1]])):
+                        is_found_paste = False
+                        break
+
+                if is_found_paste:
+                    break
+
+                # 重新产生粘贴位置
+                paste_x = 0
+                if image_w > obj_w:
+                    paste_x = np.random.randint(0, image_w - obj_w)
+                paste_y = 0
+                if image_h > obj_h:
+                    paste_y = np.random.randint(0, image_h - obj_h)
+
+                try_i += 1
+
+            if not is_found_paste:
+                # 没有找到合适位置，构建图层
+                continue
+
+            # 记录新图层位置
+            layout_pos_record.append([paste_x, paste_y, obj_w, obj_h])
+
             object_paste_mask_expand = np.expand_dims(object_paste_mask, -1)
             image[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = image[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] * (1-object_paste_mask_expand) + object_image * object_paste_mask_expand
 
+            # 记录位置
+            iidd = np.max(layout_id)
+            pos = np.where(layout_id == iidd)
+            min_y = int(np.min(pos[0]))
+            min_x = int(np.min(pos[1]))
+            max_y = int(np.max(pos[0]))
+            max_x = int(np.max(pos[1]))
+            sync_bboxes.append([min_x+paste_x, min_y+paste_y, max_x+paste_x, max_y+paste_y])
+            sync_labels.append(int(iidd) - 1)
+
+            # 记录点
             if layout_points is not None:
                 layout_points = layout_points + np.float32([[paste_x, paste_y]])
                 if sync_points is None:
                     sync_points = []
                 sync_points.append(layout_points)
 
+            # 记录mask
             if self.hard:
                 mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = layout_id
+                segment = np.ones((image_h, image_w), dtype=np.uint8) * self.border_fill
+                segment[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = layout_id
+                sync_segments.append(segment)
             else:
                 mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] * (1-object_paste_mask) + layout_id * object_paste_mask
+                segment = np.ones((image_h, image_w), dtype=np.uint8) * self.border_fill
+                segment[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = segment[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] * (1-object_paste_mask) + layout_id * object_paste_mask
+                sync_segments.append(segment)
 
         sync_image = image
         sync_mask = mask
+        sync_segments = np.stack(sync_segments, 0)
         if sync_points is not None:
-            sync_points = np.concatenate(sync_points, 0)
+            sync_points = np.stack(sync_points, 0)
 
-        bboxes = []
-        labels = []
-        if self.layout_label is None:
-            self.layout_label = {1: 'object'}
-        for layout_id, layout_label in self.layout_label.items():
-            pos = np.where(sync_mask == layout_id)
-            min_y = int(np.min(pos[0]))
-            min_x = int(np.min(pos[1]))
+        # bboxes = []
+        # labels = []
+        # if self.layout_label is None:
+        #     self.layout_label = {1: 'object'}
+        # for layout_id, layout_label in self.layout_label.items():
+        #     pos = np.where(sync_mask == layout_id)
+        #     min_y = int(np.min(pos[0]))
+        #     min_x = int(np.min(pos[1]))
 
-            max_y = int(np.max(pos[0]))
-            max_x = int(np.max(pos[1]))
+        #     max_y = int(np.max(pos[0]))
+        #     max_x = int(np.max(pos[1]))
 
-            bboxes.append([min_x, min_y, max_x, max_y])
-            # 标签=图层编号-1
-            labels.append(layout_id - 1)
+        #     bboxes.append([min_x, min_y, max_x, max_y])
+        #     # 标签=图层编号-1
+        #     labels.append(layout_id - 1)
 
         # if self.keep_layout is not None:
         #     keep_sync_mask = np.zeros(sync_mask.shape, dtype=np.uint8)
@@ -153,14 +222,11 @@ class sync_op(object):
         # image, segments
         sync_info = {
             'image': sync_image,
-            'segments': sync_mask
+            'segments': sync_segments,
+            'mask': sync_mask,
+            'bboxes': np.array(sync_bboxes, dtype=np.float32), 
+            'labels': np.array(sync_labels, dtype=np.int32)
         }
-
-        if len(bboxes) > 0 and len(labels) > 0:
-            sync_info.update({
-                'bboxes': bboxes, 
-                'labels': labels
-            })
 
         # joints2d
         if sync_points is not None:
@@ -200,8 +266,19 @@ class save_sync_info_op(object):
             'bboxes': np.array(sync_info['bboxes']) if isinstance(sync_info['bboxes'], list) else sync_info['bboxes']
         }
 
+        if 'joints2d' in sync_info:
+            info.update(
+                {'joints2d': sync_info['joints2d']}
+            )
+        
+        if 'segments' in sync_info:
+            info.update(
+                {'segments': sync_info['segments']}
+            )
+
         self.gen_op.add(Entity(**info), self.stage)
         self.index += 1
+        print(f'process {self.index}')
         if self.callback is not None:
             self.callback(self.index)
 

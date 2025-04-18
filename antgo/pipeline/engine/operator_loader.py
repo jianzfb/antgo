@@ -221,7 +221,7 @@ class OperatorLoader:
         if control_op_name == 'For':
             function_op_name_list = self.split_function(info[2:])
             function_op_name = function_op_name_list[0]
-            function_op = self.load_operator(function_op_name, arg, kws, tag)
+            function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name.replace('-', '_'), {}), tag)
             assert(function_op is not None)
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.for_op'), 'For', None)
             return self.instance_operator(control_op_cls, [], dict(func=function_op, parallel_num=kws.get('parallel_num', 1)))
@@ -310,7 +310,7 @@ class OperatorLoader:
             function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name.replace('-', '_'), {}), tag)
             assert(function_op is not None)
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.random_choice_op'), 'RandomChoice', None)
-            return self.instance_operator(control_op_cls, [], dict(func=function_op, sampling_num=kws.get('sampling_num', 1)))
+            return self.instance_operator(control_op_cls, [], dict(func=function_op, sampling_num=kws.get('sampling_num', 1), sampling_group=kws.get('sampling_group', None)))
         return None
 
     def load_operator_from_remote(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:

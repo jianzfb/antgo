@@ -63,13 +63,13 @@ DEFINE_string("remote-user", None, "")
 DEFINE_int('port', 0, 'set port')
 DEFINE_choices('stage', 'supervised', ['supervised', 'semi-supervised', 'distillation', 'label'], '')
 DEFINE_string('main', None, '')
-DEFINE_indicator('data', True, '')
 DEFINE_choices('mode', 'http/demo', ['http/demo', 'http/api', 'grpc', 'android/sdk', 'linux/sdk'], '')
 DEFINE_string("image-repo", None, "image repo")
 DEFINE_string("image-version", "latest", "image version")
 DEFINE_string("user", None, "user name")
 DEFINE_string("password", None, "user password")
 DEFINE_indicator("remote", True, "whether execute in remote")
+DEFINE_string("data-folder", None, "")
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -454,7 +454,7 @@ def main():
         # 生成服务部署脚本
         command = ''
         if args.mode.startswith('http'):
-          command = f'antgo web --main={args.main} --port={args.port}'
+          command = f'antgo web --main={args.main} --port={args.port} --name={args.name}'
 
         if os.path.exists('launch.sh'):
           # 项目存在执行脚本
@@ -462,6 +462,9 @@ def main():
         if os.path.exists('install.sh'):
           # 项目存在安装脚本，则运行命令时，先进行环境安装
           command = 'bash install.sh && '+command
+
+        if args.image is None or args.image == '':
+          args.image = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest'
 
         env = Environment(loader=FileSystemLoader('/'.join(os.path.realpath(__file__).split('/')[0:-1])))
         server_deploy_template = env.get_template('script/server-deploy.sh')
@@ -476,6 +479,8 @@ def main():
           'name': project_name,
           'workspace': '/workspace',
           'project_name': project_name,
+          'data_folder': "" if args.data_folder is None else args.data_folder,
+          'root_folder': '.' if args.root is None or args.root == '' else args.root,
           'command': command,
         }
         server_deploy_content = server_deploy_template.render(**server_deploy_data)
@@ -540,6 +545,8 @@ def main():
           'name': server_info['name'],
           'workspace': '/workspace' if server_info['mode'] != 'grpc' else '/workspace/project/deploy/package/',
           'project_name': '',
+          'data_folder': "" if args.data_folder is None else args.data_folder,
+          'root_folder': '.',
           'command': '',
         }
         server_deploy_content = server_deploy_template.render(**server_deploy_data)
@@ -729,9 +736,19 @@ def main():
           elif args.src.endswith('.zip'):
             os.system(f'scp {args.src} {user_name}@{remote_ip}:/data')
             os.system(f'ssh {user_name}@{remote_ip} "unzip -d /data/ /data/{os.path.basename(args.src)} && rm /data/{os.path.basename(args.src)}"')
+          elif os.path.isdir(args.src):
+            # 打包
+            os.system(f'tar -cf {os.path.basename(args.src)}.tar {args.src}')
+            # 推送
+            os.system(f'scp {os.path.basename(args.src)}.tar {user_name}@{remote_ip}:/data')
+            os.system(f'ssh {user_name}@{remote_ip} "tar -xf /data/{os.path.basename(args.src)}.tar -C /data/ && rm /data/{os.path.basename(args.src)}.tar"')
+            # 清理
+            os.system(f'rm {os.path.basename(args.src)}.tar')
           else:
-            os.system(f'scp -r {args.src} {user_name}@{remote_ip}:/data')
-          print(f'Finish dataset {os.path.basename(args.src)} deploy on IP {deploy_ip}.')
+            logging.error('Only support .tar/.zip/folder data format')
+            return
+
+          logging.info(f'Finish dataset {os.path.basename(args.src)} deploy on IP {deploy_ip}.')
       else:
         logging.error("Now only support ssh remote control")
     elif sub_action_name == 'del':
@@ -962,7 +979,7 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
-        ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, check_data=args.data, env=args.version)
+        ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version)
       elif args.ssh and args.script is not None:
         # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
         assert(args.image is not None and args.image != '')
