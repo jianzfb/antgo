@@ -130,6 +130,7 @@ class plot_yolo(object):
     assert(mode in ['detect', 'pose', 'segment', 'classify'])
     self.mode = mode
     self.color_map = {}
+    self.keypoint_color_map = {}
 
   def __call__(self, image, *args, **kwargs):
     if self.mode == 'detect':
@@ -148,8 +149,10 @@ class plot_yolo(object):
           self.color_map[c] = [random.randint(0, 255) for _ in range(3)]
         plot_one_box(xyxy, image, label=str(c), color=self.color_map[c], line_thickness=2)
 
-        for xy in keypoint_xy:
-          cv2.circle(image, (int(xy[0]), int(xy[1])), radius=2, color=(255,0,0), thickness=1)
+        for keypoint_i, xy in enumerate(keypoint_xy):
+          if keypoint_i not in self.keypoint_color_map:
+            self.keypoint_color_map[keypoint_i] = [random.randint(0, 255) for _ in range(3)]
+          cv2.circle(image, (int(xy[0]), int(xy[1])), radius=3, color=self.keypoint_color_map[keypoint_i], thickness=-1)
     elif self.mode == 'segment':
       # segments
       labels, segments = args
