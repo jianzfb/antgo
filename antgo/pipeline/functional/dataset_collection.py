@@ -29,7 +29,7 @@ import random
 
 
 @dynamic_dispatch
-def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False, is_random=False):
+def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False, is_random=False, is_debug=False):
     coco_style_dataset = BaseCocoStyleDataset(
         dir=dir,
         ann_file=ann_file,
@@ -45,7 +45,9 @@ def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False, i
 
         for sample_i in index_list:
             sample_info = coco_style_dataset[sample_i]
-            
+            if is_debug:
+                print(sample_info['img_path'])
+
             bboxes = sample_info['bboxes']
             if normalize:
                 for box_info in bboxes:
@@ -68,7 +70,7 @@ def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False, i
 
 
 @dynamic_dispatch
-def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_random=False):
+def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_random=False, is_debug=False):
     assert(stage in ['train', 'val', 'test'])
     with open(ann_file, "r", errors="ignore", encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -95,6 +97,8 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
         for sample_i in range(sample_num):
             file_name = file_name_list[sample_i]
             image_path = f'{image_folder_map[stage]}/{file_name}'
+            if is_debug:
+                print(image_path)
             p = file_name.rfind('.')
             pure_name = file_name[:p]
             label_path = f'{label_folder_map[stage]}/{pure_name}.txt'

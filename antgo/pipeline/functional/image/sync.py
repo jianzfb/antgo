@@ -51,6 +51,7 @@ class sync_op(object):
         image_h, image_w, _ = image.shape        
         mask = np.ones((image_h, image_w), dtype=np.uint8) * self.border_fill
         sync_points = None
+        sync_points_visible = None
         sync_bboxes = []
         sync_labels = []
         sync_segments = []
@@ -64,6 +65,7 @@ class sync_op(object):
             if layout_id.dtype != np.uint8:
                 layout_id = layout_id.astype(np.uint8)
             layout_points = layout_info.get('layout_points', None)
+            layout_points_visible = layout_info.get('layout_points_visible', None)
 
             object_image = layout_image
             obj_h, obj_w, _ = object_image.shape
@@ -179,6 +181,12 @@ class sync_op(object):
                     sync_points = []
                 sync_points.append(layout_points)
 
+            # 记录可见性
+            if layout_points_visible is not None:
+                if sync_points_visible is None:
+                    sync_points_visible = []
+                sync_points_visible.append(layout_points_visible)
+
             # 记录mask
             if self.hard:
                 mask[paste_y:paste_y+obj_h, paste_x:paste_x+obj_w] = layout_id
@@ -196,6 +204,8 @@ class sync_op(object):
         sync_segments = np.stack(sync_segments, 0)
         if sync_points is not None:
             sync_points = np.stack(sync_points, 0)
+        if sync_points_visible is not None:
+            sync_points_visible = np.stack(sync_points_visible, 0)
 
         # bboxes = []
         # labels = []
@@ -232,6 +242,11 @@ class sync_op(object):
         if sync_points is not None:
             sync_info.update({
                 'joints2d': sync_points
+            })
+        # joints_vis
+        if sync_points_visible is not None:
+            sync_info.update({
+                'joints_vis': sync_points_visible
             })
 
         return sync_info
@@ -270,7 +285,10 @@ class save_sync_info_op(object):
             info.update(
                 {'joints2d': sync_info['joints2d']}
             )
-        
+        if 'joints_vis' in sync_info:
+            info.update(
+                {'joints_vis': sync_info['joints_vis']}
+            )
         if 'segments' in sync_info:
             info.update(
                 {'segments': sync_info['segments']}

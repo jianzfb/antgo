@@ -63,10 +63,14 @@ class layoutg2_gen(object):
         image_h, image_w = image.shape[:2]
 
         # 标注数据
-        # {'polygon': xxx, 'points': xxx}
+        # {'polygon': xxx, 'points': xxx, 'visible': xxx}
         polygon = anno.get('polygon', None)
         points = anno.get('points', None)
         points = np.array(points, dtype=np.float32)
+
+        visible = anno.get('visible', None)
+        if visible is not None:
+            visible = np.array(visible, dtype=np.int32)
 
         # ploygon -> mask
         mask = np.zeros((image_h, image_w), dtype=np.uint8)
@@ -75,7 +79,8 @@ class layoutg2_gen(object):
         return {
             'layout_image': image,
             'layout_id': mask,
-            'layout_points': points
+            'layout_points': points,
+            'layout_points_visible': visible
         }
 
 

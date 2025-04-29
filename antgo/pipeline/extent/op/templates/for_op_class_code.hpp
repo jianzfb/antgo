@@ -19,8 +19,11 @@ public:
         //     Base* func = ${func_create};
         //     m_funcs.push_back(func);
         // }
+        // 创建
         Base* func = ${func_create};
         m_funcs.push_back(func);
+        // 初始化
+        ${func_init}
     }
     virtual ~${op_name}(){
         // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
@@ -30,12 +33,19 @@ public:
     }
 
     virtual int init(std::map<std::string, std::vector<float>> params){
-        // 创建函数实体
         // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
-        //     ${func_init}
+        //     m_funcs[thread_i]->init(params);
         // }
+        m_funcs[0]->init(params);
+        return 0;
     }
-    virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){return 0;};
+    virtual int init(std::map<std::string, std::vector<std::vector<float>>> params){
+        // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
+        //     m_funcs[thread_i]->init(params);
+        // }
+         m_funcs[0]->init(params);
+        return 0;
+    }
     virtual int init(std::map<std::string, std::vector<std::string>> params){
         // for(int thread_i=0; thread_i<${parallel_num}; ++thread_i){
         //     m_funcs[thread_i]->init(params);

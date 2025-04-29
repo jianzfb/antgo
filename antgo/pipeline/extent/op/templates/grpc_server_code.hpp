@@ -76,16 +76,13 @@ public:
         std::string server_pipeline_config = pipeline_config_obj.ToFormattedString();
         EAGLEEYE_LOGD("server pipeline config %s", server_pipeline_config.c_str());
         std::string server_key;
-        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        std::unique_lock<std::mutex> locker(g_create_or_stop_mu);
         // 启动服务
         eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_start(server_pipeline_config, server_key, nullptr);
 
         if(result == eagleeye::SERVER_SUCCESS){
             response->set_code(0);
             response->set_serverkey(server_key);
-
-            // 分配服务锁
-            g_call_mu_map[server_key] = std::mutex();
             locker.unlock();
             return Status::OK;
         }
@@ -96,10 +93,6 @@ public:
     ::grpc::Status ${servername}SyncCall(::grpc::ServerContext* context, const ::${package}::${servername}SyncCallRequest* request, ::${package}::${servername}SyncCallReply* response){
         std::string server_key = request->serverkey();
         std::string server_request = request->serverrequest();
-        if(g_call_mu_map.find(server_key) == g_call_mu_map.end()){
-            EAGLEEYE_LOGD("No server key");
-            return Status::CANCELLED
-        }
 
         // step 1: 解析服务请求，并处理输入数据
         // image -> base64解码 -> opencv read -> memory
@@ -210,7 +203,7 @@ public:
 
         // step 2: 执行服务管线
         std::string server_reply;
-        std::unique_lock<std::mutex> locker(this->g_call_mu_map[server_key]);
+        std::unique_lock<std::mutex> locker(g_call_mu_map[server_key]);
         eagleeye::eagleeye_pipeline_server_call(server_key, server_request_data, server_reply);
         locker.unlock();
 
@@ -220,17 +213,9 @@ public:
     }
     ::grpc::Status ${servername}SyncStop(::grpc::ServerContext* context, const ::${package}::${servername}SyncStopRequest* request, ::${package}::${servername}SyncStopReply* response){
         std::string server_key = request->serverkey();
-        if(g_call_mu_map.find(server_key) == g_call_mu_map.end()){
-            EAGLEEYE_LOGD("No server key");
-            return Status::CANCELLED
-        }
-
-        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        std::unique_lock<std::mutex> locker(g_create_or_stop_mu);
         // 停止服务
         eagleeye::eagleeye_pipeline_server_stop(server_key);
-
-        // 删除服务锁
-        g_call_mu_map.erase(server_key);
         locker.unlock();
 
         response->set_code(0);
@@ -290,7 +275,7 @@ public:
         std::string server_pipeline_config = pipeline_config_obj.ToFormattedString();
         EAGLEEYE_LOGD("server pipeline config %s", server_pipeline_config.c_str());
         std::string server_key;
-        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        std::unique_lock<std::mutex> locker(g_create_or_stop_mu);
         // 启动服务
         eagleeye::ServerStatus result = eagleeye::eagleeye_pipeline_server_start(server_pipeline_config, server_key, nullptr);
         locker.unlock();
@@ -463,12 +448,7 @@ public:
     }
     ::grpc::Status ${servername}AsynStop(::grpc::ServerContext* context, const ::${package}::${servername}AsynStopRequest* request, ::${package}::${servername}AsynStopReply* response){
         std::string server_key = request->serverkey();
-        if(g_call_mu_map.find(server_key) == g_call_mu_map.end()){
-            EAGLEEYE_LOGD("No server key");
-            return Status::CANCELLED
-        }
-
-        std::unique_lock<std::mutex> locker(this->g_create_or_stop_mu);
+        std::unique_lock<std::mutex> locker(g_create_or_stop_mu);
         // 停止服务
         eagleeye::eagleeye_pipeline_server_stop(server_key);
         locker.unlock();

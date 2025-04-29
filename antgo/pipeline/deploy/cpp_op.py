@@ -52,7 +52,7 @@ class CppOp(object):
             'CFTensor': np.float32,
             'CITensor': np.int32,
             'CUCTensor': np.uint8,
-            'CBTensor': np.bool
+            'CBTensor': np.bool_
         }
 
         out_placeholders = []

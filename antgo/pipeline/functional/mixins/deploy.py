@@ -843,7 +843,7 @@ def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, 
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': (),
         'include': os.path.join('extent/include/', f'{op_name}.hpp'),
         'src': '\n'.join([true_op_info['src'], false_op_info['src']]),
     }
@@ -851,7 +851,7 @@ def auto_generate_control_if_op(op_name, op_index, true_func_name, true_kwargs, 
 
 
 def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, output_folder, core_op_set, platform, abi, project_name):
-    op_info = prepare_cplusplus_code(func_name, op_index, func_kwargs.get(func_name, {}), output_folder, core_op_set, platform, abi, project_name)
+    op_info = prepare_cplusplus_code(func_name, op_index, func_kwargs.get(func_name.replace('-', '_').replace('/', '_'), {}), output_folder, core_op_set, platform, abi, project_name)
 
     input_ctx, output_ctx = op_index
     if isinstance(input_ctx, str):
@@ -859,10 +859,10 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
     if isinstance(output_ctx, str):
         output_ctx = [output_ctx]
 
-    arg_code = ''
     op_init_code = ''
-    if len(op_info['args']) > 0:
-        for deploy_arg_name, deploy_arg_list in op_info['args'][0].items():
+    for index in range(len(op_info['args'])):
+        arg_code = ''
+        for deploy_arg_name, deploy_arg_list in op_info['args'][index].items():
             if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
                 op_init_code += f'{deploy_arg_list}\n'
                 if arg_code == '':
@@ -877,13 +877,13 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
                 else:
                     arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-        if 'c++_type' in op_info['args'][0]:
-            args_init_code = op_info['args'][0]['c++_type']+'({'+arg_code+'})'
-            op_init_code += f'm_funcs[thread_i]->init({args_init_code});\n\n'
+        if 'c++_type' in op_info['args'][index]:
+            args_init_code = op_info['args'][index]['c++_type']+'({'+arg_code+'})'
+            op_init_code += f'm_funcs[0]->init({args_init_code});\n\n'
 
     warp_cpp_code_content = \
         gen_code('./templates/for_op_class_code.hpp')(
-            op_name=f"{op_name.replace('_','').capitalize()}Op",
+            op_name=f"{op_name.replace('_','').replace('/','').capitalize()}Op",
             input_num=len(input_ctx),
             output_num=len(output_ctx),
             func_create=f"new {op_info['type']}();" if 'template' not in op_info else f"new {op_info['type']}{op_info['template']}();",
@@ -894,15 +894,15 @@ def auto_generate_control_for_op(op_name, op_index, func_name, func_kwargs, outp
 
     src_folder = os.path.join(output_folder, 'extent', 'include')
     os.makedirs(src_folder, exist_ok=True)
-    with open(os.path.join(src_folder, f'{op_name}.hpp'), 'w') as fp:
+    with open(os.path.join(src_folder, f"{op_name.replace('_','').replace('/','')}.hpp"), 'w') as fp:
         fp.write(warp_cpp_code_content)
 
     info = {
-        'type': f"{op_name.replace('_','').capitalize()}Op",
+        'type': f"{op_name.replace('_','').replace('/','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
-        'include': os.path.join('extent/include/', f'{op_name}.hpp'),
+        'args': (),
+        'include': os.path.join('extent/include/', f"{op_name.replace('_','').replace('/','')}.hpp"),
         'src': op_info['src'],
     }
     return info
@@ -959,7 +959,7 @@ def auto_generate_control_cache_op(op_name, op_index, func_name, func_kwargs, ou
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': (),
         'include': os.path.join('extent/include/', f'{op_name}.hpp'),
         'src': op_info['src'],
     }
@@ -1015,7 +1015,7 @@ def auto_generate_control_interval_op(op_name, op_index, func_name, func_kwargs,
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': (),
         'include': os.path.join('extent/include/', f'{op_name}.hpp'),
         'src': op_info['src'],
     }
@@ -1111,7 +1111,7 @@ def auto_generate_control_group_op(op_name, op_index, group_op_name_list, group_
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': (),
         'include': os.path.join('extent/include/', f'{op_name}.hpp'),
         'src': '\n'.join(src_info_list),
     }
@@ -1185,7 +1185,7 @@ def auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_nam
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': (),
         'include': os.path.join('extent/include/', f'{op_name}.hpp'),
         'src': '\n'.join([det_op_info['src'], tracking_op_info['src']]) if tracking_op_info is not None else det_op_info['src'],
     }
@@ -1242,7 +1242,7 @@ def auto_generate_control_asyn_op(op_name, op_index, func_name, func_kwargs, out
         'type': f"{op_name.replace('_','').capitalize()}Op",
         'input': input_ctx,
         'output': output_ctx,
-        'args': {},
+        'args': (),
         'include': os.path.join('extent/include/', f'{op_name}.hpp'),
         'src': op_info['src'],
     }
@@ -1396,7 +1396,7 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
             is_found_include_directories_insert = True
 
         # 添加opencv依赖
-        if 'set(OpenCV_DIR "")' in line and (config.USING_OPENCV or 'opencv' in compile_info):
+        if 'set(OpenCV_DIR "")' in line:
             if 'arm64' in abi:
                 opencv_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-arm64-install')
             else:
@@ -1642,6 +1642,9 @@ def convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, outpu
         op_args[-1]['std'] = ['{'+','.join(str(m) for m in op_kwargs['std'])+'}']
         op_args[-1]['reverse_channel'] = ['{1}'] if op_kwargs.get('reverse_channel', False) else ['{0}']
 
+    if 'output_dim_0_is_not_b' in op_kwargs:
+        op_args[-1]['output_dim_0_is_not_b'] = ['{1}'] if op_kwargs.get('output_dim_0_is_not_b', False) else ['{0}']
+
     # include_path = f'eagleeye/engine/nano/op/{platform_engine.lower()}_op.hpp'
     include_path = 'eagleeye/engine/nano/op/nn_op.hpp'
     return 'NNOp', template_args, op_args, include_path
@@ -1816,7 +1819,7 @@ def generate_multi_nnnode_pipeline(graph_op_list, graph_op_info, graph_import_ou
             if input_name not in output_list:
                 group_input_list.append(input_name)
         for output_name in output_list:
-            if output_name not in input_list:
+            if output_name not in input_list or output_name in [export_name for export_name, _ in graph_export_outs]:
                 group_output_list.append(output_name)
 
         # 
@@ -1836,15 +1839,14 @@ def generate_multi_nnnode_pipeline(graph_op_list, graph_op_info, graph_import_ou
     group_out_links = ''
     for import_name, _ in graph_import_outs:
         group_in_links += '{'
+        is_found = False
         for group_name in group_list:
-            is_found = False
             if import_name in global_inputs_map[group_name]:
                 data_i = global_inputs_map[group_name].index(import_name)
                 group_in_links += '{'+'"'+group_name+'",'+str(data_i)+'},'
                 is_found = True
-            if is_found:
-                group_in_links = group_in_links[:-1]
-
+        if is_found:
+            group_in_links = group_in_links[:-1]
         group_in_links += '},'
     group_in_links = group_in_links[:-1]
 
@@ -1938,6 +1940,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_name_count[op_name] += 1
 
                 op_info = auto_generate_control_if_op(op_name, op_index, true_func_name, op_kwargs.get('true_func', dict()), false_func_name, op_kwargs.get('false_func', dict()), output_folder, core_op_set, platform, abi, project_name)
+                if 'group_by' in op_kwargs:
+                    op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
+                
                 deploy_graph_info[op_unique_name] = op_info
             elif function_key_list[1] == 'For':
                 function_op_name_list = split_function(function_key_list[2:])
@@ -1946,10 +1951,13 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_name = f'{function_key_list[1]}_{func_op_name}'
                 if op_name not in op_name_count:
                     op_name_count[op_name] = 0
-                op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+                op_unique_name = f"{op_name.replace('-','').replace('/','')}_{op_name_count[op_name]}"
                 op_name_count[op_name] += 1
 
                 op_info = auto_generate_control_for_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                if 'group_by' in op_kwargs:
+                    op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
+
                 deploy_graph_info[op_unique_name] = op_info           
             elif function_key_list[1] == 'Cache':
                 function_op_name_list = split_function(function_key_list[2:])
@@ -1962,6 +1970,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_name_count[op_name] += 1
 
                 op_info = auto_generate_control_cache_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                if 'group_by' in op_kwargs:
+                    op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
+
                 deploy_graph_info[op_unique_name] = op_info
             elif function_key_list[1] == 'Interval':
                 function_op_name_list = split_function(function_key_list[2:])
@@ -1974,6 +1985,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_name_count[op_name] += 1
 
                 op_info = auto_generate_control_interval_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                if 'group_by' in op_kwargs:
+                    op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
+
                 deploy_graph_info[op_unique_name] = op_info
             elif function_key_list[1] == 'DetectOrTracking':
                 function_op_name_list = split_function(function_key_list[2:])
@@ -2001,6 +2015,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
 
                 op_info = auto_generate_control_detectortracking_op(op_name, op_index, det_func_op_name, def_func_op_kwargs, tracking_func_op_name, tracking_func_op_kwargs, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                if 'group_by' in op_kwargs:
+                    op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
+
                 deploy_graph_info[op_unique_name] = op_info
             elif function_key_list[1] == 'Asyn':
                 function_op_name_list = split_function(function_key_list[2:])
@@ -2013,6 +2030,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 op_name_count[op_name] += 1
 
                 op_info = auto_generate_control_asyn_op(op_name, op_index, func_op_name, op_kwargs, output_folder, core_op_set, platform, abi, project_name)
+                if 'group_by' in op_kwargs:
+                    op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
+
                 deploy_graph_info[op_unique_name] = op_info
             else:
                 raise NotImplementedError
@@ -2026,6 +2046,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             op_name_count[op_name] += 1
 
             op_info = auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder)
+            if 'group_by' in op_kwargs:
+                op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
+
             deploy_graph_info[op_unique_name] = op_info
         elif op_name.startswith('eagleeye'):
             # eagleeye核心算子 (op级别算子)
@@ -2085,6 +2108,9 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 # 模型预测引擎算子（平台算子）
                 engine_op_name, template_args, op_args, include_path = \
                     convert_onnx_to_platform_engine(op_name, op_index, op_args, op_kwargs, output_folder, platform, abi, project_name=project_name)
+
+                if 'group_by' in op_kwargs:
+                    op_args += ({'group_by': [op_kwargs['group_by']]},)
 
                 deploy_graph_info[op_unique_name] = {
                     'type': engine_op_name,
@@ -2249,6 +2275,11 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     plugin_code_template = 'plugin_code.cpp'
     if project_config.get('mode', 'server') == 'server':
         plugin_code_template = 'server_plugin_code.cpp'
+
+    # 动态 开启后处理节点添加
+    # 后处理节点：
+    # （1）数据记录节点（自动捕获管线输出，并发送到消息中心）
+    project_postprocess_config = project_config.get('postprocess', {})
     eagleeye_plugin_code_content = \
         gen_code(f'./templates/{plugin_code_template}')(        
             project=pipeline_name,
@@ -2265,7 +2296,8 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             out_links='{'+group_out_links+'}',
             from_links='{'+group_between_links[0]+'}',
             to_links='{'+group_between_links[1]+'}',
-            node_graph=nnnode_graph_code
+            node_graph=nnnode_graph_code,
+            is_add_record_node=1 if project_postprocess_config.get('add_record_node', False) else 0
         )
 
     # TODO，如何解决之前生成的插件代码，完全冲掉问题（可能已经让开发者添加了部分代码）？
@@ -2473,16 +2505,21 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
 
         setup_info = temp_info
 
-    if ('opencv' in eagleeye_config) and (platform.lower() != 'android'):
+    if platform.lower() != 'android':
         # 对于android平台，opencv使用eagleeye自身携带的简化版本
         temp_info = []
         is_found = False
+        is_skip = False
         for line_i, line_info in enumerate(setup_info):
             if line_info == '#opencv':
                 temp_info.append('#opencv')
                 temp_info.append(f'cp {eagleeye_config["opencv"]}/lib/*.so* bin/{abi.lower()}')
                 is_found = True
+                is_skip = True
             else:
+                if is_skip:
+                    is_skip = False
+                    continue
                 temp_info.append(line_info)
 
         if not is_found:
@@ -2588,6 +2625,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
             os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye/env && bash prepare_arm_cross_build_env_10.2.sh')
 
     eagleeye_path = f'{ANTGO_DEPEND_ROOT}/eagleeye/{system_prefix}-install'
+    # 检查是否触发编译
     if not os.path.exists(eagleeye_path):
         print('Compile eagleeye core sdk and collect 3rd dependent')
         compile_props = ['app', 'ffmpeg', 'rk']
@@ -2678,49 +2716,46 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 # 提供对象存储上传/下载
                 # 默认基础镜像提供
                 pass
-            elif compile_prop_key == 'opencv':
-                # 仅对linux下opencv依赖就行处理
-                if compile_prop_val is not None and compile_prop_val != '':
-                    print('Exist opencv dependent, dont need download and compile')
-                    continue
 
-                root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
-                os.makedirs(root_folder, exist_ok=True)
-                if system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
-                    # 交叉编译linux/arm64
-                    install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-arm64-install')
-                    if not os.path.exists(install_path):
-                        if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
-                            # 下载源码
-                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
-                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
+        # (默认) 关联opencv
+        # 仅对linux下opencv依赖就行处理
+        root_folder = os.path.abspath(ANTGO_DEPEND_ROOT)
+        os.makedirs(root_folder, exist_ok=True)
+        if system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+            # 交叉编译linux/arm64
+            install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-arm64-install')
+            if not os.path.exists(install_path):
+                if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                    # 下载源码
+                    os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                    os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
 
-                        # 编译
-                        print('compile opencv')
-                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; tool_chain_path="/opt/cross_build/linux-arm64/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"; cmake -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DTOOLCHAIN_PATH=$tool_chain_path -DCMAKE_C_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-gcc -DCMAKE_CXX_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-g++ -DCMAKE_FIND_ROOT_PATH="$tool_chain_path/aarch64-linux-gnu" -DZLIB_ROOT=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_INCLUDE_DIR=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_LIBRARY=/opt/cross_build/linux-arm64/zlib-1.3.1/libz.so -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D ENABLE_NEON=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
-                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
-                    eagleeye_config[compile_prop_key] = install_path
-                elif system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
-                    # 编译linux/x86-64
-                    install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
-                    if not os.path.exists(install_path):
-                        if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
-                            # 下载源码
-                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
-                            os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
+                # 编译
+                print('compile opencv')
+                os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; tool_chain_path="/opt/cross_build/linux-arm64/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu"; cmake -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DTOOLCHAIN_PATH=$tool_chain_path -DCMAKE_C_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-gcc -DCMAKE_CXX_COMPILER=$tool_chain_path/bin/aarch64-none-linux-gnu-g++ -DCMAKE_FIND_ROOT_PATH="$tool_chain_path/aarch64-linux-gnu" -DZLIB_ROOT=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_INCLUDE_DIR=/opt/cross_build/linux-arm64/zlib-1.3.1 -DZLIB_LIBRARY=/opt/cross_build/linux-arm64/zlib-1.3.1/libz.so -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D ENABLE_NEON=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+                os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
+            eagleeye_config["opencv"] = install_path
+        elif system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+            # 编译linux/x86-64
+            install_path = os.path.join(ANTGO_DEPEND_ROOT, 'opencv-install')
+            if not os.path.exists(install_path):
+                if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'opencv')):
+                    # 下载源码
+                    os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv.git -b 3.4')
+                    os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/opencv/opencv_contrib.git -b 3.4')
 
-                        # 编译
-                        print('compile opencv')
-                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
-                        os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
+                # 编译
+                print('compile opencv')
+                os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; mkdir build ; cd build ; cmake -DOPENCV_EXTRA_MODULES_PATH={ANTGO_DEPEND_ROOT}/opencv_contrib/modules -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX={install_path} -D BUILD_DOCS=OFF -D BUILD_EXAMPLES=OFF -D BUILD_opencv_apps=OFF -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF -D BUILD_PERF_TESTS=OFF  -D BUILD_JAVA=OFF -D BUILD_opencv_java=OFF -D BUILD_TESTS=OFF -D WITH_FFMPEG=OFF .. ; make -j4 ; make install')
+                os.system(f'cd {ANTGO_DEPEND_ROOT} ; cd opencv ; rm -rf build')
 
-                        # 添加so的搜索路径 (for linux)
-                        so_abs_path = os.path.join(install_path, 'lib')
-                        os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
-                    eagleeye_config[compile_prop_key] = install_path
-                else:
-                    # android（do nothing）
-                    eagleeye_config[compile_prop_key] = f'{eagleeye_path}/3rd/opencv/'
+                # 添加so的搜索路径 (for linux)
+                so_abs_path = os.path.join(install_path, 'lib')
+                os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
+            eagleeye_config["opencv"] = install_path
+        else:
+            # android（do nothing）
+            eagleeye_config["opencv"] = f'{eagleeye_path}/3rd/opencv/'
 
         # 准备eagleeye编译脚本
         compile_param_suffix = ''
@@ -2750,7 +2785,7 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
         print(f'compile script {compile_script}')
         os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye ; bash {compile_script} ;')
 
-    # 第三方依赖信息so库整理
+    # 第三方依赖信息so库整理(为了构建cmakelist)
     for compile_prop_key, compile_prop_val in eagleeye_config.items():
         if compile_prop_key == 'ffmpeg':
             # install folder
@@ -2770,21 +2805,20 @@ def prepare_eagleeye_environment(system_platform, abi_platform, eagleeye_config=
                 compile_prop_val =  os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'rk')
 
             eagleeye_config[compile_prop_key] = compile_prop_val
-        elif compile_prop_key == 'opencv':
-            # install folder
-            opencv_install_folder = ''
-            if system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
-                if compile_prop_val is None:
-                    compile_prop_val = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-install')
-                opencv_install_folder = compile_prop_val
-            elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
-                if compile_prop_val is None:
-                    compile_prop_val = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-arm64-install')
-                opencv_install_folder = compile_prop_val
-            else:
-                opencv_install_folder = compile_prop_val
-            
-            eagleeye_config[compile_prop_key] = opencv_install_folder
+
+    # 默认必须关联opencv,第三方库so整理
+    opencv_install_folder = None
+    if system_platform.lower().startswith('linux') and 'x86-64' in abi_platform.lower():
+        # linux : x86-64
+        opencv_install_folder = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-install')
+    elif system_platform.lower().startswith('linux') and 'arm64' in abi_platform.lower():
+        # linux: arm64
+        opencv_install_folder = os.path.join(os.path.abspath(ANTGO_DEPEND_ROOT), 'opencv-arm64-install')
+    else:
+        # android: arm64-v8a
+        opencv_install_folder = f'{eagleeye_path}/3rd/opencv/lib/{abi_platform.lower()}'
+
+    eagleeye_config["opencv"] = opencv_install_folder
 
     eagleeye_path = os.path.abspath(eagleeye_path)
     return eagleeye_path, eagleeye_config
@@ -3005,12 +3039,12 @@ class DeployMixin:
                 plugin_folder = os.path.join('./', "bin", abi_platform if abi_platform != 'arm64' else 'arm64-v8a', 'plugins', project_name)
                 is_exist = False
                 for exist_code_snippet in code_snippet_list:
-                    if exist_code_snippet == f'mv {bin_folder}/lib{project_name}.so {plugin_folder}/\n':
+                    if exist_code_snippet == f'cp {bin_folder}/lib{project_name}.so {plugin_folder}/\n':
                         is_exist = True
                         break
                 if not is_exist:
                     code_snippet_list.append(f'mkdir -p {plugin_folder}\n')
-                    code_snippet_list.append(f'mv {bin_folder}/lib{project_name}.so {plugin_folder}/\n')
+                    code_snippet_list.append(f'cp {bin_folder}/lib{project_name}.so {plugin_folder}/\n')
                 with open(os.path.join(output_folder, 'setup.sh'), 'w') as fp:
                     for code_snippet in code_snippet_list:
                         fp.write(f'{code_snippet}')

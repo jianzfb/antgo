@@ -191,135 +191,137 @@ for(int i=0; i<from_links.size(); ++i){
 
 
 // record data node
-if(${is_asyn}){
-AnyNode* record = new AutoNode([out_links, ${project}](){
-    LambdaANode* ln = new LambdaANode(
-        [out_links](std::vector<Tensor>& caches, std::vector<AnySignal*> input_signals, std::vector<AnySignal*> output_signals){
-            JsonSignal* js = (JsonSignal*)output_signals[0];
-            for(int sig_i=0; sig_i<input_signals.size(); ++sig_i){
-                if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_TENSOR){
-                    // Tensor类型（对于数据过多，会导致性能问题）
-                    TensorSignal* tensor_sig = (TensorSignal*)(input_signals[sig_i]);
-                    Tensor tensor = tensor_sig->getData();
-                    std::vector<int> elem_dims(tensor.dims().size());
-                    for(int dim_i=0; dim_i<elem_dims.size(); ++dim_i){
-                        elem_dims[dim_i] = tensor.dims()[dim_i];
-                    }
-                    EagleeyeType elem_type = tensor.type();
-                    int elem_num = tensor.dims().production();
-                    std::vector<float> elem_data(elem_num);
-                    if(elem_type == EAGLEEYE_FLOAT){
-                        float* ptr = tensor.cpu<float>();
-                        for(int elem_i=0; elem_i<elem_num; ++elem_i){
-                            elem_data[elem_i] = ptr[elem_i];
+if(${is_add_record_node}){
+    if(${is_asyn}){
+    AnyNode* record = new AutoNode([out_links, ${project}](){
+        LambdaANode* ln = new LambdaANode(
+            [out_links](std::vector<Tensor>& caches, std::vector<AnySignal*> input_signals, std::vector<AnySignal*> output_signals){
+                JsonSignal* js = (JsonSignal*)output_signals[0];
+                for(int sig_i=0; sig_i<input_signals.size(); ++sig_i){
+                    if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_TENSOR){
+                        // Tensor类型（对于数据过多，会导致性能问题）
+                        TensorSignal* tensor_sig = (TensorSignal*)(input_signals[sig_i]);
+                        Tensor tensor = tensor_sig->getData();
+                        std::vector<int> elem_dims(tensor.dims().size());
+                        for(int dim_i=0; dim_i<elem_dims.size(); ++dim_i){
+                            elem_dims[dim_i] = tensor.dims()[dim_i];
                         }
-                    }
-                    else if(elem_type == EAGLEEYE_DOUBLE){
-                        double* ptr = tensor.cpu<double>();
-                        for(int elem_i=0; elem_i<elem_num; ++elem_i){
-                            elem_data[elem_i] = ptr[elem_i];
+                        EagleeyeType elem_type = tensor.type();
+                        int elem_num = tensor.dims().production();
+                        std::vector<float> elem_data(elem_num);
+                        if(elem_type == EAGLEEYE_FLOAT){
+                            float* ptr = tensor.cpu<float>();
+                            for(int elem_i=0; elem_i<elem_num; ++elem_i){
+                                elem_data[elem_i] = ptr[elem_i];
+                            }
                         }
-                    }
-                    else if(elem_type == EAGLEEYE_INT || elem_type == EAGLEEYE_UINT){
-                        int* ptr = tensor.cpu<int>();
-                        for(int elem_i=0; elem_i<elem_num; ++elem_i){
-                            elem_data[elem_i] = ptr[elem_i];
+                        else if(elem_type == EAGLEEYE_DOUBLE){
+                            double* ptr = tensor.cpu<double>();
+                            for(int elem_i=0; elem_i<elem_num; ++elem_i){
+                                elem_data[elem_i] = ptr[elem_i];
+                            }
                         }
+                        else if(elem_type == EAGLEEYE_INT || elem_type == EAGLEEYE_UINT){
+                            int* ptr = tensor.cpu<int>();
+                            for(int elem_i=0; elem_i<elem_num; ++elem_i){
+                                elem_data[elem_i] = ptr[elem_i];
+                            }
+                        }
+                        else{
+                            // skip
+                            
+                            continue;
+                        }
+
+                        std::string key_name =  out_links[sig_i].first + ":" + std::to_string(out_links[sig_i].second);
+                        js->setKT(key_name, elem_data, elem_type, elem_dims);
+                    }
+                    else if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGB_IMAGE || 
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGBA_IMAGE || 
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGR_IMAGE ||
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGRA_IMAGE ||
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_GRAY_IMAGE){
+                        // TODO 图像数据，构建base64编码
                     }
                     else{
-                        // skip
-                        
-                        continue;
+                        // TODO 支持其他类型
                     }
-
-                    std::string key_name =  out_links[sig_i].first + ":" + std::to_string(out_links[sig_i].second);
-                    js->setKT(key_name, elem_data, elem_type, elem_dims);
                 }
-                else if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGB_IMAGE || 
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGBA_IMAGE || 
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGR_IMAGE ||
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGRA_IMAGE ||
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_GRAY_IMAGE){
-                    // TODO 图像数据，构建base64编码
-                }
-                else{
-                    // TODO 支持其他类型
-                }
+                js->flush();
             }
-            js->flush();
-        }
-    );
-    ln->append<JsonSignal>(new JsonSignal(${project}->getPipelineName(), true));
-    return ln;
-}, 5);
-${project}->add(record, "record");
-}
-else{
-AnyNode* record = new ProxyNode([out_links, ${project}](){
-    LambdaANode* ln = new LambdaANode(
-        [out_links](std::vector<Tensor>& caches, std::vector<AnySignal*> input_signals, std::vector<AnySignal*> output_signals){
-            JsonSignal* js = (JsonSignal*)output_signals[0];
-            for(int sig_i=0; sig_i<input_signals.size(); ++sig_i){
-                if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_TENSOR){
-                    // Tensor类型（对于数据过多，会导致性能问题）
-                    TensorSignal* tensor_sig = (TensorSignal*)(input_signals[sig_i]);
-                    Tensor tensor = tensor_sig->getData();
-                    std::vector<int> elem_dims(tensor.dims().size());
-                    for(int dim_i=0; dim_i<elem_dims.size(); ++dim_i){
-                        elem_dims[dim_i] = tensor.dims()[dim_i];
-                    }
-                    EagleeyeType elem_type = tensor.type();
-                    int elem_num = tensor.dims().production();
-                    std::vector<float> elem_data(elem_num);
-                    if(elem_type == EAGLEEYE_FLOAT){
-                        float* ptr = tensor.cpu<float>();
-                        for(int elem_i=0; elem_i<elem_num; ++elem_i){
-                            elem_data[elem_i] = ptr[elem_i];
+        );
+        ln->append<JsonSignal>(new JsonSignal(${project}->getPipelineName(), true));
+        return ln;
+    }, 5);
+    ${project}->add(record, "record");
+    }
+    else{
+    AnyNode* record = new ProxyNode([out_links, ${project}](){
+        LambdaANode* ln = new LambdaANode(
+            [out_links](std::vector<Tensor>& caches, std::vector<AnySignal*> input_signals, std::vector<AnySignal*> output_signals){
+                JsonSignal* js = (JsonSignal*)output_signals[0];
+                for(int sig_i=0; sig_i<input_signals.size(); ++sig_i){
+                    if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_TENSOR){
+                        // Tensor类型（对于数据过多，会导致性能问题）
+                        TensorSignal* tensor_sig = (TensorSignal*)(input_signals[sig_i]);
+                        Tensor tensor = tensor_sig->getData();
+                        std::vector<int> elem_dims(tensor.dims().size());
+                        for(int dim_i=0; dim_i<elem_dims.size(); ++dim_i){
+                            elem_dims[dim_i] = tensor.dims()[dim_i];
                         }
-                    }
-                    else if(elem_type == EAGLEEYE_DOUBLE){
-                        double* ptr = tensor.cpu<double>();
-                        for(int elem_i=0; elem_i<elem_num; ++elem_i){
-                            elem_data[elem_i] = ptr[elem_i];
+                        EagleeyeType elem_type = tensor.type();
+                        int elem_num = tensor.dims().production();
+                        std::vector<float> elem_data(elem_num);
+                        if(elem_type == EAGLEEYE_FLOAT){
+                            float* ptr = tensor.cpu<float>();
+                            for(int elem_i=0; elem_i<elem_num; ++elem_i){
+                                elem_data[elem_i] = ptr[elem_i];
+                            }
                         }
-                    }
-                    else if(elem_type == EAGLEEYE_INT || elem_type == EAGLEEYE_UINT){
-                        int* ptr = tensor.cpu<int>();
-                        for(int elem_i=0; elem_i<elem_num; ++elem_i){
-                            elem_data[elem_i] = ptr[elem_i];
+                        else if(elem_type == EAGLEEYE_DOUBLE){
+                            double* ptr = tensor.cpu<double>();
+                            for(int elem_i=0; elem_i<elem_num; ++elem_i){
+                                elem_data[elem_i] = ptr[elem_i];
+                            }
                         }
+                        else if(elem_type == EAGLEEYE_INT || elem_type == EAGLEEYE_UINT){
+                            int* ptr = tensor.cpu<int>();
+                            for(int elem_i=0; elem_i<elem_num; ++elem_i){
+                                elem_data[elem_i] = ptr[elem_i];
+                            }
+                        }
+                        else{
+                            // skip
+                            
+                            continue;
+                        }
+
+                        std::string key_name =  out_links[sig_i].first + ":" + std::to_string(out_links[sig_i].second);
+                        js->setKT(key_name, elem_data, elem_type, elem_dims);
+                    }
+                    else if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGB_IMAGE || 
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGBA_IMAGE || 
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGR_IMAGE ||
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGRA_IMAGE ||
+                    input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_GRAY_IMAGE){
+                        // TODO 图像数据，构建base64编码
                     }
                     else{
-                        // skip
-                        
-                        continue;
+                        // TODO 支持其他类型
                     }
-
-                    std::string key_name =  out_links[sig_i].first + ":" + std::to_string(out_links[sig_i].second);
-                    js->setKT(key_name, elem_data, elem_type, elem_dims);
                 }
-                else if(input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGB_IMAGE || 
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_RGBA_IMAGE || 
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGR_IMAGE ||
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_BGRA_IMAGE ||
-                input_signals[sig_i]->getSignalType() == EAGLEEYE_SIGNAL_GRAY_IMAGE){
-                    // TODO 图像数据，构建base64编码
-                }
-                else{
-                    // TODO 支持其他类型
-                }
+                js->flush();
             }
-            js->flush();
-        }
-    );
-    ln->append<JsonSignal>(new JsonSignal(${project}->getPipelineName(), true));
-    return ln;
-});
-${project}->add(record, "record");
-}
+        );
+        ln->append<JsonSignal>(new JsonSignal(${project}->getPipelineName(), true));
+        return ln;
+    });
+    ${project}->add(record, "record");
+    }
 
-for(int i=0; i<out_links.size(); ++i){
-    ${project}->bind(out_links[i].first.c_str(),  out_links[i].second, "record", i);
+    for(int i=0; i<out_links.size(); ++i){
+        ${project}->bind(out_links[i].first.c_str(),  out_links[i].second, "record", i);
+    }
 }
 
 // >>>>>>>>>>>>>>>>>>>>>>AUTOGENERATE PLUGIN SOURCE>>>>>>>>>>>>>>>>>>>>>>

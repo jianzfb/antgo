@@ -21,6 +21,7 @@ from antgo import tools
 from antgo.script import *
 from antgo.utils.config_dashboard import *
 from jinja2 import Environment, FileSystemLoader
+import subprocess
 import json
 import yaml
 import pathlib
@@ -70,6 +71,7 @@ DEFINE_string("user", None, "user name")
 DEFINE_string("password", None, "user password")
 DEFINE_indicator("remote", True, "whether execute in remote")
 DEFINE_string("data-folder", None, "")
+DEFINE_indicator("log", True, "whether show log")
 
 ############## submitter ###################
 DEFINE_indicator('ssh', True, '')     # ssh 提交
@@ -484,6 +486,8 @@ def main():
           'command': command,
         }
         server_deploy_content = server_deploy_template.render(**server_deploy_data)
+        
+        print(">>>>>>>>>>> remote shell script <<<<<<<<<<<<<")
         print(server_deploy_content)
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -491,7 +495,19 @@ def main():
             fp.write(server_deploy_content)
           deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
           logging.info(deploy_cmd)
-          os.system(deploy_cmd)
+
+          deploy_cmd_response = subprocess.Popen(deploy_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          deploy_cmd_response = deploy_cmd_response.stdout.read()
+          deploy_cmd_response = deploy_cmd_response.decode('utf-8')
+          
+          print(">>>>>>>>>>> deploy shell log <<<<<<<<<<<<<")
+          print(deploy_cmd_response)
+          info_list = deploy_cmd_response.split('\n')
+          container_id = info_list[-2] if info_list[-1] == '' else info_list[-1]
+          print(f'container id {container_id}')
+          if args.log:
+            # 监控远端容器日志
+            os.system(f"antgo log --id={container_id}")
       elif args.k8s:
         logging.error('K8s deploy in comming.')
         return
@@ -551,6 +567,7 @@ def main():
         }
         server_deploy_content = server_deploy_template.render(**server_deploy_data)
 
+        print(">>>>>>>>>>> remote shell script <<<<<<<<<<<<<")
         print(server_deploy_content)
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -558,7 +575,19 @@ def main():
             fp.write(server_deploy_content)
           deploy_cmd = f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} bash -s < {os.path.join(temp_dir, "deploy.sh")}'
           logging.info(deploy_cmd)
-          os.system(deploy_cmd)
+
+          deploy_cmd_response = subprocess.Popen(deploy_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          deploy_cmd_response = deploy_cmd_response.stdout.read()
+          deploy_cmd_response = deploy_cmd_response.decode('utf-8')
+
+          print(">>>>>>>>>>> deploy shell log <<<<<<<<<<<<<")
+          print(deploy_cmd_response)
+          info_list = deploy_cmd_response.split('\n')
+          container_id = info_list[-2] if info_list[-1] == '' else info_list[-1]
+          print(f'container id {container_id}')
+          if args.log:
+            # 监控远端容器日志
+            os.system(f"antgo log --id={container_id}")
       elif args.k8s:
         logging.error('K8s deploy in comming.')
 
