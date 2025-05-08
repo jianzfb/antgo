@@ -10,11 +10,35 @@ class If(object):
     def __init__(self, true_func, false_func, **kwargs):
         self.true_func = true_func
         self.false_func = false_func
+        self.ext_info = []
+        if getattr(true_func, 'info', None):
+            self.ext_info.extend(getattr(true_func, 'info')())
+        if getattr(false_func, 'info', None):
+            self.ext_info.extend(getattr(false_func, 'info')())
 
-    def __call__(self, *args):
+    def info(self):
+        return self.ext_info
+
+    def __call__(self, *args, **kwargs):
         true_or_false_val = args[0]
         func_args = args[1:] if len(args) > 1 else []
         if bool(true_or_false_val):
-            return self.true_func(*func_args)
+            ext_data_dict = {}
+            if getattr(self.true_func, 'info', None):
+                for ext_data_name in getattr(self.true_func, 'info')():
+                    ext_data_dict.update(
+                        {
+                            ext_data_name: kwargs.get(ext_data_name, None)
+                        }
+                    )
+            return self.true_func(*func_args, **ext_data_dict)
         else:
-            return self.false_func(*func_args)
+            ext_data_dict = {}
+            if getattr(self.false_func, 'info', None):
+                for ext_data_name in getattr(self.false_func, 'info')():
+                    ext_data_dict.update(
+                        {
+                            ext_data_name: kwargs.get(ext_data_name, None)
+                        }
+                    )
+            return self.false_func(*func_args, **ext_data_name)

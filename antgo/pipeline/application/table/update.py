@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 2024/11/27 22:42
-# @File    : addorget.py
+# @File    : update.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -13,18 +13,20 @@ from antgo.pipeline.functional.common.env import *
 from sqlalchemy import and_, or_
 
 
-class AddorgetOp(object):
-    def __init__(self, table, fields, data=None, keys=None):
-        # fields:   对应输入的字段名字
+class UpdateOp(object):
+    def __init__(self, table, field, export=None, keys=None, default=None, detail=None):
+        # field:   对应输入的字段名字
         # keys:     标记过滤关键字段
         self.table = table
-        self.fields = fields if isinstance(fields, list) else [fields]
-        self.data = data
+        self.field = field if isinstance(field, list) else [field]
+        self.default = default
+        self.export = export
+        self.detail = None
         self.key_i = [0]
         if keys is not None:
             self.key_i = []
             for key in keys:
-                self.key_i.append(self.fields.index(key))
+                self.key_i.append(self.field.index(key))
 
     def info(self):
         # 设置需要使用隐信息（数据库、session_id）
@@ -37,26 +39,29 @@ class AddorgetOp(object):
         db = get_thread_session()
         # 检查是否已经存在
         if len(self.key_i) == 1:
-            record = db.query(orm_table).filter(getattr(orm_table, self.fields[self.key_i[0]]) == args[self.key_i[0]]).one_or_none()
+            record = db.query(orm_table).filter(getattr(orm_table, self.field[self.key_i[0]]) == args[self.key_i[0]]).one_or_none()
         elif len(self.key_i) == 2:
-            record = db.query(orm_table).filter(and_(getattr(orm_table, self.fields[self.key_i[0]]) == args[self.key_i[0]], getattr(orm_table, self.fields[self.key_i[1]]) == args[self.key_i[1]])).one_or_none()
+            record = db.query(orm_table).filter(and_(getattr(orm_table, self.field[self.key_i[0]]) == args[self.key_i[0]], getattr(orm_table, self.field[self.key_i[1]]) == args[self.key_i[1]])).one_or_none()
 
-        # 添加一条记录
         if record is None:
-            field_info = {}
-            for key, value in zip(self.fields, args):
-                field_info[key] = value
-            record = orm_table(**field_info)
-            db.add(record)
-            db.commit()
+            set_context_exit_info(session_id, detail="no record existed in db" if self.detail is None else self.detail)
+            return None
+
+        # 更新记录信息
+        field_info = {}
+        for key, value in zip(self.field, args):
+            if value is not None:
+                # 仅对非None数据进行赋值
+                setattr(record, key, value)
+        db.commit()
 
         # 如果不需要提取指定字段，则返回对象
-        if self.data is None:
+        if self.export is None:
             return record
 
         # 返回指定字段数据
         obj_info = {}
-        for data_name in self.data:
+        for data_name in self.export:
             if '/' not in data_name:
                 # 表内属性
                 obj_info[data_name] = getattr(record, data_name)

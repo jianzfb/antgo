@@ -9,7 +9,6 @@ from antgo.pipeline.hub import *
 from antgo.pipeline.functional.data_collection import *
 from antgo.pipeline.functional import *
 from antgo.pipeline.extent import op
-from antgo.pipeline.application.table.table import update_table_info
 from antgo.pipeline.extent.glue.common import *
 from antgo.pipeline.engine import *
 from antgo.pipeline.eagleeye import *

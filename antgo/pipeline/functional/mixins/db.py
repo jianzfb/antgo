@@ -16,9 +16,34 @@ from sqlalchemy.dialects.mysql import FLOAT
 from antgo.pipeline.extent.op.loader import *
 from contextlib import contextmanager
 import datetime
+import traceback
+import logging
 
 __global_db_session = None
 __global_db_orm = None
+__table_info = []
+__table_default = {}
+
+def get_table_info():
+    global __table_info
+    return __table_info
+
+def update_table_info(table_info):
+    global __table_info
+    __table_info.append(table_info)
+
+def get_table_default():
+    global __table_default
+    return __table_default
+
+def config_table_default(table_name, table_record):
+    global __table_default
+    if table_name not in __table_default:
+        __table_default[table_name] = []
+    
+    if isinstance(table_record, dict):
+        table_record = [table_record]
+    __table_default[table_name].extend(table_record)
 
 
 def create_db_session(db_url, **db_kwargs):
@@ -65,10 +90,11 @@ def create_db_orm(configs):
     # 搜集反向关联信息
     inverse_link_info = {}
     for config_info in configs:
-        if config_info['table'] in ['task', 'user']:
+        if config_info['table'] in ['task']:
             # 内部已经构建
+            logging.warn(f"table {config_info['table']} duplication")
             continue
-        
+
         table_cls_name = config_info['table'].capitalize()
         table_name = config_info['table'].lower()
         for link_name in config_info['links']:
@@ -78,6 +104,8 @@ def create_db_orm(configs):
             inverse_link_info[link_name].append(f'{table_name} = relationship("{table_cls_name}", back_populates="{link_name}", cascade="all,delete, delete-orphan")')
 
     # 搜集表信息，并构建
+    user_table_fields_ext_info = ''
+    user_table_links_ext_info = ''
     for config_info in configs:
         if config_info['table'] in ['task']:
             # 内部已经构建
@@ -96,6 +124,7 @@ def create_db_orm(configs):
                 field_default = f'"{field_info["default"]}"'
 
             table_field_info += f'    {field_name} = Column({filed_type_map[field_type]}, default={field_default})\n'
+        
 
         table_link_info = ''
         for link_name in config_info['links']:
@@ -107,10 +136,16 @@ def create_db_orm(configs):
     {link_name} = relationship('{link_name.capitalize()}', back_populates="{table_name}")
             '''
 
+        if config_info['table'] == 'user':
+            # user 表扩展信息
+            user_table_fields_ext_info = table_field_info
+            user_table_links_ext_info = table_link_info
+            continue
+
         table_inverse_info = ''
         if table_name in inverse_link_info:
             for inverse_code in inverse_link_info[table_name]:
-                table_inverse_info += f'{inverse_code}\n'
+                table_inverse_info += f'    {inverse_code}\n'
 
         table_template = f'''
 class {table_cls_name}(Base):
@@ -118,7 +153,7 @@ class {table_cls_name}(Base):
     id = Column(Integer, primary_key=True)
 {table_field_info}
 {table_link_info}
-    {table_inverse_info}
+{table_inverse_info}
 
     def __repr__(self):
         return '{table_cls_name}'
@@ -139,26 +174,32 @@ class {table_cls_name}(Base):
     {info}
             '''
     orm_content = \
-        gen_code('./templates/orm')(custom_tables=custom_tables, custom_inverse_links_in_user=custom_inverse_links_in_user, custom_inverse_links_in_task=custom_inverse_links_in_task)
+        gen_code('./templates/orm')(
+            custom_tables=custom_tables, 
+            custom_inverse_links_in_user=custom_inverse_links_in_user, 
+            custom_inverse_links_in_task=custom_inverse_links_in_task,
+            user_table_fields_ext_info=user_table_fields_ext_info,
+            user_table_links_ext_info=user_table_links_ext_info
+        )
 
     with open('./orm.py', 'w') as fp:
         fp.write(orm_content)
 
 
-@contextmanager
-def local_session_context():
-    global __global_db_session
-    if __global_db_session is None:
-        yield None
-        return
+# @contextmanager
+# def local_session_context():
+#     global __global_db_session
+#     if __global_db_session is None:
+#         yield None
+#         return
 
-    sess = __global_db_session()
-    try:
-        yield sess
-    except Exception as e:  # swallow any exception
-        sess.rollback()
-    finally:
-        sess.close()
+#     sess = __global_db_session()
+#     try:
+#         yield sess
+#     except Exception as e:  # swallow any exception
+#         sess.rollback()
+#     finally:
+#         sess.close()
 
 
 __thread_db_info = threading.local()
@@ -177,6 +218,7 @@ def thread_session_context():
         yield __thread_db_info.sess
     except Exception as e:  # swallow any exception
         __thread_db_info.sess.rollback()
+        traceback.print_exc()
     finally:
         __thread_db_info.sess.close()
 

@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 2024/11/27 22:42
-# @File    : add.py
+# @File    : addorupdate.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -13,15 +13,14 @@ from antgo.pipeline.functional.common.env import *
 from sqlalchemy import and_, or_
 
 
-class AddOp(object):
-    def __init__(self, table, field, export=None, keys=None, default=None, detail=None):
+class AddorupdateOp(object):
+    def __init__(self, table, field, export=None, keys=None, default=None):
         # field:   对应输入的字段名字
         # keys:     标记过滤关键字段
         self.table = table
         self.field = field if isinstance(field, list) else [field]
         self.default = default
         self.export = export
-        self.detail = None
         self.key_i = [0]
         if keys is not None:
             self.key_i = []
@@ -43,13 +42,14 @@ class AddOp(object):
         elif len(self.key_i) == 2:
             record = db.query(orm_table).filter(and_(getattr(orm_table, self.field[self.key_i[0]]) == args[self.key_i[0]], getattr(orm_table, self.field[self.key_i[1]]) == args[self.key_i[1]])).one_or_none()
 
+        is_new_record = True
         if record is not None:
-            set_context_exit_info(session_id, detail="existed in db" if self.detail is None else self.detail)
-            return None
+            is_new_record = False
 
-        # 添加一条记录
-        if record is None:
+        if is_new_record:
+            # 添加一条记录
             field_info = {}
+            # 用户指定数据
             for key, value in zip(self.field, args):
                 if value is not None:
                     # 仅对非None数据进行赋值
@@ -60,6 +60,8 @@ class AddOp(object):
                         field_info[foreign_table_name] = foreign_record
                     else:
                         field_info[key] = value
+
+            # 默认数据
             if self.default is not None:
                 for key, value in self.default.items():
                     if value is not None:
@@ -74,6 +76,13 @@ class AddOp(object):
 
             record = orm_table(**field_info)
             db.add(record)
+            db.commit()
+        else:
+            field_info = {}
+            for key, value in zip(self.field, args):
+                if value is not None:
+                    # 仅对非None数据进行赋值
+                    setattr(record, key, value)
             db.commit()
 
         # 如果不需要提取指定字段，则返回对象

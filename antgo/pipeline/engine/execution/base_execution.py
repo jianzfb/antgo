@@ -50,7 +50,7 @@ class BaseExecution:
     def __call__(self, *arg, **kws):
         if self.__is_need_exit__(arg[0].__dict__.get('session_id', None)):
             # 检查退出标记
-            return None
+            return arg[0]
 
         try:
             if bool(self._index):
@@ -60,23 +60,24 @@ class BaseExecution:
                 # TODO, 存在无法区分意图情况,op[A,B], op[(A,B)]
                 # op[A,B] 表达的是输入A，输出B
                 # op[(A,B)] 表达的是输出A，B；需要转换成op[[A,B]]表达
-                if (isinstance(self._index, tuple) or isinstance(self._index, list)) and ((isinstance(self._index[1], tuple) or isinstance(self._index[1], list))):
-                    # if not isinstance(self._index[1],tuple) or len(self._index[1]) != len(res):
-                    #     raise IndexError(
-                    #         f'Op has {len(res)} outputs, but {len(self._index[1])} indices are given.'
-                    #     )
+                if (isinstance(self._index, tuple) or isinstance(self._index, list)) and len(self._index) >= 2 and ((isinstance(self._index[1], tuple) or isinstance(self._index[1], list))):
+                    # (A,B),(A,(B,C))
                     for i, j in zip(self._index[1], res):
                         setattr(arg[0], i, j)
+                elif (isinstance(self._index, tuple) or isinstance(self._index, list)) and len(self._index) >= 2 and (isinstance(self._index[1], str)):
+                    setattr(arg[0], self._index[1], res)
                 # Single output.
                 else:
                     if isinstance(res, NoUpdate):
                         return arg[0]
 
-                    if (isinstance(self._index, list)) and (isinstance(res, tuple) or isinstance(res, list)):
+                    if (isinstance(self._index, tuple) or isinstance(self._index, list)) and (isinstance(res, tuple) or isinstance(res, list)):
+                        # [A,B]
                         for i, j in zip(self._index, res):
                             setattr(arg[0], i, j)
                     else:
-                        setattr(arg[0], self._index[1], res)
+                        # (B)
+                        setattr(arg[0], self._index, res)
                 return arg[0]
             else:
                 if isinstance(self._op, CppOp):

@@ -13,10 +13,10 @@ from sqlalchemy import and_, or_
 
 
 class FilterOp(object):
-    def __init__(self, table, fields, data=None, prefix='and'):
+    def __init__(self, table, field, export=None, prefix='and'):
         self.table = table
-        self.data = data
-        self.fields = fields if isinstance(fields, list) else [fields]
+        self.export = export
+        self.field = field if isinstance(field, list) else [field]
         assert(prefix in ['and', 'or'])
         self.prefix = prefix
 
@@ -26,20 +26,20 @@ class FilterOp(object):
         prefix_op = and_ if self.prefix == 'and' else or_
         objs = None
         db = get_thread_session()
-        if len(self.fields) == 1:
-            objs = db.query(orm_table).filter(getattr(orm_table, self.fields[0]) == args[0]).all()
-        elif len(self.fields) == 2:
+        if len(self.field) == 1:
+            objs = db.query(orm_table).filter(getattr(orm_table, self.field[0]) == args[0]).all()
+        elif len(self.field) == 2:
             objs = db.query(orm_table).filter(
-                prefix_op(getattr(orm_table, self.fields[0]) == args[0], getattr(orm_table, self.fields[1]) == args[1])
+                prefix_op(getattr(orm_table, self.field[0]) == args[0], getattr(orm_table, self.field[1]) == args[1])
             ).all()
 
-        if self.data is None:
+        if self.export is None:
             return objs
 
         obj_infos = []
         for filter_obj in objs:
             info_dict = {}
-            for data_name in self.data:
+            for data_name in self.export:
                 if '/' not in data_name:
                     # 表内属性
                     info_dict[data_name] = getattr(filter_obj, data_name)

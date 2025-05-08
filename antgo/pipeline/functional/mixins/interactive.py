@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 from antgo.pipeline.engine import *
-from antgo.pipeline.functional.mixins.serve import _APIWrapper
+from antgo.pipeline.functional.mixins.serve import ServerInfo
 import cv2
 import os
 import base64
@@ -20,7 +20,7 @@ class InteractiveMixin:
 	# POLYGON, POINT, LINE, RECT
 	def interactive_points(self, bind_src, bind_tgt, num=1, config={}):
 
-		InteractiveMixin.interactive_elements[f'{_APIWrapper.tls.placeholder._name}/{bind_src}'] = {
+		InteractiveMixin.interactive_elements[f'{ServerInfo.pipeline_name}/{bind_src}'] = {
 			'mode': 'POINT',
 			'num': num,
 			'target': bind_tgt,
@@ -35,7 +35,7 @@ class InteractiveMixin:
 		return self._factory(inner())
 
 	def interactive_rects(self, bind_src, bind_tgt, num=1, config={}):
-		InteractiveMixin.interactive_elements[f'{_APIWrapper.tls.placeholder._name}/{bind_src}'] = {
+		InteractiveMixin.interactive_elements[f'{ServerInfo.pipeline_name}/{bind_src}'] = {
 			'mode': 'RECT',
 			'num': num,
 			'target': bind_tgt,
@@ -50,7 +50,7 @@ class InteractiveMixin:
 		return self._factory(inner())
 
 	def interactive_lines(self, bind_src, bind_tgt, num=1, config={}):
-		InteractiveMixin.interactive_elements[f'{_APIWrapper.tls.placeholder._name}/{bind_src}'] = {
+		InteractiveMixin.interactive_elements[f'{ServerInfo.pipeline_name}/{bind_src}'] = {
 			'mode': 'LINE',
 			'num': num,
 			'target': bind_tgt,
@@ -65,7 +65,7 @@ class InteractiveMixin:
 		return self._factory(inner())
 	
 	def interactive_polygon(self, bind_src, bind_tgt, num=1, config={}):
-		InteractiveMixin.interactive_elements[f'{_APIWrapper.tls.placeholder._name}/{bind_src}'] = {
+		InteractiveMixin.interactive_elements[f'{ServerInfo.pipeline_name}/{bind_src}'] = {
 			'mode': 'POLYGON',
 			'num': num,
 			'target': bind_tgt,

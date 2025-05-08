@@ -14,6 +14,8 @@ from ..control.group_op import Group
 from contextlib import contextmanager
 import importlib
 import copy
+from inspect import signature
+
 
 ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(Path.home())}/.3rd')
 if not os.path.exists(ANTGO_DEPEND_ROOT):
@@ -37,7 +39,8 @@ class GroupDef(object):
             'inner': self.create_inner_op,
             'eagleeye': self.create_eagleeye_op,
             'deploy': self.create_deploy_op,
-            'remote': self.create_remote_op
+            'remote': self.create_remote_op,
+            'application': self.create_application_op
         }
         self.op_name_list = []
         self.op_args_list = []
@@ -69,7 +72,7 @@ class GroupDef(object):
                     cur_abs_path = os.path.abspath(os.curdir)
                     so_abs_path = os.path.join(cur_abs_path, f"{ANTGO_DEPEND_ROOT}/eagleeye/py/libs/x86-64")
                     os.system(f'echo "{so_abs_path}" >> /etc/ld.so.conf && ldconfig')
-        
+
         op_cls_gen = None
         if category.lower() == 'op':
             op_cls_gen = getattr(importlib.import_module('antgo.pipeline.eagleeye.core_op'), 'CoreOp', None)
@@ -102,6 +105,30 @@ class GroupDef(object):
             'server_name': server_name,
             'function_name': function_name
         })
+
+        return op_cls_gen(**op_params)
+
+    def create_application_op(self, op_name, op_params):
+        keys = op_name.split('/')
+        op_cls_gen = None
+        if op_name.startswith('application/table'):
+            action_name = keys[2]
+            table_or_field_name = keys[3] if len(keys) >= 3 else None
+            op_cls_gen = getattr(importlib.import_module(f'antgo.pipeline.application.table.{action_name}'), f'{action_name.capitalize()}Op', None)
+            if table_or_field_name is not None:
+                action_object_name = list(signature(op_cls_gen.__init__)._parameters.keys())[1]
+                op_params.update({
+                    action_object_name: table_or_field_name,
+                })
+        elif len(keys) == 3:
+            module, action_name, obj_name = keys
+            op_cls_gen = getattr(importlib.import_module(f'antgo.pipeline.application.{action_name}.{obj_name}'), f'{obj_name.capitalize()}Op', None)
+        else:
+            module, prefix, table_name, action_name = keys
+            op_cls_gen = getattr(importlib.import_module(f'antgo.pipeline.application.{prefix}.{action_name}'), f'{action_name.capitalize()}Op', None)
+            op_params.update({
+                'table': table_name,
+            })
 
         return op_cls_gen(**op_params)
 
@@ -232,6 +259,29 @@ class GroupDef(object):
 
             self.op_name_list.append(name)
             self.op_category_list.append('eagleeye')
+            return self
+        elif (name.startswith('application') or self.op_prefix == 'application'):
+            # application.xxx.yyy.?zzz
+            if self.op_name_cache == '':
+                self.op_name_cache = name
+            else:
+                self.op_name_cache += '/'+name
+
+            if self.op_prefix == '':
+                self.op_prefix = 'application'
+
+            # ? 存在问题，application是动态的,3/4
+            self.op_offset += 1
+            if self.op_offset != 4:
+                return self
+            # 已经获得完整名字
+            name = self.op_name_cache
+            self.op_name_cache = ''
+            self.op_prefix = ''
+            self.op_offset = 0
+
+            self.op_name_list.append(name)
+            self.op_category_list.append('application')
             return self
 
         self.op_name_list.append(name)

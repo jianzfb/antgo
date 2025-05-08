@@ -17,6 +17,7 @@ from antgo.pipeline.operators import Operator
 from antgo.pipeline.operators.nop import NOPOperator
 from antgo.pipeline.engine import *
 from antgo.pipeline.hparam import param_scope
+from inspect import signature
 import pathlib
 ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home())}/.3rd')
 if not os.path.exists(ANTGO_DEPEND_ROOT):
@@ -207,6 +208,9 @@ class OperatorLoader:
             elif function_key_name_list[0].startswith('deploy'):
                 function_list.append('/'.join(function_key_name_list[:2]))
                 function_key_name_list = function_key_name_list[2:]
+            elif function_key_name_list[0].startswith('application'):
+                function_list.append('/'.join(function_key_name_list))
+                function_key_name_list = []
             else:
                 function_list.append(function_key_name_list[0])
                 function_key_name_list = function_key_name_list[1:]
@@ -334,7 +338,16 @@ class OperatorLoader:
             return None
 
         keys = function.split('/')
-        if len(keys) == 3:
+        if function.startswith('application/table'):
+            action_name = keys[2]
+            table_or_field_name = keys[3] if len(keys) >= 3 else None
+            op = getattr(importlib.import_module(f'antgo.pipeline.application.table.{action_name}'), f'{action_name.capitalize()}Op', None)
+            if table_or_field_name is not None:
+                action_object_name = list(signature(op.__init__)._parameters.keys())[1]
+                kws.update({
+                    action_object_name: table_or_field_name,
+                })
+        elif len(keys) == 3:
             module, action_name, obj_name = keys
             op = getattr(importlib.import_module(f'antgo.pipeline.application.{action_name}.{obj_name}'), f'{obj_name.capitalize()}Op', None)
         else:

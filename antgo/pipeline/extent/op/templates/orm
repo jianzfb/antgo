@@ -178,6 +178,9 @@ class User(Base):
 
     ${custom_inverse_links_in_user}
 
+${user_table_fields_ext_info}
+    ${user_table_links_ext_info}
+
     @classmethod
     def find(cls, db, name):
         """Find a user by name.

@@ -13,11 +13,15 @@ from antgo.utils.cache import *
 class Group(object):
     def __init__(self, func_list, arg_list, relation, input, output, **kwargs):
         self.func_list = []
+        self.ext_info = []
         for func_op_info, func_arg_info in zip(func_list, arg_list):
             func_op = func_op_info(*func_arg_info)
             func_name = func_op.__class__.__name__ 
             func_op.__dict__.update(kwargs.get(func_name, {}))
             self.func_list.append(func_op)
+
+            if getattr(func_op, 'info', None):
+                 self.ext_info.extend(getattr(func_op, 'info')())
 
         self.relation = relation
         self.input_map = {}
@@ -34,7 +38,10 @@ class Group(object):
             for i, v in enumerate(self.output):
                 self.output_map[v] = i
 
-    def __call__(self, *args):
+    def info(self):
+        return self.ext_info
+
+    def __call__(self, *args, **kwargs):
         input_args = []
         if self.input is not None:
             # 管线需要输入,(1) args, (2) cache
@@ -77,7 +84,16 @@ class Group(object):
                         # 来自外部输入的数据
                         input_data_list.append(args[self.input_map[input_info]])
 
-            output_data_list = func_op(*input_data_list)
+            ext_data_dict = {}
+            if getattr(func_op, 'info', None):
+                for ext_data_name in getattr(func_op, 'info')():
+                    ext_data_dict.update(
+                        {
+                            ext_data_name: kwargs.get(ext_data_name, None)
+                        }
+                    )
+
+            output_data_list = func_op(*input_data_list, **ext_data_dict)
             if isinstance(output_info, tuple):
                 for output_tag, output_data in zip(output_info, output_data_list):
                     inner_data_dict[output_tag] = output_data

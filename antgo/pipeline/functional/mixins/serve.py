@@ -12,7 +12,6 @@ import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
 from antgo.pipeline.functional.common.config import *
-from antgo.pipeline.application.table.table import *
 from antgo.pipeline.functional.mixins.db import *
 from antgo.pipeline.functional.common.env import *
 from fastapi.responses import RedirectResponse,HTMLResponse, FileResponse
@@ -22,6 +21,9 @@ from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
+import urllib
 
 import secrets
 import logging
@@ -30,15 +32,16 @@ import uuid
 import base64
 import cv2
 
+class ServerInfo(object):
+    app = None
+    db = None
+    pipeline_info = {}
+    pipeline_name = None
+    index = -1
 
-class _APIWrapper:
-    """
-    API Wrapper
-    """
-    tls = threading.local()
-
+class PipelineEntry:
+    # 数据源
     def __init__(self, index=None, cls=None, name='demo', **kwargs) -> None:
-        self._queue = queue.Queue()
         self._cls = cls
         self._name = name
 
@@ -46,55 +49,48 @@ class _APIWrapper:
             self._index = index if isinstance(index, list) else [index]
         else:
             self._index = index
-
-        self.step_i = kwargs.get('step_i', 0)
-        self.step_num = kwargs.get('step_num', 0)
+        self.entity = None
 
     def feed(self, x) -> None:
-        entity = Entity(**x)
-        # entity = Some(entity)
-        self._queue.put(entity)
+        self.entity = Entity(**x)
 
     def __iter__(self):
         while True:
-            yield self._queue.get()
+            yield self.entity
 
     def __enter__(self):
-        _APIWrapper.tls.placeholder = self
-
         return self._cls(self).stream()
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if hasattr(_APIWrapper.tls, 'placeholder'):
-            _APIWrapper.tls.placeholder = None
+        pass
 
 
-class _PipeWrapper:
-    """
-    Wrapper for execute pipeline as function
-    """
-    def __init__(self, pipe, placeholder) -> None:
-        self._pipe = pipe
-        self._placeholder = placeholder
-        self._futures = queue.Queue()
-        self._executor = threading.Thread(target=self.worker, daemon=True)
-        self._executor.start()
+class PipelineExecuter:
+    def __init__(self, pipeline, feed) -> None:
+        self.pipeline = pipeline
+        self.feed = feed
+        self.pool = ThreadPoolExecutor(max_workers=1)
 
-    def worker(self):
-        while True:
-            future = self._futures.get()
-            # 驱动管线执行(线程内绑定db)
-            result = None
-            with thread_session_context():
-                result = next(self._pipe)
+    def _execute(self, pipeline, feed, data):
+        # data -> pipeline
+        with thread_session_context() as sess:
+            feed(data)
+            result = next(pipeline)
+            return result
 
-            future.set_result(result)
+    async def execute(self, data):
+        # TODO, input -> pipeline -> output
+        # 创建一个新线程执行
+        # future = concurrent.futures.Future()
+        # threading.Thread(target=self._execute, args=(self.pipeline, future), daemon=True).start()
+        # only python3.9 support asyncio.to_thread
+        # task = asyncio.to_thread(self._execute, self.pipeline, data)
+        
+        loop = asyncio.get_running_loop()
+        task = loop.run_in_executor(self.pool, self._execute, self.pipeline, self.feed, data)
 
-    def execute(self, x):
-        future = concurrent.futures.Future()
-        self._futures.put(future)
-        self._placeholder.feed(x)
-        return future.result()
+        result = await task
+        return result
 
 
 async def _decode_content(req):
@@ -112,9 +108,6 @@ class ServeMixin:
     """
     Mixin for API serve
     """
-    server_app = None
-    server_db = None
-    pipeline_info = {}
     def serve(self, input=[], output=[], default_config=None, db_config=None, **kwargs):
         """
         Serve the DataFrame as a RESTful API
@@ -126,15 +119,15 @@ class ServeMixin:
         Returns:
             _type_: the app that bind to
         """      
-        api = _APIWrapper.tls.placeholder
-        ServeMixin.pipeline_info[api._name] = {
-           'api': _PipeWrapper(self._iterable, api)
+        pipeline_name = ServerInfo.pipeline_name
+        ServerInfo.pipeline_info[pipeline_name] = {
+           'api': PipelineExecuter(self._iterable, ServerInfo.pipeline_info[pipeline_name]['entry'])
 	    }
 
         input_selection = [cc['data'] for cc in input]
         input_selection_types = [cc['type'] for cc in input]
         for ui_type in input_selection_types:
-            assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search'])
+            assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header'])
 
         output_selection = [cc['data'] for cc in output]
         output_selection_types = [cc['type'] for cc in output]
@@ -145,7 +138,7 @@ class ServeMixin:
         if default_config is None:
             input_config = [{} for _ in range(len(input_selection))]
 
-        ServeMixin.pipeline_info[api._name].update(
+        ServerInfo.pipeline_info[pipeline_name].update(
             {
                 'input_selection': input_selection,
                 'input_selection_types': input_selection_types,
@@ -157,7 +150,8 @@ class ServeMixin:
 
         # 动态生成orm（基于管线算子需求）
         # 创建/加载数据库
-        if ServeMixin.server_db is None and db_config is not None:
+        if ServerInfo.db is None and db_config is not None:
+            is_new_create = False
             if not os.path.exists('./orm.py'):
                 # 生成db orm
                 # table_config_info = []
@@ -165,21 +159,45 @@ class ServeMixin:
                 #     table_config_info.append(table_info)
 
                 create_db_orm(get_table_info())
+                is_new_create = True
 
             update_db_orm(__import__('orm'))
-            ServeMixin.server_db = create_db_session(db_config['db_url'])
+            ServerInfo.db = create_db_session(db_config['db_url'])
+            if is_new_create:
+                # 创建默认记录
+                table_default_records = get_table_default()
+                db = ServerInfo.db()
+                for table_name, tabel_default_records in table_default_records.items():
+                    orm_table = getattr(get_db_orm(), table_name.capitalize())
+                    for record_info in tabel_default_records:
+                        update_info = []
+                        for field_name, field_value in record_info.items():
+                            # 如果field_name是foreign key, 则需要获取db 记录
+                            if '/' in field_name:
+                                foreign_table_name, foreign_field_name = field_name.split('/')
+                                foreign_orm_table = getattr(get_db_orm(), foreign_table_name.capitalize())
+                                foreign_record = db.query(foreign_orm_table).filter(getattr(foreign_orm_table, foreign_field_name) == field_value).one_or_none()
+                                update_info.append((field_name, {foreign_table_name: foreign_record}))
 
-        if ServeMixin.server_app is not None:
-            return ServeMixin.server_app
+                        if len(update_info) > 0:
+                            for old_field_name, new_info in update_info:
+                                record_info.pop(old_field_name)
+                                record_info.update(new_info)
+                        record = orm_table(**record_info)
+                        db.add(record)
+                db.commit()
+
+        if ServerInfo.app is not None:
+            return ServerInfo.app
 
         static_folder = './dump'
         os.makedirs(static_folder, exist_ok=True)
 
         from fastapi import FastAPI, Request
-        ServeMixin.server_app = FastAPI()
-        ServeMixin.server_app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
+        ServerInfo.app = FastAPI()
+        ServerInfo.app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 
-        @ServeMixin.server_app.post("/{server_name}/execute/")
+        @ServerInfo.app.post("/{server_name}/execute/")
         async def wrapper(server_name: str, req: Request, response: RedirectResponse):
             # 获得session_id
             if(req.session.get("session_id") is None):
@@ -190,25 +208,45 @@ class ServeMixin:
             update_context_cookie_info(session_id, response)
 
             # 解析请求
-            input_req = await _decode_content(req)
             try:
+                input_req = await _decode_content(req)
+                if input_req == '':
+                    input_req = '{}'
                 input_req = json.loads(input_req)
+                
             except:
                 logging.error('Fail to parsing request.')
                 raise HTTPException(status_code=404, detail="请求不合规")
 
             # 判断服务是否存在
-            if server_name not in ServeMixin.pipeline_info:
+            if server_name not in ServerInfo.pipeline_info:
                 raise HTTPException(status_code=404, detail="服务不存在")
 
             # 转换请求数据
-            input_selection_types = ServeMixin.pipeline_info[server_name]['input_selection_types']
-            input_selection = ServeMixin.pipeline_info[server_name]['input_selection']
+            input_selection_types = ServerInfo.pipeline_info[server_name]['input_selection_types']
+            input_selection = ServerInfo.pipeline_info[server_name]['input_selection']
             for input_name, input_type in zip(input_selection, input_selection_types):
+                if input_type == 'header':
+                    # 从http header，获取数据
+                    input_req[input_name] = req.headers.get(input_name, None)
+                    continue
+
+                if input_name not in input_req:
+                    input_req[input_name] = None
+                    continue
+
                 if input_type == 'image':
-                    decoded_data = base64.b64decode(input_req[input_name])
-                    decoded_data = np.frombuffer(decoded_data, dtype='uint8')
-                    input_req[input_name] = cv2.imdecode(decoded_data, 1)
+                    # 支持base64格式+URL格式
+                    if input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
+                        # url 格式
+                        res = urllib.request.urlopen(input_req[input_name])
+                        img = np.asarray(bytearray(res.read()), dtype="uint8")
+                        input_req[input_name] = cv2.imdecode(img, 1)
+                    else:
+                        # base64格式
+                        decoded_data = base64.b64decode(input_req[input_name])
+                        decoded_data = np.frombuffer(decoded_data, dtype='uint8')
+                        input_req[input_name] = cv2.imdecode(decoded_data, 1)
                 elif input_type in ['video', 'file']:
                     input_req[input_name] = os.path.join(static_folder, 'image', 'query', input_req[input_name])
 
@@ -216,15 +254,17 @@ class ServeMixin:
             feed_info = {}
             for input_name in input_selection:
                 if input_name not in input_req:
-                    raise HTTPException(status_code=403, detail="request params not match")
+                    feed_info[input_name] = None
                 feed_info[input_name] = input_req[input_name]
+
+            # 填充保留字段
             feed_info.update(
-                {'session_id': session_id, 'ST': input_req.get('ST', None), 'token': input_req.get('token', None)}
+                {'session_id': session_id, 'ST': input_req.get('ST', None), 'token': input_req.get('token', None), 'username': input_req.get('username', None), 'password': input_req.get('password', None)}
             )
 
             # 驱动管线处理流程
             # TODO，加入多线程管线，增强处理能力
-            rsp_value = ServeMixin.pipeline_info[server_name]['api'].execute(feed_info)
+            rsp_value = await ServerInfo.pipeline_info[server_name]['api'].execute(feed_info)
 
             # 检查是否需要跳转
             redirect_url = get_context_redirect_info(session_id, None)
@@ -242,12 +282,12 @@ class ServeMixin:
             # 由于计算过程产生BUG
             if rsp_value is None:
                 clear_context_env_info(session_id)
-                raise HTTPException(status_code=500, detail="pipeline execute abnormal")
+                raise HTTPException(status_code=500, detail="server abnormal")
 
             # 清空session_id绑定的上下文
             clear_context_env_info(session_id)
-            output_selection_types = ServeMixin.pipeline_info[server_name]['output_selection_types']
-            output_selection = ServeMixin.pipeline_info[server_name]['output_selection']
+            output_selection_types = ServerInfo.pipeline_info[server_name]['output_selection_types']
+            output_selection = ServerInfo.pipeline_info[server_name]['output_selection']
 
             # 重组返回数据
             output_info = {}
@@ -279,17 +319,22 @@ class ServeMixin:
                         shutil.copyfile(value, os.path.join(static_folder, 'image', 'response', value.split('/')[-1]))
                         output_info[b] = os.path.join(static_folder, 'image', 'response', value.split('/')[-1])
                         output_info[b] = f'image/response/{value.split("/")[-1]}'
+                elif output_selection_types[i] == 'json':
+                    value = rsp_value.__dict__[b]
+                    if not isinstance(value, str):
+                        value = json.dumps(value)
+                    output_info[b] = value
                 else:
                     output_info[b] = rsp_value.__dict__[b]
 
             return output_info
 
-        @ServeMixin.server_app.get("/file/download/")
+        @ServerInfo.app.get("/file/download/")
         async def download(req: Request):
             file_path = req.query_params['file_name']
             return FileResponse(os.path.join(static_folder, file_path))
 
-        @ServeMixin.server_app.post("/file/upload/")
+        @ServerInfo.app.post("/file/upload/")
         async def upload(file: UploadFile):
             filename = file.filename
             file_size = file.size
@@ -303,10 +348,31 @@ class ServeMixin:
             return {"fileid": unique_filename, 'filepath': f'/image/query/{unique_filename}'}
 
         # static resource
-        ServeMixin.server_app.mount("/", StaticFiles(directory=static_folder), name="static")
+        ServerInfo.app.mount("/", StaticFiles(directory=static_folder), name="static")
 
-        return ServeMixin.server_app
+        return ServerInfo.app
 
     @classmethod
-    def api(cls, index=None, name='serve'):
-        return _APIWrapper(index=index, cls=cls, name=name)
+    def web(cls, index=None, name='demo', **kwargs):
+        # 创建处理管线
+        pipeline_entry = PipelineEntry(
+            index=index, 
+            cls=cls, 
+            name=name, **kwargs
+        )
+
+        # 记录管线基本信息到全局
+        ServerInfo.index += 1
+        ServerInfo.pipeline_name = name
+        ServerInfo.pipeline_info.update({
+            name: {
+                'step_i': kwargs.get('step_i', ServerInfo.index),
+                'entry': pipeline_entry.feed
+            }
+        })
+
+        # 更新服务总数
+        for server_name, server_config in ServerInfo.pipeline_info.items():
+            server_config['step_num'] = len(ServerInfo.pipeline_info)
+
+        return pipeline_entry

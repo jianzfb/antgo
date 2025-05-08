@@ -182,6 +182,14 @@ class scalar_int32_op(object):
         else:
             return self.init_val
 
+@register
+class const_string_op(object):
+    def __init__(self, init_val):
+        self.init_val = init_val
+
+    def __call__(self, *args):
+        return self.init_val
+
 
 @register
 class tensor_int32_op(object):
@@ -406,3 +414,13 @@ class command_op(object):
 
     def __call__(self, *args):
         return self.func(*args)
+
+
+@register
+class unwarp(object):
+    def __init__(self, order=[]):
+        self.order = order
+    
+    def __call__(self, *args):
+        unwarp_data = [args[0][name] for name in self.order]
+        return tuple(unwarp_data)

@@ -14,13 +14,14 @@ from sqlalchemy import and_, or_
 
 
 class OneornoneOp(object):
-    def __init__(self, table, fields, data=None, prefix='and', allow_none=False):
+    def __init__(self, table, field, export=None, prefix='and', allow_none=False, detail=None):
         self.table = table
-        self.data = data
-        self.fields = fields if isinstance(fields, list) else [fields]
+        self.export = export
+        self.field = field if isinstance(field, list) else [field]
         assert(prefix in ['and', 'or'])
         self.prefix = prefix
         self.allow_none = allow_none
+        self.detail = detail
 
     def info(self):
         # 设置需要使用隐信息（数据库、session_id）
@@ -32,22 +33,22 @@ class OneornoneOp(object):
         prefix_op = and_ if self.prefix == 'and' else or_
         obj = None
         db = get_thread_session()
-        if len(self.fields) == 1:
-            obj = db.query(orm_table).filter(getattr(orm_table, self.fields[0]) == args[0]).one_or_none()
-        elif len(self.fields) == 2:
+        if len(self.field) == 1:
+            obj = db.query(orm_table).filter(getattr(orm_table, self.field[0]) == args[0]).one_or_none()
+        elif len(self.field) == 2:
             obj = db.query(orm_table).filter(
-                prefix_op(getattr(orm_table, self.fields[0]) == args[0], getattr(orm_table, self.fields[1]) == args[1])
+                prefix_op(getattr(orm_table, self.field[0]) == args[0], getattr(orm_table, self.field[1]) == args[1])
             ).one_or_none()
 
         if obj is None and (not self.allow_none):
-            set_context_exit_info(session_id, detail="not existed in db")
+            set_context_exit_info(session_id, detail="not existed in db" if self.detail is None else self.detail)
             return None
 
-        if self.data is None or obj is None:
+        if self.export is None or obj is None:
             return obj
 
         obj_info = {}
-        for data_name in self.data:
+        for data_name in self.export:
             if '/' not in data_name:
                 # 表内属性
                 obj_info[data_name] = getattr(obj, data_name)
@@ -55,9 +56,9 @@ class OneornoneOp(object):
                 # 跨表属性
                 related_obj,related_field = data_name.split('/')
                 related_obj = getattr(obj, related_obj)
-                info_dict[data_name] = None
+                obj_info[data_name] = None
                 if related_obj is not None:
-                    info_dict[data_name] = getattr(related_obj, related_field)
+                    obj_info[data_name] = getattr(related_obj, related_field)
 
         return obj_info
 

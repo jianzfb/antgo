@@ -66,6 +66,9 @@ class CanvasOp(object):
         # [[],[],...]
         pass
 
+    def drawImage(self, data):
+        pass
+
     def __call__(self, *args, **kwds):
         # 格式
         # args = [parent_node, data, ...]

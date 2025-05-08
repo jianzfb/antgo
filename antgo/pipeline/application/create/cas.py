@@ -15,6 +15,7 @@ import cv2
 import base64
 import numpy as np
 import re
+from sqlalchemy import and_, or_
 
 
 # pattern for the authentication token header
@@ -33,7 +34,7 @@ class CasOp(object):
     def info(self):
         return ['ST', 'token', 'username', 'password', 'session_id']
 
-    def get_current_user_token(self, db, token):
+    def get_current_user_from_token(self, db, token):
         """get_current_user from Authorization header token"""
         if token is None:
             return None
@@ -47,18 +48,12 @@ class CasOp(object):
         else:
             return orm_token.user
 
-    def get_current_user_token_from_argments(self, db, token):
-        if token is None:
+    def get_current_user_from_argments(self, db, username, password):
+        if username is None or password is None:
             return None
 
-        orm_token = get_db_orm().APIToken.find(db, token)
-        if orm_token is None:
-            return None
-            
-        if orm_token is None:
-            return None
-        else:
-            return orm_token.user
+        user = db.query(get_db_orm().User).filter(and_(get_db_orm().User.name==username, get_db_orm().User.password==password)).one_or_none()
+        return user
 
     def get_current_user(self, db, token, username, password):
         """get current username"""
@@ -67,13 +62,14 @@ class CasOp(object):
         # if user is not None:
         #     return user
         # 2.step 从api_token获得登录用户
-        user = self.get_current_user_token(db, token)
+        user = self.get_current_user_from_token(db, token)
         if user is not None:
             return user
         # 3.step 从用户名密码获得登录用户
-        user = self.get_current_user_token_from_argments(db, token)
+        user = self.get_current_user_from_argments(db, username, password)
         if user is not None:
             return user
+
         return user
 
     def __call__(self, *args, ST=None, token=None, username=None, password=None, session_id=None):

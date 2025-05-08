@@ -202,17 +202,10 @@ def lambda_dc(*args):
   return DataFrame(inner())
 
 
-def _api(name='serve'):
+def _web(name='demo', **kwargs):
   """
   Create an API input, for building RestFul API or application API.
   """
-  return DataFrame.api(index=param_scope()._index, name=name)
-
-
-api = dynamic_dispatch(_api)
-
-
-def _web(name='demo', **kwargs):
   return DataFrame.web(index=param_scope()._index, name=name, **kwargs)
 
 

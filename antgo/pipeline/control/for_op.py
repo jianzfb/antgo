@@ -10,8 +10,14 @@ class For(object):
     def __init__(self, func, parallel_num=1, **kwargs):
         self.func = func
         self.parallel_num = parallel_num
+        self.ext_info = []
+        if getattr(self.func, 'info', None):
+            self.ext_info.extend(self.func.info())
 
-    def __call__(self, *args):
+    def info(self):
+        return self.ext_info
+
+    def __call__(self, *args, **wargs):
         out_list = None
         loop_num = max([len(v) for v in args])
         if min([len(v) for v in args]) == 0:
@@ -19,8 +25,8 @@ class For(object):
 
         for loop_i in range(loop_num):
             data_tuple = [v[loop_i%len(v)] for v in args]
-            out = self.func(*data_tuple)
-            if not isinstance(out, list) and not isinstance(out, tuple):
+            out = self.func(*data_tuple, **wargs)
+            if not isinstance(out, tuple):
                 out = [out]
 
             if out_list is None:
