@@ -366,6 +366,10 @@ class OperatorLoader:
         if not function.startswith('ui'):
             return None
         
+        if function.startswith('ui/data'):
+            op = getattr(importlib.import_module(f'antgo.pipeline.ui.data'), 'DataOp', None)
+            return self.instance_operator(op, arg, kws) if op is not None else None
+
         keys = function.split('/')
         if len(keys) == 3:
             _, framework_name, component_name = keys

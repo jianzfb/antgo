@@ -14,7 +14,7 @@ from antgo.pipeline.hparam import HyperParameter as State
 from antgo.pipeline.hparam import param_scope
 from antgo.pipeline.hparam import dynamic_dispatch
 from antgo.pipeline.functional.common.config import *
-from antgo.pipeline.ui.smart.data import *
+from antgo.pipeline.ui.data import *
 from .env_collection import *
 from .gui_collection import *
 from .dataset_collection import *

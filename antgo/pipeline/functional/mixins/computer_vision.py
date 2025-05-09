@@ -77,8 +77,11 @@ class ComputerVisionMixin:
     Mixin for computer vision problems.
     """
     def image_imshow(self, title='image'):  # pragma: no cover
-        for im in self:
-            cv2.imshow(title, im)
+        for data in self:
+            if isinstance(data, Entity):
+                data = list(data.__dict__.values())[0] 
+
+            cv2.imshow(title, data)
             cv2.waitKey(0)
 
     @classmethod

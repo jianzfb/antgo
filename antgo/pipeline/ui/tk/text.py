@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import tkinter as tk  
-from antgo.pipeline.ui.smart.data import DataS, AttrMap
+from antgo.pipeline.ui.data import DataS, AttrMap
 
 
 class TextOp(object):
@@ -21,6 +21,7 @@ class TextOp(object):
             pady    =DataS(default=pady) if not isinstance(pady, DataS) else pady,
             stick   =DataS(default=stick) if not isinstance(stick, DataS) else stick
         )
+        self._attr.text.config_proxy(self)
         self._entry = None
 
     @property
@@ -30,6 +31,16 @@ class TextOp(object):
     @property
     def attr(self):
         return self._attr
+
+    def get(self, _):
+        if self._entry is None:
+            return ''
+        return self._entry.get()
+
+    def set(self, _, value):
+        if self._entry is None:
+            return
+        self._entry.insert(0, value)
 
     def __getattr__(self, name):
         if name not in ['text']:
@@ -52,8 +63,7 @@ class TextOp(object):
             'text': self._attr.text.get()
         }
         self._entry = tk.Entry(parent_node, **params)
-        self._attr.text.watch(lambda value: self._entry.insert(0, value))
-
+        
         layout_params = {
             'row': self._attr.gridy.get(), 
             'column': self._attr.gridx.get(),

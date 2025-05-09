@@ -9,7 +9,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from tkinter import PhotoImage
 import numpy as np
-from antgo.pipeline.ui.smart.data import DataS, AttrMap
+from antgo.pipeline.ui.data import DataS, AttrMap
 
 
 class LabelOp(object):

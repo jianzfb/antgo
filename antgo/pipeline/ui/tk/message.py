@@ -7,7 +7,7 @@ from __future__ import unicode_literals
 from __future__ import print_function
 import tkinter as tk
 from tkinter import messagebox
-from antgo.pipeline.ui.smart.data import DataS, AttrMap
+from antgo.pipeline.ui.data import DataS, AttrMap
 
 class MessageOp(object):
     def __init__(self, win_type="info", text="", title="message"):

@@ -6,7 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import tkinter as tk  
-from antgo.pipeline.ui.smart.data import DataS, AttrMap
+from antgo.pipeline.ui.data import DataS, AttrMap
 
 
 class ButtonOp(object):
@@ -51,7 +51,7 @@ class ButtonOp(object):
         # 格式
         # args = [parent_node, data, ...]
         parent_node = args[0].element
-        self._btn = tk.Button(parent_node, text=self.attr.text.get(), command=lambda: self.click(*args))
+        self._btn = tk.Button(parent_node, text=self.attr.text.get(), command=lambda: self.click(*args[1:]))
         self.attr.text.watch(lambda value: self._btn.config(text=value))
     
         layout_params = {
