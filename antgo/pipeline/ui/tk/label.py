@@ -26,6 +26,7 @@ class LabelOp(object):
             image   =DataS(default=image) if not isinstance(image, DataS) else image
         )
         self._label = None
+        self._image = None
 
     @property
     def element(self):
@@ -36,6 +37,8 @@ class LabelOp(object):
         return self._attr
 
     def setImage(self, value):
+        if value is None:
+            return
         if isinstance(value, np.ndarray):
             value = Image.fromarray(value)
             value = ImageTk.PhotoImage(value)
@@ -43,15 +46,19 @@ class LabelOp(object):
             value = ImageTk.PhotoImage(value)
         else:
             value = PhotoImage(file=value)
-        self._label.config(image=value)
+        
+        self._image = value
+        self._label.config(image=self._image)
 
     def __call__(self, *args, **kwds):
         parent_node = args[0].element
         params = {}
         if self._attr.text.get() is not None:
             params['text'] = self._attr.text.get()
+
         if self._attr.image.get() is not None:
-            params['image'] = ImageTk.PhotoImage(Image.open(self._attr.image.get()))
+            self._image = ImageTk.PhotoImage(Image.open(self._attr.image.get()))
+            params['image'] = self._image
 
         self._label = tk.Label(parent_node, **params)
         self._attr.text.watch(lambda value: self._label.config(text=value))

@@ -11,15 +11,24 @@ from antgo.pipeline.ui.data import DataS, AttrMap
 
 class CanvasOp(object):
     def __init__(self, elem_type='line', **kwargs):
-        self._entry = None
         self.elem_type = elem_type
+        if self.elem_type not in ['line', 'rectangle', 'text', 'oval', 'any']:
+            raise ValueError("elem_type must be one of ['line', 'rectangle', 'text', 'oval']")
+        self._parent = None
         self._attr = None
-        if elem_type == 'line':
-            fill_attr = kwargs.get('fill', 'blue')
-            width_attr = kwargs.get('width', 1)
-            arrow_attr = kwargs.get("arrow", 'none')
-            capstyle_attr = kwargs.get("capstyle", 'butt')
-            joinstyle_attr = kwargs.get('joinstyle', 'miter')
+        self._entry = None
+
+        fill_attr = kwargs.get('fill', 'blue')
+        width_attr = kwargs.get('width', 1)
+        arrow_attr = kwargs.get("arrow", 'none')
+        capstyle_attr = kwargs.get("capstyle", 'butt')
+        joinstyle_attr = kwargs.get('joinstyle', 'miter')
+        outline_attr = kwargs.get('outline', 'black')
+        anchor_attr = kwargs.get('anchor', 'center')    # center, sw
+        if anchor_attr == 'center':
+            anchor_attr = tk.CENTER 
+
+        if self.elem_type == 'line':
             self._attr = AttrMap(
                 fill    =DataS(default=fill_attr) if not isinstance(fill_attr, DataS) else fill_attr,
                 width   =DataS(default=width_attr) if not isinstance(width_attr, DataS) else width_attr,
@@ -27,13 +36,36 @@ class CanvasOp(object):
                 capstyle=DataS(default=capstyle_attr) if not isinstance(capstyle_attr, DataS) else capstyle_attr,
                 joinstyle   =DataS(default=joinstyle_attr) if not isinstance(joinstyle_attr, DataS) else joinstyle_attr,
             )
+        elif self.elem_type == 'rectangle':
+            self._attr = AttrMap(
+                fill    =DataS(default=fill_attr) if not isinstance(fill_attr, DataS) else fill_attr,
+                width   =DataS(default=width_attr) if not isinstance(width_attr, DataS) else width_attr,
+                outline =DataS(default=outline_attr) if not isinstance(outline_attr, DataS) else outline_attr,
+            )
+        elif self.elem_type == 'text':
+            self._attr = AttrMap(
+                fill    =DataS(default=fill_attr) if not isinstance(fill_attr, DataS) else fill_attr,
+                anchor  =DataS(default=anchor_attr) if not isinstance(anchor_attr, DataS) else anchor_attr,
+            )
+        elif self.elem_type == 'oval':
+            self._attr = AttrMap(
+                fill    =DataS(default=fill_attr) if not isinstance(fill_attr, DataS) else fill_attr,
+                width   =DataS(default=width_attr) if not isinstance(width_attr, DataS) else width_attr,
+                outline =DataS(default=outline_attr) if not isinstance(outline_attr, DataS) else outline_attr,
+            )
+
+        self.data = kwargs.get('data', None)
+        if self.data is not None:
+            self.data = DataS(default=self.data) if not isinstance(self.data, DataS) else self.data
 
         self.callback_map = {
             'line': self.drawLine,
-            'rect': self.drawRect,
+            'rectangle': self.drawRect,
             'text': self.drawText,
-            'circle': self.drawCircle
+            'oval': self.drawOval,
+            'any': self.drawAny,
         }
+        self.callback_func = self.callback_map[self.elem_type]
 
     @property
     def element(self):
@@ -46,7 +78,8 @@ class CanvasOp(object):
     def drawLine(self, data):
         # [[[x0,y0],[x1,y1],...]]
         # step 1: clear
-        self._entry.delete('all')
+        if len(data) > 0:
+            self._entry.delete('all')
 
         # step 2: draw
         for line_i in range(len(data)):
@@ -58,26 +91,54 @@ class CanvasOp(object):
 
     def drawRect(self, data):
         # [[],[],...]
-        pass
-    def drawText(self, data):
-        # ["", "", ...]
-        pass
-    def drawCircle(self, data):
-        # [[],[],...]
-        pass
+        if len(data) > 0:
+            self._entry.delete('all')
 
-    def drawImage(self, data):
+        for rect_i in range(len(data)):
+            rect_data = data[rect_i]
+            x0, y0, x1, y1 = rect_data
+            self._entry.create_rectangle(int(x0), int(y0), int(x1), int(y1), **self._attr.all())
+
+    def drawText(self, data):
+        # [[x0,y0,""], [x0,y0,""], ...]
+        if len(data) > 0:
+            self._entry.delete('all')
+
+        for text_i in range(len(data)):
+            print(data)
+            x0, y0, text_data = data[text_i]
+            self._entry.create_text(int(x0), int(y0), text=text_data, **self._attr.all())
+
+    def drawOval(self, data):
+        # [[],[],...]
+        if len(data) > 0:
+            self._entry.delete('all')
+
+        for oval_i in range(len(data)):
+            oval_data = data[oval_i]
+            x0, y0, x1, y1 = oval_data
+            self._entry.create_oval(int(x0), int(y0), int(x1), int(y1), **self._attr.all())
+
+    def drawAny(self, data):
+        # {
+        #     "line": [],
+        #     "rectangle": [],
+        # }
         pass
 
     def __call__(self, *args, **kwds):
         # 格式
         # args = [parent_node, data, ...]
-        parent_node = args[0].element
-        self._entry = tk.Canvas(parent_node)
+        self._entry = tk.Canvas(args[0].element)
         self._entry.pack(fill=tk.BOTH, expand=True)
+
         for arg in args[1:]:
             # 数据监听，动态重绘
-            arg.watch(self.callback_map[self.elem_type])
+            arg.watch(self.callback_func)
+
+        if self.data is not None:
+            # 数据监听，动态重绘
+            self.data.watch(self.callback_func)
 
         return self
 

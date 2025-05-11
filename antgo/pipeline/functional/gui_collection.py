@@ -19,9 +19,10 @@ def tk_env(*args, **kwargs):
     index = param_scope()._index
 
     class UIConfig(object):
-        def __init__(self, title, height, width, x, y):
+        def __init__(self, title, height, width, x, y, resizable = (False, False)):
             self.root = tk.Tk()
             self.root.title(title)
+            self.root.resizable(*resizable)
             self.root.geometry(kwargs.get('shape', f'{width}x{height}+{x}+{y}'))
 
         def loop(self):
@@ -33,11 +34,12 @@ def tk_env(*args, **kwargs):
 
     def inner():
         ui_config = UIConfig(
-           title=kwargs.get('title', 'antgo'),
-           height=kwargs.get('height', 300),
-           width=kwargs.get('width', 300),
-           x=kwargs.get('x', 100),
-           y=kwargs.get('y', 100)
+            title=kwargs.get('title', 'antgo'),
+            height=kwargs.get('height', 300),
+            width=kwargs.get('width', 300),
+            x=kwargs.get('x', 100),
+            y=kwargs.get('y', 100),
+            resizable=kwargs.get('resizable', (False, False))
         )
         env_entity = Entity()(**{index: ui_config, '__page_root__': ui_config})
         yield env_entity

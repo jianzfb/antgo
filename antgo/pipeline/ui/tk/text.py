@@ -21,6 +21,7 @@ class TextOp(object):
             pady    =DataS(default=pady) if not isinstance(pady, DataS) else pady,
             stick   =DataS(default=stick) if not isinstance(stick, DataS) else stick
         )
+        self._text = self._attr.text.get()
         self._attr.text.config_proxy(self)
         self._entry = None
 
@@ -60,10 +61,9 @@ class TextOp(object):
     def __call__(self, *args, **kwds):
         parent_node = args[0].element
         params = {
-            'text': self._attr.text.get()
+            'text': self._text
         }
         self._entry = tk.Entry(parent_node, **params)
-        
         layout_params = {
             'row': self._attr.gridy.get(), 
             'column': self._attr.gridx.get(),
