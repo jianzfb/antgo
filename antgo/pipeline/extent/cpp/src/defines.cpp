@@ -19,6 +19,10 @@ ANTGO_API void destroy_cuctensor(CUCTensor* t){
     t->destroy();
 }
 
+ANTGO_API void destroy_custensor(CUSTensor* t){
+    t->destroy();
+}
+
 ANTGO_API void destroy_cbtensor(CBTensor* t){
     t->destroy();
 }

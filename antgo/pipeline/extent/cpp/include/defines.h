@@ -227,6 +227,7 @@ typedef CTensor<double> CDTensor;
 typedef CTensor<float> CFTensor;
 typedef CTensor<int> CITensor;
 typedef CTensor<unsigned char> CUCTensor;
+typedef CTensor<unsigned short> CUSTensor;
 typedef CTensor<bool> CBTensor;
 
 

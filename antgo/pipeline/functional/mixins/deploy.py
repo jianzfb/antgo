@@ -267,6 +267,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CFTensor': 'CFTensor* %s;',
         'CITensor': 'CITensor* %s;',
         'CUCTensor': 'CUCTensor* %s;',
+        'CUSTensor': 'CUSTensor* %s;',
         'CDTensor': 'CDTensor* %s;',
         'CBTensor': 'CBTensor* %s;'
     }
@@ -276,6 +277,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CFTensor': '%s = NULL;',
         'CITensor': '%s = NULL;',
         'CUCTensor': '%s = NULL;',
+        'CUSTensor': '%s = NULL;',
         'CDTensor': '%s = NULL;',
         'CBTensor': '%s = NULL;',
     }
@@ -285,6 +287,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CFTensor': 'if(%s != NULL){delete %s;};',
         'CITensor': 'if(%s != NULL){delete %s;};',
         'CUCTensor': 'if(%s != NULL){delete %s;};',
+        'CUSTensor': 'if(%s != NULL){delete %s;};',
         'CDTensor': 'if(%s != NULL){delete %s;};',
         'CBTensor': 'if(%s != NULL){delete %s;};',
     }
@@ -294,6 +297,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CFTensor': 'if(%s == NULL){%s=new_cftensor();};',
         'CITensor': 'if(%s == NULL){%s=new_citensor();};',
         'CUCTensor': 'if(%s == NULL){%s=new_cuctensor();};',
+        'CUSTensor': 'if(%s == NULL){%s=new_custensor();};',
         'CDTensor': 'if(%s == NULL){%s=new_cdtensor();};',
         'CBTensor': 'if(%s == NULL){%s=new_cbtensor();};',
     }
@@ -303,6 +307,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CFTensor': '%s->mirror(input[%d].cpu<float>(), input[%d].dims().data());',
         'CITensor': '%s->mirror(input[%d].cpu<int>(), input[%d].dims().data());',
         'CUCTensor': '%s->mirror(input[%d].cpu<unsigned char>(), input[%d].dims().data());',
+        'CUSTensor': '%s->mirror(input[%d].cpu<unsigned short>(), input[%d].dims().data());',
         'CDTensor': '%s->mirror(input[%d].cpu<double>(), input[%d].dims().data());',
         'CBTensor': '%s->mirror(input[%d].cpu<bool>(), input[%d].dims().data());',
     }
@@ -312,6 +317,7 @@ def generate_func_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output
         'CFTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_FLOAT, DataFormat::AUTO,%s->data);',
         'CITensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_INT, DataFormat::AUTO,%s->data);',
         'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
+        'CUSTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_USHORT, DataFormat::AUTO,%s->data);',
         'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
         'CBTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_BOOL DataFormat::AUTO,%s->data);',
     }
@@ -487,6 +493,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CFTensor': 'CFTensor* %s;',
         'CITensor': 'CITensor* %s;',
         'CUCTensor': 'CUCTensor* %s;',
+        'CUSTensor': 'CUSTensor* %s;',
         'CDTensor': 'CDTensor* %s;',
         'CBTensor': 'CBTensor* %s;',
     }
@@ -496,6 +503,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CFTensor': '%s = NULL;',
         'CITensor': '%s = NULL;',
         'CUCTensor': '%s = NULL;',
+        'CUSTensor': '%s = NULL;',
         'CDTensor': '%s = NULL;',
         'CBTensor': '%s = NULL;',
     }
@@ -505,6 +513,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CFTensor': 'if(%s != NULL){delete %s;};',
         'CITensor': 'if(%s != NULL){delete %s;};',
         'CUCTensor': 'if(%s != NULL){delete %s;};',
+        'CUSTensor': 'if(%s != NULL){delete %s;};',
         'CDTensor': 'if(%s != NULL){delete %s;};',
         'CBTensor': 'if(%s != NULL){delete %s;};',
     }
@@ -514,6 +523,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CFTensor': 'if(%s == NULL){%s=new_cftensor();};',
         'CITensor': 'if(%s == NULL){%s=new_citensor();};',
         'CUCTensor': 'if(%s == NULL){%s=new_cuctensor();};',
+        'CUSTensor': 'if(%s == NULL){%s=new_custensor();};',
         'CDTensor': 'if(%s == NULL){%s=new_cdtensor();};',
         'CBTensor': 'if(%s == NULL){%s=new_cbtensor();};',
     }
@@ -523,6 +533,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CFTensor': '%s->mirror(input[%d].cpu<float>(), input[%d].dims().data());',
         'CITensor': '%s->mirror(input[%d].cpu<int>(), input[%d].dims().data());',
         'CUCTensor': '%s->mirror(input[%d].cpu<unsigned char>(), input[%d].dims().data());',
+        'CUSTensor': '%s->mirror(input[%d].cpu<unsigned short>(), input[%d].dims().data());',
         'CDTensor': '%s->mirror(input[%d].cpu<double>(), input[%d].dims().data());',
         'CBTensor': '%s->mirror(input[%d].cpu<bool>(), input[%d].dims().data());',
     }
@@ -532,6 +543,7 @@ def generate_cls_op_eagleeye_code(op_name, op_index, op_args, op_kwargs, output_
         'CFTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_FLOAT, DataFormat::AUTO,%s->data);',
         'CITensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_INT, DataFormat::AUTO,%s->data);',
         'CUCTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_UCHAR, DataFormat::AUTO,%s->data);',
+        'CUSTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_USHORT, DataFormat::AUTO,%s->data);',
         'CDTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_DOUBLE, DataFormat::AUTO,%s->data);',
         'CBTensor': 'm_outputs[%d]=Tensor(std::vector<int64_t>(%s->dims, %s->dims+%s->dim_size),EAGLEEYE_BOOL, DataFormat::AUTO,%s->data);',
     }

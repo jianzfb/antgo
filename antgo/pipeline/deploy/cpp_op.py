@@ -52,6 +52,7 @@ class CppOp(object):
             'CFTensor': np.float32,
             'CITensor': np.int32,
             'CUCTensor': np.uint8,
+            'CUSTensor': np.uint16,
             'CBTensor': np.bool_
         }
 
