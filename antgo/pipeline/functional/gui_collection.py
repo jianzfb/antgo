@@ -16,64 +16,70 @@ import tkinter as tk
 
 @dynamic_dispatch
 def tk_env(*args, **kwargs):
-    index = param_scope()._index
+   index = param_scope()._index
 
-    class UIConfig(object):
-        def __init__(self, title, height, width, x, y, resizable = (False, False)):
+   class UIConfig(object):
+      def __init__(self, title, height, width, x, y, resizable = (False, False)):
             self.root = tk.Tk()
             self.root.title(title)
             self.root.resizable(*resizable)
             self.root.geometry(kwargs.get('shape', f'{width}x{height}+{x}+{y}'))
 
-        def loop(self):
+      def loop(self):
             self.root.mainloop()
 
-        @property
-        def element(self):
-           return self.root
+      @property
+      def element(self):
+         return self.root
 
-    def inner():
-        ui_config = UIConfig(
+   def inner():
+      ui_config = UIConfig(
             title=kwargs.get('title', 'antgo'),
             height=kwargs.get('height', 300),
             width=kwargs.get('width', 300),
             x=kwargs.get('x', 100),
             y=kwargs.get('y', 100),
             resizable=kwargs.get('resizable', (False, False))
-        )
-        env_entity = Entity()(**{index: ui_config, '__page_root__': ui_config})
-        yield env_entity
+      )
+      env_entity = Entity()(**{index: ui_config, '__page_root__': ui_config})
+      yield env_entity
 
-    return DataFrame(inner())
+   return DataFrame(inner())
 
 
 class _DataWrap(object):
-  def __init__(self):
-     self.name = None
+   def __init__(self):
+      self.name = None
 
-  def __getattr__(self, name):
-    self.name = name
-    return self
+   def __getattr__(self, name):
+      self.name = name
+      return self
 
-  def get(self):
-     return DataS(name=self.name).get()
+   def get(self):
+      return DataS(name=self.name).get()
 
-  def set(self, value):
-     return DataS(name=self.name).set(value)
+   def set(self, value):
+      return DataS(name=self.name).set(value)
 
-  def __call__(self, *args, **kwds):
-     return DataS(name=self.name, default=args[0])
+   def watch(self, callback_func, callback_name=None):
+      DataS(name=self.name).watch(callback_func, callback_name)
+
+   def cancel(self, callback_name):
+      DataS(name=self.name).cancel(callback_name)
+
+   def __call__(self, *args, **kwds):
+      return DataS(name=self.name, default=args[0])
 
 
 class _gui(object):
-  def __getattr__(self, name):
-    if name not in ['tk', 'data']:
-      return None
+   def __getattr__(self, name):
+      if name not in ['tk', 'data']:
+         return None
 
-    if name == 'data':
-       return _DataWrap()
+      if name == 'data':
+         return _DataWrap()
 
-    return globals()[f'{name}_env']
+      return globals()[f'{name}_env']
 
 gui = _gui()
 
