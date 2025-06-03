@@ -139,6 +139,7 @@ def main():
   else:
     sub_action_name = sys.argv[2]
     sys.argv = [sys.argv[0]] + sys.argv[3:]
+
   args = parse_args()
 
   # 执行脚本命令，则默认normal运行（默认情况是debug）
@@ -1317,6 +1318,8 @@ def main():
       command_str = f'python3 {args.exp.split(".")[0]}/main.py --exp={args.exp} --checkpoint={args.checkpoint} --process=export --running=normal --root={args.root} --config={args.config} --work-dir={args.work_dir}'
       if args.no_manage:
         command_str += ' --no-manage'
+      if args.is_dynamic:
+        command_str += ' --is-dynamic'
       os.system(command_str)
   else:
     if action_name == 'create':

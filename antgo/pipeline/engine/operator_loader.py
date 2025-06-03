@@ -133,6 +133,8 @@ class OperatorLoader:
     def load_operator_from_eagleeye(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         if not function.startswith('eagleeye'):
             return None
+        if function.startswith('eagleeye/compile'):
+            return None
 
         module, category, fname = function.split('/')
         os.makedirs(ANTGO_DEPEND_ROOT, exist_ok=True)
@@ -163,6 +165,16 @@ class OperatorLoader:
             op = getattr(importlib.import_module('antgo.pipeline.eagleeye.exe_op'), 'Exe', None)
         if op is None:
             return None
+        kws.update({
+            'func_op_name': fname.replace('-', '_')
+        })
+        return self.instance_operator(op, arg, kws) if op is not None else None
+
+    def load_operator_from_compile(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:
+        if not function.startswith('eagleeye/compile'):
+            return None
+        module, category, fname = function.split('/')
+        op = getattr(importlib.import_module('antgo.pipeline.eagleeye.compile_op'), 'CompileOp')
         kws.update({
             'func_op_name': fname.replace('-', '_')
         })
@@ -416,6 +428,7 @@ class OperatorLoader:
                         self.load_operator_from_packages,
                         self.load_operator_from_eagleeye,
                         self.load_operator_from_deploy,
+                        self.load_operator_from_compile,
                         self.load_operator_from_control,
                         self.load_operator_from_robot,
                         self.load_operator_from_ui]:

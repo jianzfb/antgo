@@ -212,8 +212,13 @@ class ServeMixin:
                 input_req = await _decode_content(req)
                 if input_req == '':
                     input_req = '{}'
-                input_req = json.loads(input_req)
-                
+                if isinstance(input_req, str):
+                    input_req = json.loads(input_req)
+                else:
+                    kvmaps = {}
+                    for k,v in zip(input_req.keys(), input_req.values()):
+                        kvmaps[k] = v
+                    input_req = kvmaps
             except:
                 logging.error('Fail to parsing request.')
                 raise HTTPException(status_code=404, detail="请求不合规")

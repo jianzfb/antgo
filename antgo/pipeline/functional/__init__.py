@@ -87,6 +87,18 @@ def json_dc(*args):
 
 
 @dynamic_dispatch
+def data_dc(*args):
+  index = param_scope()._index
+  if isinstance(index, str):
+    index = (index, )
+
+  def inner():
+    yield Entity()(**{key: value for key,value in zip(index, args)})
+
+  return DataFrame(inner())
+
+
+@dynamic_dispatch
 def txt_dc(*args):
   index = param_scope()._index
 
@@ -298,4 +310,3 @@ def _placeholder(*args):
 
 
 placeholder = dynamic_dispatch(_placeholder)
-

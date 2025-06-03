@@ -20,11 +20,11 @@ class Exe(object):
         self.project_folder = os.path.join(self.folder, 'deploy', f'{self.plugin_name}_plugin')
         self.data_folder = self.project_folder
         if not os.path.exists(self.project_folder):
-            print(f'Project {project} not exist.')
+            print(f'Project {self.plugin_name} not exist.')
             return
 
         if not os.path.exists(os.path.join(self.project_folder, '.project.json')):
-            print(f'Project {project} missing .project.json file.')
+            print(f'Project {self.plugin_name} missing .project.json file.')
             return
 
         with open(os.path.join(self.project_folder, '.project.json'), 'r') as fp:

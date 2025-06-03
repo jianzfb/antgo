@@ -50,7 +50,7 @@ def DEFINE_choices(name, default, choices, var_help):
         choices=choices,
         default=default,
         help=var_help
-    )    
+    )
 
 
 def DEFINE_nn_args():
@@ -175,6 +175,11 @@ def DEFINE_nn_args():
         '--no-manage',
         action='store_true',
         help='whether not to manage experiment by vibstring'
+    )
+    parser.add_argument(
+        '--is-dynamic',
+        action='store_true',
+        help="is dynamic flag"
     )
     parser.add_argument('--ext-module', type=str, default='', help='introduce ext module py file')
 

@@ -25,6 +25,89 @@ ANTGO_DEPEND_ROOT = os.environ.get('ANTGO_DEPEND_ROOT', f'{str(pathlib.Path.home
 if not os.path.exists(ANTGO_DEPEND_ROOT):
     os.makedirs(ANTGO_DEPEND_ROOT)
 
+class ParseCPP(object):
+    def __init__(self, project_folder):
+        self.project_folder = project_folder
+        self.include_dirs = []
+        self.source_files = []
+        self.finished_traverse_files = []
+
+    def iteration_parse_includes(self, file_path, is_continue_check_cpp=True):
+        file_folder = os.path.dirname(os.path.abspath(file_path))
+
+        with open(file_path, 'r') as fp:
+            lines = fp.readlines()
+            for line in lines:
+                line = line.strip()
+                if line == '':
+                    continue
+
+                if line.startswith('#ifndef'):
+                    line = line.replace(' ', '')
+                    flag = line[len('#ifndef'):]
+                    if flag in self.finished_traverse_files:
+                        # 已经完成遍历
+                        return None
+                    self.finished_traverse_files.append(flag)
+
+                if line.startswith('#include'):
+                    info = line.replace(' ','').replace('#include','')
+                    if info.startswith('<'):
+                        # 默认系统库自动关联
+                        continue
+                    info = info[1:-1]
+                    if info == 'defines.h' or info.startswith('pybind11'):
+                        # 保留头文件，直接过滤
+                        continue
+
+                    if info.startswith('eagleeye'):
+                        # 默认核心库自动关联
+                        continue
+                    if info.startswith('opencv'):
+                        # opencv库自动关联
+                        continue
+
+                    # .h, .hpp，深入检索
+                    if info.endswith('.h') or info.endswith('.hpp'):
+                        # 搜索
+                        if info.startswith('.') or '/' not in info:
+                            if file_folder not in self.include_dirs:
+                                self.include_dirs.append(file_folder)
+
+                        if is_continue_check_cpp:
+                            source_file = info
+                            if info.endswith('.h'):
+                                source_file = source_file[:-2]+'.cpp'
+                            
+                            if os.path.exists(os.path.join(self.project_folder, source_file)):
+                                source_file = os.path.join(self.project_folder, source_file)
+                            elif os.path.exists(os.path.join(self.project_folder, source_file.replace('/include/', '/src/'))):
+                                source_file = os.path.join(self.project_folder, source_file.replace('/include/', '/src/'))
+                            elif os.path.exists(os.path.join(file_folder, source_file.replace('/include/', '/src/'))):
+                                source_file = os.path.join(file_folder, source_file.replace('/include/', '/src/'))
+                            else:
+                                source_file = os.path.join(file_folder, source_file)
+
+                            # 允许source file not exist
+                            if os.path.exists(source_file) and source_file not in self.source_files:
+                                # self.iteration_parse_includes(source_file, False)
+                                self.source_files.append(source_file)
+
+                        traverse_file_path = info
+                        # traverse_file_path.startswith('.') -> 与当前文件存在相对路径关系
+                        # '/' not in traverse_file_path -> 表明为当前目录下的文件
+                        if traverse_file_path.startswith('.') or '/' not in traverse_file_path:
+                            traverse_file_path = os.path.join(file_folder, traverse_file_path)
+                        else:
+                            traverse_file_path = os.path.join(self.project_folder, traverse_file_path)
+
+                        if not os.path.exists(traverse_file_path):
+                            print(f'abnormal {traverse_file_path} not exists')
+                            continue
+
+                        self.iteration_parse_includes(traverse_file_path, True)
+        return None
+
 
 def snpe_import_config(output_folder, project_name, platform, abi, device='GPU'):
     # load snpe lib
@@ -1361,7 +1444,7 @@ def convert_args_eagleeye_op_args(op_args, op_kwargs):
     return tuple(group_converted_op_args)
 
 
-def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info, platform, abi):
+def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_list, compile_info, platform, abi, include_dirs=[]):
     info = []
     is_found_include_directories_insert = False
     is_start_add_src_code = False
@@ -1404,6 +1487,9 @@ def update_cmakelist(output_folder, project_name, pipeline_name, src_op_warp_lis
             extent_cpp_include_folder = os.path.join(extent_cpp_include_folder, 'extent','cpp','include')
             if extent_cpp_include_folder not in line:
                 info.append(f'include_directories({extent_cpp_include_folder})\n')
+
+            for include_info in include_dirs:
+                info.append(f'include_directories({include_info})\n')
 
             is_found_include_directories_insert = True
 
@@ -1800,18 +1886,17 @@ def generate_multi_nnnode_pipeline(graph_op_list, graph_op_info, graph_import_ou
 
     if 'default' in group_info_map and len(group_info_map) > 1:
         print('default group couldnt exist with developer set customized group_by')
+        print(group_info_map['default'])
         return None
 
     cpp_code = ''
     global_inputs_map = {}
     global_outputs_map = {}
     global_data_inv_link = {}
-    for group_name in group_list:
-        # group nodes
-        # 发现group input and group output
-        group_input_list = []
-        group_output_list = []
 
+    # 分析每个group需要输入信息
+    for group_name in group_list:
+        group_input_list = []
         input_list = []
         output_list = []
         for op_name in group_op_map[group_name]:
@@ -1830,12 +1915,34 @@ def generate_multi_nnnode_pipeline(graph_op_list, graph_op_info, graph_import_ou
         for input_name in input_list:
             if input_name not in output_list:
                 group_input_list.append(input_name)
-        for output_name in output_list:
-            if output_name not in input_list or output_name in [export_name for export_name, _ in graph_export_outs]:
-                group_output_list.append(output_name)
-
-        # 
         global_inputs_map[group_name] = group_input_list
+
+    # 分析每个group需要导出的信息
+    for group_name in group_list:
+        # group nodes
+        # 发现group input and group output
+        group_output_list = []
+
+        # input_list = []
+        output_list = []
+        for op_name in group_op_map[group_name]:
+            op_info = group_info_map[group_name][op_name]
+            output_info = op_info['output']
+
+            for output_name in output_info:
+                if output_name not in output_list:
+                    output_list.append(output_name)
+
+        for output_name in output_list:
+            if output_name in [export_name for export_name, _ in graph_export_outs]:
+                group_output_list.append(output_name)
+                continue
+
+            for to_group_name, to_input_list in global_inputs_map.items():
+                if output_name in to_input_list and output_name not in group_output_list:
+                    group_output_list.append(output_name)
+
+        group_input_list = global_inputs_map[group_name]
         global_outputs_map[group_name] = group_output_list
 
         # 生成node C++ 代码
@@ -1914,7 +2021,8 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         op_index = graph_op_info['op_index']
         op_args = graph_op_info['op_args']
         op_kwargs = graph_op_info['op_kwargs']
-
+        if 'SelectPersonInSportOp' in op_name:
+            print("AA")
         print(f'op_name {op_name}')
         input_ctx = ()
         output_ctx = ()
@@ -2058,10 +2166,40 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
             op_name_count[op_name] += 1
 
             op_info = auto_generate_eagleeye_op(op_name, op_index, op_args, op_kwargs, output_folder)
+            if isinstance(op_info['args'], dict):
+                op_info['args'] = (op_info['args'],)
             if 'group_by' in op_kwargs:
                 op_info['args'] += ({'group_by': [op_kwargs['group_by']]},)
 
             deploy_graph_info[op_unique_name] = op_info
+        elif op_name.startswith('eagleeye.compile'):
+            op_name = op_name[17:]
+            if op_name not in op_name_count:
+                op_name_count[op_name] = 0
+            op_unique_name = f'{op_name}_{op_name_count[op_name]}'
+            op_name_count[op_name] += 1
+
+            code_file_path = op_kwargs['func_op_file']
+            if op_kwargs.get('folder', None) is not None:
+                code_file_path = os.path.join(op_kwargs.get('folder', None), code_file_path)
+            parse_cpp = ParseCPP(project_folder=op_kwargs.get('project_folder', ''))
+            parse_cpp.iteration_parse_includes(code_file_path)
+            code_include_dirs = parse_cpp.include_dirs
+            if op_kwargs.get('project_folder', '') != '':
+                code_include_dirs.append(op_kwargs.get('project_folder', ''))
+            
+            op_args = ()
+            if 'group_by' in op_kwargs:
+                op_args += ({'group_by': [op_kwargs['group_by']]},)
+
+            deploy_graph_info[op_unique_name] = {
+                'type': op_name,
+                'input': input_ctx,
+                'output': output_ctx,
+                'args': op_args,
+                'include': op_kwargs['func_op_file'],
+                'include_dirs': code_include_dirs
+            }
         elif op_name.startswith('eagleeye'):
             # eagleeye核心算子 (op级别算子)
             op_name = op_name[12:]
@@ -2425,7 +2563,11 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         if 'depedent_src' in src_info:
             src_code_list.extend(src_info['depedent_src'])
 
-    update_cmakelist(output_folder, project_name, pipeline_name,src_code_list, project_config.get('compile', []), platform, abi)
+    include_dirs = []
+    for s in deploy_graph_info.values():
+        if 'include_dirs' in s:
+            include_dirs.extend(s['include_dirs'])
+    update_cmakelist(output_folder, project_name, pipeline_name, src_code_list, project_config.get('compile', []), platform, abi, include_dirs=include_dirs)
 
     # 更新插件工程编译脚本
     if os.path.exists(os.path.join(output_folder, 'build.sh')):

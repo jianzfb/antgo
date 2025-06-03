@@ -84,9 +84,9 @@ class Exporter(object):
         if is_dynamic:
             dynamic_axes = {}
             for input_node_name in input_name_list:
-                dynamic_axes[input_node_name] = [0]
+                dynamic_axes[input_node_name] = {0: "-1"}
             for output_node_name in output_name_list:
-                dynamic_axes[output_node_name] = [0]
+                dynamic_axes[output_node_name] = {0: "-1"}
 
         torch.onnx.export(
                 model,                                      # model being run
