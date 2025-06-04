@@ -25,6 +25,7 @@ timer
 thop
 torch
 torchvision
+torchaudio
 imagesize
 tfrecord
 GitPython

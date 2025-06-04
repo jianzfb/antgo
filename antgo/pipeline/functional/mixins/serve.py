@@ -5,7 +5,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-
+import torchaudio
 import queue
 import threading
 import concurrent.futures
@@ -24,7 +24,6 @@ from fastapi.staticfiles import StaticFiles
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import urllib
-
 import secrets
 import logging
 import json
@@ -127,12 +126,12 @@ class ServeMixin:
         input_selection = [cc['data'] for cc in input]
         input_selection_types = [cc['type'] for cc in input]
         for ui_type in input_selection_types:
-            assert(ui_type in ['image', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header'])
+            assert(ui_type in ['image', 'sound', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header'])
 
         output_selection = [cc['data'] for cc in output]
         output_selection_types = [cc['type'] for cc in output]
         for ui_type in output_selection_types:
-            assert (ui_type in ['image', 'video', 'text', 'number', 'file', 'json'])
+            assert (ui_type in ['image', 'sound', 'video', 'text', 'number', 'file', 'json'])
 
         input_config = default_config
         if default_config is None:
@@ -244,14 +243,38 @@ class ServeMixin:
                     # 支持base64格式+URL格式
                     if input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
                         # url 格式
-                        res = urllib.request.urlopen(input_req[input_name])
-                        img = np.asarray(bytearray(res.read()), dtype="uint8")
-                        input_req[input_name] = cv2.imdecode(img, 1)
+                        try:
+                            res = urllib.request.urlopen(input_req[input_name])
+                            img = np.asarray(bytearray(res.read()), dtype="uint8")
+                            input_req[input_name] = cv2.imdecode(img, 1)
+                        except:
+                            raise HTTPException(status_code=500, detail="server abnormal")
                     else:
                         # base64格式
-                        decoded_data = base64.b64decode(input_req[input_name])
-                        decoded_data = np.frombuffer(decoded_data, dtype='uint8')
-                        input_req[input_name] = cv2.imdecode(decoded_data, 1)
+                        try:
+                            decoded_data = base64.b64decode(input_req[input_name])
+                            decoded_data = np.frombuffer(decoded_data, dtype='uint8')
+                            input_req[input_name] = cv2.imdecode(decoded_data, 1)
+                        except:
+                            raise HTTPException(status_code=500, detail="server abnormal")
+                elif input_type == 'sound':
+                    # 支持base64格式+URL格式
+                    if input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
+                        # url 格式
+                        try:
+                            signal, fs = torchaudio.load(input_req[input_name], channels_first = False)
+                        except:
+                            raise HTTPException(status_code=500, detail="server abnormal")
+
+                        sound_data = {
+                            'signal': signal, 
+                            'fs': fs
+                        }
+                        input_req[input_name] = sound_data
+                    else:
+                        # base64格式
+                        print('base64 not support, now.')
+                        pass
                 elif input_type in ['video', 'file']:
                     input_req[input_name] = os.path.join(static_folder, 'image', 'query', input_req[input_name])
 
@@ -326,8 +349,8 @@ class ServeMixin:
                         output_info[b] = f'image/response/{value.split("/")[-1]}'
                 elif output_selection_types[i] == 'json':
                     value = rsp_value.__dict__[b]
-                    if not isinstance(value, str):
-                        value = json.dumps(value)
+                    # if not isinstance(value, str):
+                    #     value = json.dumps(value, ensure_ascii=False)
                     output_info[b] = value
                 else:
                     output_info[b] = rsp_value.__dict__[b]
