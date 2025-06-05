@@ -273,8 +273,17 @@ class ServeMixin:
                         input_req[input_name] = sound_data
                     else:
                         # base64格式
-                        print('base64 not support, now.')
-                        pass
+                        decoded_data = base64.b64decode(input_req[input_name])
+                        try:
+                            signal, fs = torchaudio.load(io.BytesIO(decoded_data), channels_first = False)
+                        except:
+                            raise HTTPException(status_code=500, detail="server abnormal")
+                        
+                        sound_data = {
+                            'signal': signal, 
+                            'fs': fs
+                        }
+                        input_req[input_name] = sound_data
                 elif input_type in ['video', 'file']:
                     input_req[input_name] = os.path.join(static_folder, 'image', 'query', input_req[input_name])
 
