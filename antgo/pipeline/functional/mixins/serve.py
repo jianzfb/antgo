@@ -93,13 +93,13 @@ class PipelineExecuter:
 
 
 async def _decode_content(req):
-    from multipart.multipart import parse_options_header
-    content_type_header = req.headers.get('Content-Type')
-    content_type, _ = parse_options_header(content_type_header)
-    if content_type in {b'multipart/form-data'}:
-        return await req.form()
-    if content_type.startswith(b'image/'):
-        return await req.body()
+    # from multipart.multipart import parse_options_header
+    # content_type_header = req.headers.get('Content-Type')
+    # content_type, _ = parse_options_header(content_type_header)
+    # if content_type in {b'multipart/form-data'}:
+    #     return await req.form()
+    # if content_type.startswith(b'image/'):
+    #     return await req.body()
     return (await req.body()).decode()
 
 
@@ -107,6 +107,7 @@ class ServeMixin:
     """
     Mixin for API serve
     """
+    isDebug = False
     def serve(self, input=[], output=[], default_config=None, db_config=None, **kwargs):
         """
         Serve the DataFrame as a RESTful API
@@ -209,6 +210,11 @@ class ServeMixin:
             # 解析请求
             try:
                 input_req = await _decode_content(req)
+                if ServeMixin.isDebug:
+                    print(">>>>>>>>>")
+                    print(input_req)
+                    print("<<<<<<<<<")
+
                 if input_req == '':
                     input_req = '{}'
                 if isinstance(input_req, str):
@@ -231,7 +237,7 @@ class ServeMixin:
             input_selection = ServerInfo.pipeline_info[server_name]['input_selection']
             for input_name, input_type in zip(input_selection, input_selection_types):
                 if input_type == 'header':
-                    # 从http header，获取数据
+                    # 从http header获取数据
                     input_req[input_name] = req.headers.get(input_name, None)
                     continue
 
@@ -300,7 +306,6 @@ class ServeMixin:
             )
 
             # 驱动管线处理流程
-            # TODO，加入多线程管线，增强处理能力
             rsp_value = await ServerInfo.pipeline_info[server_name]['api'].execute(feed_info)
 
             # 检查是否需要跳转
@@ -364,7 +369,17 @@ class ServeMixin:
                 else:
                     output_info[b] = rsp_value.__dict__[b]
 
-            return output_info
+            response = {
+                'code': 0,
+                'message': 'success',
+            }
+            if '__response__' in rsp_value.__dict__:
+                response.update(
+                    rsp_value.__dict__['__response__']
+                )
+
+            response.update(output_info)
+            return response
 
         @ServerInfo.app.get("/file/download/")
         async def download(req: Request):

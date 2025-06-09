@@ -62,22 +62,37 @@ class BaseExecution:
                 # op[(A,B)] 表达的是输出A，B；需要转换成op[[A,B]]表达
                 if isinstance(self._index, tuple) and len(self._index) >= 2 and ((isinstance(self._index[1], tuple) or isinstance(self._index[1], list))):
                     # (A,B),(A,(B,C))
-                    for i, j in zip(self._index[1], res):
+                    output_index = self._index[1]
+                    if hasattr(self._op, 'fixedOutIndex'):
+                        output_index = self._op.fixedOutIndex
+
+                    for i, j in zip(output_index, res):
                         setattr(arg[0], i, j)
                 elif isinstance(self._index, tuple) and len(self._index) >= 2 and (isinstance(self._index[1], str)):
-                    setattr(arg[0], self._index[1], res)
+                    output_index = self._index[1]
+                    if hasattr(self._op, 'fixedOutIndex'):
+                        output_index = self._op.fixedOutIndex
+
+                    setattr(arg[0], output_index, res)
                 # Single output.
                 else:
                     if isinstance(res, NoUpdate):
                         return arg[0]
-
                     if (isinstance(self._index, tuple) or isinstance(self._index, list)) and (isinstance(res, tuple) or isinstance(res, list)):
                         # [A,B]
-                        for i, j in zip(self._index, res):
+                        output_index = self._index
+                        if hasattr(self._op, 'fixedOutIndex'):
+                            output_index = self._op.fixedOutIndex
+
+                        for i, j in zip(output_index, res):
                             setattr(arg[0], i, j)
                     else:
                         # (B)
-                        setattr(arg[0], self._index, res)
+                        output_index = self._index
+                        if hasattr(self._op, 'fixedOutIndex'):
+                            output_index = self._op.fixedOutIndex
+
+                        setattr(arg[0], output_index, res)
                 return arg[0]
             else:
                 if isinstance(self._op, CppOp):

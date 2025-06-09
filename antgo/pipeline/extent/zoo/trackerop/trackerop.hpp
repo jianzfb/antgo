@@ -15,7 +15,7 @@ using namespace antgo;
 ANTGO_CLASS class TrackerOp{
 public:
     TrackerOp(int frame_rate, float track_thresh, float high_thresh, float match_thresh){
-        m_tracker = new byte_track::BYTETracker(frame_rate, 30, track_thresh, high_thresh, match_thresh);
+        m_tracker = new byte_track::BYTETracker(frame_rate, 100, track_thresh, high_thresh, match_thresh);
     }
     virtual ~TrackerOp(){
         delete m_tracker;
