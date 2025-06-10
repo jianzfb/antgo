@@ -1303,7 +1303,7 @@ def main():
       if action_model_name is not None:
         # 第三方框架支持
         if action_model_name == 'yolo':
-          tools.yolo_model_export(args.exp, args.checkpoint, no_manage=args.no_manage)
+          tools.yolo_model_export(args.exp, args.checkpoint, no_manage=args.no_manage, dynamic=args.is_dynamic)
         return
 
       # 获得实验root

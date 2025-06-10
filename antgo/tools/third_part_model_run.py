@@ -9,6 +9,7 @@ import json
 import yaml
 import os
 import sys
+import time
 
 
 logger_canvas = None
@@ -54,7 +55,7 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None, **kwarg
 
     project = cfg.get('project', os.path.abspath(os.path.curdir).split('/')[-1])
     if exp_name is None or exp_name == '':
-        exp_name = 'yolo'
+        exp_name = f'yolo-{time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(time.time()))}'
     if not kwargs.get('no_manage', False):
         # 创建dashboard        
         create_project_in_dashboard(project, exp_name, False)
@@ -222,7 +223,7 @@ def yolo_model_export(exp_name, pretrained_model, **kwargs):
     from ultralytics import YOLO
 
     model = YOLO(pretrained_model)
-    model.export(format="onnx", simplify=True)
+    model.export(format="onnx", simplify=True, dynamic=kwargs.get('dynamic', False))
 
 
 def yolo_model_eval(exp_name, cfg, root, gpu_id, pretrained_model, **kwargs):
