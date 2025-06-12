@@ -75,6 +75,10 @@ class YOLOFormatGen(object):
                         if c is None:
                             c = int(sample_info.labels[box_i])
 
+                        x0 = max(x0, 0)
+                        y0 = max(y0, 0)
+                        x1 = min(x1, image_w)
+                        y1 = min(y1, image_h)
                         box=[float((x0+x1)/2.0/image_w),float((y0+y1)/2.0/image_h),float((x1-x0)/image_w),float((y1-y0)/image_h)]
                         fp.write(f'{int(c)} {box[0]} {box[1]} {box[2]} {box[3]}\n')
             else:
@@ -119,6 +123,10 @@ class YOLOFormatGen(object):
                         if c is None:
                             c = int(sample_info.labels[box_i])
 
+                        x0 = max(x0, 0)
+                        y0 = max(y0, 0)
+                        x1 = min(x1, image_w)
+                        y1 = min(y1, image_h)
                         box=[float((x0+x1)/2.0/image_w),float((y0+y1)/2.0/image_h),float((x1-x0)/image_w),float((y1-y0)/image_h)]
                         box_str = f'{int(c)} {box[0]} {box[1]} {box[2]} {box[3]}'
                         

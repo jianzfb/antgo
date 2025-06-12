@@ -138,7 +138,7 @@ def analyze_all_dependent_data(config_file_path):
     return dependent_data_list
 
 
-def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False, env='master'):   
+def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size, task_name=None, ip='', exp='', check_data=False, env='master', data_folder='/data', project_folder='', is_resource_check=False):   
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
@@ -194,36 +194,52 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size
 
     target_ip_list = ip.split(',')
     target_machine_info_list = []
-    for target_ip in target_ip_list:
-        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{target_ip}-submit-config.yaml')
-        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-            ssh_config_info = yaml.safe_load(fp)
+    if is_resource_check:
+        for target_ip in target_ip_list:
+            ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{target_ip}-submit-config.yaml')
+            with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+                ssh_config_info = yaml.safe_load(fp)
 
-        # 检查GPU占用情况
-        info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
-        if len(info['free_gpus']) < gpu_num:
-            logging.error(f"No enough gpu in {target_ip}.")
+            # 检查GPU占用情况
+            info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
+            if len(info['free_gpus']) < gpu_num:
+                logging.error(f"No enough gpu in {target_ip}.")
+                return
+
+            has_local_data = True
+            if check_data:
+                has_local_data = check_data_is_exist(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"], dependent_data_list)
+                if not has_local_data:
+                    logging.error(f'Dont exist data in remote {target_ip}')
+
+            if has_local_data:
+                username = ssh_config_info["config"]["username"]
+                password = ssh_config_info["config"]["password"]
+                target_machine_info_list.append({
+                    'ip': target_ip,
+                    'username': username,
+                    'password': password,
+                    'gpus': info['free_gpus']
+                })
+
+        if len(target_machine_info_list) != len(target_ip_list):
+            logging.error("No enough machine resource")
             return
+    else:
+        for target_ip in target_ip_list:
+            ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{target_ip}-submit-config.yaml')
+            with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+                ssh_config_info = yaml.safe_load(fp)
 
-        has_local_data = True
-        if check_data:
-            has_local_data = check_data_is_exist(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"], dependent_data_list)
-            if not has_local_data:
-                logging.error(f'Dont exist data in remote {target_ip}')
-
-        if has_local_data:
             username = ssh_config_info["config"]["username"]
             password = ssh_config_info["config"]["password"]
             target_machine_info_list.append({
                 'ip': target_ip,
                 'username': username,
                 'password': password,
-                'gpus': info['free_gpus']
+                'gpus': [int(g) for g in gpu_ids]
             })
 
-    if len(target_machine_info_list) != len(target_ip_list):
-        logging.error("No enough machine resource")
-        return
     logging.info(f"Apply target machine resource {target_machine_info_list}")
 
     # 对于多机多卡模式，不可自定义指定GPU编号
@@ -251,10 +267,6 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size
         else:
             # [0]作为master节点
             sys_argv = f'{sys_argv} --master-addr={target_machine_info_list[0]["ip"]}'
-
-    # 记录提交机器地址
-    with open('./address', 'w') as fp:
-        fp.write(f'{username}@{target_machine_info_list[0]["ip"]}')
 
     # 添加扩展配置:保存到当前目录下并一同提交
     if task_name is not None and len(project_info) > 0:
@@ -287,11 +299,15 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size
 
     target_machine_ips = ','.join([v['ip'] for v in target_machine_info_list])
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
-    submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name} {env} {submit_time}'
+    submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{sys_argv}" {image_name} {project_name} {env} {submit_time} {data_folder} {project_folder}'
 
     # 解析提交后的输出，并解析出container id
     print('submit command')
     print(submit_cmd)
+
+    # 记录提交机器地址
+    with open('./address', 'w') as fp:
+        fp.write(f'{username}@{target_machine_info_list[0]["ip"]}')
 
     print('\n\n')
     print('remote execute process')
@@ -356,13 +372,12 @@ def ssh_submit_process_func(create_time, sys_argv, gpu_ids, cpu_num, memory_size
     # 删除临时配置:
     if os.path.exists('./extra-config.py'):
         os.remove('./extra-config.py')
-    
     if os.path.exists('./address'):
         os.remove('./address')
     return True
 
 
-def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cpu_num, memory_size, task_name=None, ip='', exp='', env='master', is_inner_launch=False):
+def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cpu_num, memory_size, task_name=None, ip='', exp='', env='master', is_inner_launch=False, data_folder='/data', project_folder='', is_resource_check=False):
     # 前提假设，调用此函数前当前目录下需要存在项目代码
     # 遍历所有注册的设备，找到每个设备的空闲GPU
     with open('./.project.json', 'r') as fp:
@@ -403,31 +418,47 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cp
 
     target_ip_list = ip.split(',')
     target_machine_info_list = []
-    for target_ip in target_ip_list:
-        ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{target_ip}-submit-config.yaml')
-        with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
-            ssh_config_info = yaml.safe_load(fp)
+    if is_resource_check:
+        target_machine_info_list = []
+        for target_ip in target_ip_list:
+            ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{target_ip}-submit-config.yaml')
+            with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+                ssh_config_info = yaml.safe_load(fp)
 
-        # 检查GPU占用情况
-        info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
-        if len(info['free_gpus']) < gpu_num:
-            logging.error(f"No enough gpu in {target_ip}.")
+            # 检查GPU占用情况
+            info = remote_gpu_running_info(ssh_config_info["config"]["username"], ssh_config_info["config"]["ip"])
+            if len(info['free_gpus']) < gpu_num:
+                logging.error(f"No enough gpu in {target_ip}.")
+                return
+
+            username = ssh_config_info["config"]["username"]
+            password = ssh_config_info["config"]["password"]
+            target_machine_info_list.append({
+                'ip': target_ip,
+                'username': username,
+                'password': password,
+                'gpus': info['free_gpus']
+            })
+
+        if len(target_machine_info_list) != len(target_ip_list):
+            logging.error("No enough machine resource")
             return
+    else:
+        for target_ip in target_ip_list:
+            ssh_submit_config_file = os.path.join(os.environ['HOME'], '.config', 'antgo', f'ssh-{target_ip}-submit-config.yaml')
+            with open(ssh_submit_config_file, encoding='utf-8', mode='r') as fp:
+                ssh_config_info = yaml.safe_load(fp)
 
-        username = ssh_config_info["config"]["username"]
-        password = ssh_config_info["config"]["password"]
-        target_machine_info_list.append({
-            'ip': target_ip,
-            'username': username,
-            'password': password,
-            'gpus': info['free_gpus']
-        })
+            username = ssh_config_info["config"]["username"]
+            password = ssh_config_info["config"]["password"]
+            target_machine_info_list.append({
+                'ip': target_ip,
+                'username': username,
+                'password': password,
+                'gpus': [int(g) for g in gpu_ids]
+            })
 
-    if len(target_machine_info_list) != len(target_ip_list):
-        logging.error("No enough machine resource")
-        return
     logging.info(f"Apply target machine resource {target_machine_info_list}")
-
 
     # 对于多机多卡模式，不可自定义指定GPU编号
     # 对于单机多卡模式，可以自定义指定GPU编号
@@ -454,6 +485,7 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cp
     if password == '':
         password = 'default'
 
+
     print(f'Use image {image_name}')
     project_name = os.path.abspath(os.path.curdir).split("/")[-1]
     submit_time = create_time
@@ -462,20 +494,21 @@ def ssh_submit_3rd_process_func(create_time, exe_script, base_image, gpu_ids, cp
     print(f'project_name {project_name}')
     print(f'target_machine_ips {target_machine_ips}')
 
-    # 记录提交机器地址
-    with open('./address', 'w') as fp:
-        fp.write(f'{username}@{target_machine_info_list[0]["ip"]}')
-
     submit_script = os.path.join(os.path.dirname(__file__), 'ssh-submit.sh')
     if not is_inner_launch:
         exe_script = f'{exe_script} --device-num={gpu_num} --nnodes={len(target_machine_info_list)} --master-port=8990 --master-addr={target_machine_info_list[0]["ip"]}'
     # 设置CUDA可见性，第三方yolo框架，缺少精确控制设备能力
     exe_script = f'export CUDA_VISIBLE_DEVICES={apply_gpu_id}; {exe_script}'
-    submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{exe_script}" {image_name} {project_name} {env} {submit_time}'
+    submit_cmd = f'bash {submit_script} {username} {password} {target_machine_ips} {gpu_num} {cpu_num} {memory_size}M "{exe_script}" {image_name} {project_name} {env} {submit_time} {data_folder} {project_folder}'
 
     # 解析提交后的输出，并解析出container id
     print('submit command')
     print(submit_cmd)
+
+    # 记录提交机器地址
+    with open('./address', 'w') as fp:
+        fp.write(f'{username}@{target_machine_info_list[0]["ip"]}')
+
     ret = subprocess.Popen(submit_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     content = ret.stdout.read()
     content = content.decode('utf-8')

@@ -56,6 +56,7 @@ DEFINE_indicator("auto", True, '')              # 是否项目自动优化
 DEFINE_indicator("finetune", True, '')          # 是否启用finetune模式
 DEFINE_indicator("release", True, '')           # 发布
 DEFINE_indicator("no-launch", True, '')         # 不加载
+DEFINE_indicator("auto-resource-check", True, '')    # 资源检查
 DEFINE_indicator("upgrade", True, '')           # 升级标记
 DEFINE_string('id', None, '')
 DEFINE_string("ip", "", "set ip")
@@ -71,6 +72,7 @@ DEFINE_string("user", None, "user name")
 DEFINE_string("password", None, "user password")
 DEFINE_indicator("remote", True, "whether execute in remote")
 DEFINE_string("data-folder", None, "")
+DEFINE_string("project-folder", None, "")
 DEFINE_indicator("log", True, "whether show log")
 
 ############## submitter ###################
@@ -451,7 +453,9 @@ def main():
         # 推送项目文件
         project_name = os.path.abspath(os.curdir).split('/')[-1]
         os.system(f'cd .. && tar -cf {project_name}.tar ./{project_name}')
-        os.system(f'cd .. && scp {project_name}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:~/')
+        if args.project_folder is not None:
+          os.system(f'ssh {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]} mkdir -p {args.project_folder}')
+        os.system(f'cd .. && scp {project_name}.tar {ssh_config_info["config"]["username"]}@{ssh_config_info["config"]["ip"]}:{args.project_folder if args.project_folder is not None else "~/"}')
         os.system(f'cd .. && rm {project_name}.tar')
 
         # 生成服务部署脚本
@@ -483,7 +487,7 @@ def main():
           'workspace': '/workspace',
           'project_name': project_name,
           'data_folder': "" if args.data_folder is None else args.data_folder,
-          'root_folder': '.' if args.root is None or args.root == '' else args.root,
+          'project_folder': args.project_folder if args.project_folder is not None else f'/home/{ssh_config_info["config"]["username"]}',
           'command': command,
         }
         server_deploy_content = server_deploy_template.render(**server_deploy_data)
@@ -886,8 +890,9 @@ def main():
 
   ######################################### ROOT 设置 #################################################
   if args.root is None or args.root == '':
-    print('Using default root address ali:///exp')
-    args.root = "ali:///exp"
+    print('Using default root address ./output/ (本地路径, 或阿里云路径(ali:///exp))')
+    # args.root = "ali:///exp"
+    args.root = "./output/"
 
   ######################################### 后台监控服务 ################################################
   if action_name == 'server':
@@ -976,7 +981,9 @@ def main():
           # 第三方框架支持
           gpu_id = '0' if args.gpu_id == '' else args.gpu_id
           exec_script = f'antgo {action_name}/{action_model_name} --exp={args.exp} --config={args.config} --root={args.root} --gpu-id={gpu_id}'
-          ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True)
+          if args.no_manage:
+            exec_script += ' --no-manage'
+          ssh_submit_3rd_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), exec_script, args.image, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, is_inner_launch=True, data_folder=args.data_folder if args.data_folder is not None else '/data', project_folder=args.project_folder if args.project_folder is not None else '', is_resource_check=args.auto_resource_check)
         return
 
       filter_sys_argv_cp = []
@@ -1009,7 +1016,7 @@ def main():
         sys_argv_cmd = sys_argv_cmd.replace('--ssh', '')
         sys_argv_cmd = sys_argv_cmd.replace('  ', ' ')
         sys_argv_cmd = f'antgo {sys_argv_cmd}'
-        ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version)
+        ssh_submit_process_func(time.strftime(f"%Y-%m-%d.%H-%M-%S", time.localtime(now_time)), sys_argv_cmd, [0] if args.gpu_id == '' else [int(g) for g in args.gpu_id.split(',')], args.cpu, args.memory, ip=args.ip, exp=args.exp, env=args.version, data_folder=args.data_folder if args.data_folder is not None else '/data', project_folder=args.project_folder if args.project_folder is not None else '', is_resource_check=args.auto_resource_check)
       elif args.ssh and args.script is not None:
         # 自定义脚本提交,提交远程机器后的启动脚本，所有启动项提交脚本者负责。环境能力，如暴漏GPU由框架负责
         assert(args.image is not None and args.image != '')
