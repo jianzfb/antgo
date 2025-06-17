@@ -192,6 +192,8 @@ def camera_dc(*args):
 @dynamic_dispatch
 def imread_dc(*args, is_unchanged=False):
   index = param_scope()._index
+  if isinstance(index, str):
+    index = (index,)
   assert(len(index) == len(args))
 
   def inner():

@@ -58,9 +58,25 @@ public:
         // split batch dim, as loop_num
         int loop_num = input[0].dims()[0];
         for(int i=1; i<input.size(); ++i){
+            if(input[i].dims()[0] == 0){
+                loop_num = 0;
+                break;
+            }
+             
             if(loop_num < input[i].dims()[0]){
                 loop_num = input[i].dims()[0];
             }
+        }
+        if(loop_num == 0){
+            for(int output_i=0; output_i<this->m_funcs[0]->getOutputNum(); ++output_i){
+                this->m_outputs[output_i] = Tensor(
+                    std::vector<int64_t>{0},
+                    EAGLEEYE_FLOAT32,
+                    DataFormat::AUTO,
+                    CPU_BUFFER
+                );
+            }
+            return 0;
         }
         std::vector<std::vector<Tensor>> loop_output(loop_num);
 
@@ -106,17 +122,6 @@ public:
             loop_output[loop_i] = out;
         }
 
-        if(loop_num == 0){
-            for(int output_i=0; output_i<this->m_funcs[0]->getOutputNum(); ++output_i){
-                this->m_outputs[output_i] = Tensor(
-                    std::vector<int64_t>{0},
-                    EAGLEEYE_FLOAT32,
-                    DataFormat::AUTO,
-                    CPU_BUFFER
-                );
-            }
-            return 0;
-        }
         // stack all output
         for(int output_i=0; output_i<this->m_funcs[0]->getOutputNum(); ++output_i){
             // 申请空间
