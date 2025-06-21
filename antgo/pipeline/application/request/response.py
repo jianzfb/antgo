@@ -12,22 +12,32 @@ from antgo.pipeline.functional.mixins.db import *
 from antgo.pipeline.functional.common.env import *
 
 class ResponseOp(object):
-    def __init__(self, check_func):
+    def __init__(self, check_func, detail=''):
         self.check_func = check_func
+        self.detail = detail
+
+    def info(self):
+        return ['session_id']
 
     @property
     def fixedOutIndex(self):
         return '__response__'
 
-    def __call__(self, *args):
+    def __call__(self, *args, session_id):
         is_ok = self.check_func(*args)
         if is_ok:
+            # 填写响应标记
             return {
                 'code': 0,
                 'message': 'success',
             }
         else:
+            # 设置请求退出标记
+            set_context_exit_info(session_id, detail='', status_code=200)
+
+            # 填写响应标记
             return {
                 'code': -1,
                 'message': 'fail',
+                'info': self.detail
             }

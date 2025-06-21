@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from concurrent.futures import ThreadPoolExecutor
+import starlette
 import asyncio
 import urllib
 import secrets
@@ -93,13 +94,15 @@ class PipelineExecuter:
 
 
 async def _decode_content(req):
-    # from multipart.multipart import parse_options_header
-    # content_type_header = req.headers.get('Content-Type')
-    # content_type, _ = parse_options_header(content_type_header)
-    # if content_type in {b'multipart/form-data'}:
-    #     return await req.form()
-    # if content_type.startswith(b'image/'):
-    #     return await req.body()
+    if getattr(req, 'headers', None):
+        from multipart.multipart import parse_options_header
+        content_type_header = req.headers.get('Content-Type')
+        content_type, _ = parse_options_header(content_type_header)
+        if content_type in {b'multipart/form-data'}:
+            return await req.form()
+        if content_type.startswith(b'image/'):
+            return await req.body()
+
     return (await req.body()).decode()
 
 
@@ -145,6 +148,7 @@ class ServeMixin:
                 'output_selection': output_selection,
                 'output_selection_types': output_selection_types,
                 'input_config': input_config,
+                'response_unwarp': kwargs.get('response_unwarp',False)
             }
         )
 
@@ -192,6 +196,7 @@ class ServeMixin:
 
         static_folder = './dump'
         os.makedirs(static_folder, exist_ok=True)
+        os.makedirs( os.path.join(static_folder, 'image', 'query'), exist_ok=True)
 
         from fastapi import FastAPI, Request
         ServerInfo.app = FastAPI()
@@ -246,8 +251,25 @@ class ServeMixin:
                     continue
 
                 if input_type == 'image':
-                    # 支持base64格式+URL格式
-                    if input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
+                    # 支持base64格式+URL格式+UploadFile
+                    if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
+                        try:
+                            file = input_req[input_name]
+                            contents = file.file.read()
+                            filename = file.filename
+                            query_folder = os.path.join(static_folder, 'image', 'query')
+
+                            random_id = str(uuid.uuid4())
+                            with open(os.path.join(query_folder, f'{random_id}_{filename}'), 'wb') as f:
+                                f.write(contents)
+
+                            input_req[input_name] = cv2.imread(os.path.join(query_folder, f'{random_id}_{filename}'))
+                        except Exception:
+                            raise HTTPException(status_code=500, detail="server abnormal")
+                        finally:
+                            file.file.close()
+
+                    elif input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
                         # url 格式
                         try:
                             res = urllib.request.urlopen(input_req[input_name])
@@ -318,10 +340,12 @@ class ServeMixin:
             exit_condition = get_context_exit_info(session_id, None)
             if exit_condition is not None:
                 clear_context_env_info(session_id)
-                raise HTTPException(status_code=403, detail=exit_condition) 
+                status_code, status_info = exit_condition.split('/')
+                status_code = int(status_code)
+                if status_code != 200:
+                    raise HTTPException(status_code=status_code, detail=status_info) 
 
-            # 检查执行异常
-            # 由于计算过程产生BUG
+            # 检查执行异常(由于计算过程产生BUG)
             if rsp_value is None:
                 clear_context_env_info(session_id)
                 raise HTTPException(status_code=500, detail="server abnormal")
@@ -362,21 +386,31 @@ class ServeMixin:
                         output_info[b] = os.path.join(static_folder, 'image', 'response', value.split('/')[-1])
                         output_info[b] = f'image/response/{value.split("/")[-1]}'
                 elif output_selection_types[i] == 'json':
+                    if b not in rsp_value.__dict__:
+                        continue
                     value = rsp_value.__dict__[b]
                     # if not isinstance(value, str):
                     #     value = json.dumps(value, ensure_ascii=False)
                     output_info[b] = value
                 else:
+                    if b not in rsp_value.__dict__:
+                        continue
                     output_info[b] = rsp_value.__dict__[b]
 
+            # 执行正常返回时，返回status_code=200
             response = {
                 'code': 0,
                 'message': 'success',
             }
             if '__response__' in rsp_value.__dict__:
+                # 将保留字段信息写入响应中
                 response.update(
                     rsp_value.__dict__['__response__']
                 )
+            if len(output_info) == 1 and ServerInfo.pipeline_info[server_name]['response_unwarp']:
+                output_info = list(output_info.values())[0]
+                if not isinstance(output_info, dict):
+                    raise HTTPException(status_code=500, detail='output info parse error') 
 
             response.update(output_info)
             return response

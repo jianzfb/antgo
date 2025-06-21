@@ -1856,7 +1856,7 @@ def generate_asyn_node_code(group_graph_op_list, deploy_graph_info, group_input,
     op_graph_code += 'return nnnode;\n'
 
     # suffix
-    op_graph_code += '}, 5),' if is_asyn else '}),'
+    op_graph_code += '}, 10, false, false),' if is_asyn else '}),'
     return op_graph_code, deploy_output_data_name_inv_link
 
 

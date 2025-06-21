@@ -24,14 +24,14 @@ def update_context_env_info(session_id, **kwargs):
     __global_context_env_info[session_id].update(kwargs)
 
 
-def set_context_exit_info(session_id, detail=None):
+def set_context_exit_info(session_id, detail='', status_code=403):
     global __global_context_env_info
     if session_id is None:
         return
     if session_id not in __global_context_env_info:
         __global_context_env_info[session_id] = {}
 
-    __global_context_env_info[session_id]['exit'] = detail
+    __global_context_env_info[session_id]['exit'] = f'{status_code}/{detail}'
 
 
 def get_context_exit_info(session_id, default=None):
@@ -95,6 +95,8 @@ def update_context_cookie_info(session_id, cookie):
 def clear_context_env_info(session_id):
     global __global_context_env_info
     if session_id is None:
+        return
+    if session_id not in __global_context_env_info:
         return
     __global_context_env_info.pop(session_id)
 
