@@ -140,7 +140,7 @@ class OperatorLoader:
         os.makedirs(ANTGO_DEPEND_ROOT, exist_ok=True)
         if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye', 'py')):
             if not os.path.exists(os.path.join(ANTGO_DEPEND_ROOT, 'eagleeye')):
-                os.system('cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
+                os.system(f'cd {ANTGO_DEPEND_ROOT} && git clone https://github.com/jianzfb/eagleeye.git')
 
             if 'darwin' in sys.platform:
                 os.system(f'cd {ANTGO_DEPEND_ROOT}/eagleeye && bash osx_build.sh BUILD_PYTHON_MODULE')
