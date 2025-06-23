@@ -130,7 +130,7 @@ class ServeMixin:
         input_selection = [cc['data'] for cc in input]
         input_selection_types = [cc['type'] for cc in input]
         for ui_type in input_selection_types:
-            assert(ui_type in ['image', 'sound', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header'])
+            assert(ui_type in ['image', 'sound', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header', 'image-ext', 'sound-ext'])
 
         output_selection = [cc['data'] for cc in output]
         output_selection_types = [cc['type'] for cc in output]
@@ -250,7 +250,7 @@ class ServeMixin:
                     input_req[input_name] = None
                     continue
 
-                if input_type == 'image':
+                if input_type.startswith('image'):
                     # 支持base64格式+URL格式+UploadFile
                     if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
                         try:
@@ -262,8 +262,14 @@ class ServeMixin:
                             random_id = str(uuid.uuid4())
                             with open(os.path.join(query_folder, f'{random_id}_{filename}'), 'wb') as f:
                                 f.write(contents)
-
-                            input_req[input_name] = cv2.imread(os.path.join(query_folder, f'{random_id}_{filename}'))
+                            
+                            if input_type == 'image':
+                                input_req[input_name] = cv2.imread(os.path.join(query_folder, f'{random_id}_{filename}'))
+                            else:
+                                input_req[input_name] = {
+                                    'image': cv2.imread(os.path.join(query_folder, f'{random_id}_{filename}')),
+                                    'filename': filename
+                                }
                         except Exception:
                             raise HTTPException(status_code=500, detail="server abnormal")
                         finally:
@@ -271,10 +277,17 @@ class ServeMixin:
 
                     elif input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
                         # url 格式
+                        url = input_req[input_name]
                         try:
                             res = urllib.request.urlopen(input_req[input_name])
                             img = np.asarray(bytearray(res.read()), dtype="uint8")
-                            input_req[input_name] = cv2.imdecode(img, 1)
+                            if input_type == 'image':
+                                input_req[input_name] = cv2.imdecode(img, 1)
+                            else:
+                                input_req[input_name] = {
+                                    'image': cv2.imdecode(img, 1),
+                                    'filename': url
+                                }
                         except:
                             raise HTTPException(status_code=500, detail="server abnormal")
                     else:
@@ -282,12 +295,19 @@ class ServeMixin:
                         try:
                             decoded_data = base64.b64decode(input_req[input_name])
                             decoded_data = np.frombuffer(decoded_data, dtype='uint8')
-                            input_req[input_name] = cv2.imdecode(decoded_data, 1)
+                            if input_type == 'image':
+                                input_req[input_name] = cv2.imdecode(decoded_data, 1)
+                            else:
+                                input_req[input_name] = {
+                                    'image': cv2.imdecode(decoded_data, 1),
+                                    'filename': None
+                                }
                         except:
                             raise HTTPException(status_code=500, detail="server abnormal")
-                elif input_type == 'sound':
+                elif input_type.startswith('sound'):
                     # 支持base64格式+URL格式
                     if input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
+                        url = input_req[input_name]
                         # url 格式
                         try:
                             signal, fs = torchaudio.load(input_req[input_name], channels_first = False)
@@ -296,7 +316,8 @@ class ServeMixin:
 
                         sound_data = {
                             'signal': signal, 
-                            'fs': fs
+                            'fs': fs,
+                            'filename': url
                         }
                         input_req[input_name] = sound_data
                     else:
@@ -309,7 +330,8 @@ class ServeMixin:
                         
                         sound_data = {
                             'signal': signal, 
-                            'fs': fs
+                            'fs': fs,
+                            'filename': None
                         }
                         input_req[input_name] = sound_data
                 elif input_type in ['video', 'file']:
