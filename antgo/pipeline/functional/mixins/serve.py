@@ -429,6 +429,9 @@ class ServeMixin:
                 response.update(
                     rsp_value.__dict__['__response__']
                 )
+            if response['code'] != 0:
+                return response
+
             if len(output_info) == 1 and ServerInfo.pipeline_info[server_name]['response_unwarp']:
                 output_info = list(output_info.values())[0]
                 if not isinstance(output_info, dict):

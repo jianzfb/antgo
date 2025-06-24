@@ -20,7 +20,7 @@ class ResponseOp(object):
         return ['session_id']
 
     @property
-    def fixedOutIndex(self):
+    def outIndex(self):
         return '__response__'
 
     def __call__(self, *args, session_id):

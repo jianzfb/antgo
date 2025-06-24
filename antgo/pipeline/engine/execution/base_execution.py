@@ -63,15 +63,15 @@ class BaseExecution:
                 if isinstance(self._index, tuple) and len(self._index) >= 2 and ((isinstance(self._index[1], tuple) or isinstance(self._index[1], list))):
                     # (A,B),(A,(B,C))
                     output_index = self._index[1]
-                    if hasattr(self._op, 'fixedOutIndex'):
-                        output_index = self._op.fixedOutIndex
+                    if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
+                        output_index = self._op.outIndex
 
                     for i, j in zip(output_index, res):
                         setattr(arg[0], i, j)
                 elif isinstance(self._index, tuple) and len(self._index) >= 2 and (isinstance(self._index[1], str)):
                     output_index = self._index[1]
-                    if hasattr(self._op, 'fixedOutIndex'):
-                        output_index = self._op.fixedOutIndex
+                    if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
+                        output_index = self._op.outIndex
 
                     setattr(arg[0], output_index, res)
                 # Single output.
@@ -81,16 +81,16 @@ class BaseExecution:
                     if (isinstance(self._index, tuple) or isinstance(self._index, list)) and (isinstance(res, tuple) or isinstance(res, list)):
                         # [A,B]
                         output_index = self._index
-                        if hasattr(self._op, 'fixedOutIndex'):
-                            output_index = self._op.fixedOutIndex
+                        if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
+                            output_index = self._op.outIndex
 
                         for i, j in zip(output_index, res):
                             setattr(arg[0], i, j)
                     else:
                         # (B)
                         output_index = self._index
-                        if hasattr(self._op, 'fixedOutIndex'):
-                            output_index = self._op.fixedOutIndex
+                        if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
+                            output_index = self._op.outIndex
 
                         setattr(arg[0], output_index, res)
                 return arg[0]
