@@ -28,14 +28,16 @@ class CheckinvalidOp(object):
     def __call__(self, *args, session_id):
         is_invalid = False
         for check_var, invalid_val in zip(args, self.invalid_vals):
+            if check_var is None:
+                # None is invalid
+                is_invalid = True
+                break
             if invalid_val is None:
-                if check_var is None:
-                    is_invalid = True
-                    break
-            else:
-                if check_var == invalid_val:
-                    is_invalid = True
-                    break
+                continue
+
+            if check_var == invalid_val:
+                is_invalid = True
+                break
 
         if is_invalid:
             set_context_exit_info(session_id, detail='', status_code=self.status_code)

@@ -463,12 +463,15 @@ def main():
         if args.mode.startswith('http'):
           command = f'antgo web --main={args.main} --port={args.port} --name={args.name}'
 
+        if args.version != '-':
+          command = f'pip3 uninstall -y antgo;pip3 install antgo@git+https://github.com/jianzfb/antgo.git@{args.version};{command}'
+
         if os.path.exists('launch.sh'):
           # 项目存在执行脚本
           command = 'bash launch.sh'
         if os.path.exists('install.sh'):
           # 项目存在安装脚本，则运行命令时，先进行环境安装
-          command = 'bash install.sh && '+command
+          command = 'bash install.sh ; '+command
 
         if args.image is None or args.image == '':
           args.image = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest'

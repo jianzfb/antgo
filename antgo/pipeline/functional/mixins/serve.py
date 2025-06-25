@@ -231,11 +231,11 @@ class ServeMixin:
                     input_req = kvmaps
             except:
                 logging.error('Fail to parsing request.')
-                raise HTTPException(status_code=404, detail="请求不合规")
+                raise HTTPException(status_code=400, detail="request format abnormal")
 
             # 判断服务是否存在
             if server_name not in ServerInfo.pipeline_info:
-                raise HTTPException(status_code=404, detail="服务不存在")
+                raise HTTPException(status_code=404, detail=f"server {server_name} not exist")
 
             # 转换请求数据
             input_selection_types = ServerInfo.pipeline_info[server_name]['input_selection_types']
@@ -248,7 +248,7 @@ class ServeMixin:
 
                 if input_name not in input_req:
                     input_req[input_name] = None
-                    continue
+                    raise HTTPException(status_code=400, detail=f"request param {input_name} missing")
 
                 if input_type.startswith('image'):
                     # 支持base64格式+URL格式+UploadFile
@@ -257,22 +257,19 @@ class ServeMixin:
                             file = input_req[input_name]
                             contents = file.file.read()
                             filename = file.filename
-                            query_folder = os.path.join(static_folder, 'image', 'query')
+                            if contents == b'':
+                                raise HTTPException(status_code=400, detail=f"request {input_name}(image) read multi-form abnormal")
 
-                            random_id = str(uuid.uuid4())
-                            with open(os.path.join(query_folder, f'{random_id}_{filename}'), 'wb') as f:
-                                f.write(contents)
-                            
                             if input_type == 'image':
-                                input_req[input_name] = cv2.imread(os.path.join(query_folder, f'{random_id}_{filename}'))
+                                input_req[input_name] = cv2.imdecode(np.asarray(bytearray(contents), dtype="uint8"), 1)
                             else:
                                 input_req[input_name] = {
-                                    'image': cv2.imread(os.path.join(query_folder, f'{random_id}_{filename}')),
+                                    'image': cv2.imdecode(np.asarray(bytearray(contents), dtype="uint8"), 1),
                                     'filename': filename
                                 }
                         except Exception:
-                            raise HTTPException(status_code=500, detail="server abnormal")
-                        finally:
+                            raise HTTPException(status_code=400, detail=f"request {input_name}(image) read multi-form abnormal")
+                        except:
                             file.file.close()
 
                     elif input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
@@ -289,7 +286,7 @@ class ServeMixin:
                                     'filename': url
                                 }
                         except:
-                            raise HTTPException(status_code=500, detail="server abnormal")
+                            raise HTTPException(status_code=400, detail=f"request {input_name}(image) read url abnormal")
                     else:
                         # base64格式
                         try:
@@ -303,7 +300,7 @@ class ServeMixin:
                                     'filename': None
                                 }
                         except:
-                            raise HTTPException(status_code=500, detail="server abnormal")
+                            raise HTTPException(status_code=400, detail=f"request {input_name}(image) read base64 abnormal")
                 elif input_type.startswith('sound'):
                     # 支持base64格式+URL格式
                     if input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
@@ -312,10 +309,10 @@ class ServeMixin:
                         try:
                             signal, fs = torchaudio.load(input_req[input_name], channels_first = False)
                         except:
-                            raise HTTPException(status_code=500, detail="server abnormal")
+                            raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read url abnormal")
 
                         sound_data = {
-                            'signal': signal, 
+                            'signal': signal,
                             'fs': fs,
                             'filename': url
                         }
@@ -326,10 +323,10 @@ class ServeMixin:
                         try:
                             signal, fs = torchaudio.load(io.BytesIO(decoded_data), channels_first = False)
                         except:
-                            raise HTTPException(status_code=500, detail="server abnormal")
+                            raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read base64 abnormal")
                         
                         sound_data = {
-                            'signal': signal, 
+                            'signal': signal,
                             'fs': fs,
                             'filename': None
                         }
@@ -370,7 +367,7 @@ class ServeMixin:
             # 检查执行异常(由于计算过程产生BUG)
             if rsp_value is None:
                 clear_context_env_info(session_id)
-                raise HTTPException(status_code=500, detail="server abnormal")
+                raise HTTPException(status_code=500, detail="server execute abnormal")
 
             # 清空session_id绑定的上下文
             clear_context_env_info(session_id)
@@ -435,7 +432,7 @@ class ServeMixin:
             if len(output_info) == 1 and ServerInfo.pipeline_info[server_name]['response_unwarp']:
                 output_info = list(output_info.values())[0]
                 if not isinstance(output_info, dict):
-                    raise HTTPException(status_code=500, detail='output info parse error') 
+                    raise HTTPException(status_code=500, detail='server output info parse abnormal') 
 
             response.update(output_info)
             return response
