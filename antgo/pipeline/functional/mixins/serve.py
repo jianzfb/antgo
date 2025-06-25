@@ -30,6 +30,7 @@ import logging
 import json
 import uuid
 import base64
+import io
 import cv2
 
 class ServerInfo(object):
@@ -269,7 +270,7 @@ class ServeMixin:
                                 }
                         except Exception:
                             raise HTTPException(status_code=400, detail=f"request {input_name}(image) read multi-form abnormal")
-                        except:
+                        else:
                             file.file.close()
 
                     elif input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
@@ -302,8 +303,28 @@ class ServeMixin:
                         except:
                             raise HTTPException(status_code=400, detail=f"request {input_name}(image) read base64 abnormal")
                 elif input_type.startswith('sound'):
-                    # 支持base64格式+URL格式
-                    if input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
+                    # 支持base64格式+URL格式+UploadFile
+                    if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
+                        try:
+                            file = input_req[input_name]
+                            contents = file.file.read()
+                            filename = file.filename
+                            if contents == b'':
+                                raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
+
+                            signal, fs = torchaudio.load(io.BytesIO(contents), channels_first = False)
+                        except:
+                            raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read base64 abnormal")
+                        else:
+                            file.file.close()
+
+                        sound_data = {
+                            'signal': signal,
+                            'fs': fs,
+                            'filename': filename
+                        }
+                        input_req[input_name] = sound_data
+                    elif input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
                         url = input_req[input_name]
                         # url 格式
                         try:
