@@ -310,12 +310,10 @@ class ServeMixin:
                             contents = await file.read()
                             filename = file.filename
                             if contents == b'':
-                                print("AAAAA")
                                 raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
 
                             signal, fs = torchaudio.load(io.BytesIO(contents), channels_first = False)
                         except:
-                            print("BBBBBB")
                             raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
                         else:
                             file.file.close()
