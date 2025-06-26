@@ -256,7 +256,7 @@ class ServeMixin:
                     if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
                         try:
                             file = input_req[input_name]
-                            contents = file.file.read()
+                            contents = await file.read()
                             filename = file.filename
                             if contents == b'':
                                 raise HTTPException(status_code=400, detail=f"request {input_name}(image) read multi-form abnormal")
@@ -307,14 +307,14 @@ class ServeMixin:
                     if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
                         try:
                             file = input_req[input_name]
-                            contents = file.file.read()
+                            contents = await file.read()
                             filename = file.filename
                             if contents == b'':
                                 raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
 
                             signal, fs = torchaudio.load(io.BytesIO(contents), channels_first = False)
                         except:
-                            raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read base64 abnormal")
+                            raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
                         else:
                             file.file.close()
 
@@ -340,8 +340,8 @@ class ServeMixin:
                         input_req[input_name] = sound_data
                     else:
                         # base64格式
-                        decoded_data = base64.b64decode(input_req[input_name])
                         try:
+                            decoded_data = base64.b64decode(input_req[input_name])
                             signal, fs = torchaudio.load(io.BytesIO(decoded_data), channels_first = False)
                         except:
                             raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read base64 abnormal")
