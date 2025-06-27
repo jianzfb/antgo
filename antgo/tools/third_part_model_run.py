@@ -219,6 +219,7 @@ def yolo_model_export(exp_name, pretrained_model, **kwargs):
 
     print(f'Copy {fix_file_path} {package_path}/ultralytics/nn/modules')
     shutil.copy(fix_file_path, f'{package_path}/ultralytics/nn/modules')
+    shutil.copy(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resource/fix/yolo/exporter.py'), f'{package_path}/ultralytics/engine')
 
     from ultralytics import YOLO
 

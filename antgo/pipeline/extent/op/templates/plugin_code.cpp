@@ -40,7 +40,7 @@ for(size_t i=0; i<in_port_list.size(); ++i){
     if(type_str == "EAGLEEYE_SIGNAL_IMAGE" ||
         type_str == "EAGLEEYE_SIGNAL_RGB_IMAGE" ||
         type_str == "EAGLEEYE_SIGNAL_BGR_IMAGE"){
-        input_node = new Placeholder<ImageSignal<Array<unsigned char, 3>>>(${is_asyn}, 10, false, false);        
+        input_node = new Placeholder<ImageSignal<Array<unsigned char, 3>>>(${is_asyn}, 10, false, true);        
         if(type_str == "EAGLEEYE_SIGNAL_IMAGE"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_IMAGE);
         }
@@ -53,7 +53,7 @@ for(size_t i=0; i<in_port_list.size(); ++i){
     }
     else if(type_str == "EAGLEEYE_SIGNAL_RGBA_IMAGE" ||
             type_str == "EAGLEEYE_SIGNAL_BGRA_IMAGE"){
-        input_node = new Placeholder<ImageSignal<Array<unsigned char, 4>>>(${is_asyn}, 10, false, false);
+        input_node = new Placeholder<ImageSignal<Array<unsigned char, 4>>>(${is_asyn}, 10, false, true);
 
         if(type_str == "EAGLEEYE_SIGNAL_RGBA_IMAGE"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_RGBA_IMAGE);
@@ -65,7 +65,7 @@ for(size_t i=0; i<in_port_list.size(); ++i){
     else if(type_str == "EAGLEEYE_SIGNAL_GRAY_IMAGE" ||
             type_str == "EAGLEEYE_SIGNAL_MASK" || 
             type_str == "EAGLEEYE_SIGNAL_UCMATRIX"){
-        input_node = new Placeholder<ImageSignal<unsigned char>>(${is_asyn}, 10, false, false);
+        input_node = new Placeholder<ImageSignal<unsigned char>>(${is_asyn}, 10, false, true);
 
         if(type_str == "EAGLEEYE_SIGNAL_GRAY_IMAGE"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_GRAY_IMAGE);
@@ -78,7 +78,7 @@ for(size_t i=0; i<in_port_list.size(); ++i){
         }
     }
     else if(type_str == "EAGLEEYE_SIGNAL_TENSOR"){
-        input_node = new Placeholder<TensorSignal>(${is_asyn}, 10, false, false);        
+        input_node = new Placeholder<TensorSignal>(${is_asyn}, 10, false, true);        
         input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_TENSOR);
     }
     else if(type_str == "EAGLEEYE_SIGNAL_DET" ||
@@ -88,7 +88,7 @@ for(size_t i=0; i<in_port_list.size(); ++i){
             type_str == "EAGLEEYE_SIGNAL_POS_3D" ||
             type_str == "EAGLEEYE_SIGNAL_LANDMARK" || 
             type_str == "EAGLEEYE_SIGNAL_FMATRIX"){
-        input_node = new Placeholder<ImageSignal<float>>(${is_asyn}, 10, false, false);
+        input_node = new Placeholder<ImageSignal<float>>(${is_asyn}, 10, false, true);
         if(type_str == "EAGLEEYE_SIGNAL_DET"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_DET);
         }
@@ -114,7 +114,7 @@ for(size_t i=0; i<in_port_list.size(); ++i){
     else if(type_str == "EAGLEEYE_SIGNAL_CLS" ||
             type_str == "EAGLEEYE_SIGNAL_STATE" ||
             type_str == "EAGLEEYE_SIGNAL_IMATRIX"){
-        input_node = new Placeholder<ImageSignal<int>>(${is_asyn}, 10, false, false);
+        input_node = new Placeholder<ImageSignal<int>>(${is_asyn}, 10, false, true);
         if(type_str == "EAGLEEYE_SIGNAL_CLS"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_CLS);
         }
@@ -126,13 +126,13 @@ for(size_t i=0; i<in_port_list.size(); ++i){
         }
     }
     else if(type_str == "EAGLEEYE_SIGNAL_SWITCH"){
-        input_node = new Placeholder<BooleanSignal>(${is_asyn}, 10, false, false);
+        input_node = new Placeholder<BooleanSignal>(${is_asyn}, 10, false, true);
         input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_SWITCH);
     }
     else if(type_str == "EAGLEEYE_SIGNAL_RECT" ||
             type_str == "EAGLEEYE_SIGNAL_LINE" ||
             type_str == "EAGLEEYE_SIGNAL_POINT"){
-        input_node = new Placeholder<ImageSignal<float>>(${is_asyn}, 10, false, false);
+        input_node = new Placeholder<ImageSignal<float>>(${is_asyn}, 10, false, true);
         if(type_str == "EAGLEEYE_SIGNAL_RECT"){
             input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_RECT);
         }
@@ -144,7 +144,7 @@ for(size_t i=0; i<in_port_list.size(); ++i){
         }
     }
     else if(type_str == "EAGLEEYE_SIGNAL_TIMESTAMP"){
-        input_node = new Placeholder<ImageSignal<double>>(${is_asyn}, 10, false, false);
+        input_node = new Placeholder<ImageSignal<double>>(${is_asyn}, 10, false, true);
         input_node->getOutputPort(0)->setSignalType(EAGLEEYE_SIGNAL_TIMESTAMP);
     }
     else{
