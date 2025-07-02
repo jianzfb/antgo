@@ -106,3 +106,10 @@ docker run -d --name antgo-env-ide -p 8080:8080 -e PASSWORD=123 -v /tmp:/tmp -v 
     source ~/.bashrc
     nvm install 19.7.0
     ```
+8. 使用C++扩展时报/miniconda3/bin/../lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found
+
+这是由于conda环境的libstd库与编译c++库不符导致，可以通过如下方式解决
+```
+rm /miniconda3/bin/../lib/libstdc++.so.6
+ln /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /miniconda3/bin/../lib/libstdc++.so.6
+```

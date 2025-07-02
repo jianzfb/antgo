@@ -1778,18 +1778,38 @@ def generate_asyn_node_code(group_graph_op_list, deploy_graph_info, group_input,
     op_graph_code += 'NNNode* nnnode = new NNNode();\n'
     op_graph_code += 'dataflow::Graph* op_graph = nnnode->getOpGraph();\n'
 
-    circle_node_list = []
+    special_output_record = {}
+    for op_name in group_graph_op_list:
+        if len(deploy_graph_info[op_name]['output']) == 1 and len(deploy_graph_info[op_name]['input']) == 0:
+            special_output_record[deploy_graph_info[op_name]['output'][0]] = op_name
+
+    circle_node_map = {}
+    circle_node_map_inv = {}
+    pre_existed_input_list = []
+    for op_name in group_graph_op_list:
+        if len(deploy_graph_info[op_name]['output']) == 1 and len(deploy_graph_info[op_name]['input']) == 0:
+            continue
+        for input_name in deploy_graph_info[op_name]['input']:
+            if input_name not in pre_existed_input_list:
+                pre_existed_input_list.append(input_name)
+
+        for output_name in deploy_graph_info[op_name]['output']:
+            if output_name in pre_existed_input_list:
+                circle_node_map[special_output_record[output_name]] = output_name
+                circle_node_map_inv[output_name] = special_output_record[output_name]
+
     deploy_output_data_name_inv_link = {}
+    deploy_circle_output_data_name_inv_link = {}
     # 创建算子(有序)
     for deploy_op_name in group_graph_op_list:
         deploy_op_info = deploy_graph_info[deploy_op_name]
         if 'template' in deploy_op_info:
             node_cls_type = f'{deploy_op_info["type"]}{deploy_op_info["template"]}'
-            is_circle = "true" if deploy_op_name in circle_node_list else "false"
+            is_circle = "true" if deploy_op_name in circle_node_map else "false"
             op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
         else:
             node_cls_type = f'{deploy_op_info["type"]}'
-            is_circle = "true" if deploy_op_name in circle_node_list else "false"
+            is_circle = "true" if deploy_op_name in circle_node_map else "false"
             op_graph_code += f'dataflow::Node* {deploy_op_name} = op_graph->add<{node_cls_type}>("{deploy_op_name}", EagleeyeRuntime(EAGLEEYE_CPU), {is_circle});\n'
 
         deploy_op_args_tuple = deploy_op_info['args']
@@ -1817,10 +1837,14 @@ def generate_asyn_node_code(group_graph_op_list, deploy_graph_info, group_input,
                 args_init_code = deploy_op_args['c++_type']+'({'+arg_code+'})'
                 op_graph_code += f'{deploy_op_name}->init({args_init_code});\n\n'
 
-        # print(deploy_op_info['output'])
         for data_i, data_name in enumerate(deploy_op_info['output']):
             if data_name not in deploy_output_data_name_inv_link:
                 deploy_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
+            
+            if data_name in circle_node_map_inv:
+                if circle_node_map_inv[data_name] == deploy_op_name:
+                    continue
+                deploy_circle_output_data_name_inv_link[data_name] = (deploy_op_name, data_i)
 
     # 创建占位算子（graph输入）
     for data_i, data_name in enumerate(group_input):
@@ -1837,7 +1861,6 @@ def generate_asyn_node_code(group_graph_op_list, deploy_graph_info, group_input,
                     from_op_name, from_op_out_i = deploy_output_data_name_inv_link[input_data_name]
                     op_graph_code += f'op_graph->bind("{from_op_name}", {from_op_out_i}, "{deploy_op_name}", {input_data_i});\n'
 
-        # 考虑回环结构
         if deploy_op_info['output'] is not None:
             for output_data_i, output_data_name in enumerate(deploy_op_info['output']):
                 if output_data_name in deploy_output_data_name_inv_link and deploy_output_data_name_inv_link[output_data_name][0] != deploy_op_name:
@@ -1847,6 +1870,7 @@ def generate_asyn_node_code(group_graph_op_list, deploy_graph_info, group_input,
     # 初始化计算图
     op_graph_code += 'op_graph->init(NULL);\n'
 
+    deploy_output_data_name_inv_link.update(deploy_circle_output_data_name_inv_link)
     graph_in_ops = '{'+','.join(['"'+deploy_output_data_name_inv_link[name][0]+'"' for name in group_input])+'}'
     graph_out_ops = '{'+','.join(['{"'+deploy_output_data_name_inv_link[name][0]+'",'+str(deploy_output_data_name_inv_link[name][1])+'}' for name in group_output])+'}'
     op_graph_code += f"nnnode->analyze({graph_in_ops}, {graph_out_ops});\n"
@@ -1946,7 +1970,8 @@ def generate_multi_nnnode_pipeline(graph_op_list, graph_op_info, graph_import_ou
         global_outputs_map[group_name] = group_output_list
 
         # 生成node C++ 代码
-        code, data_inv_link = generate_asyn_node_code(group_op_map[group_name], group_info_map[group_name], group_input_list, group_output_list, is_asyn)
+        code, data_inv_link = \
+            generate_asyn_node_code(group_op_map[group_name], group_info_map[group_name], group_input_list, group_output_list, is_asyn)
 
         cpp_code += code 
         global_data_inv_link[group_name] = data_inv_link
@@ -2021,8 +2046,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
         op_index = graph_op_info['op_index']
         op_args = graph_op_info['op_args']
         op_kwargs = graph_op_info['op_kwargs']
-        if 'SelectPersonInSportOp' in op_name:
-            print("AA")
+
         print(f'op_name {op_name}')
         input_ctx = ()
         output_ctx = ()
@@ -2421,7 +2445,8 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
     #         op_graph=op_graph_code
     #     )
 
-    nnnode_graph_code, group_names, group_in_links, group_out_links, group_between_links = generate_multi_nnnode_pipeline(order_graph_op_list, deploy_graph_info, project_config['input'], project_config['output'], call_mode=='asyn')
+    nnnode_graph_code, group_names, group_in_links, group_out_links, group_between_links = \
+        generate_multi_nnnode_pipeline(order_graph_op_list, deploy_graph_info, project_config['input'], project_config['output'], call_mode=='asyn')
     plugin_code_template = 'plugin_code.cpp'
     if project_config.get('mode', 'server') == 'server':
         plugin_code_template = 'server_plugin_code.cpp'

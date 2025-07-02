@@ -459,19 +459,20 @@ def main():
         os.system(f'cd .. && rm {project_name}.tar')
 
         # 生成服务部署脚本
-        command = ''
-        if args.mode.startswith('http'):
-          command = f'antgo web --main={args.main} --port={args.port} --name={args.name}'
-
+        prefix_command = '. ~/.bashrc;'
         if args.version != '-':
-          command = f'pip3 uninstall -y antgo;pip3 install antgo@git+https://github.com/jianzfb/antgo.git@{args.version};{command}'
+          prefix_command = f'pip3 uninstall -y antgo;pip3 install antgo@git+https://github.com/jianzfb/antgo.git@{args.version};'
 
-        if os.path.exists('launch.sh'):
-          # 项目存在执行脚本
-          command = 'bash launch.sh'
         if os.path.exists('install.sh'):
           # 项目存在安装脚本，则运行命令时，先进行环境安装
-          command = 'bash install.sh ; '+command
+          prefix_command = prefix_command+'bash install.sh;'
+
+        command = prefix_command
+        if os.path.exists('launch.sh'):
+          command = command + 'bash launch.sh;'
+        else:
+          if args.mode.startswith('http'):
+            command = command + f'antgo web --main={args.main} --port={args.port} --name={args.name}'
 
         if args.image is None or args.image == '':
           args.image = 'registry.cn-hangzhou.aliyuncs.com/vibstring/antgo-env:latest'
