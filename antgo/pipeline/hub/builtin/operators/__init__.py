@@ -8,7 +8,8 @@ from __future__ import print_function
 from .runas_op import runas_op
 from .inference_model_op import inference_model_op
 from .inference_onnx_op import inference_onnx_op, ensemble_onnx_op, ensemble_shell_op
+from .inference_triton_op import inference_triton_op
 
 __all__ = [
-    'runas_op', 'inference_model_op', 'inference_onnx_op', 'ensemble_onnx_op', 'ensemble_shell_op'
+    'runas_op', 'inference_model_op', 'inference_onnx_op', 'ensemble_onnx_op', 'ensemble_shell_op', 'inference_triton_op'
 ]
