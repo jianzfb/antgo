@@ -106,27 +106,43 @@ class ComputerVisionMixin:
 
     # pylint: disable=redefined-builtin
     @classmethod
-    def read_video(cls, path, format='rgb24'):
+    def read_video(cls, path, fps=None, format='rgb24'):
         """
         Load video as a datacollection.
 
         Args:
             path:
                 The path to the target video.
-            format:
-                The format of the images loaded from video.
         """
-        def inner():
+        def inner(video_fps):
             cap = cv2.VideoCapture(path)
+            success = True
+            if video_fps is not None:
+                success = cap.set(cv2.CAP_PROP_FPS, video_fps)
+                if success:
+                    print(f"成功设置帧率为 {video_fps} fps")
+                else:
+                    print(f"无法设置帧率为 {video_fps} fps,当前帧率: {cap.get(cv2.CAP_PROP_FPS)}")
+
+            skip_frames = -1
+            if video_fps is not None and not success:
+                video_fps = min(video_fps, cap.get(cv2.CAP_PROP_FPS))
+                skip_frames = int(cap.get(cv2.CAP_PROP_FPS)) // video_fps
+
             frame_count = 0
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
+
+                if skip_frames > 0 and frame_count % skip_frames != 0:
+                    frame_count += 1
+                    continue
+
                 yield frame, frame_count
                 frame_count += 1
 
-        return cls(inner())
+        return cls(inner(fps))
 
     @register_dag
     def video_decode(self, input_index, out_index):

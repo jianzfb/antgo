@@ -106,7 +106,8 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
             image = cv2.imread(image_path)
             image_h, image_w = image.shape[:2]
             export_info = {
-                'image': image
+                'image': image,
+                'filename': image_path
             }
             if mode == 'detect':
                 with open(label_path, 'r') as fp:
@@ -199,6 +200,146 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
             elif mode == 'classify':
                 pass
 
+            entity = Entity()(**export_info)
+            yield entity
+
+    return DataFrame(inner())
+
+
+@dynamic_dispatch
+def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
+    def inner():
+        with open(ann_file, 'r') as fp:
+            sample_anno_list = json.load(fp)
+        
+        for anno_info in sample_anno_list:
+            if len(anno_info['annotations']) == 0:
+                continue
+
+            group_anno_ids = {}
+            original_file = '-'.join(anno_info['file_upload'].split('-')[1:])
+
+            export_info = {}
+            export_info['filename'] = os.path.join(data_folder, original_file)
+            export_info['image'] = cv2.imread(export_info['filename'])
+            export_info['bboxes'] = []
+            export_info['labels'] = []
+            export_info['label_names'] = []
+            export_info['segments'] = []
+            export_info['has_segments'] = []
+            sample_anno_info = anno_info['annotations'][0]
+            for sample_anno_instance in sample_anno_info['result']:
+                if sample_anno_instance['type'] == 'rectanglelabels':
+                    # 矩形框标注
+                    export_info['height'] = sample_anno_instance['original_height']
+                    export_info['width'] = sample_anno_instance['original_width']
+                                    
+                    bbox_x = sample_anno_instance['value']['x'] / 100.0 * export_info['width']
+                    bbox_y = sample_anno_instance['value']['y'] / 100.0 * export_info['height']
+                    bbox_width = sample_anno_instance['value']['width'] / 100.0 * export_info['width']
+                    bbox_height = sample_anno_instance['value']['height'] / 100.0 * export_info['height']
+                    bbox_rotation = sample_anno_instance['value']['rotation']
+                    export_info['bboxes'].append([bbox_x,bbox_y,bbox_x+bbox_width,bbox_y+bbox_height])
+
+                    label_name = sample_anno_instance['value']['rectanglelabels'][0]
+                    export_info['labels'].append(category_map[label_name] if label_name in category_map else -1)
+                    export_info['label_names'].append(label_name)
+                elif sample_anno_instance['type'] == 'keypointlabels':
+                    # 2D关键点标注
+                    export_info['height'] = sample_anno_instance['original_height']
+                    export_info['width'] = sample_anno_instance['original_width']  
+                    keypoint_x = sample_anno_instance['value']['x'] / 100.0 * export_info['width']
+                    keypoint_y = sample_anno_instance['value']['y'] / 100.0 * export_info['height']
+                    
+                    # 先把所有关键点保存起来，然后进行组合到单个个体
+                    label_name = sample_anno_instance['value']['keypointlabels'][0]
+                    label_id = category_map[label_name]
+                    # label_order = label_name_order[label_name]
+                    
+                    sample_anno_id = sample_anno_instance['id']
+                    sample_parent_anno_id = sample_anno_instance['parentID'] if 'parentID' in sample_anno_instance else ''
+
+                    group_anno_ids[sample_anno_id] = {
+                        'keypoint_x': keypoint_x,
+                        'keypoint_y': keypoint_y,
+                        'label_name': label_name,
+                        'label_id': label_id,
+                        'anno_id': sample_anno_id,
+                        'group_anno_id': sample_parent_anno_id
+                    }
+                elif sample_anno_instance['type'] == 'polygonlabels':
+                    # 分割标注(polygon)
+                    export_info['height'] = sample_anno_instance['original_height']
+                    export_info['width'] = sample_anno_instance['original_width']  
+
+                    points = sample_anno_instance['value']['points']
+                    label_name = sample_anno_instance['value']['polygonlabels'][0]
+                    label_id = category_map[label_name]
+                    
+                    points_array = np.array(points) 
+                    points_array[:, 0] = points_array[:, 0] / 100.0 * export_info['width']
+                    points_array[:, 1] = points_array[:, 1] / 100.0 * export_info['height']
+                    points = points_array.tolist()
+                    
+                    bbox_x1 = float(np.min(points_array[:,0]))
+                    bbox_y1 = float(np.min(points_array[:,1]))
+                    bbox_x2 = float(np.max(points_array[:,0]))
+                    bbox_y2 = float(np.max(points_array[:,1]))
+                    export_info['bboxes'].append([bbox_x1, bbox_y1, bbox_x2, bbox_y2])
+
+                    label_name = sample_anno_instance['value']['polygonlabels'][0]
+                    export_info['labels'].append(category_map[label_name] if label_name in category_map else -1)
+                    export_info['label_names'].append(label_name)
+
+                    export_info['segments'].append(points)
+                    export_info['has_segments'].append(1)
+                    
+                    assert(len(export_info['segments']) == len(export_info['bboxes']))
+                elif sample_anno_instance['type'] == 'choices':
+                    # 图片级类别标注
+                    label_name = ','.join(sample_anno_instance['value']['choices'])
+                    export_info['image_label_name'] = label_name
+                    export_info['image_label'] = category_map[label_name] if label_name in category_map else -1
+
+            if len(group_anno_ids) > 0:
+                # 仅对关键点标注启用
+                regroup_anno_ids = {}
+                for k,v in group_anno_ids.items():
+                    if v['group_anno_id'] != '': 
+                        # 只抽取group id
+                        regroup_anno_ids[v['group_anno_id']] = []
+
+                for k,v in group_anno_ids.items():
+                    if v['group_anno_id'] != '':
+                        regroup_anno_ids[v['group_anno_id']].append(v)
+                    elif v['anno_id'] in regroup_anno_ids:
+                        regroup_anno_ids[v['anno_id']].append(v)
+                
+                # 重新排序每个group
+                export_info['joints2d'] = [None for _ in range(len(regroup_anno_ids))]
+                export_info['has_joints2d'] = []
+                
+                for group_i, group_key in enumerate(regroup_anno_ids.keys()):
+                    export_info['joints2d'][group_i] = [[] for _ in range(len(category_map))]
+                    export_info['has_joints2d'].append(1)
+                    
+                    for anno_info in regroup_anno_ids[group_key]:
+                        label_id = anno_info['label_id']
+                        export_info['joints2d'][group_i][label_id] = [anno_info['keypoint_x'], anno_info['keypoint_y']]
+
+                # 
+                for group_i in range(len(export_info['joints2d'])):
+                    points_array = np.array(export_info['joints2d'][group_i]) 
+                    
+                    bbox_x1 = float(np.min(points_array[:,0]))
+                    bbox_y1 = float(np.min(points_array[:,1]))
+                    bbox_x2 = float(np.max(points_array[:,0]))
+                    bbox_y2 = float(np.max(points_array[:,1]))
+                    export_info['bboxes'].append([bbox_x1, bbox_y1, bbox_x2, bbox_y2])
+
+                    export_info['labels'].append(0)
+                    export_info['label_names'].append('unkown')
+                    
             entity = Entity()(**export_info)
             yield entity
 
@@ -372,7 +513,7 @@ class _dataset_dc(object):
     def __getattr__(self, name):
         if name == 'dataset':
             return common_dataset_dc
-        if name not in ['coco','yolo','tfrecord']:
+        if name not in ['coco','yolo','tfrecord','labelstudio']:
             return None
 
         return globals()[f'{name}_format_dc']

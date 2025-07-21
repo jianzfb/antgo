@@ -271,7 +271,9 @@ def vcg_download(keyword, download_params, download_save_dir, process_queue=None
             return
 
         # 3.step 继续分析所有等待导航页面
+        is_finish = False
         for page_index, page_url in enumerate(nav_page_list):
+            page_url = f'https://www.vcg.com{page_url}'
             logger.info("Analyze nav page(%d/%d) %s"%(page_index+2, len(nav_page_list), page_url))
             Result = A.get(page_url, timeout=7, allow_redirects=True)
             if Result.status_code != 200:
@@ -305,7 +307,11 @@ def vcg_download(keyword, download_params, download_save_dir, process_queue=None
                 __vcg_img_download(waiting_process_queue, save_dir, img_url, keyword, download_count)
                 download_count += 1
                 if download_count > target_num:           
+                    is_finish = True
                     break
+            
+            if is_finish:
+                break
 
         # 添加结束标记
         if waiting_process_queue is not None:

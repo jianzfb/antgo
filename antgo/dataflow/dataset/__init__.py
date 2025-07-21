@@ -27,6 +27,7 @@ from .ochuman_dataset import OCHumanDataset
 from .aic_dataset import AicDataset
 from .episode import Episode
 from .yolo_dataset import YoloDataset
+from .roboflow import Roboflow
 
 __all__ = [
   'Mnist', 
@@ -55,5 +56,6 @@ __all__ = [
   'OCHumanDataset',
   'AicDataset',
   'Episode',
-  'YoloDataset'
+  'YoloDataset',
+  'Roboflow'
 ]

@@ -132,7 +132,7 @@ def line_dc(*args):
 
 
 @dynamic_dispatch
-def video_dc(*args):
+def video_dc(*args, **kwargs):
     index = param_scope()._index
     if not isinstance(index, tuple):
       print('Video dc neef (frame, frame_index) export')
@@ -140,13 +140,13 @@ def video_dc(*args):
 
     if len(args) == 1 and isinstance(args[0], str):
       video_entity = Entity()
-      return DataFrame.read_video(*args).map(lambda x: video_entity(**{key: value for key,value in zip(index, x)}))
+      return DataFrame.read_video(*args, **kwargs).map(lambda x: video_entity(**{key: value for key,value in zip(index, x)}))
 
     def inner():
       source_iterator_list = []
       for video_path in args:
         source_iterator_list.append(
-          iter(DataFrame.read_video(video_path))
+          iter(DataFrame.read_video(video_path, **kwargs))
         )
 
       source_num = len(source_iterator_list)
