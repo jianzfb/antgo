@@ -115,13 +115,18 @@ def yolo_model_train(exp_name, cfg, root, gpu_id, pretrained_model=None, **kwarg
     batch_size = data.get('batch_size', 32)
     workers = data.get('workers', 1)
 
+    aug_config = {}
+    if 'aug' in data:
+        aug_config.update(data['aug'])
+
     device = [int(k) for k in gpu_id.split(',')]
     results = model.train(
         data='./data.yaml' if model_category != 'cls' else data.get('path', None), 
         epochs=cfg.get('max_epochs', 100), 
         imgsz=data_imgsz, 
         device=device,
-        batch=batch_size
+        batch=batch_size,
+        **aug_config
     )
     save_dir = str(model.trainer.save_dir)
     if not root.startswith('ali'):
@@ -199,27 +204,27 @@ def yolo_model_export(exp_name, pretrained_model, **kwargs):
         os.system('pip3 uninstall -y opencv-python-headless')
         os.system('pip3 install opencv-python-headless')
 
-    print('Fix export onnx to multi-platform')
-    fix_file_path = os.path.dirname(os.path.dirname(__file__))
-    fix_file_path = os.path.join(fix_file_path, 'resource/fix/yolo/head.py')
+    # print('Fix export onnx to multi-platform')
+    # fix_file_path = os.path.dirname(os.path.dirname(__file__))
+    # fix_file_path = os.path.join(fix_file_path, 'resource/fix/yolo/head.py')
 
-    # analyze prefix
-    prefix_index = 0
-    for index, info in enumerate(fix_file_path.split('/')):
-        if info.startswith('python'):
-            prefix_index = index
-            break
-    prefix = '/'.join(fix_file_path.split("/")[:prefix_index+1])
+    # # analyze prefix
+    # prefix_index = 0
+    # for index, info in enumerate(fix_file_path.split('/')):
+    #     if info.startswith('python'):
+    #         prefix_index = index
+    #         break
+    # prefix = '/'.join(fix_file_path.split("/")[:prefix_index+1])
 
-    package_path = ''
-    for check_sys_path in sys.path:
-        if check_sys_path.endswith('site-packages') and check_sys_path.startswith(prefix):
-            package_path = check_sys_path
-            break
+    # package_path = ''
+    # for check_sys_path in sys.path:
+    #     if check_sys_path.endswith('site-packages') and check_sys_path.startswith(prefix):
+    #         package_path = check_sys_path
+    #         break
 
-    print(f'Copy {fix_file_path} {package_path}/ultralytics/nn/modules')
-    shutil.copy(fix_file_path, f'{package_path}/ultralytics/nn/modules')
-    shutil.copy(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resource/fix/yolo/exporter.py'), f'{package_path}/ultralytics/engine')
+    # print(f'Copy {fix_file_path} {package_path}/ultralytics/nn/modules')
+    # shutil.copy(fix_file_path, f'{package_path}/ultralytics/nn/modules')
+    # shutil.copy(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'resource/fix/yolo/exporter.py'), f'{package_path}/ultralytics/engine')
 
     from ultralytics import YOLO
 
