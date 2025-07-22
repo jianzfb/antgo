@@ -76,6 +76,9 @@ class Exporter(object):
             print('FLOPs = ' + str(flops/1000**3) + 'G')
             print('Params = ' + str(params/1000**2) + 'M')
 
+        if self.work_dir == './':
+            self.work_dir = os.path.dirname(checkpoint)
+
         if not os.path.exists(self.work_dir):
             os.makedirs(self.work_dir)
 

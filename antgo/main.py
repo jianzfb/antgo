@@ -1201,8 +1201,7 @@ def main():
       else:
         # multi gpu run
         # (1)安装;(2)数据准备;(3)运行
-        gpu_num = len(args.gpu_id.split(','))
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp.split(".")[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint} --resume-from={args.resume_from}; bash launch.sh {args.exp.split(".")[0]}/main.py {args.gpu_id} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=train --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config}'
         if args.no_manage:
           command_str += ' --no-manage'
         if args.no_validate:
@@ -1267,8 +1266,7 @@ def main():
         os.system(command_str)
       else:
         # multi gpu run
-        gpu_num = len(args.gpu_id.split(','))
-        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp.split(".")[0]}/main.py {gpu_num} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
+        command_str = f'python3 {script_folder}/data_prepare.py --exp={args.exp} --extra-config={args.extra_config} --config={args.config} --checkpoint={args.checkpoint}; bash launch.sh {args.exp.split(".")[0]}/main.py {args.gpu_id} {args.nodes} {args.node_rank} {args.master_addr} --exp={args.exp} --process=test --running=normal --root={args.root} --extra-config={args.extra_config} --config={args.config} --json=evalresult.json'
         if args.no_manage:
           command_str += ' --no-manage'
         if args.checkpoint is not None:
