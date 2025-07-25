@@ -11,7 +11,7 @@ CRTDIR=$(pwd)
 # gpu visible in env
 export CUDA_VISIBLE_DEVICES=$GPU_IDS
 # gpu number
-GPU_NUM = $(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+GPU_NUM=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
 
 # show command
 echo python3 -m torch.distributed.launch --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --nproc_per_node $GPU_NUM --master_port $PORT $CRTDIR/$MAINPY --distributed ${@:6}

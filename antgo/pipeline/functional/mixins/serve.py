@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
 import torchaudio
+import torch
 import queue
 import threading
 import concurrent.futures
@@ -131,12 +132,12 @@ class ServeMixin:
         input_selection = [cc['data'] for cc in input]
         input_selection_types = [cc['type'] for cc in input]
         for ui_type in input_selection_types:
-            assert(ui_type in ['image', 'sound', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header', 'image-ext', 'sound-ext'])
+            assert(ui_type in ['image', 'sound', 'sound/pcm', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header', 'image-ext', 'sound-ext'])
 
         output_selection = [cc['data'] for cc in output]
         output_selection_types = [cc['type'] for cc in output]
         for ui_type in output_selection_types:
-            assert (ui_type in ['image', 'sound', 'video', 'text', 'number', 'file', 'json'])
+            assert (ui_type in ['image', 'sound', 'sound/pcm', 'video', 'text', 'number', 'file', 'json'])
 
         input_config = default_config
         if default_config is None:
@@ -305,6 +306,7 @@ class ServeMixin:
                 elif input_type.startswith('sound'):
                     # 支持base64格式+URL格式+UploadFile
                     if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
+                        signal, fs = None, None
                         try:
                             file = input_req[input_name]
                             contents = await file.read()
@@ -312,7 +314,25 @@ class ServeMixin:
                             if contents == b'':
                                 raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
 
-                            signal, fs = torchaudio.load(io.BytesIO(contents), channels_first = False)
+                            if not input_type.endswith('pcm'):
+                                signal, fs = torchaudio.load(io.BytesIO(contents), channels_first = False)
+                            else:
+                                # PCM格式，需要设置采样率，通道数
+                                # 位深度：s16le，采样率：16000
+                                sound_format = input_req.get(f'{input_name}/format', 's16le')
+                                sound_sample_rate = input_req.get(f'{input_name}/sample_rate', '16000')
+                                sound_channel_num = input_req.get(f'{input_name}/channel_num', '1')
+                                streamer = torchaudio.io.StreamReader(src=io.BytesIO(contents), format=sound_format, option={"sample_rate": sound_sample_rate})
+                                streamer.add_basic_audio_stream(
+                                    frames_per_chunk=-1,  # 读取整个文件
+                                    num_channels=sound_channel_num
+                                )
+                                
+                                signal = []
+                                for (chunk,) in streamer.stream():
+                                    signal.append(chunk)
+                                signal = torch.cat(signal, 0)
+                                fs = int(sound_sample_rate)
                         except:
                             raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
                         else:
@@ -326,9 +346,28 @@ class ServeMixin:
                         input_req[input_name] = sound_data
                     elif input_req[input_name].startswith('http') or input_req[input_name].startswith('https'):
                         url = input_req[input_name]
+                        signal, fs = None, None
                         # url 格式
                         try:
-                            signal, fs = torchaudio.load(input_req[input_name], channels_first = False)
+                            if not input_type.endswith('pcm'):
+                                signal, fs = torchaudio.load(input_req[input_name], channels_first = False)
+                            else:
+                                # PCM格式，需要设置采样率，通道数
+                                # 位深度：s16le，采样率：16000                                
+                                sound_format = input_req.get(f'{input_name}/format', 's16le')
+                                sound_sample_rate = input_req.get(f'{input_name}/sample_rate', '16000')
+                                sound_channel_num = input_req.get(f'{input_name}/channel_num', '1')
+                                streamer = torchaudio.io.StreamReader(src=input_req[input_name], format=sound_format, option={"sample_rate": sound_sample_rate})
+                                streamer.add_basic_audio_stream(
+                                    frames_per_chunk=-1,  # 读取整个文件
+                                    num_channels=sound_channel_num
+                                )
+
+                                signal = []
+                                for (chunk,) in streamer.stream():
+                                    signal.append(chunk)
+                                signal = torch.cat(signal, 0)
+                                fs = int(sound_sample_rate)
                         except:
                             raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read url abnormal")
 
@@ -339,10 +378,30 @@ class ServeMixin:
                         }
                         input_req[input_name] = sound_data
                     else:
+                        signal, fs = None, None
                         # base64格式
                         try:
-                            decoded_data = base64.b64decode(input_req[input_name])
-                            signal, fs = torchaudio.load(io.BytesIO(decoded_data), channels_first = False)
+                            if not input_type.endswith('pcm'):
+                                decoded_data = base64.b64decode(input_req[input_name])
+                                signal, fs = torchaudio.load(io.BytesIO(decoded_data), channels_first = False)
+                            else:
+                                # PCM格式，需要设置采样率，通道数
+                                # 位深度：s16le，采样率：16000                                
+                                sound_format = input_req.get(f'{input_name}/format', 's16le')
+                                sound_sample_rate = input_req.get(f'{input_name}/sample_rate', '16000')
+                                sound_channel_num = input_req.get(f'{input_name}/channel_num', '1')
+                                decoded_data = base64.b64decode(input_req[input_name])
+                                streamer = torchaudio.io.StreamReader(src=io.BytesIO(decoded_data), format=sound_format, option={"sample_rate": sound_sample_rate})
+                                streamer.add_basic_audio_stream(
+                                    frames_per_chunk=-1,  # 读取整个文件
+                                    num_channels=sound_channel_num
+                                )
+
+                                signal = []
+                                for (chunk,) in streamer.stream():
+                                    signal.append(chunk)
+                                signal = torch.cat(signal, 0)
+                                fs = int(sound_sample_rate)
                         except:
                             raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read base64 abnormal")
                         
