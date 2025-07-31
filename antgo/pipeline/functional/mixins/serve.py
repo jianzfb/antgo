@@ -314,7 +314,7 @@ class ServeMixin:
                             if contents == b'':
                                 raise HTTPException(status_code=400, detail=f"request {input_name}(sound) read multi-form abnormal")
 
-                            if not input_type.endswith('pcm'):
+                            if not filename.endswith('pcm'):
                                 signal, fs = torchaudio.load(io.BytesIO(contents), channels_first = False)
                             else:
                                 # PCM格式，需要设置采样率，通道数
@@ -349,7 +349,7 @@ class ServeMixin:
                         signal, fs = None, None
                         # url 格式
                         try:
-                            if not input_type.endswith('pcm'):
+                            if not url.endswith('pcm'):
                                 signal, fs = torchaudio.load(input_req[input_name], channels_first = False)
                             else:
                                 # PCM格式，需要设置采样率，通道数
