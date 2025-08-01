@@ -13,7 +13,7 @@ from antgo.pipeline.ui.data import DataS, AttrMap
 
 
 class LabelOp(object):
-    def __init__(self, text=None, image=None, gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):
+    def __init__(self, text=None, image=None, font=('微软雅黑', 20, 'italic'), gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):
         self._attr = AttrMap(
             text    =DataS(default=text) if not isinstance(text, DataS) else text,
             gridx   =DataS(default=gridx) if not isinstance(gridx, DataS) else gridx,
@@ -27,6 +27,7 @@ class LabelOp(object):
         )
         self._label = None
         self._image = None
+        self._font = font
 
     @property
     def element(self):
@@ -59,6 +60,7 @@ class LabelOp(object):
         if self._attr.image.get() is not None:
             self._image = ImageTk.PhotoImage(Image.open(self._attr.image.get()))
             params['image'] = self._image
+        params['font'] = self._font
 
         self._label = tk.Label(parent_node, **params)
         self._attr.text.watch(lambda value: self._label.config(text=value))
@@ -71,7 +73,7 @@ class LabelOp(object):
             'pady': self._attr.pady.get(),
             'rowspan': self._attr.spany.get(),
             'columnspan': self._attr.spanx.get(),
-            'sticky': self._attr.stick.get()
+            'sticky': tk.NSEW
         }
 
         self._label.grid(**layout_params)
