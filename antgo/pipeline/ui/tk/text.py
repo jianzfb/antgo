@@ -10,7 +10,7 @@ from antgo.pipeline.ui.data import DataS, AttrMap
 
 
 class TextOp(object):
-    def __init__(self, text="", gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):  
+    def __init__(self, text="", font=('微软雅黑', 10, 'italic'), gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):  
         self._attr = AttrMap(
             text    =DataS(default=text) if not isinstance(text, DataS) else text,
             gridx   =DataS(default=gridx) if not isinstance(gridx, DataS) else gridx,
@@ -23,6 +23,8 @@ class TextOp(object):
         )
         self._text = self._attr.text.get()
         self._attr.text.config_proxy(self)
+
+        self._font = font
         self._entry = None
 
     @property
@@ -61,7 +63,8 @@ class TextOp(object):
     def __call__(self, *args, **kwds):
         parent_node = args[0].element
         params = {
-            'text': self._text
+            'text': self._text,
+            'font': self._font
         }
         self._entry = tk.Entry(parent_node, **params)
         layout_params = {
@@ -71,7 +74,7 @@ class TextOp(object):
             'pady': self._attr.pady.get(),
             'rowspan': self._attr.spany.get(),
             'columnspan': self._attr.spanx.get(),
-            'sticky': self._attr.stick.get()
+            'sticky': tk.NSEW
         }
 
         self._entry.grid(**layout_params)

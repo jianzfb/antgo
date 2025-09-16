@@ -10,7 +10,7 @@ from antgo.pipeline.ui.data import DataS, AttrMap
 
 
 class ButtonOp(object):
-    def __init__(self, func, text="OK", gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):  
+    def __init__(self, func, text="OK", font=('微软雅黑', 10, 'italic'), gridx=0, gridy=0, spanx=1, spany=1, padx=0, pady=0, stick=''):  
         self._func = func
         self._btn = None
         self._attr = AttrMap(
@@ -23,6 +23,7 @@ class ButtonOp(object):
             pady    =DataS(default=pady) if not isinstance(pady, DataS) else pady,
             stick   =DataS(default=stick) if not isinstance(stick, DataS) else stick
         )
+        self._font = font
 
     def click(self, *args, **kwargs):
         self._func(*args, **kwargs)
@@ -51,7 +52,7 @@ class ButtonOp(object):
         # 格式
         # args = [parent_node, data, ...]
         parent_node = args[0].element
-        self._btn = tk.Button(parent_node, text=self.attr.text.get(), command=lambda: self.click(*args[1:]))
+        self._btn = tk.Button(parent_node, text=self.attr.text.get(), command=lambda: self.click(*args[1:]), font=self._font)
         self.attr.text.watch(lambda value: self._btn.config(text=value))
     
         layout_params = {

@@ -24,6 +24,10 @@ def tk_env(*args, **kwargs):
             self.root.title(title)
             self.root.resizable(*resizable)
             self.root.geometry(kwargs.get('shape', f'{width}x{height}+{x}+{y}'))
+            for i in range(20):
+               self.root.grid_columnconfigure(i, weight=1)
+
+            self.root.update()            
 
       def loop(self):
             self.root.mainloop()

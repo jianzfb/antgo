@@ -38,9 +38,13 @@ class LayoutOp(object):
         parent_node = args[0].element
         width = self._attr.width.get() * parent_node.winfo_width()
         height = self._attr.height.get() * parent_node.winfo_height()
+
+        # for i in range(self._attr.gridx.get(), self._attr.gridx.get()+self._attr.padx.get(), 1):
+        #    parent_node.grid_columnconfigure(i, weight=1)
+
         params = {
-            'width': width, 
-            'height': height,
+            # 'width': width, 
+            # 'height': height,
             'highlightbackground': self._attr.bg.get(),
             'highlightthickness': self._attr.thickness.get()
         }
@@ -53,7 +57,8 @@ class LayoutOp(object):
             'pady': self._attr.pady.get(),
             'rowspan': self._attr.spany.get(),
             'columnspan': self._attr.spanx.get(),
-            'sticky': self._attr.stick.get()
+            'sticky': tk.NSEW
         }
         self._layout.grid(**layout_params)
+
         return self
