@@ -170,7 +170,7 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
 
                     export_info['bboxes'] = np.array(bboxes, dtype=np.float32)
                     export_info['labels'] = np.array(labels, dtype=np.int32)
-                    export_info['keypoints'] = np.stack(keypoints, 0)
+                    export_info['joints2d'] = np.stack(keypoints, 0)
             elif mode == 'segment':
                 with open(label_path, 'r') as fp:
                     content = fp.readline().strip()
@@ -212,12 +212,12 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
         with open(ann_file, 'r') as fp:
             sample_anno_list = json.load(fp)
         
-        for anno_info in sample_anno_list:
+        for anno_i, anno_info in enumerate(sample_anno_list):
             if len(anno_info['annotations']) == 0:
                 continue
 
             group_anno_ids = {}
-            original_file = '-'.join(anno_info['file_upload'].split('-')[1:])
+            original_file = anno_info['data']['img'].split('/')[-1] if 'img' in anno_info else anno_info['data']['image'].split('/')[-1]
 
             export_info = {}
             export_info['filename'] = os.path.join(data_folder, original_file)
@@ -257,7 +257,7 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
                     # label_order = label_name_order[label_name]
                     
                     sample_anno_id = sample_anno_instance['id']
-                    sample_parent_anno_id = sample_anno_instance['parentID'] if 'parentID' in sample_anno_instance else ''
+                    sample_parent_anno_id = sample_anno_instance['parentID'] if 'parentID' in sample_anno_instance else 'default'
 
                     group_anno_ids[sample_anno_id] = {
                         'keypoint_x': keypoint_x,
@@ -314,15 +314,15 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
                         regroup_anno_ids[v['group_anno_id']].append(v)
                     elif v['anno_id'] in regroup_anno_ids:
                         regroup_anno_ids[v['anno_id']].append(v)
-                
+
                 # 重新排序每个group
                 export_info['joints2d'] = [None for _ in range(len(regroup_anno_ids))]
                 export_info['has_joints2d'] = []
-                
+
                 for group_i, group_key in enumerate(regroup_anno_ids.keys()):
                     export_info['joints2d'][group_i] = [[] for _ in range(len(category_map))]
                     export_info['has_joints2d'].append(1)
-                    
+
                     for anno_info in regroup_anno_ids[group_key]:
                         label_id = anno_info['label_id']
                         export_info['joints2d'][group_i][label_id] = [anno_info['keypoint_x'], anno_info['keypoint_y']]
@@ -330,7 +330,7 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
                 # 
                 for group_i in range(len(export_info['joints2d'])):
                     points_array = np.array(export_info['joints2d'][group_i]) 
-                    
+
                     bbox_x1 = float(np.min(points_array[:,0]))
                     bbox_y1 = float(np.min(points_array[:,1]))
                     bbox_x2 = float(np.max(points_array[:,0]))
@@ -339,7 +339,7 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
 
                     export_info['labels'].append(0)
                     export_info['label_names'].append('unkown')
-                    
+
             entity = Entity()(**export_info)
             yield entity
 

@@ -1012,26 +1012,27 @@ def auto_generate_control_cache_op(op_name, op_index, func_name, func_kwargs, ou
 
     op_info = prepare_cplusplus_code(func_name, (input_ctx[1:], output_ctx), func_kwargs.get(func_name, {}), output_folder, core_op_set, platform, abi, project_name)
 
-    arg_code = ''
     op_init_code = ''
-    for deploy_arg_name, deploy_arg_list in op_info['args'].items():
-        if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
-            op_init_code += f'{deploy_arg_list}\n'
-            if arg_code == '':
-                arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-            else:
-                arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
-            continue
+    for index in range(len(op_info['args'])):
+        arg_code = ''
+        for deploy_arg_name, deploy_arg_list in op_info['args'][index].items():
+            if deploy_arg_name != 'c++_type' and isinstance(deploy_arg_list, str):
+                op_init_code += f'{deploy_arg_list}\n'
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",'+deploy_arg_name+'}'
+                continue
 
-        if deploy_arg_name != 'c++_type':
-            if arg_code == '':
-                arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
-            else:
-                arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+            if deploy_arg_name != 'c++_type':
+                if arg_code == '':
+                    arg_code = '{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
+                else:
+                    arg_code += ',{"'+deploy_arg_name+'",{'+','.join([str(v) for v in deploy_arg_list])+'}}'
 
-    if 'c++_type' in op_info['args']:
-        args_init_code = op_info['args']['c++_type']+'({'+arg_code+'})'
-        op_init_code += f'm_func->init({args_init_code});\n\n'
+        if 'c++_type' in op_info['args'][index]:
+            args_init_code = op_info['args'][index]['c++_type']+'({'+arg_code+'})'
+            op_init_code += f'm_func->init({args_init_code});\n\n'
 
     warp_cpp_code_content = \
         gen_code('./templates/cache_op_class_code.hpp')(
@@ -2078,6 +2079,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 false_func_name = function_op_name_list[0]
 
                 op_name = f'{function_key_list[1]}_{true_func_name}_{false_func_name}'
+                op_name = op_name.replace('-','').replace('/','')
                 if op_name not in op_name_count:
                     op_name_count[op_name] = 0
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
@@ -2093,6 +2095,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 func_op_name = function_op_name_list[0]
 
                 op_name = f'{function_key_list[1]}_{func_op_name}'
+                op_name = op_name.replace('-','').replace('/','')
                 if op_name not in op_name_count:
                     op_name_count[op_name] = 0
                 op_unique_name = f"{op_name.replace('-','').replace('/','')}_{op_name_count[op_name]}"
@@ -2108,6 +2111,8 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 func_op_name = function_op_name_list[0]
 
                 op_name = f'{function_key_list[1]}_{func_op_name}'
+                op_name = op_name.replace('-','').replace('/','')
+
                 if op_name not in op_name_count:
                     op_name_count[op_name] = 0
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
@@ -2123,6 +2128,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 func_op_name = function_op_name_list[0]
 
                 op_name = f'{function_key_list[1]}_{func_op_name}'
+                op_name = op_name.replace('-','').replace('/','')
                 if op_name not in op_name_count:
                     op_name_count[op_name] = 0
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'
@@ -2168,6 +2174,7 @@ def package_build(output_folder, eagleeye_path, project_config, platform, abi=No
                 func_op_name = function_op_name_list[0]
 
                 op_name = f'{function_key_list[1]}_{func_op_name}'
+                op_name = op_name.replace('-','').replace('/','')
                 if op_name not in op_name_count:
                     op_name_count[op_name] = 0
                 op_unique_name = f'{op_name}_{op_name_count[op_name]}'

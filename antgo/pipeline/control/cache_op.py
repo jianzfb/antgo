@@ -17,6 +17,14 @@ class Cache(object):
         self.cache_folder = kwargs.get('writable_path', './')
         self.prefix = kwargs.get('prefix', '')
 
+    @property
+    def _index(self):
+        return None
+
+    @_index.setter
+    def _index(self, val):
+        self.func._index = (val[0][1:], val[1])
+
     def __call__(self, *args, **kwargs):
         # 准备eagleeye环境，并加载
         if not Cache.is_finish_import_eagleeye:

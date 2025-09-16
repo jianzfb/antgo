@@ -12,8 +12,9 @@ class YOLOFormatGen(object):
         self.mode = mode
         self.class_ids = category_map
         self.inv_class_ids = {}
-        for k,v in category_map.items():
-            self.inv_class_ids[v] = k
+        if self.class_ids is not None:
+            for k,v in self.class_ids.items():
+                self.inv_class_ids[v] = k
 
         os.makedirs(os.path.join(self.save_path, 'images', 'train'), exist_ok=True)
         os.makedirs(os.path.join(self.save_path, 'images', 'val'), exist_ok=True)
@@ -55,6 +56,9 @@ class YOLOFormatGen(object):
 
     def add(self, sample_info, stage='train'):
         image = sample_info.image
+        if image is None:
+            # invalid sample
+            return
         image_h, image_w = image.shape[:2]
 
         if self.mode == 'detect':
@@ -129,7 +133,7 @@ class YOLOFormatGen(object):
                         y1 = min(y1, image_h)
                         box=[float((x0+x1)/2.0/image_w),float((y0+y1)/2.0/image_h),float((x1-x0)/image_w),float((y1-y0)/image_h)]
                         box_str = f'{int(c)} {box[0]} {box[1]} {box[2]} {box[3]}'
-                        
+
                         keypoint_str = ''
                         joints2d_info[:,0] = joints2d_info[:,0] / image_w
                         joints2d_info[:,1] = joints2d_info[:,1] / image_h

@@ -20,6 +20,7 @@ from antgo.utils import logger
 import cv2
 from PIL import Image, ImageEnhance, ImageDraw
 from .functional import *
+from .geometric import imshear
 from antgo.dataflow.vis import *
 from io import StringIO, BytesIO
 import copy
@@ -526,7 +527,7 @@ class ConvertRandomObjJoints25DAndOffset(ConvertRandomObjJointsAndOffset):
         offset_z = np.zeros((num_joints, 16), dtype=np.float32)
         offset_x = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
         offset_y = np.zeros((num_joints, self._heatmap_size[0], self._heatmap_size[1]), dtype=np.float32)
-        tmp_size = 4  # self._sigma * 4
+        tmp_size = self._sigma * 2  # self._sigma * 4
         for i in range(num_joints):
             if jonits_vis[i].size == 1:
                 if jonits_vis[i] == 0:
@@ -742,7 +743,7 @@ class UnSqueeze(BaseOperator):
 
 # FINISH FIX
 class KeepRatio(BaseOperator):
-    def __init__(self, aspect_ratio=1, focus_on_center=False, focus_on_objects=False, inputs=None):
+    def __init__(self, aspect_ratio=1.0, focus_on_center=False, focus_on_objects=False, inputs=None):
         super(KeepRatio, self).__init__(inputs=inputs)
         self.aspect_ratio = aspect_ratio
         self.focus_on_objects = focus_on_objects
@@ -895,6 +896,49 @@ class KeepRatio(BaseOperator):
         return sample
 
 
+# only for classification
+class RandomRatio(BaseOperator):
+    def __init__(self, r1=0.8, prob=0.5, inputs=None):
+        super(RandomRatio, self).__init__(inputs=inputs)
+        self.r1 = r1
+        self.prob = prob
+
+    def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            return sample
+
+        im = sample['image']
+        height, width = im.shape[:2]
+
+        target_area = height * width
+        aspect_ratio = random.uniform(self.r1, 1 / self.r1)
+
+        h = int(round(math.sqrt(target_area * aspect_ratio)))
+        w = int(round(math.sqrt(target_area / aspect_ratio)))
+
+        x_scale = w / im.shape[1]
+        y_scale = h / im.shape[0]
+        im = cv2.resize(im, (w, h))
+
+        if 'bboxes' in sample and len(sample['bboxes']) > 0:
+            scale_array = np.array([x_scale, y_scale] * 2, dtype=np.float32).reshape(1,4)
+            boxes = sample['bboxes'] * scale_array
+            sample['bboxes'] = boxes
+
+        if 'joints2d' in sample and len(sample['joints2d']) > 0:
+            scale_array = np.array([x_scale, y_scale], dtype=np.float32).reshape(1,1,2)    
+            joints2d = sample['joints2d'] * scale_array
+            sample['joints2d'] = joints2d      
+
+        if 'segments' in sample and sample['segments'].size != 0:
+            segments = sample['segments']
+            segments = resize(segments, (w, h), cv2.INTER_NEAREST)
+            sample['segments'] = segments
+
+        sample['image'] = im
+        return sample
+
+
 # FINISH FIX
 class Rotation(BaseOperator):
     """
@@ -932,14 +976,14 @@ class Rotation(BaseOperator):
                 ymin = np.min(coor_new[1, :])
                 xmax = np.max(coor_new[0, :])
                 ymax = np.max(coor_new[1, :])
-                region_scale = np.sqrt((xmax - xmin)*(ymax - ymin))
-                if region_scale > 50:
-                    margin = 1.8
-                    xmin = np.min(coor_new[0, :]) + np.abs(angle/margin)
-                    ymin = np.min(coor_new[1, :]) + np.abs(angle/margin)
-                    xmax = np.max(coor_new[0, :]) - np.abs(angle/margin)
-                    ymax = np.max(coor_new[1, :]) - np.abs(angle/margin)
-                    
+                # region_scale = np.sqrt((xmax - xmin)*(ymax - ymin))
+                # if region_scale > 50:
+                #     margin = 1.8
+                #     xmin = np.min(coor_new[0, :]) + np.abs(angle/margin)
+                #     ymin = np.min(coor_new[1, :]) + np.abs(angle/margin)
+                #     xmax = np.max(coor_new[0, :]) - np.abs(angle/margin)
+                #     ymax = np.max(coor_new[1, :]) - np.abs(angle/margin)
+
                 xmin = np.clip(xmin, 0, image_rotated.shape[1]-1)
                 ymin = np.clip(ymin, 0, image_rotated.shape[0]-1)
                 xmax = np.clip(xmax, 0, image_rotated.shape[1]-1)
@@ -1275,10 +1319,9 @@ class RandomFlipImage(BaseOperator):
                 else:
                     gt_bbox[:, 0] = width - oldx2 - 1
                     gt_bbox[:, 2] = width - oldx1 - 1
-                if gt_bbox.shape[0] != 0 and (gt_bbox[:, 2] < gt_bbox[:, 0]).all():
-                    m = "{}: invalid box, x2 should be greater than x1".format(
-                        self)
-                    raise BboxError(m)
+                # if gt_bbox.shape[0] != 0 and (gt_bbox[:, 2] < gt_bbox[:, 0]).all():
+                #     m = "{}: invalid box, x2 should be greater than x1".format(self)
+                #     raise BboxError(m)
                 sample['bboxes'] = gt_bbox
 
                 if len(self.swap_labels) > 0:
@@ -1347,18 +1390,40 @@ class RandomErasingImage(BaseOperator):
         self.r1 = r1
 
     def __call__(self, sample, context=None):
-        gt_bbox = sample['bboxes']
         im = sample['image']
         if not isinstance(im, np.ndarray):
             raise TypeError("{}: image is not a numpy array.".format(self))
         if len(im.shape) != 3:
             raise ImageError("{}: image is not 3-dimensional.".format(self))
 
-        for idx in range(gt_bbox.shape[0]):
-            if self.prob <= np.random.rand():
-                continue
+        image_h, image_w = im.shape[:2]
+        if 'bboxes' in sample:
+            gt_bbox = sample['bboxes']
+            for idx in range(gt_bbox.shape[0]):
+                if self.prob <= np.random.rand():
+                    continue
 
-            x1, y1, x2, y2 = gt_bbox[idx, :]
+                x1, y1, x2, y2 = gt_bbox[idx, :]
+                w_bbox = x2 - x1 + 1
+                h_bbox = y2 - y1 + 1
+                area = w_bbox * h_bbox
+
+                target_area = random.uniform(self.sl, self.sh) * area
+                aspect_ratio = random.uniform(self.r1, 1 / self.r1)
+
+                h = int(round(math.sqrt(target_area * aspect_ratio)))
+                w = int(round(math.sqrt(target_area / aspect_ratio)))
+
+                if w < w_bbox and h < h_bbox:
+                    off_y1 = random.randint(0, int(h_bbox - h))
+                    off_x1 = random.randint(0, int(w_bbox - w))
+                    im[int(y1 + off_y1):int(y1 + off_y1 + h), int(x1 + off_x1):
+                        int(x1 + off_x1 + w), :] = 0
+        else:
+            if self.prob <= np.random.rand():
+                return sample
+
+            x1, y1, x2, y2 = 0, 0, image_w, image_h
             w_bbox = x2 - x1 + 1
             h_bbox = y2 - y1 + 1
             area = w_bbox * h_bbox
@@ -1374,6 +1439,7 @@ class RandomErasingImage(BaseOperator):
                 off_x1 = random.randint(0, int(w_bbox - w))
                 im[int(y1 + off_y1):int(y1 + off_y1 + h), int(x1 + off_x1):
                     int(x1 + off_x1 + w), :] = 0
+
         sample['image'] = im
         return sample
 
@@ -2144,7 +2210,7 @@ class ResizeS(BaseOperator):
         'LANCZOS4': cv2.INTER_LANCZOS4
     }
 
-    def __init__(self, target_dim=[], interp='LINEAR', inputs=None):
+    def __init__(self, target_dim=[], interp='LINEAR', prob = 1.0, keys=['segments'], inputs=None):
         super(ResizeS, self).__init__(inputs=inputs)
         if type(target_dim) == list or type(target_dim) == tuple:
             self.target_dim = target_dim                # w,h
@@ -2155,8 +2221,21 @@ class ResizeS(BaseOperator):
                 self.interp_dict.keys()))
 
         self.interp = interp  # 'RANDOM' for yolov3
+        self.prob = prob
+        self.keys = keys
 
     def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            if 'image_meta' not in sample:
+                sample['image_meta'] = {}
+
+            image_h, image_w = sample['image'].shape[:2]
+            sample['height'] = image_h
+            sample['width'] = image_w
+            sample['image_meta']['image_shape'] = (image_h, image_w)
+            sample['image_meta']['scale_factor'] =  [1.0, 1.0]
+            return sample
+
         w = sample['image'].shape[1]
         h = sample['image'].shape[0]
         resize_w, resize_h = self.target_dim
@@ -2203,7 +2282,7 @@ class ResizeS(BaseOperator):
             y = np.clip(y, 0, resize_h - 1)
             sample['joints2d'] = np.concatenate([x, y], axis=-1)
 
-        if 'segments' in sample and sample['segments'].size != 0:
+        if 'segments' in sample and sample['segments'].size != 0 and 'segments' in self.keys:
             sample['segments'] = \
                 cv2.resize(sample['segments'], (resize_w, resize_h), interpolation=cv2.INTER_NEAREST)
 
@@ -2314,6 +2393,29 @@ class ColorDistort(BaseOperator):
         sample['image'] = img
         
         # vis_2d_boxes_in_image(sample['image'], sample['bboxes'], sample['labels'], './c.png')
+        return sample
+
+
+class GrayDistort(BaseOperator):
+    def __init__(self,
+                 gamma=[0.5,2], A=[0.8,1.2], prob=0.5, inputs=None):
+        super(GrayDistort, self).__init__(inputs=inputs)
+        self.gamma=gamma
+        self.A = A
+        self.prob=prob
+
+    def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            return sample
+
+        img = sample['image']
+        fimg = img.astype(np.float32)/255
+        gamma = np.random.uniform(self.gamma[0], self.gamma[1])
+        A = np.random.uniform(self.A[0], self.A[1])
+        fimg = np.power(fimg, gamma) * A
+        img = np.clip(fimg*255, 0,255)
+        img = img.astype(np.uint8)
+        sample['image'] = img
         return sample
 
 
@@ -2840,6 +2942,24 @@ class RandomMotionBlur(BaseOperator):
         sample['image'] = im
         return sample
 
+# 
+class RandomNoise(BaseOperator):
+    def __init__(self, sigma=10, prob=0.5, inputs=None):
+        super(RandomNoise, self).__init__(inputs=inputs)
+        self.sigma = sigma
+        self.prob = prob
+
+    def __call__(self, sample, context=None):
+        image = sample['image']
+        if np.random.random() > self.prob:
+            return sample
+
+        height, width, channels = image.shape
+        noise = (np.random.random((height, width, channels)) * 2 - 1) * self.sigma
+        image_cpy = image + noise
+
+        sample['image'] = image_cpy.astype(np.uint8)
+        return sample
 
 # FINISH FIX
 class ResizeStepScaling(BaseOperator):
@@ -2904,7 +3024,7 @@ class ResizeStepScaling(BaseOperator):
         sample['image'] = im
 
         if 'bboxes' in sample and len(sample['bboxes']) > 0:
-            scale_array = np.array([scale_factor, scale_factor] * 2, dtype=np.float32)      
+            scale_array = np.array([scale_factor, scale_factor] * 2, dtype=np.float32).reshape(1,4) 
             boxes = sample['bboxes'] * scale_array
             sample['bboxes'] = boxes
 
@@ -2918,7 +3038,63 @@ class ResizeStepScaling(BaseOperator):
             segments = resize(segments, (w, h), cv2.INTER_NEAREST)
             sample['segments'] = segments
 
-        sample['image_meta']['image_shape'] = sample['image'].shape[:2]
+        if 'image_meta' in sample:
+            sample['image_meta']['image_shape'] = sample['image'].shape[:2]
+        return sample
+
+
+class RandomDraw(BaseOperator):
+    def __init__(self, prob=0.5, min_draw_num=1, max_draw_num=3, ext_ratio=0.2, thickness_ratio=0.2, focus_on_bbox=True, inputs=None):
+        self.prob = prob
+        self.focus_on_bbox = focus_on_bbox
+        self.min_draw_num = min_draw_num
+        self.max_draw_num = max_draw_num
+        self.ext_ratio = ext_ratio
+        self.thickness_ratio = thickness_ratio
+
+    def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            return sample
+
+        image = sample['image']
+        height,width = image.shape[:2]
+        draw_num = np.random.randint(self.min_draw_num, self.max_draw_num+1)
+        for _ in range(draw_num):
+            x0,y0,x1,y1 = 0,0,image.shape[1],image.shape[0]
+            if 'bboxes' in sample and len(sample['bboxes']) > 0 and self.focus_on_bbox:
+                random_i = np.random.randint(0, len(sample['bboxes']))
+                x0,y0,x1,y1 = sample['bboxes'][random_i,:4]
+                ext_w_size = (x1-x0) * 0.5 * (1.0+self.ext_ratio)
+                ext_h_size = (y1-y0) * 0.5 * (1.0+self.ext_ratio)
+                cx = (x0 + x1) / 2.0
+                cy = (y0 + y1) / 2.0
+                x0,y0,x1,y1 = cx - ext_w_size, cy - ext_h_size, cx + ext_w_size, cy + ext_h_size
+
+                x0 = max(x0, 0)
+                y0 = max(y0, 0)
+                x1 = min(x1, width)
+                y1 = min(y1, height)
+
+            if np.random.random() > 0.5:
+                # random draw line
+                point_0_x = x0+(x1-x0)*np.random.random()
+                point_0_y = y1
+
+                point_1_x = x1
+                point_1_y = y0+(y1-y0)*np.random.random()
+
+                thickness = np.random.randint(1, max(int(min((x1-x0),(y1-y0))*self.thickness_ratio), 3))
+                fill_color = np.random.randint(0,255)
+                cv2.line(image, (int(point_0_x), int(point_0_y)), (int(point_1_x), int(point_1_y)), (fill_color, fill_color, fill_color), thickness)
+            else:
+                # random draw circle
+                point_cx = x0+(x1-x0)*np.random.random()
+                point_cy = y0+(y1-y0)*np.random.random()
+
+                radius = int(np.random.randint(2, max(int(min((x1-x0),(y1-y0))*self.thickness_ratio), 3)))
+                fill_color = np.random.randint(0,255)
+                cv2.circle(image, (int(point_cx),int(point_cy)), radius, (fill_color, fill_color, fill_color), -1)
+
         return sample
 
 
@@ -3286,3 +3462,28 @@ class CoarseDropout(object):
     #         "fill_value",
     #         "mask_fill_value",
     #     )
+
+
+# 仅支持分类任务
+# 对图像做剪切，对其余信息不做处理
+class ShearImage(BaseOperator):
+    def __init__(self, magnitude=0.2, direction='horizontal', prob=0.5, inputs=None):
+        super(ShearImage, self).__init__(inputs=inputs)
+        self.magnitude = magnitude
+        self.direction = direction
+        self.prob = prob
+
+    def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            return sample
+
+        image = sample['image']
+        magnitude = np.random.uniform(-self.magnitude, self.magnitude)
+        if isinstance(self.direction, str):
+            sheared_image = imshear(image, magnitude, direction=self.direction)
+        else:
+            direction = random.choice(self.direction)
+            sheared_image = imshear(image, magnitude, direction=direction)
+
+        sample['image'] = sheared_image
+        return sample

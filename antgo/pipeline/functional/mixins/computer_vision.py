@@ -127,8 +127,9 @@ class ComputerVisionMixin:
             skip_frames = -1
             if video_fps is not None and not success:
                 video_fps = min(video_fps, cap.get(cv2.CAP_PROP_FPS))
-                skip_frames = int(cap.get(cv2.CAP_PROP_FPS)) // video_fps
+                skip_frames = int(cap.get(cv2.CAP_PROP_FPS) / (float)(video_fps) + 0.5)
 
+            print(f'skip_frames {skip_frames}')
             frame_count = 0
             while cap.isOpened():
                 ret, frame = cap.read()

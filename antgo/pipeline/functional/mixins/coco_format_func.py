@@ -33,6 +33,9 @@ class COCOFormatGen(object):
  
     def add(self, sample_info, stage='train'):
         image = sample_info.image
+        if image is None:
+            # invalid sample
+            return        
         image_h, image_w = image.shape[:2]
         self.stage = stage
 

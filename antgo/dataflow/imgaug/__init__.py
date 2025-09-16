@@ -32,7 +32,12 @@ from .operators import (
   CorrectBoxes,
   RandomBlur,
   YoloBboxFormat,
-  CoarseDropout)
+  CoarseDropout,
+  ShearImage,
+  RandomNoise,
+  RandomRatio,
+  GrayDistort,
+  RandomDraw)
 
 from .converting import (
   KeypointConverter,
@@ -71,5 +76,10 @@ __all__ = [
   'KeypointConverter',
   'KeynameConvert',
   'YoloBboxFormat',
-  'CoarseDropout'
+  'CoarseDropout',
+  'ShearImage',
+  'RandomNoise',
+  'RandomRatio',
+  'GrayDistort',
+  'RandomDraw'
 ]

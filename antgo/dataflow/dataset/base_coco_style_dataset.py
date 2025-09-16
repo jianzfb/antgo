@@ -55,7 +55,8 @@ class BaseCocoStyleDataset(Dataset):
                  serialize_data: bool = False,
                  pipeline: List[Union[dict, Callable]] = [],
                  train_or_test: str = 'unkown',
-                 max_refetch=100):
+                 max_refetch=100,
+                 is_segment_merge=False):
         if data_mode not in {'topdown', 'bottomup'}:
             raise ValueError(
                 f'{self.__class__.__name__} got invalid data_mode: '
@@ -88,6 +89,8 @@ class BaseCocoStyleDataset(Dataset):
 
         # init
         self.init()
+
+        self.is_segment_merge = is_segment_merge
 
     def get_data_info(self, idx: int) -> dict:
         """Get data info by index.
@@ -516,7 +519,15 @@ class BaseCocoStyleDataset(Dataset):
                         obj_seg_list.append(segmentation)
 
                 if len(obj_seg_list) > 0:
-                    data['segmentation'] = obj_seg_list[0] if len(obj_seg_list) == 1 else np.concatenate(obj_seg_list, 0)
+                    if self.is_segment_merge:
+                        all_mask = np.zeros((img_h, img_w), dtype=bool)
+                        for obj_i in range(len(obj_seg_list)):
+                            all_mask = all_mask | (obj_seg_list[obj_i] > 0)
+
+                        all_mask = all_mask.astype(np.uint8)
+                        data['segmentation'] = all_mask
+                    else:
+                        data['segmentation'] = obj_seg_list[0] if len(obj_seg_list) == 1 else np.concatenate(obj_seg_list, 0)
 
             data['image'] = image
             data['image_meta'] = {
