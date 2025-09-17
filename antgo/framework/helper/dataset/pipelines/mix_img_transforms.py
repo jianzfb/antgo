@@ -338,7 +338,16 @@ class Mosaic(MixImageTransform):
 
         for key in annos:
             valid_anns = [ann for ann in annos[key] if len(ann) > 0]
-            annos[key] = np.concatenate(valid_anns)
+            if len(valid_anns) > 0:
+                annos[key] = np.concatenate(valid_anns)
+            else:
+                if key == 'bboxes':
+                    annos[key] = np.empty((0, 4), dtype=np.float32)
+                elif key in ['bboxes_score', 'area']:
+                    annos[key] = np.empty((0), dtype=np.float32)
+                
+                # TODO: 不支持joints2d,keypoints,keypoints_visible,joints_vis
+
         return mosaic_img, annos
 
     def _mosaic_combine(
