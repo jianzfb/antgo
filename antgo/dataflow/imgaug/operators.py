@@ -976,13 +976,13 @@ class Rotation(BaseOperator):
                 ymin = np.min(coor_new[1, :])
                 xmax = np.max(coor_new[0, :])
                 ymax = np.max(coor_new[1, :])
-                # region_scale = np.sqrt((xmax - xmin)*(ymax - ymin))
-                # if region_scale > 50:
-                #     margin = 1.8
-                #     xmin = np.min(coor_new[0, :]) + np.abs(angle/margin)
-                #     ymin = np.min(coor_new[1, :]) + np.abs(angle/margin)
-                #     xmax = np.max(coor_new[0, :]) - np.abs(angle/margin)
-                #     ymax = np.max(coor_new[1, :]) - np.abs(angle/margin)
+                region_scale = np.sqrt((xmax - xmin)*(ymax - ymin))
+                if region_scale > 50:
+                    margin = 1.8
+                    xmin = np.min(coor_new[0, :]) + np.abs(angle/margin)
+                    ymin = np.min(coor_new[1, :]) + np.abs(angle/margin)
+                    xmax = np.max(coor_new[0, :]) - np.abs(angle/margin)
+                    ymax = np.max(coor_new[1, :]) - np.abs(angle/margin)
 
                 xmin = np.clip(xmin, 0, image_rotated.shape[1]-1)
                 ymin = np.clip(ymin, 0, image_rotated.shape[0]-1)
@@ -1319,9 +1319,9 @@ class RandomFlipImage(BaseOperator):
                 else:
                     gt_bbox[:, 0] = width - oldx2 - 1
                     gt_bbox[:, 2] = width - oldx1 - 1
-                # if gt_bbox.shape[0] != 0 and (gt_bbox[:, 2] < gt_bbox[:, 0]).all():
-                #     m = "{}: invalid box, x2 should be greater than x1".format(self)
-                #     raise BboxError(m)
+                if gt_bbox.shape[0] != 0 and (gt_bbox[:, 2] < gt_bbox[:, 0]).all():
+                    m = "{}: invalid box, x2 should be greater than x1".format(self)
+                    raise BboxError(m)
                 sample['bboxes'] = gt_bbox
 
                 if len(self.swap_labels) > 0:
