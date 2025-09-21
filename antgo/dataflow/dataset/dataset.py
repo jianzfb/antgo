@@ -31,18 +31,6 @@ import functools
 Config = config.AntConfig
 
 
-def imread(file):
-  return cv2.imread(file)
-
-
-def imwrite(file, img):
-  cv2.imwrite(file, img)
-
-
-def imresize(image, size):
-  return cv2.resize(image, (size[1],size[0]))
-
-
 class Dataset(BaseNode):
   _BASE_DATASET = True
   METAINFO: dict = dict()
@@ -262,8 +250,8 @@ class Dataset(BaseNode):
         data_file = data_file.strip()
         label_file = label_file.strip()
         if candidate_type == 'IMAGE':
-          yield imread(os.path.join(self.dir, data_file)), \
-                imread(os.path.join(self.dir, label_file))
+          yield cv2.imread(os.path.join(self.dir, data_file)), \
+                cv2.imread(os.path.join(self.dir, label_file))
         else:
           yield os.path.join(self.dir, data_file), \
                 os.path.join(self.dir, label_file)
@@ -614,7 +602,7 @@ class Dataset(BaseNode):
       self.is_sequence = True
 
   def load_image(self,image_path):
-    return imread(image_path)
+    return cv2.imread(image_path)
 
   def reorganize_data(self,data,label,class_num=0):
     '''

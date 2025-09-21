@@ -55,8 +55,7 @@ class BaseCocoStyleDataset(Dataset):
                  serialize_data: bool = False,
                  pipeline: List[Union[dict, Callable]] = [],
                  train_or_test: str = 'unkown',
-                 max_refetch=100,
-                 is_segment_merge=False):
+                 max_refetch=100, **kwargs):
         if data_mode not in {'topdown', 'bottomup'}:
             raise ValueError(
                 f'{self.__class__.__name__} got invalid data_mode: '
@@ -89,8 +88,6 @@ class BaseCocoStyleDataset(Dataset):
 
         # init
         self.init()
-
-        self.is_segment_merge = is_segment_merge
 
     def get_data_info(self, idx: int) -> dict:
         """Get data info by index.
@@ -489,13 +486,19 @@ class BaseCocoStyleDataset(Dataset):
             image = cv2.imread(osp.join(self.dir, data['img_path']))
             img_h, img_w = image.shape[:2]
 
+            data['image'] = image
+            data['image_meta'] = {
+                'image_shape': image.shape[:2],
+            }
+
             # 解析目标分割
             if 'segmentation' in data:
-                obj_seg_list = []
+                # obj_seg_list = []
                 obj_seg_infos = data['segmentation']
                 if self.data_mode == 'topdown':
                     obj_seg_infos = [obj_seg_infos]
 
+                mask = np.zeros((img_h, img_w), np.uint8)
                 for obj_i, seg_info in enumerate(obj_seg_infos):
                     if seg_info is None:
                         continue
@@ -503,36 +506,29 @@ class BaseCocoStyleDataset(Dataset):
                         # rle格式存储(非压缩)
                         rle = seg_info
                         compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
-                        obj_seg_list.append(mask_util.decode(compressed_rle))
+                        obj_mask = mask_util.decode(compressed_rle)
+                        mask[obj_mask > 0] = obj_i
+                        # obj_seg_list.append(mask_util.decode(compressed_rle))
                     elif 'counts' in seg_info:
                         # rle格式存储(压缩)
                         compressed_rle = seg_info
-                        segmentation = mask_util.decode([compressed_rle])
-                        segmentation = segmentation[:,:,0]
-                        obj_seg_list.append(segmentation)
+                        obj_mask = mask_util.decode([compressed_rle])
+                        obj_mask = obj_mask[:,:,0]
+                        mask[obj_mask > 0] = obj_i
+                        # obj_seg_list.append(obj_mask)
                     else:
                         # ply格式存储
                         polys = seg_info
-                        segmentation = np.zeros((img_h, img_w), dtype=np.uint8)
+                        obj_mask = np.zeros((img_h, img_w), dtype=np.uint8)
                         for i in range(len(polys)):
-                            cv2.fillPoly(segmentation, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
-                        obj_seg_list.append(segmentation)
+                            cv2.fillPoly(obj_mask, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
+                        mask[obj_mask > 0] = obj_i
+                        # obj_seg_list.append(obj_mask)
 
-                if len(obj_seg_list) > 0:
-                    if self.is_segment_merge:
-                        all_mask = np.zeros((img_h, img_w), dtype=bool)
-                        for obj_i in range(len(obj_seg_list)):
-                            all_mask = all_mask | (obj_seg_list[obj_i] > 0)
-
-                        all_mask = all_mask.astype(np.uint8)
-                        data['segmentation'] = all_mask
-                    else:
-                        data['segmentation'] = obj_seg_list[0] if len(obj_seg_list) == 1 else np.concatenate(obj_seg_list, 0)
-
-            data['image'] = image
-            data['image_meta'] = {
-                'ori_image_shape': image.shape[:2]
-            }
+                data['segmentation'] = mask
+                data['image_meta'].update({
+                    'segmentation': obj_seg_infos
+                })
             return data
 
         raise Exception(f'Cannot find valid image after {self.max_refetch}! '

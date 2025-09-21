@@ -48,7 +48,7 @@ class WatchDataRecorder(object):
 
       file_name = '%s.png' % str(uuid.uuid4())
       image_path = os.path.join(self.dump_dir, file_name)
-      imwrite(image_path, transfer_result)
+      cv2.imwrite(image_path, transfer_result)
       return file_name
     except:
       logger.error('couldnt transfer image data')

@@ -375,19 +375,19 @@ class COCO2017(Dataset):
          (246, 0, 122), (191, 162, 208)]
   }
 
-  def __init__(self, train_or_test, dir=None, ext_params=None):
-    super(COCO2017, self).__init__(train_or_test, dir, ext_params)
+  def __init__(self, train_or_test, dir=None, task_type='OBJECT-DETECTION', subtask_type='stuff', random_one_ins=True, **kwargs):
+    super(COCO2017, self).__init__(train_or_test, dir)
     self.year = "2017"
     self.dir = dir
     self.train_or_test = train_or_test
     self.data_type = None
     self.is_support_random_split = False
-    self.task_type = getattr(self, 'task_type', None)
-    self.task_type_subset = getattr(self, 'task_type_subset', 'stuff')
-    self.task_test = getattr(self, 'task_test', None)
+    self.task_type = task_type
+    self.subtask_type = subtask_type
+    self.task_test = None
 
     assert(self.train_or_test in ['train', 'val', 'test'])
-    assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'INSTANCE-SEGMENTATION', 'LANDMARK'])
+    assert (self.task_type in ['SEGMENTATION', 'OBJECT-DETECTION', 'PERSON-INSTANCE-SEGMENTATION', 'LANDMARK'])
 
     if not os.path.exists(os.path.join(self.dir , 'annotations')):
       lock = FileLock('DATASET.lock')
@@ -403,6 +403,8 @@ class COCO2017(Dataset):
       # 修改数据目录
       self.dir = os.path.join(self.dir, 'COCO')
 
+    self.random_one_ins = random_one_ins
+
     data_type = None
     if self.train_or_test == "train":
       data_type = "train" + self.year
@@ -413,7 +415,7 @@ class COCO2017(Dataset):
     self.data_type = data_type
 
     if self.train_or_test in ['train', 'val']:
-      if self.task_type in ["OBJECT-DETECTION", "INSTANCE-SEGMENTATION"]:
+      if self.task_type == "OBJECT-DETECTION":
         # annotation file
         ann_file = self.config_ann_file(data_type, self.dir, "Instance")
         self.coco_api = CocoAPI(ann_file)
@@ -423,6 +425,16 @@ class COCO2017(Dataset):
         self.cat_ids = self.coco_api.getCatIds(catNms=list(self.METAINFO['classes']))
         self.img_ids = self.coco_api.getImgIds(catIds=self.cat_ids)
         self.cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)}
+      elif self.task_type == 'PERSON-INSTANCE-SEGMENTATION':
+        # annotation file
+        ann_file = self.config_ann_file(data_type, self.dir, "Instance")
+        self.coco_api = CocoAPI(ann_file)
+
+        # parse (for object detector)
+        # self.cats = self.coco_api.loadCats(self.coco_api.getCatIds())
+        self.cat_ids = self.coco_api.getCatIds(catNms=['person'])
+        self.img_ids = self.coco_api.getImgIds(catIds=self.cat_ids)
+        self.cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)} 
       elif self.task_type == "LANDMARK":
         # parse (for object detector)
         ann_file = self.config_ann_file(data_type, self.dir, "Instance")
@@ -503,11 +515,11 @@ class COCO2017(Dataset):
     img_obj = self.coco_api.loadImgs(self.img_ids[id])[0]
     if self.train_or_test == 'test':
       # 对于测试集没有标签
-      img = imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
+      img = cv2.imread(os.path.join(self.dir, '%s2017' % self.train_or_test, img_obj['file_name']))
       return (img, {})
 
-    if self.task_type == 'OBJECT-DETECTION' or \
-            self.task_type=='INSTANCE-SEGMENTATION':
+    img = cv2.imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
+    if self.task_type == 'OBJECT-DETECTION':
       annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
       annotation = self.coco_api.loadAnns(annotation_ids)
       img_annotation = {}
@@ -534,18 +546,60 @@ class COCO2017(Dataset):
         category_id.append(self.cat2label[obj['category_id']])
         # 忽略目标分割
 
-      img_annotation['bboxes'] = np.array(boxes)
-      img_annotation['labels'] = np.array(category_id)
-      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
+      img_annotation['bboxes'] = np.array(boxes, dtype=np.float32)
+      img_annotation['labels'] = np.array(category_id, dtype=np.int32)
       img_annotation['image_meta'] = {
         'image_shape': (img.shape[0], img.shape[1]),
         'image_file': os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name'])
       }
-
       return (img, img_annotation)
+    elif self.task_type=='PERSON-INSTANCE-SEGMENTATION':
+      annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
+      annotation = self.coco_api.loadAnns(annotation_ids)
+      img_annotation = {}
+
+      boxes = []
+      category_id = []
+      mask = np.zeros((img.shape[0], img.shape[1]), np.uint8)
+      obj_mask_list = []
+      obj_ins_i = 0
+      for ix, obj in enumerate(annotation):
+        x, y, w, h = obj['bbox']
+        inter_w = max(0, min(x + w, img_obj['width']) - max(x, 0))
+        inter_h = max(0, min(y + h, img_obj['height']) - max(y, 0))
+        if inter_w * inter_h == 0:
+                continue   
+        if obj['area'] <= 0 or w < 1 or h < 1:
+            continue
+        if obj['category_id'] not in self.cat_ids:
+            continue
+        if obj['iscrowd'] == 1:
+          # 去除群体标注
+          continue
+
+        # 目标框
+        boxes.append([x, y, x + w, y + h])
+        # 目标类别
+        category_id.append(self.cat2label[obj['category_id']])
+        # 目标分割
+        obj_mask = self.coco_api.annToMask(obj)                   # 获取单个掩膜
+        mask[obj_mask == 1] = obj_ins_i                           # 用不同的ID标记每个实例
+        obj_ins_i += 1
+
+        obj_mask_list.append(obj['segmentation'])
+
+      img_annotation['bboxes'] = np.array(boxes, dtype=np.float32)
+      img_annotation['labels'] = np.array(category_id, dtype=np.int32)
+      img_annotation['segments'] = mask
+      img_annotation['image_meta'] = {
+        'image_shape': (img.shape[0], img.shape[1]),
+        'image_file': os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']),
+        'segments': obj_mask_list
+      }
+
+      return img, img_annotation
     elif self.task_type == 'SEGMENTATION':
       # stuff, Panoptic
-      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
       annotation_ids = self.coco_api.getAnnIds(imgIds=img_obj['id'])
       annotation = self.coco_api.loadAnns(annotation_ids)
       category_id = np.zeros((len(annotation)), dtype=np.int32)
@@ -554,7 +608,7 @@ class COCO2017(Dataset):
         category_id[ix] = self.cat2label(obj['category_id'])
         segmentation.append(self.coco_api.annToMask(obj))
 
-      segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.int32)
+      segmentation_map = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
       for ix, obj_seg in enumerate(segmentation):
         obj_id = category_id[ix]
         segmentation_map[np.where(obj_seg == 1)] = obj_id
@@ -568,7 +622,6 @@ class COCO2017(Dataset):
       }
       return (img, img_annotation)
     elif self.task_type == 'LANDMARK':
-      img = imread(os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name']))
       ann_ids = self.coco_kps_api.getAnnIds(imgIds=img_obj['id'])
       anns = self.coco_kps_api.loadAnns(ann_ids)
 
@@ -579,11 +632,11 @@ class COCO2017(Dataset):
 
       for person_ann in anns:
         keypionts = person_ann['keypoints']        
-        person_keypoints_xy = np.zeros((len(keypionts)//3, 2))
+        person_keypoints_xy = np.zeros((len(keypionts)//3, 2), dtype=np.float32)
         person_keypoints_xy[:, 0] = keypionts[0::3]
         person_keypoints_xy[:, 1] = keypionts[1::3]
 
-        keypoints_visible = np.array(keypionts[2::3])
+        keypoints_visible = np.array(keypionts[2::3], dtype=np.int32)
         position_visible = np.where(keypoints_visible>0)
         if position_visible[0].size == 0:
           continue        
@@ -609,8 +662,8 @@ class COCO2017(Dataset):
       img_annotation = {
         'joints2d': np.stack(joints2d, 0),
         'joints_vis': np.stack(joints_vis, 0),
-        'bboxes': np.array(boxes),
-        'labels': np.array(labels),
+        'bboxes': np.array(boxes).astype(np.float32),
+        'labels': np.array(labels).astype(np.int32),
         'image_meta': {
           'image_shape': (img.shape[0], img.shape[1]),
           'image_file': os.path.join(self.dir, '%s2017'%self.train_or_test, img_obj['file_name'])
@@ -624,12 +677,8 @@ class COCO2017(Dataset):
   def size(self):
     return len(self.img_ids)
 
-  def split(self, train_validation_ratio=0.0, is_stratified_sampling=True):
-    assert(self.train_or_test == 'train')
-    validation_coco = COCO2017('val', self.dir, self.ext_params)
-    return self, validation_coco
 
-# coco2017 = COCO2017('train', '/root/workspace/dataset/COCO', ext_params={'task_type': 'OBJECT-DETECTION'})
+# coco2017 = COCO2017('train', '/workspace/dataset/coco', task_type='PERSON-INSTANCE-SEGMENTATION')
 # label_max = 0
 # for i in range(coco2017.size):
 #   data = coco2017.sample(i)

@@ -79,8 +79,8 @@ class Horse2Zebra(Dataset):
       for a_k, b_k in zip(idxs, b_idxs):
         a = self.data_a_list[a_k]
         b = self.data_b_list[b_k]
-        a_img = imread(a)
-        b_img = imread(b)
+        a_img = cv2.imread(a)
+        b_img = cv2.imread(b)
         yield [a_img, b_img]
   
   def at(self, id):
@@ -90,8 +90,8 @@ class Horse2Zebra(Dataset):
     a = self.data_a_list[id]
     random_b_index = np.random.randint(0, len(self.data_b_list), 1)[0]
     b = self.data_b_list[random_b_index]
-    a_img = imread(a)
-    b_img = imread(b)
+    a_img = cv2.imread(a)
+    b_img = cv2.imread(b)
     return a_img, b_img
   
   def split(self, split_params={}, split_method=''):

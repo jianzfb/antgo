@@ -3487,3 +3487,88 @@ class ShearImage(BaseOperator):
 
         sample['image'] = sheared_image
         return sample
+
+
+# 仅支持实例分割，姿态任务
+class RandomSelectInstance(BaseOperator):
+    def __init__(self, is_random_ext=True, is_both_same=False, inputs=None):
+        super(RandomSelectInstance, self).__init__(inputs=inputs)
+        self.is_random_ext = is_random_ext
+        self.is_both_same = is_both_same
+
+    def __call__(self, sample, context=None):
+        # bboxes, labels, joints2d, joints_vis, segments
+        ins_num = len(sample['bboxes'])
+        if ins_num == 0:
+            return sample
+        random_i = np.random.randint(ins_num)
+
+        image_h, image_w = sample['image'].shape[:2]
+
+        ins_bbox = sample['bboxes'][random_i:random_i+1]
+        ins_x0, ins_y0, ins_x1, ins_y1 = ins_bbox[0]
+        ins_w, ins_h = ins_x1 - ins_x0, ins_y1 - ins_y0
+        region_x0, region_y0, region_x1, region_y1 = ins_x0, ins_y0, ins_x1, ins_y1
+        region_cx = (region_x0+region_x1)/2.0
+        region_cy = (region_y0+region_y1)/2.0
+        if self.is_random_ext:
+            ext_w_s = ins_w * (1.0 + 0.4*np.random.random())
+            ext_h_s = ins_h * (1.0 + 0.3*np.random.random())
+
+            if self.is_both_same:
+                size = max(ins_w, ins_h)
+                ext_w_s = size * (1.0 + 0.2*np.random.random()) 
+                ext_h_s = ext_w_s
+
+            region_x0 = region_cx - ext_w_s/2
+            region_x0 = max(region_x0, 0)
+            region_y0 = region_cy - ext_h_s/2
+            region_y0 = max(region_y0, 0)
+
+            region_x1 = region_cx + ext_w_s/2
+            region_x1 = min(region_x1, image_w)
+            region_y1 = region_cy + ext_h_s/2
+            region_y1 = min(region_y1, image_h)
+        
+        region_x0, region_y0, region_x1, region_y1 = int(region_x0), int(region_y0), int(region_x1), int(region_y1)
+        
+        # convert bboxes
+        sample['bboxes'] = np.array([[ins_x0-region_x0, ins_y0-region_y0, ins_x1-region_x0, ins_y1-region_y0]], dtype=np.float32)
+
+        if 'labels' in sample:
+            sample['labels'] = sample['labels'][random_i:random_i+1]
+        if 'joints2d' in sample:
+            sample['joints2d'] = sample['joints2d'][random_i:random_i+1]
+            sample['joints2d'][:,:,:2] = sample['joints2d'][:,:,:2] - np.array([region_x0, region_y0], dtype=np.float32).reshape((1,1,2))
+
+        if 'joints_vis' in sample:
+            sample['joints_vis'] = sample['joints_vis'][random_i:random_i+1]
+
+        if 'segments' in sample:
+            seg_info = sample['image_meta']['segments'][random_i]
+            mask = np.zeros((image_h, image_w), dtype=np.uint8)
+            if 'counts' in seg_info and isinstance(seg_info['counts'], list):
+                # rle格式存储(非压缩)
+                rle = seg_info
+                compressed_rle = mask_util.frPyObjects(rle, rle.get('size')[0], rle.get('size')[1])
+                obj_mask = mask_util.decode(compressed_rle)
+                mask[obj_mask > 0] = 1
+            elif 'counts' in seg_info:
+                # rle格式存储(压缩)
+                compressed_rle = seg_info
+                obj_mask = mask_util.decode([compressed_rle])
+                obj_mask = obj_mask[:,:,0]
+                mask[obj_mask > 0] = 1
+            else:
+                # ply格式存储
+                polys = seg_info
+                obj_mask = np.zeros((image_h, image_w), dtype=np.uint8)
+                for i in range(len(polys)):
+                    cv2.fillPoly(obj_mask, [np.array(polys[i], dtype=np.int64).reshape(-1,2)], 1)
+                mask[obj_mask > 0] = 1
+
+            sample['image_meta'].pop('segments')
+            sample['segments'] = mask[region_y0:region_y1, region_x0:region_x1]
+
+        sample['image'] = sample['image'][region_y0:region_y1, region_x0:region_x1]
+        return sample

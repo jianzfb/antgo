@@ -272,7 +272,7 @@ class PascalBase(Dataset):
     seg_img_index = None
     if has_seg:
       seg_file = os.path.join(self._data_path, 'SegmentationClass', index + '.png')
-      seg_img = imread(seg_file)
+      seg_img = cv2.imread(seg_file)
       seg_img_int = seg_img.astype(np.int32)
       seg_img_index = seg_img_int[:,:,0]*255*255 + seg_img_int[:,:,1]*255 + seg_img_int[:,:,2]
 

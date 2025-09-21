@@ -231,7 +231,7 @@ class FashionAILandmark(Dataset):
       for k in idxs:
         image_file, category = self.images[k]
         image_path = os.path.join(self.dir, self.train_or_test, image_file)
-        image = imread(image_path)
+        image = cv2.imread(image_path)
         
         if self.train_or_test == 'train':
           data_annotation = copy.deepcopy(self.annotation[k])
@@ -243,7 +243,7 @@ class FashionAILandmark(Dataset):
   def at(self, id):
     image_file, category_id = self.images[id]
     image_path = os.path.join(self.dir, self.train_or_test, image_file)
-    image = imread(image_path)
+    image = cv2.imread(image_path)
     return (image, category_id, image_file)
 
   def split(self, split_params={}, split_method='holdout'):

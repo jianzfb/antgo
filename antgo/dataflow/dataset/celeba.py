@@ -357,7 +357,7 @@ class CelebA(Dataset):
       for k in idxs:
         image_file = self._file_list[k]
         file_name = image_file.split('/')[-1]
-        image = imread(image_file)
+        image = cv2.imread(image_file)
 
         self._annotations[file_name].update({'id': k, 'info': [image.shape[0], image.shape[1], image.shape[2]]})
         self._annotations[file_name].update({'name': file_name})
@@ -369,7 +369,7 @@ class CelebA(Dataset):
 
     image_file = self._file_list[id]
     file_name = image_file.split('/')[-1]
-    image = imread(image_file)
+    image = cv2.imread(image_file)
     self._annotations[file_name].update({'id': id, 'info': [image.shape[0], image.shape[1], image.shape[2]]})
     self._annotations[file_name].update({'name': file_name})
     return image, self._annotations[file_name]

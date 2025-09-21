@@ -118,7 +118,7 @@ class FashionAIAttribute(Dataset):
       for k in idxs:
         image_file, cloth_attrib, cloth_attrib_label, sub_folder = self.images[k]
         image_path = os.path.join(self.dir, sub_folder, image_file)
-        image = imread(image_path)
+        image = cv2.imread(image_path)
       
         if self.train_or_test == 'train':
           yield [(image, self.cloth_attribs_index[cloth_attrib], image_file),
@@ -129,7 +129,7 @@ class FashionAIAttribute(Dataset):
   def at(self, id):
     image_file, cloth_attrib, cloth_attrib_label, sub_folder = self.images[id]
     image_path = os.path.join(self.dir, sub_folder, image_file)
-    image = imread(image_path)
+    image = cv2.imread(image_path)
     
     return (image, cloth_attrib, image_file)
   
