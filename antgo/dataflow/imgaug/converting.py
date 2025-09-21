@@ -161,4 +161,8 @@ class KeynameConvert(BaseOperator):
             data = sample.pop(src_keyname)
             sample[tgt_keyname] = data
 
+            if 'image_meta' in sample and src_keyname in sample['image_meta']:
+                data = sample['image_meta'].pop(src_keyname)
+                sample['image_meta'][tgt_keyname] = data
+
         return sample

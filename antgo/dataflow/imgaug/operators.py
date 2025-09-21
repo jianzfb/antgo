@@ -3491,10 +3491,10 @@ class ShearImage(BaseOperator):
 
 # 仅支持实例分割，姿态任务
 class RandomSelectInstance(BaseOperator):
-    def __init__(self, is_random_ext=True, is_both_same=False, inputs=None):
+    def __init__(self, is_both_same=False, ext_scale=(0.3,0.3), inputs=None):
         super(RandomSelectInstance, self).__init__(inputs=inputs)
-        self.is_random_ext = is_random_ext
         self.is_both_same = is_both_same
+        self.ext_scale = ext_scale            
 
     def __call__(self, sample, context=None):
         # bboxes, labels, joints2d, joints_vis, segments
@@ -3511,25 +3511,28 @@ class RandomSelectInstance(BaseOperator):
         region_x0, region_y0, region_x1, region_y1 = ins_x0, ins_y0, ins_x1, ins_y1
         region_cx = (region_x0+region_x1)/2.0
         region_cy = (region_y0+region_y1)/2.0
-        if self.is_random_ext:
-            ext_w_s = ins_w * (1.0 + 0.4*np.random.random())
-            ext_h_s = ins_h * (1.0 + 0.3*np.random.random())
 
-            if self.is_both_same:
-                size = max(ins_w, ins_h)
-                ext_w_s = size * (1.0 + 0.2*np.random.random()) 
-                ext_h_s = ext_w_s
+        ext_x_scale = self.ext_scale[0] if isinstance(self.ext_scale, tuple) or isinstance(self.ext_scale, list) else self.ext_scale
+        ext_y_scale = self.ext_scale[1] if isinstance(self.ext_scale, tuple) or isinstance(self.ext_scale, list) else self.ext_scale
 
-            region_x0 = region_cx - ext_w_s/2
-            region_x0 = max(region_x0, 0)
-            region_y0 = region_cy - ext_h_s/2
-            region_y0 = max(region_y0, 0)
+        ext_w_s = ins_w * (1.0 + ext_x_scale*np.random.random())
+        ext_h_s = ins_h * (1.0 + ext_y_scale*np.random.random())
 
-            region_x1 = region_cx + ext_w_s/2
-            region_x1 = min(region_x1, image_w)
-            region_y1 = region_cy + ext_h_s/2
-            region_y1 = min(region_y1, image_h)
-        
+        if self.is_both_same:
+            size = max(ins_w, ins_h)
+            ext_w_s = size * (1.0 + ext_x_scale*np.random.random()) 
+            ext_h_s = ext_w_s
+
+        region_x0 = region_cx - ext_w_s/2
+        region_x0 = max(region_x0, 0)
+        region_y0 = region_cy - ext_h_s/2
+        region_y0 = max(region_y0, 0)
+
+        region_x1 = region_cx + ext_w_s/2
+        region_x1 = min(region_x1, image_w)
+        region_y1 = region_cy + ext_h_s/2
+        region_y1 = min(region_y1, image_h)
+    
         region_x0, region_y0, region_x1, region_y1 = int(region_x0), int(region_y0), int(region_x1), int(region_y1)
         
         # convert bboxes
