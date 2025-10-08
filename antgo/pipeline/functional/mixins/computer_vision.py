@@ -349,8 +349,8 @@ class ComputerVisionMixin:
         try:
             for index, info in enumerate(self):
                 cocoformat_gen.add(info)
-        except:
-            pass
+        except Exception as e:
+            traceback.print_exc()
         cocoformat_gen.save()
 
     def to_yolo_format(self, folder, category_map, prefix="data", mode='detect', stage='train', keymap=None):
@@ -369,11 +369,67 @@ class ComputerVisionMixin:
         yoloformat_gen = YOLOFormatGen(folder, category_map, mode, prefix)
         try:
             for index, info in enumerate(self):
-                print(f'process {index}')
                 yoloformat_gen.add(info, stage)
-        except:
-            pass
+        except Exception as e:
+            traceback.print_exc()
         yoloformat_gen.save()
+
+    def to_labelstudio_label(self, folder, category_map, version='one', mode='detect'):
+        support_mode_list = ['detect']
+        if mode not in support_mode_list:
+            print(f'Only support {support_mode_list}')
+            return
+        os.makedirs(folder, exist_ok=True)
+
+        inv_category_map = {}
+        for k,v in category_map.items():
+            inv_category_map[v] = k
+
+        try:
+            anno_list = []
+            for sample_index, sample_info in enumerate(self):
+                img_path = getattr(sample_info, 'img_path', None)
+                if img_path is None:
+                    os.makedirs( os.path.join(folder, 'images'), exist_ok=True)
+                    img_path = os.path.join(folder, 'images', f'{sample_index}.webp')
+                    cv2.imwrite(img_path, sample_info.image)
+
+                image_h, image_w = sample_info.image.shape[:2]
+                pred_info = {
+                    'data': {
+                        'image': f'/data/local-files/?d={img_path}'
+                    },
+                    'predictions': [{
+                        "model_version": version,
+                        "score": 1.0,
+                        "result": []
+                    }]
+                }
+
+                if mode == 'detect':
+                    for index, (box, label) in enumerate(zip(sample_info.bboxes, sample_info.labels)):
+                        x0,y0,x1,y1 = box[:4]
+                        pred_info['predictions'][0]['result'].append({
+                            'id': f'result_{index}',
+                            'type': 'rectanglelabels',
+                            "from_name": "label", "to_name": "image",
+                            "original_width": image_w, "original_height": image_h,
+                            "image_rotation": 0,
+                            "value": {
+                                "rotation": 0,          
+                                "x": x0/image_w*100, "y": y0/image_h*100,
+                                "width": (x1-x0)/image_w*100, "height": (y1-y0)/image_h*100,
+                                "rectanglelabels": [inv_category_map[int(label)]]
+                            }
+                        })
+                else:
+                    pass
+
+                anno_list.append(pred_info)
+            with open(os.path.join(folder, 'anno.json'), 'w') as fp:
+                json.dump(anno_list, fp)
+        except Exception as e:
+            traceback.print_exc()
 
     def to_dataset(self, 
         folder, 

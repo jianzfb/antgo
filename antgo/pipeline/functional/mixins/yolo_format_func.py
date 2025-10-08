@@ -23,6 +23,14 @@ class YOLOFormatGen(object):
             'val': os.path.join(self.save_path, 'images', 'val')
         }
 
+        if self.mode == 'segment':
+            os.makedirs(os.path.join(self.save_path, 'masks', 'train'), exist_ok=True)
+            os.makedirs(os.path.join(self.save_path, 'masks', 'val'), exist_ok=True)
+            self.mask_folder = {
+                'train': os.path.join(self.save_path, 'masks', 'train'),
+                'val': os.path.join(self.save_path, 'masks', 'val')
+            }
+
         os.makedirs(os.path.join(self.save_path, 'labels', 'train'), exist_ok=True)
         os.makedirs(os.path.join(self.save_path, 'labels', 'val'), exist_ok=True)
         self.label_folder = {
@@ -61,13 +69,20 @@ class YOLOFormatGen(object):
             return
         image_h, image_w = image.shape[:2]
 
+        sample_name = getattr(sample_info, 'img_path', None)
+        if sample_name is not None:
+            sample_name = sample_name.split('/')[-1]
+        else:
+            sample_name = f'{self.prefix}-{self.image_id}'
+
+        print(sample_name)
         if self.mode == 'detect':
             # detect
-            image_path = os.path.join(self.image_folder[stage], f'{self.prefix}-{self.image_id}.webp')
+            image_path = os.path.join(self.image_folder[stage], f'{sample_name}.webp')
             cv2.imwrite(image_path, image, [int(cv2.IMWRITE_WEBP_QUALITY), 20])
 
             if len(sample_info.bboxes) > 0:
-                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
+                label_path = os.path.join(self.label_folder[stage], f'{sample_name}.txt')
                 with open(label_path, 'w') as fp:
                     for box_i, box_info in enumerate(sample_info.bboxes):
                         x0,y0,x1,y1,c = 0, 0, 0, 0, None
@@ -86,7 +101,7 @@ class YOLOFormatGen(object):
                         box=[float((x0+x1)/2.0/image_w),float((y0+y1)/2.0/image_h),float((x1-x0)/image_w),float((y1-y0)/image_h)]
                         fp.write(f'{int(c)} {box[0]} {box[1]} {box[2]} {box[3]}\n')
             else:
-                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
+                label_path = os.path.join(self.label_folder[stage], f'{sample_name}.txt')
                 with open(label_path, 'w') as fp:
                     pass
 
@@ -94,13 +109,13 @@ class YOLOFormatGen(object):
             return
         elif self.mode == 'pose':
             # pose
-            image_path = os.path.join(self.image_folder[stage], f'{self.prefix}-{self.image_id}.webp')
+            image_path = os.path.join(self.image_folder[stage], f'{sample_name}.webp')
             cv2.imwrite(image_path, image, [int(cv2.IMWRITE_WEBP_QUALITY), 20])
 
             # 标注文件格式与 detect任务类似
             # cls box_cx box_cy box_w box_h x0 y0 ....
             if len(sample_info.bboxes) > 0:
-                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
+                label_path = os.path.join(self.label_folder[stage], f'{sample_name}.txt')
 
                 if not self.is_update_config:
                     # 根据数据信息，更新配置文件
@@ -144,7 +159,7 @@ class YOLOFormatGen(object):
                         anno_str = f'{box_str} {keypoint_str}\n'
                         fp.write(anno_str)
             else:
-                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
+                label_path = os.path.join(self.label_folder[stage], f'{sample_name}.txt')
                 with open(label_path, 'w') as fp:
                     pass
 
@@ -175,18 +190,18 @@ class YOLOFormatGen(object):
                     box_image = image[y0:y1, x0:x1]
                     class_folder = os.path.join(self.image_folder[stage], str(label_info))
                     os.makedirs(class_folder, exist_ok=True)
-                    image_path = os.path.join(class_folder, f'{self.prefix}-{self.image_id}-{box_i}.webp')
+                    image_path = os.path.join(class_folder, f'{sample_name}-{box_i}.webp')
                     cv2.imwrite(image_path, box_image, [int(cv2.IMWRITE_WEBP_QUALITY), 20])
 
             self.image_id += 1
             return
         else:
             # segment
-            image_path = os.path.join(self.image_folder[stage], f'{self.prefix}-{self.image_id}.webp')
+            image_path = os.path.join(self.image_folder[stage], f'{sample_name}.webp')
             cv2.imwrite(image_path, image, [int(cv2.IMWRITE_WEBP_QUALITY), 20])
 
             if len(sample_info.bboxes) > 0:
-                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
+                label_path = os.path.join(self.label_folder[stage], f'{sample_name}.txt')
                 with open(label_path, 'w') as fp:
                     for layout_i, (layout_label, layout_segment) in enumerate(zip(sample_info.labels, sample_info.segments)):
                         # segment_info -> polygon
@@ -194,6 +209,7 @@ class YOLOFormatGen(object):
 
                         mask = np.zeros((image_h, image_w), dtype=np.uint8)
                         mask[layout_segment == label] = 1
+                        cv2.imwrite(os.path.join(self.mask_folder[stage], f'{sample_name}-{layout_label}.webp'), mask)
 
                         contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
                         polygons = []
@@ -208,7 +224,7 @@ class YOLOFormatGen(object):
                             anno_str = f'{layout_label} {coords_str}\n'
                             fp.write(anno_str)
             else:
-                label_path = os.path.join(self.label_folder[stage], f'{self.prefix}-{self.image_id}.txt')
+                label_path = os.path.join(self.label_folder[stage], f'{sample_name}.txt')
                 with open(label_path, 'w') as fp:
                     pass
 

@@ -37,6 +37,7 @@ class RemoteApiOp(object):
         if 'server_port' in kwargs:
             kwargs.pop('server_port')
         self.rpc = HttpRpc("v1", server_name, server_ip, server_port, token=token)
+        # self.rpc = HttpRpc("v1", '', server_ip, server_port, token=token)
         self.rpc.headers.update(
             {
                 'Content-Type': 'application/json'
@@ -115,5 +116,7 @@ class RemoteApiOp(object):
             else:
                 # 其他类型
                 out_values.append(arg_value)
+        if len(out_values) == 0:
+            return None
 
         return out_values[0] if len(out_values) == 1 else out_values

@@ -81,7 +81,7 @@ class YoloDataset(Dataset):
                 'image': image,
                 'bboxes': np.empty((0, 4), dtype=np.float32),
                 'labels': np.empty((0), dtype=np.float32),
-                'filepath': file_name
+                'img_path': file_name
             }
 
         bboxes = np.array(anno_info['bboxes'], dtype=np.float32)
@@ -94,7 +94,7 @@ class YoloDataset(Dataset):
             'image': image,
             'bboxes': bboxes,
             'labels': labels,
-            'filepath': file_name
+            'img_path': file_name
         }
 
     def parsePoseData(self, id):

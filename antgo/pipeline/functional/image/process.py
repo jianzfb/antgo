@@ -50,6 +50,8 @@ class resize_keep_ratio_op(object):
         self.resize_w = out_size[0]
         self.resize_h = out_size[1]
         self.interp = interp
+        # left,center,right
+        self.align = align
 
     def __call__(self, image):
         image_h, image_w = image.shape[:2]
@@ -68,12 +70,24 @@ class resize_keep_ratio_op(object):
             image, 
             (new_width, new_height), 
             interpolation=self.interp_dict[self.interp])
+        
+        x_offset = 0
+        y_offset = 0
         if new_height != self.resize_h or new_width != self.resize_w:
             canvas = np.zeros((self.resize_h, self.resize_w, image.shape[2]), dtype=np.uint8)
-            canvas[:new_height, :new_width, :] = new_image
+            if self.align == 'left':
+                canvas[:new_height, :new_width, :] = new_image
+            elif self.align == 'center':
+                x_offset = (self.resize_w-new_width)//2
+                y_offset = (self.resize_h-new_height)//2
+                canvas[y_offset:y_offset+new_height, x_offset:x_offset+new_width, :] = new_image
+            else:
+                x_offset = self.resize_w-new_width
+                y_offset = self.resize_h-new_height
+                canvas[y_offset:y_offset+new_height, x_offset:x_offset+new_width, :] = new_image
             new_image = canvas
 
-        return new_image, np.array([scale], dtype=np.float32)
+        return new_image, np.array([scale,x_offset,y_offset], dtype=np.float32)
 
 @register
 class keep_ratio_op(object):

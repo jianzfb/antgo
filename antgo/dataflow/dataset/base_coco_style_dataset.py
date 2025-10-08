@@ -7,7 +7,7 @@ from antgo.dataflow.dataset import *
 from antgo.dataflow.dataset.parse_metainfo import parse_pose_metainfo
 import numpy as np
 from pycocotools.coco import COCO
-import antgo.utils.mask as mask_util
+#import antgo.utils.mask as mask_util
 import cv2
 
 

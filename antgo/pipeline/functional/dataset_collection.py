@@ -70,7 +70,7 @@ def coco_format_dc(dir, ann_file, data_prefix, mode='detect', normalize=False, i
 
 
 @dynamic_dispatch
-def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_random=False, is_debug=False):
+def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_random=False, is_debug=False, filter_by_digit=False):
     assert(stage in ['train', 'val', 'test'])
     with open(ann_file, "r", errors="ignore", encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -86,7 +86,11 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
         'val': os.path.join(ann_folder, data_folder, data['val'].replace('images', 'labels'))
     }
     file_name_list = os.listdir(image_folder_map[stage])
-    file_name_list = [name for name in file_name_list if name[0] != '.']
+    file_name_list = [name for name in file_name_list if name[0] != '.' and (name.endswith('webp') or name.endswith('png') or name.endswith('jpg') or name.endswith('jpeg'))]
+    if filter_by_digit:
+        file_name_list = [name for name in file_name_list if name[0].isdigit()]
+
+    print(len(file_name_list))
 
     if is_random:
         random.shuffle(file_name_list)
@@ -95,6 +99,7 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
     def inner():
         sample_num = len(file_name_list)
         for sample_i in range(sample_num):
+            
             file_name = file_name_list[sample_i]
             image_path = f'{image_folder_map[stage]}/{file_name}'
             if is_debug:
@@ -107,7 +112,7 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
             image_h, image_w = image.shape[:2]
             export_info = {
                 'image': image,
-                'filename': image_path
+                'img_path': image_path
             }
             if mode == 'detect':
                 with open(label_path, 'r') as fp:
@@ -220,8 +225,8 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
             original_file = anno_info['data']['img'].split('/')[-1] if 'img' in anno_info else anno_info['data']['image'].split('/')[-1]
 
             export_info = {}
-            export_info['filename'] = os.path.join(data_folder, original_file)
-            export_info['image'] = cv2.imread(export_info['filename'])
+            export_info['img_path'] = os.path.join(data_folder, original_file)
+            export_info['image'] = cv2.imread(export_info['img_path'])
             export_info['bboxes'] = []
             export_info['labels'] = []
             export_info['label_names'] = []

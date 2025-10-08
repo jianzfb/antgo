@@ -6,7 +6,7 @@ from typing import Optional
 import cv2
 import numpy as np
 from antgo.dataflow.dataset.base_coco_style_dataset import BaseCocoStyleDataset
-import antgo.utils.mask as mask_util
+#import antgo.utils.mask as mask_util
 
 
 __all__ = ['CocoWholeBodyDataset']

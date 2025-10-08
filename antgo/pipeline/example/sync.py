@@ -44,7 +44,7 @@ class parse_labelstudio(object):
             if len(anno_info['annotations']) == 0:
                 continue
 
-            file_name = '-'.join(anno_info['file_upload'].split('-')[1:])
+            file_name = anno_info['data']['image'].split('/')[-1]
             file_path = os.path.join(anno_folder, file_name)
             image = cv2.imread(file_path)
             image_h, image_w = image.shape[:2]
@@ -160,28 +160,6 @@ with GroupRegister['layout_image_path', 'layout_info']('layoutg2') as layoutg_gr
         )
 
 
-with GroupRegister[('image_path', 'layout_info'), 'sync_out']('syncg') as syncg_group:
-    syncg_group.image_decode.sync_op.save_sync_info_op(
-        [
-            {
-                'folder': ''
-            },
-            {
-                'min_scale': 0.1,
-                'max_scale': 0.4,
-            },
-            {
-                'folder': ''
-            }
-        ],
-        relation=[
-            ['image_path', 'image'],
-            [('image', 'layout_info'), 'sync_info'],
-            ['sync_info', 'sync_out']
-        ]
-    )
-
-
 # 数据模式生成2（基于AnyGS数据服务引擎）
 with GroupRegister['image_path', ('image_mask', 'image_wo_bg')]('removebg') as removebg_group:
     removebg_group.image_decode.remote.removebg.demo(
@@ -261,11 +239,33 @@ with GroupRegister[('image','prompt','min_obj_ratio','max_obj_ratio'), 'sync_out
     )
 
 
-def create_data_gen_base_pipe(folder, category_map, sample_num=10000, obj_num=1, dataset_format='yolo', stage='train', task='detect', prefix='data', is_auto=True, callback=None):
+def create_data_gen_base_pipe(folder, category_map, sample_num=10000, obj_num=1, obj_min_scale=0.8, obj_max_scale=1.0, dataset_format='yolo', stage='train', task='detect', prefix='data', is_auto=True, callback=None):
     if is_auto:
         if task == 'pose':
             print('Only detect,segment,classify task support auto mode')
             return None
+
+    # 定义合成算子
+    with GroupRegister[('image_path', 'layout_info'), 'sync_out']('syncg') as syncg_group:
+        syncg_group.image_decode.sync_op.save_sync_info_op(
+            [
+                {
+                    'folder': ''
+                },
+                {
+                    'min_scale': obj_min_scale,
+                    'max_scale': obj_max_scale,
+                },
+                {
+                    'folder': ''
+                }
+            ],
+            relation=[
+                ['image_path', 'image'],
+                [('image', 'layout_info'), 'sync_info'],
+                ['sync_info', 'sync_out']
+            ]
+        )
 
     if is_auto:
         # 基于主体物分割模型，自动对目标图像进行分层以获得主体物
@@ -311,11 +311,33 @@ def create_data_gen_base_pipe(folder, category_map, sample_num=10000, obj_num=1,
     return data_gen_base_pipe
 
 
-def create_data_gen_base_labelstudio_pipe(folder, category_map, sample_num=10000, obj_num=1, dataset_format='yolo', stage='train', task='detect', prefix='data', is_auto=True, callback=None):
+def create_data_gen_base_labelstudio_pipe(folder, category_map, sample_num=10000, obj_num=1, obj_min_scale=0.8, obj_max_scale=1.0, dataset_format='yolo', stage='train', task='detect', prefix='data', is_auto=True, callback=None):
     if is_auto:
         if task == 'pose':
             print('Only detect,segment,classify task support auto mode')
             return None
+
+    # 定义合成算子
+    with GroupRegister[('image_path', 'layout_info'), 'sync_out']('syncg') as syncg_group:
+        syncg_group.image_decode.sync_op.save_sync_info_op(
+            [
+                {
+                    'folder': ''
+                },
+                {
+                    'min_scale': obj_min_scale,
+                    'max_scale': obj_max_scale,
+                },
+                {
+                    'folder': ''
+                }
+            ],
+            relation=[
+                ['image_path', 'image'],
+                [('image', 'layout_info'), 'sync_info'],
+                ['sync_info', 'sync_out']
+            ]
+        )
 
     if is_auto:
         # 基于主体物分割模型，自动对目标图像进行分层以获得主体物

@@ -16,7 +16,7 @@ from collections import defaultdict
 import sys
 from urllib.request import urlretrieve
 from antgo.dataflow.dataset.dataset import *
-from antgo.utils import mask as maskUtils
+#from antgo.utils import mask as maskUtils
 from antgo.utils.fs import maybe_here_match_format
 from antgo.framework.helper.fileio.file_client import *
 from filelock import FileLock
