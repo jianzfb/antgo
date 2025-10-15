@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 # @Time    : 2024/11/27 22:42
-# @File    : user.py
+# @File    : auth.py
 # @Author  : jian<jian@mltalker.com>
 from __future__ import division
 from __future__ import unicode_literals
@@ -8,8 +8,10 @@ from __future__ import print_function
 from antvis.client.httprpc import *
 from antgo.pipeline.functional.common.config import *
 from antgo.pipeline.functional.common.env import *
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.env import *
+from antgo.pipeline.application.common.db import *
 from urllib.parse import unquote_plus, quote_plus
+from antgo.pipeline.utils.reserved import *
 import os
 import cv2
 import base64
@@ -22,61 +24,63 @@ from sqlalchemy import and_, or_
 auth_header_pat = re.compile(r'^token\s+([^\s]+)$')
 
 
-class CasOp(object):
-    def __init__(self, cas_ip, cas_port, cas_proto='http', cas_prefix='antvis', server_router="/#/Login"):
+class AuthOp(object):
+    def __init__(self, cas_ip=None, cas_port=None, cas_proto='http', cas_prefix='antvis', server_router="/#/Login", cookie_prefix='antgo-auth'):
         self.cas_url = f'{cas_proto}://{cas_ip}:{cas_port}/{cas_prefix}'
         self.cas_ip = cas_ip
         self.cas_port = cas_port
         self.cas_proto = cas_proto
         self.cas_prefix = cas_prefix
         self.server_router = server_router
+        self.cookie_prefix = cookie_prefix
 
     def info(self):
-        return ['ST', 'token', 'username', 'password', 'session_id']
+        return ['ST', 'username', 'password', 'session_id', 'db', 'headers', 'cookie']
 
-    def get_current_user_from_token(self, db, token):
-        """get_current_user from Authorization header token"""
-        if token is None:
-            return None
-        match = auth_header_pat.match(auth_header)
-        if not match:
-            return None
-        token = match.group(1)
-        orm_token = get_db_orm().APIToken.find(db, token)
-        if orm_token is None:
-            return None
-        else:
-            return orm_token.user
+    def get_current_user(self, db, username, password, headers, cookie):
+        """get current username"""
+        orm = get_db_orm()
+        # 1.step 从cookie获得登录要换个户
+        cookie_id = cookie.get(self.cookie_prefix, None)
+        if cookie_id is not None:
+            user = db.query(orm.User).filter(orm.User.cookie_id == cookie_id).one_or_none()
+            if user is not None:
+                return user
 
-    def get_current_user_from_argments(self, db, username, password):
+        # 2.step 从api_token获得登录用户
+        api_token = headers.get('Authorization', None)
+        if api_token is not None:
+            api_token = orm.APIToken.find(db, api_token, kind='user')
+            if api_token is not None and api_token.user is not None:
+               return api_token.user
+
+        # 3.step 从用户名密码获得登录用户
         if username is None or password is None:
             return None
-
-        user = db.query(get_db_orm().User).filter(and_(get_db_orm().User.name==username, get_db_orm().User.password==password)).one_or_none()
-        return user
-
-    def get_current_user(self, db, token, username, password):
-        """get current username"""
-        # # 1.step 从cookie获得登录要换个户
-        # user = self.get_current_user_cookie()
-        # if user is not None:
-        #     return user
-        # 2.step 从api_token获得登录用户
-        user = self.get_current_user_from_token(db, token)
-        if user is not None:
-            return user
-        # 3.step 从用户名密码获得登录用户
-        user = self.get_current_user_from_argments(db, username, password)
+        user = db.query(orm.User).filter(orm.User.name == username, orm.User.password == password).one_or_none()
         if user is not None:
             return user
 
-        return user
+        return None
 
-    def __call__(self, *args, ST=None, token=None, username=None, password=None, session_id=None):
-        db = get_thread_session()
-        current_user = self.get_current_user(db, token, username, password)
+    @resource_db_env
+    def __call__(self, ST, username, password, session_id, db, headers, cookie):
+        current_user = self.get_current_user(db, username, password, headers, cookie)
         if current_user is not None:
             return current_user
+
+        if self.cas_ip is None or self.cas_port is None:
+            return ReservedRtnType(
+                index = '__response__',
+                data = {
+                    'code': -1,
+                    'message': 'fail',
+                    'info': "need to login"
+                },
+                session_id=session_id,
+                status_code=401,
+                message="need to login"
+            )
 
         if ST is None:
             # 无票据信息，需要重新登录
@@ -89,9 +93,18 @@ class CasOp(object):
                 server_url = '{}/{}'.format(self.cas_url, quote_plus(re_server_router))
 
             cas_url = '{}/cas/auth/?redirect={}'.format(self.cas_url, server_url)
-            set_context_redirect_info(session_id, cas_url)
-            set_context_exit_info(session_id, detail="login or re-auth user")
-            return None
+            return ReservedRtnType(
+                index = '__response__',
+                data = {
+                    'code': -1,
+                    'message': 'fail',
+                    'info': "login or re-auth user"
+                },
+                session_id=session_id,
+                status_code=401,
+                message="login or re-auth user",
+                redirect_url=cas_url
+            )
 
         if current_user is None or current_user.service_ticket != ST:
             # 从CAS获得登录信息
@@ -115,7 +128,8 @@ class CasOp(object):
                 # 设置登录状态
                 user.cookie_id = str(uuid.uuid4()) + '/' + str(uuid.uuid4())
                 db.commit()
-                set_context_cookie_info(session_id, 'antgo-user', user.cookie_id)
+                cookie.set(self.cookie_prefix, user.cookie_id)
+
                 return user
             else:
                 # 票据失效，需要重新登录
@@ -128,8 +142,17 @@ class CasOp(object):
                     server_url = '{}/{}'.format(self.cas_url, quote_plus(re_server_router))
 
                 cas_url = '{}/cas/auth/?redirect={}'.format(self.cas_url, server_url)
-                set_context_redirect_info(session_id, cas_url)
-                set_context_exit_info(session_id, detail="login or re-auth user")
-                return None
+                return ReservedRtnType(
+                    index = '__response__',
+                    data = {
+                        'code': -1,
+                        'message': 'fail',
+                        'info': "login or re-auth user"
+                    },
+                    session_id=session_id,
+                    status_code=401,
+                    message="login or re-auth user",
+                    redirect_url=cas_url
+                )
 
         return current_user

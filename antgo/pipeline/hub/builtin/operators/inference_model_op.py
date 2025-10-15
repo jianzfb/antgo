@@ -20,6 +20,7 @@ import cv2
 import json
 import copy
 import numpy as np
+import threading
 
 
 @register
@@ -48,6 +49,7 @@ class inference_model_op(object):
     # self._fields = copy.deepcopy(inputs_def['fields']) if inputs_def else None
     self._fields = ['image', 'image_meta']
     self._output = output
+    self.lock = threading.Lock()
 
   def _arrange(self, sample, fields):
     if type(fields[0]) == list or type(fields[0]) == tuple:
@@ -68,34 +70,36 @@ class inference_model_op(object):
 
   def __call__(self, image):
     # 输入是组batch前的最后一步数据 (C,H,W)
-    sample = {
-      'image': torch.from_numpy(image),
-      'image_meta': {
-        'image_shape': image.shape[1:],
-        'scale_factor': (1, 1, 1, 1),
-        'transform_matrix': np.eye(3),
+    with self.lock:
+      # 防止多线程运行
+      sample = {
+        'image': torch.from_numpy(image),
+        'image_meta': {
+          'image_shape': image.shape[1:],
+          'scale_factor': (1, 1, 1, 1),
+          'transform_matrix': np.eye(3),
+        }
       }
-    }
 
-    # arange warp
-    sample = self._arrange(sample, self._fields)
-    sample = collate([sample])
-    sample.update({
-      'return_loss': False
-    })
+      # arange warp
+      sample = self._arrange(sample, self._fields)
+      sample = collate([sample])
+      sample.update({
+        'return_loss': False
+      })
 
-    # model run
-    self.model.eval()
-    result = {}
-    with torch.no_grad():
-      result = self.model(**sample)
+      # model run
+      self.model.eval()
+      result = {}
+      with torch.no_grad():
+        result = self.model(**sample)
 
-    if self._output is None:
-      self._output = result.keys()
-    out = []
-    for k in self._output:
-      out.append(result[k][0].detach().cpu().numpy())
-    return tuple(out)
+      if self._output is None:
+        self._output = result.keys()
+      out = []
+      for k in self._output:
+        out.append(result[k][0].detach().cpu().numpy())
+      return tuple(out)
 
 
 

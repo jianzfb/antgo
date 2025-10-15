@@ -19,6 +19,7 @@ from multiprocessing import queues
 import logging
 import os
 import shutil
+import threading
 
 
 @register
@@ -51,90 +52,93 @@ class inference_onnx_op(object):
         self.reverse_channel = kwargs.get('reverse_channel', False)
         self.engine = kwargs.get('engine', None)
         self.engine_args = kwargs.get('engine_args', {}) 
+        self.lock = threading.Lock()
 
-    def __call__(self, *args):        
-        input_map = None
-        for field, data, expected_shape in zip(self.input_fields, args, self.input_shapes):
-            if data.shape[0] == 0:
-                continue
+    def __call__(self, *args):
+        with self.lock:
+            # 防止多线程运行
+            input_map = None
+            for field, data, expected_shape in zip(self.input_fields, args, self.input_shapes):
+                if data is None or data.shape[0] == 0:
+                    continue
 
-            if self.mean_val is not None and self.std_val is not None and data.dtype==np.uint8 and data.shape[-1] == 3:
-                # 均值方差内部处理，仅对图像类型输入有效
-                if len(data.shape) == 4:
-                    # NxHxWx3
-                    if self.reverse_channel:
-                        data = data[:,:,:,::-1]
-                    data = data - np.reshape(np.array(self.mean_val), (1,1,1,3))
-                    data = data / np.reshape(np.array(self.std_val), (1,1,1,3))
+                if self.mean_val is not None and self.std_val is not None and data.dtype==np.uint8 and data.shape[-1] == 3:
+                    # 均值方差内部处理，仅对图像类型输入有效
+                    if len(data.shape) == 4:
+                        # NxHxWx3
+                        if self.reverse_channel:
+                            data = data[:,:,:,::-1]
+                        data = data - np.reshape(np.array(self.mean_val), (1,1,1,3))
+                        data = data / np.reshape(np.array(self.std_val), (1,1,1,3))
 
-                    # Nx3xHxW
-                    data = np.transpose(data, (0,3,1,2))
-                elif len(data.shape) == 3:
-                    # HxWx3
-                    if self.reverse_channel:
-                        data = data[:,:,::-1]
-                    data = data - np.reshape(np.array(self.mean_val), (1,1,3))
-                    data = data / np.reshape(np.array(self.std_val), (1,1,3))
+                        # Nx3xHxW
+                        data = np.transpose(data, (0,3,1,2))
+                    elif len(data.shape) == 3:
+                        # HxWx3
+                        if self.reverse_channel:
+                            data = data[:,:,::-1]
+                        data = data - np.reshape(np.array(self.mean_val), (1,1,3))
+                        data = data / np.reshape(np.array(self.std_val), (1,1,3))
 
-                    # -> 1xHxWx3
-                    data = np.expand_dims(data, 0)
-                    # -> 1x3xHxW
-                    data = np.transpose(data, (0,3,1,2))
+                        # -> 1xHxWx3
+                        data = np.expand_dims(data, 0)
+                        # -> 1x3xHxW
+                        data = np.transpose(data, (0,3,1,2))
 
-            if data.dtype != np.float32:
-                data = data.astype(np.float32)
+                if data.dtype != np.float32:
+                    data = data.astype(np.float32)
 
-            if not isinstance(expected_shape[0], str):
-                group_num = data.shape[0] // expected_shape[0]
-                if input_map is None:
-                    input_map = [{} for _ in range(group_num)]
+                if not isinstance(expected_shape[0], str):
+                    group_num = data.shape[0] // expected_shape[0]
+                    if input_map is None:
+                        input_map = [{} for _ in range(group_num)]
 
-                for group_i in range(group_num):
-                    input_map[group_i][field] = data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]]
+                    for group_i in range(group_num):
+                        input_map[group_i][field] = data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]]
+                else:
+                    if input_map is None:
+                        input_map = [{}]
+                    input_map[0][field] = data
+
+            if input_map is None:
+                if len(self.output_shapes) == 1:
+                    return np.empty([0]*len(self.output_shapes[0]), dtype=np.float32)
+                else:
+                    oo = []
+                    for i in range(len(self.output_shapes)):
+                        oo.append(
+                            np.empty([0]*len(self.output_shapes[i]), dtype=np.float32)
+                        )
+                    return oo
+
+            group_output = []
+            for group_input_map in input_map:
+                result = self.sess.run(None, group_input_map)
+                group_output.append(result)
+
+            output = None
+            if len(group_output) == 1:
+                output = group_output[0]
             else:
-                if input_map is None:
-                    input_map = [{}]
-                input_map[0][field] = data
+                if isinstance(group_output[0], tuple) or isinstance(group_output[0], list):
+                    output = []
+                    for elem_i in range(len(group_output[0])):
+                        rr = []
+                        for group_i in range(len(group_output)):
+                            rr.append(group_output[group_i][elem_i])
+                        
+                        rr = np.concatenate(rr, 0)
+                        output.append(rr)
+                else:
+                    output = np.concatenate(group_output, 0)
 
-        if input_map is None:
-            if len(self.output_shapes) == 1:
-                return np.empty([0]*len(self.output_shapes[0]), dtype=np.float32)
-            else:
-                oo = []
-                for i in range(len(self.output_shapes)):
-                    oo.append(
-                        np.empty([0]*len(self.output_shapes[i]), dtype=np.float32)
-                    )
-                return oo
+            if isinstance(output, list) or isinstance(output, tuple):
+                if len(output) == 1:
+                    return output[0]
 
-        group_output = []
-        for group_input_map in input_map:
-            result = self.sess.run(None, group_input_map)
-            group_output.append(result)
-
-        output = None
-        if len(group_output) == 1:
-            output = group_output[0]
-        else:
-            if isinstance(group_output[0], tuple) or isinstance(group_output[0], list):
-                output = []
-                for elem_i in range(len(group_output[0])):
-                    rr = []
-                    for group_i in range(len(group_output)):
-                        rr.append(group_output[group_i][elem_i])
-                    
-                    rr = np.concatenate(rr, 0)
-                    output.append(rr)
-            else:
-                output = np.concatenate(group_output, 0)
-
-        if isinstance(output, list) or isinstance(output, tuple):
-            if len(output) == 1:
-                return output[0]
-
-            return tuple(output)
-        
-        return output
+                return tuple(output)
+            
+            return output
     
     def export(self):
         if self.engine is None:

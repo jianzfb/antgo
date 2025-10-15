@@ -31,7 +31,7 @@ LOCAL_OPERATOR_CACHE = DEFAULT_LOCAL_CACHE_ROOT / 'operators'
 GroupDefMap = dict()
 
 class GroupDef(object):
-    def __init__(self, name, index=None):
+    def __init__(self, name, index=None, use_resource_db=False):
         self.name = name
         self.index = index
 
@@ -40,18 +40,23 @@ class GroupDef(object):
             'eagleeye': self.create_eagleeye_op,
             'deploy': self.create_deploy_op,
             'remote': self.create_remote_op,
-            'application': self.create_application_op
+            'application': self.create_application_op,
+            'control': self.create_control_op
         }
         self.op_name_list = []
         self.op_args_list = []
         self.op_category_list = []
+        self.op_child_list = []
         self.op_relation = []
         self.op_input = []
         self.op_output = []
 
         self.op_name_cache = ''
         self.op_prefix = ''
+        self.last_control_op_not_close = False
+        self.last_control_op_name = None
         self.op_offset = 0
+        self.use_resource_db = use_resource_db
 
     def create_eagleeye_op(self, op_name, op_params):
         module, category, name = op_name.split('/')
@@ -113,7 +118,7 @@ class GroupDef(object):
         op_cls_gen = None
         if op_name.startswith('application/table'):
             action_name = keys[2]
-            table_or_field_name = keys[3] if len(keys) >= 3 else None
+            table_or_field_name = keys[3] if len(keys) > 3 else None
             op_cls_gen = getattr(importlib.import_module(f'antgo.pipeline.application.table.{action_name}'), f'{action_name.capitalize()}Op', None)
             if table_or_field_name is not None:
                 action_object_name = list(signature(op_cls_gen.__init__)._parameters.keys())[1]
@@ -142,6 +147,19 @@ class GroupDef(object):
             op = op_cls(**op_params)        
         return op
 
+    def create_control_op(self, op_name, op_params):
+        _, control_op = op_name.split('/')
+        child_info = op_params.pop('control')
+        if control_op == 'For':
+            control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.for_op'), 'For', None)
+
+            child_name, child_category = child_info
+            child_op = self.op_creator_map[child_category](child_name, op_params.get(child_name.replace('-', '_').replace('/', '_'), {}))
+            op = control_op_cls(func=child_op, parallel_num = 1)
+            return op
+
+        return None
+
     def __call__(self, params, relation, input=None, output=None):
         # 定义图结构
         if self.index is not None:
@@ -158,11 +176,15 @@ class GroupDef(object):
         # 定义算子
         group_op_list = []
         group_args_list = []
-        for op_name, op_category, op_param in zip(self.op_name_list, self.op_category_list, params):
+        for op_name, op_category, op_child, op_param in zip(self.op_name_list, self.op_category_list, self.op_child_list, params):
             # 复制一份
             self.op_args_list.append(copy.deepcopy(op_param))
 
             # 构建op信息
+            if op_child is not None:
+                op_param.update({
+                    'control': op_child
+                })
             group_op_list.append(self.op_creator_map[op_category])
             group_args_list.append((op_name, op_param))
 
@@ -174,13 +196,14 @@ class GroupDef(object):
         group_op_relation = self.op_relation
         group_op_input = self.op_input
         group_op_output = self.op_output
+        use_resource_db = self.use_resource_db
         group_cls = \
             type(
                 group_name, 
                 (Group,), 
                 {
                     '__init__': lambda self, **kwargs: 
-                        Group.__init__(self, group_op_list, group_args_list, group_op_relation, group_op_input, group_op_output, **kwargs)
+                        Group.__init__(self, group_op_list, group_args_list, group_op_relation, group_op_input, group_op_output, resource={'db': use_resource_db}, **kwargs)
                 }
             )
 
@@ -211,8 +234,14 @@ class GroupDef(object):
             self.op_prefix = ''
             self.op_offset = 0
 
+            if self.last_control_op_not_close:
+                self.op_child_list[-1] = (name, 'deploy')
+                self.last_control_op_not_close = False
+                return self
+
             self.op_name_list.append(name)
             self.op_category_list.append('deploy')
+            self.op_child_list.append(None)
             return self
         elif (name.startswith('remote')) or self.op_prefix == 'remote':
             # remote.xxx.yyy
@@ -234,8 +263,14 @@ class GroupDef(object):
             self.op_prefix = ''
             self.op_offset = 0
 
+            if self.last_control_op_not_close:
+                self.op_child_list[-1] = (name, 'remote')
+                self.last_control_op_not_close = False
+                return self
+
             self.op_name_list.append(name)
             self.op_category_list.append('remote')
+            self.op_child_list.append(None)
             return self
         elif (name.startswith('eagleeye') or self.op_prefix == 'eagleeye'):
             # eagleeye.xxx.yyy
@@ -257,8 +292,14 @@ class GroupDef(object):
             self.op_prefix = ''
             self.op_offset = 0
 
+            if self.last_control_op_not_close:
+                self.op_child_list[-1] = (name, 'eagleeye')
+                self.last_control_op_not_close = False
+                return self
+
             self.op_name_list.append(name)
             self.op_category_list.append('eagleeye')
+            self.op_child_list.append(None)
             return self
         elif (name.startswith('application') or self.op_prefix == 'application'):
             # application.xxx.yyy.?zzz
@@ -272,8 +313,42 @@ class GroupDef(object):
 
             # ? 存在问题，application是动态的,3/4
             self.op_offset += 1
-            if self.op_offset != 4:
+            is_found = False
+            if self.op_offset == 3 and name in ['auth', 'login', 'logout', 'signup']:
+                is_found = True
+            
+            if not is_found and self.op_offset != 4:
                 return self
+
+            # 已经获得完整名字
+            name = self.op_name_cache
+            self.op_name_cache = ''
+            self.op_prefix = ''
+            self.op_offset = 0
+
+            if self.last_control_op_not_close:
+                self.op_child_list[-1] = (name, 'application')
+                self.last_control_op_not_close = False
+                return self
+
+            self.op_name_list.append(name)
+            self.op_category_list.append('application')
+            self.op_child_list.append(None)
+            return self
+        elif (name.startswith('control') or self.op_prefix == 'control'):
+            # control.xxx
+            if self.op_name_cache == '':
+                self.op_name_cache = name
+            else:
+                self.op_name_cache += '/'+name
+
+            if self.op_prefix == '':
+                self.op_prefix = 'control'
+
+            self.op_offset += 1
+            if self.op_offset != 2:
+                return self
+
             # 已经获得完整名字
             name = self.op_name_cache
             self.op_name_cache = ''
@@ -281,25 +356,24 @@ class GroupDef(object):
             self.op_offset = 0
 
             self.op_name_list.append(name)
-            self.op_category_list.append('application')
+            self.op_category_list.append('control')
+            self.op_child_list.append(None)
+
+            self.last_control_op_not_close = True
+            self.last_control_op_name = name
+            return self
+
+
+        if self.last_control_op_not_close:
+            self.op_child_list[-1] = (name, 'inner')
+            self.last_control_op_not_close = False
             return self
 
         self.op_name_list.append(name)
-        self.op_category_list.append('inner')        
+        self.op_category_list.append('inner')
+        self.op_child_list.append(None)
         return self
 
-
-# @contextmanager
-# def GroupRegister(name):
-#   try:
-#     global GroupDefMap
-#     assert(name not in GroupDefMap)
-#     groupdef = GroupDef(name)
-#     yield groupdef
-#     GroupDefMap[name] = groupdef
-#   except:
-#     traceback.print_exc()
-#     raise sys.exc_info()[0]
 
 class _GroupRegister(object):
     def __init__(self):
@@ -310,11 +384,11 @@ class _GroupRegister(object):
         return self
 
     @contextmanager
-    def __call__(self, name):
+    def __call__(self, name, use_resource_db=False):
         try:
             global GroupDefMap
             assert(name not in GroupDefMap)
-            groupdef = GroupDef(name, index=self.index)
+            groupdef = GroupDef(name, index=self.index, use_resource_db=use_resource_db)
             yield groupdef
             GroupDefMap[name] = groupdef
         except:

@@ -8,8 +8,9 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.application.common.env import *
 from sqlalchemy import and_, or_
 
 
@@ -25,10 +26,10 @@ class RemoveOp(object):
             for key in keys:
                 self.key_i.append(self.field.index(key))
 
-    def __call__(self, *args):
+    @resource_db_env
+    def __call__(self, *args, db, **kwargs):
         orm = get_db_orm()
         orm_table = getattr(orm, self.table.capitalize())
-        db = get_thread_session()
         objs = []
         if len(self.key_i) == 1:
             objs = db.query(orm_table).filter(getattr(orm_table, self.field[0]) == args[0]).all()

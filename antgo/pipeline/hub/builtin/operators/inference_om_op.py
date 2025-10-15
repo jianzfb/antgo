@@ -11,6 +11,7 @@ from antgo.pipeline.models.utils.utils import *
 import acl
 import numpy as np
 import os
+import threading
 
 
 # 常量定义
@@ -46,6 +47,7 @@ class inference_om_op(object):
 
         self.init_acl()
         self.load_model()
+        self.lock = threading.Lock()
 
     def init_acl(self):
         if not inference_om_op.is_init:
@@ -228,94 +230,96 @@ class inference_om_op(object):
         print(f"All resources {self.model_path} released")
 
     def __call__(self, *args):
-        input_map = None
-        for data, expected_shape in zip(args, self.input_shapes):
-            if data.shape[0] == 0:
-                continue
+        with self.lock:
+            # 防止多线程运行
+            input_map = None
+            for data, expected_shape in zip(args, self.input_shapes):
+                if data is None or data.shape[0] == 0:
+                    continue
 
-            if self.mean_val is not None and self.std_val is not None and data.dtype==np.uint8 and data.shape[-1] == 3:
-                # 均值方差内部处理，仅对图像类型输入有效
-                if len(data.shape) == 4:
-                    # NxHxWx3
-                    if self.reverse_channel:
-                        data = data[:,:,:,::-1]
-                    data = data - np.reshape(np.array(self.mean_val), (1,1,1,3))
-                    data = data / np.reshape(np.array(self.std_val), (1,1,1,3))
+                if self.mean_val is not None and self.std_val is not None and data.dtype==np.uint8 and data.shape[-1] == 3:
+                    # 均值方差内部处理，仅对图像类型输入有效
+                    if len(data.shape) == 4:
+                        # NxHxWx3
+                        if self.reverse_channel:
+                            data = data[:,:,:,::-1]
+                        data = data - np.reshape(np.array(self.mean_val), (1,1,1,3))
+                        data = data / np.reshape(np.array(self.std_val), (1,1,1,3))
 
-                    # Nx3xHxW
-                    data = np.transpose(data, (0,3,1,2))
-                elif len(data.shape) == 3:
-                    # HxWx3
-                    if self.reverse_channel:
-                        data = data[:,:,::-1]
-                    data = data - np.reshape(np.array(self.mean_val), (1,1,3))
-                    data = data / np.reshape(np.array(self.std_val), (1,1,3))
+                        # Nx3xHxW
+                        data = np.transpose(data, (0,3,1,2))
+                    elif len(data.shape) == 3:
+                        # HxWx3
+                        if self.reverse_channel:
+                            data = data[:,:,::-1]
+                        data = data - np.reshape(np.array(self.mean_val), (1,1,3))
+                        data = data / np.reshape(np.array(self.std_val), (1,1,3))
 
-                    # -> 1xHxWx3
-                    data = np.expand_dims(data, 0)
-                    # -> 1x3xHxW
-                    data = np.transpose(data, (0,3,1,2))
+                        # -> 1xHxWx3
+                        data = np.expand_dims(data, 0)
+                        # -> 1x3xHxW
+                        data = np.transpose(data, (0,3,1,2))
 
-            if data.dtype != np.float32:
-                data = data.astype(np.float32)
+                if data.dtype != np.float32:
+                    data = data.astype(np.float32)
 
-            if not isinstance(expected_shape[0], str):
-                group_num = data.shape[0] // expected_shape[0]
-                if input_map is None:
-                    input_map = [[] for _ in range(group_num)]
+                if not isinstance(expected_shape[0], str):
+                    group_num = data.shape[0] // expected_shape[0]
+                    if input_map is None:
+                        input_map = [[] for _ in range(group_num)]
 
-                for group_i in range(group_num):
-                    input_map[group_i].append(data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]])
+                    for group_i in range(group_num):
+                        input_map[group_i].append(data[group_i*expected_shape[0]:(group_i+1)*expected_shape[0]])
+                else:
+                    if input_map is None:
+                        input_map = [[]]
+                    input_map[0].append(data)
+
+            if input_map is None:
+                if len(self.output_shapes) == 1:
+                    return np.empty([0]*len(self.output_shapes[0]), dtype=np.float32)
+                else:
+                    oo = []
+                    for i in range(len(self.output_shapes)):
+                        oo.append(
+                            np.empty([0]*len(self.output_shapes[i]), dtype=np.float32)
+                        )
+                    return oo
+
+            # run
+            group_output = []
+            for group_input_map in input_map:
+                for data in group_input_map:
+                    print(data.shape)
+
+                # 设置输入
+                self.process_input(group_input_map)
+                # 执行模型
+                self.execute_inference()
+                # 获得输出
+                result = self.get_output()
+                group_output.append(result)
+
+            output = None
+            if len(group_output) == 1:
+                output = group_output[0]
             else:
-                if input_map is None:
-                    input_map = [[]]
-                input_map[0].append(data)
+                if isinstance(group_output[0], tuple) or isinstance(group_output[0], list):
+                    output = []
+                    for elem_i in range(len(group_output[0])):
+                        rr = []
+                        for group_i in range(len(group_output)):
+                            rr.append(group_output[group_i][elem_i])
+                        
+                        rr = np.concatenate(rr, 0)
+                        output.append(rr)
+                else:
+                    output = np.concatenate(group_output, 0)
 
-        if input_map is None:
-            if len(self.output_shapes) == 1:
-                return np.empty([0]*len(self.output_shapes[0]), dtype=np.float32)
-            else:
-                oo = []
-                for i in range(len(self.output_shapes)):
-                    oo.append(
-                        np.empty([0]*len(self.output_shapes[i]), dtype=np.float32)
-                    )
-                return oo
+            if isinstance(output, list) or isinstance(output, tuple):
+                if len(output) == 1:
+                    return output[0]
 
-        # run
-        group_output = []
-        for group_input_map in input_map:
-            for data in group_input_map:
-                print(data.shape)
+                return tuple(output)
 
-            # 设置输入
-            self.process_input(group_input_map)
-            # 执行模型
-            self.execute_inference()
-            # 获得输出
-            result = self.get_output()
-            group_output.append(result)
-
-        output = None
-        if len(group_output) == 1:
-            output = group_output[0]
-        else:
-            if isinstance(group_output[0], tuple) or isinstance(group_output[0], list):
-                output = []
-                for elem_i in range(len(group_output[0])):
-                    rr = []
-                    for group_i in range(len(group_output)):
-                        rr.append(group_output[group_i][elem_i])
-                    
-                    rr = np.concatenate(rr, 0)
-                    output.append(rr)
-            else:
-                output = np.concatenate(group_output, 0)
-
-        if isinstance(output, list) or isinstance(output, tuple):
-            if len(output) == 1:
-                return output[0]
-
-            return tuple(output)
-
-        return output
+            return output

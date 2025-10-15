@@ -1,5 +1,6 @@
 
 import torch.nn as nn
+import torch
 from .conv_module import ConvModule
 from .make_divisible import make_divisible
 
@@ -73,3 +74,27 @@ class SELayer(nn.Module):
             return out
         else:
             return x * out
+
+
+class ChannelAttention(nn.Module):
+    """Channel attention Module.
+
+    Args:
+        channels (int): The input (and output) channels of the attention layer.
+        init_cfg (dict or list[dict], optional): Initialization config dict.
+            Defaults to None
+    """
+
+    def __init__(self, channels):
+        super(ChannelAttention, self).__init__()
+        self.global_avgpool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Conv2d(channels, channels, 1, 1, 0, bias=True)
+        self.act = nn.Hardsigmoid(inplace=True)
+
+    def forward(self, x):
+        """Forward function for ChannelAttention."""
+        with torch.cuda.amp.autocast(enabled=False):
+            out = self.global_avgpool(x)
+        out = self.fc(out)
+        out = self.act(out)
+        return x * out

@@ -105,7 +105,6 @@ class OperatorLoader:
         
         return self.instance_operator(op, arg, kws) if op is not None else None
 
-
     def load_operator_from_deploy(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         if not function.startswith('deploy'):
             return None
@@ -182,7 +181,7 @@ class OperatorLoader:
 
     def load_operator_from_packages(self, function: str, arg: List[Any], kws: Dict[str, Any], tag: str) -> Operator:  # pylint: disable=unused-argument
         try:
-            if len(function.split('/')) > 2:
+            if not (len(function.split('/')) == 2):
                 return None
 
             module, fname = function.split('/')
@@ -352,7 +351,7 @@ class OperatorLoader:
         keys = function.split('/')
         if function.startswith('application/table'):
             action_name = keys[2]
-            table_or_field_name = keys[3] if len(keys) >= 3 else None
+            table_or_field_name = keys[3] if len(keys) > 3 else None
             op = getattr(importlib.import_module(f'antgo.pipeline.application.table.{action_name}'), f'{action_name.capitalize()}Op', None)
             if table_or_field_name is not None:
                 action_object_name = list(signature(op.__init__)._parameters.keys())[1]

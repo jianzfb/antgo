@@ -63,7 +63,6 @@ setup(name='antgo',
       packages=find_packages(),
       ext_modules=ext_modules(),
       entry_points={'console_scripts': ['antgo=antgo.main:main'], },
-      install_requires=read_requirements('requirements.txt'),
       long_description=readme(),
       include_package_data=True,
       zip_safe=False,)

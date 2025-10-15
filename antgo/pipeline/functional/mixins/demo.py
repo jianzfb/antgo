@@ -20,7 +20,7 @@ from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
 from antgo.tools.download_funcs import *
 from .interactive import *
-from .serve import PipelineExecuter, _decode_content
+from .serve import _decode_content
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -42,9 +42,6 @@ class DemoMixin:
     pipeline_name = ServerInfo.pipeline_name
     server_index = ServerInfo.pipeline_info[pipeline_name]['step_i']
     server_num = ServerInfo.pipeline_info[pipeline_name]['step_num']    
-    ServerInfo.pipeline_info[pipeline_name].update({
-       'exe': PipelineExecuter(self._iterable, ServerInfo.pipeline_info[pipeline_name]['entry'])
-	  })
 
     input_selection = [cc['data'] for cc in input]
     input_selection_types = [cc['type'] for cc in input]
@@ -184,7 +181,19 @@ class DemoMixin:
           {'session_id': session_id}
         )
 
-        rsp_value = await ServerInfo.pipeline_info[demo_name]['exe'].execute(feed_info)
+        # 驱动管线处理流程
+        rsp_value = Entity(**feed_info)
+        try:
+          loop = asyncio.get_running_loop()
+          for op in gEnv._g_pipeline_op_map[server_name]:
+              # python 3.9+ 支持
+              # rsp_value = await asyncio.to_thread(op, rsp_value)
+              # 兼容python 3.8
+              rsp_value = await loop.run_in_executor(None,op,rsp_value)
+        except Exception as e:  # swallow any exception
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail='server pipeline inner error') 
+
         if rsp_value is None:
            raise HTTPException(status_code=500, detail="server abnormal")
 

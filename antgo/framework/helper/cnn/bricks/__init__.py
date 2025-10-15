@@ -23,6 +23,7 @@ from .upsample import build_upsample_layer
 from .wrappers import (Conv2d, Conv3d, ConvTranspose2d, ConvTranspose3d,
                        Linear, MaxPool2d, MaxPool3d)
 from .transformer import MultiheadAttention,FFN,BaseTransformerLayer,TransformerLayerSequence
+from .csp_layer import CSPLayer
 
 __all__ = [
     'ConvModule', 'build_activation_layer', 'build_conv_layer',
@@ -34,5 +35,5 @@ __all__ = [
     'conv_ws_2d', 'DepthwiseSeparableConvModule', 'Swish', 'Linear',
     'Conv2dAdaptivePadding', 'Conv2d', 'ConvTranspose2d', 'MaxPool2d',
     'ConvTranspose3d', 'MaxPool3d', 'Conv3d', 'Dropout', 'DropPath', 'InvertedResidual',
-    'MultiheadAttention','FFN','BaseTransformerLayer','TransformerLayerSequence', 'SELayer'
+    'MultiheadAttention','FFN','BaseTransformerLayer','TransformerLayerSequence', 'SELayer', 'CSPLayer'
 ]

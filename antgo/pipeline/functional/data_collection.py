@@ -9,6 +9,7 @@ from typing import Iterable, Iterator, Callable
 from antgo.pipeline.functional.mixins.dag import register_dag
 from antgo.pipeline.functional.mixins import DCMixins
 from antgo.pipeline.functional.mixins.dataframe import DataFrameMixin
+from antgo.pipeline.functional.g import *
 from antgo.pipeline.hparam import param_scope, dynamic_dispatch
 from antgo.pipeline.functional.entity import EntityView
 from antgo.pipeline.functional.option import Option, Some
@@ -115,8 +116,17 @@ class DataCollection(Iterable, DCMixins):
         index = hp._index
       # 解析算子对象
       op = self.resolve(path, index, *arg, **kws)
+
+      # TODO, 管线描述信息（与管线一一绑定）
       # 添加算子节点信息到全局配置
       add_op_info(path, index, arg, kws)
+
+      if gEnv._g_active_pipeline_name is not None:
+        if gEnv._g_active_pipeline_name not in gEnv._g_pipeline_op_map:
+          gEnv._g_pipeline_op_map[gEnv._g_active_pipeline_name] = []
+
+        gEnv._g_pipeline_op_map[gEnv._g_active_pipeline_name].append(op)
+
       return self.map(op)
 
     return getattr(wrapper, name)
