@@ -8,8 +8,10 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.application.common.env import *
+from antgo.pipeline.utils.reserved import *
 from sqlalchemy import and_, or_
 
 
@@ -27,12 +29,11 @@ class OneornoneOp(object):
         # 设置需要使用隐信息（数据库、session_id）
         return ['session_id']
 
-    def __call__(self, *args, session_id):
-        orm = get_db_orm()
-        orm_table = getattr(orm, self.table.capitalize())
+    @resource_db_env
+    def __call__(self, *args, session_id, db):
+        orm_table = getattr(get_db_orm(), self.table.capitalize())
         prefix_op = and_ if self.prefix == 'and' else or_
         obj = None
-        db = get_thread_session()
         if len(self.field) == 1:
             obj = db.query(orm_table).filter(getattr(orm_table, self.field[0]) == args[0]).one_or_none()
         elif len(self.field) == 2:
@@ -41,8 +42,17 @@ class OneornoneOp(object):
             ).one_or_none()
 
         if obj is None and (not self.allow_none):
-            set_context_exit_info(session_id, detail="not existed in db" if self.detail is None else self.detail)
-            return None
+            return ReservedRtnType(
+                index = '__response__',
+                data = {
+                    'code': -1,
+                    'message': 'fail',
+                    'info': "not existed in db" if self.detail is None else self.detail
+                },
+                session_id=session_id,
+                status_code=401,
+                message="not existed in db" if self.detail is None else self.detail
+            )
 
         if self.export is None or obj is None:
             return obj
@@ -61,4 +71,3 @@ class OneornoneOp(object):
                     obj_info[data_name] = getattr(related_obj, related_field)
 
         return obj_info
-

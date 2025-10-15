@@ -8,22 +8,18 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.utils.reserved import *
 
 class CheckinvalidOp(object):
     def __init__(self, *args, detail='', status_code=200):
         self.invalid_vals = args
         self.detail = detail
-        self.out_index = None
         self.status_code = status_code
 
     def info(self):
         return ['session_id']
-
-    @property
-    def outIndex(self):
-        return self.out_index
 
     def __call__(self, *args, session_id):
         is_invalid = False
@@ -40,14 +36,16 @@ class CheckinvalidOp(object):
                 break
 
         if is_invalid:
-            set_context_exit_info(session_id, detail='', status_code=self.status_code)
+            return ReservedRtnType(
+                index = '__response__',
+                data = {
+                    'code': -1,
+                    'message': 'fail',
+                    'info': 'invalid request params' if self.detail == '' else self.detail
+                },
+                session_id=session_id,
+                status_code=self.status_code,
+                message=''
+            )
 
-            self.out_index = '__response__'
-            return {
-                'code': -1,
-                'message': 'fail',
-                'info': 'invalid request params' if self.detail == '' else self.detail
-            }
-        
-        self.out_index = None
         return args[0] if len(args) == 1 else args

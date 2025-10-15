@@ -8,8 +8,10 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.utils.reserved import *
+
 
 class ResponseOp(object):
     def __init__(self, check_func, detail=''):
@@ -18,10 +20,6 @@ class ResponseOp(object):
 
     def info(self):
         return ['session_id']
-
-    @property
-    def outIndex(self):
-        return '__response__'
 
     def __call__(self, *args, session_id):
         is_ok = self.check_func(*args)
@@ -32,12 +30,14 @@ class ResponseOp(object):
                 'message': 'success',
             }
         else:
-            # 设置请求退出标记
-            set_context_exit_info(session_id, detail='', status_code=200)
-
-            # 填写响应标记
-            return {
-                'code': -1,
-                'message': 'fail',
-                'info': self.detail
-            }
+            return ReservedRtnType(
+                index = '__response__',
+                data = {
+                    'code': -1,
+                    'message': 'fail',
+                    'info': self.detail
+                },
+                session_id=session_id,
+                status_code=200,
+                message=self.detail
+            )

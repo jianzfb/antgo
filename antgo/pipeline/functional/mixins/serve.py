@@ -8,13 +8,15 @@ from __future__ import print_function
 import torchaudio
 import torch
 import queue
-import threading
 import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
 from antgo.pipeline.functional.option import Some
 from antgo.pipeline.functional.common.config import *
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
+from antgo.pipeline.application.table import *
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.utils.reserved import *
+from antgo.pipeline.functional.g import *
 from fastapi.responses import RedirectResponse,HTMLResponse, FileResponse
 from fastapi import HTTPException
 from fastapi import File, UploadFile
@@ -26,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 import starlette
 import asyncio
 import urllib
+from urllib.parse import parse_qs
 import secrets
 import logging
 import json
@@ -33,6 +36,8 @@ import uuid
 import base64
 import io
 import cv2
+import logging
+
 
 class ServerInfo(object):
     app = None
@@ -41,7 +46,8 @@ class ServerInfo(object):
     pipeline_name = None
     index = -1
 
-class PipelineEntry:
+
+class SourceEntry:
     # 数据源
     def __init__(self, index=None, cls=None, name='demo', **kwargs) -> None:
         self._cls = cls
@@ -51,48 +57,18 @@ class PipelineEntry:
             self._index = index if isinstance(index, list) else [index]
         else:
             self._index = index
-        self.entity = None
-
-    def feed(self, x) -> None:
-        self.entity = Entity(**x)
 
     def __iter__(self):
         while True:
-            yield self.entity
+            # do nothing
+            print('shouldnt run default pipeline drive')
+            yield None
 
     def __enter__(self):
         return self._cls(self).stream()
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
-
-
-class PipelineExecuter:
-    def __init__(self, pipeline, feed) -> None:
-        self.pipeline = pipeline
-        self.feed = feed
-        self.pool = ThreadPoolExecutor(max_workers=1)
-
-    def _execute(self, pipeline, feed, data):
-        # data -> pipeline
-        with thread_session_context() as sess:
-            feed(data)
-            result = next(pipeline)
-            return result
-
-    async def execute(self, data):
-        # TODO, input -> pipeline -> output
-        # 创建一个新线程执行
-        # future = concurrent.futures.Future()
-        # threading.Thread(target=self._execute, args=(self.pipeline, future), daemon=True).start()
-        # only python3.9 support asyncio.to_thread
-        # task = asyncio.to_thread(self._execute, self.pipeline, data)
-        
-        loop = asyncio.get_running_loop()
-        task = loop.run_in_executor(self.pool, self._execute, self.pipeline, self.feed, data)
-
-        result = await task
-        return result
 
 
 async def _decode_content(req):
@@ -104,8 +80,17 @@ async def _decode_content(req):
             return await req.form()
         if content_type.startswith(b'image/'):
             return await req.body()
+        if content_type.startswith(b'application/x-www-form-urlencoded'):
+            body_str = (await req.body()).decode()
+            body_info = parse_qs(body_str)
+            body_info = {k: v[0] for k, v in body_info.items()}
+            return body_info
 
-    return (await req.body()).decode()
+        if len(req._query_params) > 0:
+            return dict(req._query_params)
+
+    info = (await req.body()).decode()
+    return info
 
 
 class ServeMixin:
@@ -125,10 +110,6 @@ class ServeMixin:
             _type_: the app that bind to
         """      
         pipeline_name = ServerInfo.pipeline_name
-        ServerInfo.pipeline_info[pipeline_name] = {
-           'api': PipelineExecuter(self._iterable, ServerInfo.pipeline_info[pipeline_name]['entry'])
-	    }
-
         input_selection = [cc['data'] for cc in input]
         input_selection_types = [cc['type'] for cc in input]
         for ui_type in input_selection_types:
@@ -205,22 +186,20 @@ class ServeMixin:
         ServerInfo.app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 
         @ServerInfo.app.post("/{server_name}/execute/")
+        @ServerInfo.app.post("/{server_name}/execute")
         async def wrapper(server_name: str, req: Request, response: RedirectResponse):
             # 获得session_id
             if(req.session.get("session_id") is None):
                 session_id = req.session["session_id"] = secrets.token_urlsafe(32)
-                response.set_cookie(key="Authorization", value=session_id)
             session_id = req.session.get("session_id")
-            # 上下文绑定：session_id-cookie
-            update_context_cookie_info(session_id, response)
 
             # 解析请求
             try:
                 input_req = await _decode_content(req)
                 if ServeMixin.isDebug:
-                    print(">>>>>>>>>")
+                    print("--------- Request Info ------------")
                     print(input_req)
-                    print("<<<<<<<<<")
+                    print("--------------------------------------")
 
                 if input_req == '':
                     input_req = '{}'
@@ -422,35 +401,57 @@ class ServeMixin:
                 feed_info[input_name] = input_req[input_name]
 
             # 填充保留字段
+            class CookieHandler(object):
+                def __init__(self, s, r):
+                    self.s = s
+                    self.r = r
+                def get(self, key, default=None):
+                    return self.s.get(key, default)
+                def set(self, key, value):
+                    self.r.set_cookie(key, value, path="/", domain=None, secure=None, httponly=True, samesite="lax")
+                def clear(self, key):
+                    self.r.delete_cookie(key)
+
             feed_info.update(
-                {'session_id': session_id, 'ST': input_req.get('ST', None), 'token': input_req.get('token', None), 'username': input_req.get('username', None), 'password': input_req.get('password', None)}
+                {
+                    'session_id': session_id, 
+                    'ST': input_req.get('ST', None), 
+                    'token': input_req.get('token', None), 
+                    'username': input_req.get('username', None), 
+                    'password': input_req.get('password', None),
+                    'headers': req.headers,
+                    'cookie': CookieHandler(req.cookies, response)
+                }
             )
 
             # 驱动管线处理流程
-            rsp_value = await ServerInfo.pipeline_info[server_name]['api'].execute(feed_info)
+            rsp_value = Entity(**feed_info)
+            try:
+                loop = asyncio.get_running_loop()
+                # 服务调用
+                for op in gEnv._g_pipeline_op_map[server_name]:
+                    # python 3.9+ 支持
+                    # rsp_value = await asyncio.to_thread(op, rsp_value)
+                    # 兼容python 3.8
+                    rsp_value = await loop.run_in_executor(None, op, rsp_value)
+                    if isinstance(rsp_value, ReservedRtnType):
+                        break
+            except Exception as e:  # swallow any exception
+                traceback.print_exc()
+                raise HTTPException(status_code=500, detail='server pipeline inner error 1') 
 
-            # 检查是否需要跳转
-            redirect_url = get_context_redirect_info(session_id, None)
-            if redirect_url is not None:
-                clear_context_env_info(session_id)
-                return RedirectResponse(redirect_url)
+            # 检测是否是特殊返回标记
+            # 不满足管线完整执行条件，退出/跳转/执行崩溃
+            if isinstance(rsp_value, ReservedRtnType):
+                if rsp_value.redirect_url is not None:
+                    # 是否需要跳转
+                    return RedirectResponse(rsp_value.redirect_url)
+                if rsp_value.status_code == 500:
+                    # 管线执行错误
+                    raise HTTPException(status_code=500, detail="server pipeline inner error 2")
 
-            # 检查由是否于不满足条件退出，返回退出原因
-            exit_condition = get_context_exit_info(session_id, None)
-            if exit_condition is not None:
-                clear_context_env_info(session_id)
-                status_code, status_info = exit_condition.split('/')
-                status_code = int(status_code)
-                if status_code != 200:
-                    raise HTTPException(status_code=status_code, detail=status_info) 
+                rsp_value = Entity(__response__=rsp_value.data)
 
-            # 检查执行异常(由于计算过程产生BUG)
-            if rsp_value is None:
-                clear_context_env_info(session_id)
-                raise HTTPException(status_code=500, detail="server execute abnormal")
-
-            # 清空session_id绑定的上下文
-            clear_context_env_info(session_id)
             output_selection_types = ServerInfo.pipeline_info[server_name]['output_selection_types']
             output_selection = ServerInfo.pipeline_info[server_name]['output_selection']
 
@@ -497,32 +498,39 @@ class ServeMixin:
                     output_info[b] = rsp_value.__dict__[b]
 
             # 执行正常返回时，返回status_code=200
-            response = {
+            response_info = {
                 'code': 0,
                 'message': 'success',
             }
             if '__response__' in rsp_value.__dict__:
                 # 将保留字段信息写入响应中
-                response.update(
+                response_info.update(
                     rsp_value.__dict__['__response__']
                 )
-            if response['code'] != 0:
-                return response
+            if response_info['code'] != 0:
+                return response_info
 
             if len(output_info) == 1 and ServerInfo.pipeline_info[server_name]['response_unwarp']:
                 output_info = list(output_info.values())[0]
                 if not isinstance(output_info, dict):
                     raise HTTPException(status_code=500, detail='server output info parse abnormal') 
 
-            response.update(output_info)
-            return response
+            response_info.update(output_info)
+
+            if ServeMixin.isDebug:
+                print("--------- Response Info ------------")
+                print(response_info)
+                print("--------------------------------------")
+            return response_info
 
         @ServerInfo.app.get("/file/download/")
+        @ServerInfo.app.get("/file/download")
         async def download(req: Request):
             file_path = req.query_params['file_name']
             return FileResponse(os.path.join(static_folder, file_path))
 
         @ServerInfo.app.post("/file/upload/")
+        @ServerInfo.app.post("/file/upload")
         async def upload(file: UploadFile):
             filename = file.filename
             file_size = file.size
@@ -542,20 +550,41 @@ class ServeMixin:
 
     @classmethod
     def web(cls, index=None, name='demo', **kwargs):
+        # 设置日志级别
+        logging_level = kwargs.get('logging_level', 'INFO')
+        logging_level_map = {
+            'INFO': logging.INFO,
+            'DEBUG': logging.DEBUG,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR
+        }
+        if logging_level not in logging_level_map:
+            logging_level = logging.INFO
+
+        # multipart logger 
+        multipart_logger = logging.getLogger('multipart')
+        multipart_logger.setLevel(logging_level)
+        # requests logger (底层依赖urllib3)
+        requests_logger = logging.getLogger("urllib3")
+        requests_logger.setLevel(logging_level)
+
         # 创建处理管线
-        pipeline_entry = PipelineEntry(
+        source_entry = SourceEntry(
             index=index, 
             cls=cls, 
             name=name, **kwargs
         )
 
+        # 当前激活的管线（设置后，会记录管线所有的算子信息）
+        gEnv._g_active_pipeline_name = name
+
         # 记录管线基本信息到全局
         ServerInfo.index += 1
         ServerInfo.pipeline_name = name
+
         ServerInfo.pipeline_info.update({
             name: {
                 'step_i': kwargs.get('step_i', ServerInfo.index),
-                'entry': pipeline_entry.feed
             }
         })
 
@@ -563,4 +592,4 @@ class ServeMixin:
         for server_name, server_config in ServerInfo.pipeline_info.items():
             server_config['step_num'] = len(ServerInfo.pipeline_info)
 
-        return pipeline_entry
+        return source_entry

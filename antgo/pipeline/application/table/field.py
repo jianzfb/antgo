@@ -8,7 +8,8 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
+from antgo.pipeline.application.common.env import *
 from sqlalchemy import and_, or_
 
 
@@ -17,7 +18,9 @@ class FieldOp(object):
         if isinstance(self.field, str):
             self.field = [field]
 
-    def __call__(self, *args):
+    @resource_db_env
+    def __call__(self, *args, **kwargs):
+        # 需要考虑跨线程对象共享
         info = []
         for data_name in self.field:
             if '/' not in data_name:

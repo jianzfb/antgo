@@ -8,7 +8,8 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
+from antgo.pipeline.application.common.env import *
 from sqlalchemy import and_, or_
 
 
@@ -20,12 +21,12 @@ class FilterOp(object):
         assert(prefix in ['and', 'or'])
         self.prefix = prefix
 
-    def __call__(self, *args):
+    @resource_db_env
+    def __call__(self, *args, db, **kwargs):
         orm = get_db_orm()
         orm_table = getattr(orm, self.table.capitalize())
         prefix_op = and_ if self.prefix == 'and' else or_
         objs = None
-        db = get_thread_session()
         if len(self.field) == 1:
             objs = db.query(orm_table).filter(getattr(orm_table, self.field[0]) == args[0]).all()
         elif len(self.field) == 2:

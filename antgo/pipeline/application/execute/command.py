@@ -7,8 +7,10 @@ from __future__ import unicode_literals
 from __future__ import print_function
 from antvis.client.httprpc import *
 from antgo.pipeline.application.table.table import *
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.application.common.env import *
+from antgo.pipeline.utils.reserved import *
 from antgo import config
 import threading
 import logging
@@ -58,7 +60,9 @@ class CommandOp(object):
     def progress(self, user_name, task_name, task_progress, task_finish, task_success=True):
         orm_handler = get_db_orm()
         orm_table = orm_handler.Task
-        with local_session_context() as db:
+
+        try:
+            db = get_db_session()()
             task = db.query(orm_table).filter(orm_table.task_name == task_name).one_or_none()
             if task is None:
                 # no task
@@ -69,19 +73,32 @@ class CommandOp(object):
                 task.task_is_finish = True
                 task.task_is_success = task_success
                 task.task_stop_time = datetime.datetime.now()
-
             db.commit()
+        except Exception as e:
+            db.rollback()
+        finally:
+            db.close()
 
-    def __call__(self, *args, session_id):
+
+    @resource_db_env
+    def __call__(self, *args, session_id, db):
         # 启动新任务或查询进度
         orm_handler = get_db_orm()
         orm_table = orm_handler.Task
-        db = get_thread_session()
         current_user, task_name, bind_obj, task_script = args[:4]
         task = db.query(orm_table).filter(and_(orm_table.user == current_user, orm_table.task_name == task_name)).one_or_none()
         if task is not None:
-            set_context_exit_info(session_id, detail="task has existed in db")
-            return None
+            return ReservedRtnType(
+                index = '__response__',
+                data = {
+                    'code': -1,
+                    'message': 'fail',
+                    'info': "task has existed in db"
+                },
+                session_id=session_id,
+                status_code=401,
+                message="task has existed in db"
+            )
 
         # 创建新任务
         params = {'user': current_user}

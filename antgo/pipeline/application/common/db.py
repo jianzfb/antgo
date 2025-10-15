@@ -202,27 +202,25 @@ class {table_cls_name}(Base):
 #         sess.close()
 
 
-__thread_db_info = threading.local()
+# __thread_db_info = threading.local()
+# @contextmanager
+# def thread_session_context():
+#     global __global_db_session
+#     global __thread_db_info
+#     if __global_db_session is None:
+#         yield None
+#         return
+
+#     __thread_db_info.sess = __global_db_session()
+#     try:
+#         yield __thread_db_info.sess
+#     except Exception as e:  # swallow any exception
+#         __thread_db_info.sess.rollback()
+#         traceback.print_exc()
+#     finally:
+#         __thread_db_info.sess.close()
 
 
-@contextmanager
-def thread_session_context():
-    global __global_db_session
-    global __thread_db_info
-    if __global_db_session is None:
-        yield None
-        return
-
-    __thread_db_info.sess = __global_db_session()
-    try:
-        yield __thread_db_info.sess
-    except Exception as e:  # swallow any exception
-        __thread_db_info.sess.rollback()
-        traceback.print_exc()
-    finally:
-        __thread_db_info.sess.close()
-
-
-def get_thread_session():
-    global __thread_db_info
-    return __thread_db_info.sess
+# def get_thread_session():
+#     global __thread_db_info
+#     return __thread_db_info.sess

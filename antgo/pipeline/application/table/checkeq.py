@@ -8,8 +8,11 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
+from antgo.pipeline.application.common.env import *
 from sqlalchemy import and_, or_
+from antgo.pipeline.utils.reserved import *
+
 
 class CheckeqOp(object):
     def __init__(self, field, target, detail=None):
@@ -20,7 +23,8 @@ class CheckeqOp(object):
     def info(self):
         return ['session_id']
 
-    def __call__(self, *args, session_id):
+    @resource_db_env
+    def __call__(self, *args, session_id, **kwargs):
         check_val = None
         if '/' not in self.field:
             # 表内属性
@@ -33,7 +37,16 @@ class CheckeqOp(object):
                 check_val = getattr(related_obj, related_field)
 
         if check_val is None or check_val != self.target:
-            set_context_exit_info(session_id, detail="request not allow" if self.detail is None else self.detail)
-            return False
+            return ReservedRtnType(
+                index = '__response__',
+                data = {
+                    'code': -1,
+                    'message': 'fail',
+                    'info': "request not allow" if self.detail is None else self.detail
+                },
+                session_id=session_id,
+                status_code=401,
+                message="request not allow" if self.detail is None else self.detail
+            )
 
         return True

@@ -32,6 +32,106 @@ Base = declarative_base()
 # Base.log = app_log
 
 
+class ServiceTicket(Base):
+    __tablename__ = 'service_ticket_tokens'
+
+    @declared_attr
+    def service_ticket_user_id(cls):
+        return Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+
+    service_ticket_user = relationship("User", back_populates='service_ticket')
+
+    id = Column(Integer, primary_key=True)
+    hashed = Column(Unicode(1024))
+    prefix = Column(Unicode(1024))
+    prefix_length = 4
+    algorithm = "sha512"
+    rounds = 16384
+    salt_bytes = 8
+    create_time = Column(DateTime, default=datetime.datetime.now)
+    expire_time = Column(DateTime, default=datetime.datetime.now)
+
+    @property
+    def token(self):
+        raise AttributeError("token is write-only")
+
+    @token.setter
+    def token(self, token):
+        """Store the hashed value and prefix for a token"""
+        self.prefix = token[:self.prefix_length]
+        self.hashed = hash_token(token, rounds=self.rounds, salt=self.salt_bytes, algorithm=self.algorithm)
+
+    def __repr__(self):
+        kind = ''
+        name = ''
+        if self.service_ticket_user is not None:
+            kind = 'service-ticket'
+            name = ''
+        else:
+            # this shouldn't happen
+            kind = 'owner'
+            name = 'unknown'
+
+        return "<{cls}('{pre}...', {kind}='{name}')>".format(
+            cls=self.__class__.__name__,
+            pre=self.prefix,
+            kind=kind,
+            name=name,
+        )
+
+    @classmethod
+    def find(cls, db, token, *, kind=None):
+        """Find a token object by value.
+
+        Returns None if not found.
+
+        `kind='user'` only returns API tokens for users
+        `kind='service'` only returns API tokens for services
+        """
+        prefix = token[:cls.prefix_length]
+        # since we can't filter on hashed values, filter on prefix
+        # so we aren't comparing with all tokens
+        prefix_match = db.query(cls).filter(bindparam('prefix', prefix).startswith(cls.prefix))
+
+        for orm_token in prefix_match:
+            if orm_token.match(token):
+                return orm_token
+
+    def match(self, token):
+        """Is this my token?"""
+        return compare_token(self.hashed, token)
+
+    @classmethod
+    def new(cls, token=None, service_ticket=None):
+        """Generate a new API token for a user or service"""
+        # assert user or service or taskapp
+        # assert not (user and service and service)
+        db = None
+        if service_ticket is not None:
+            db = inspect(service_ticket).session
+
+        if token is None:
+            token = new_token()
+        else:
+            if len(token) < 8:
+                raise ValueError("Tokens must be at least 8 characters, got %r" % token)
+            found = ServiceTicket.find(db, token)
+            if found:
+                raise ValueError("Collision on token: %s..." % token[:4])
+
+        orm_token = ServiceTicket(token=token)
+        now_time = datetime.datetime.now()
+        if service_ticket is not None:
+            assert service_ticket.id is not None
+            orm_token.service_ticket_user_id = service_ticket.id
+            orm_token.expire_time = now_time+datetime.timedelta(hours=1)
+
+        orm_token.create_time = now_time
+        db.add(orm_token)
+        db.commit()
+        return token
+
+
 class APIToken(Base):
     """An API token"""
     __tablename__ = 'api_tokens'
@@ -174,6 +274,9 @@ class User(Base):
 
     api_token = relationship("APIToken", back_populates="user")
     api_token_str = Column(Unicode(4096), default="")
+    # service ticket
+    service_ticket = relationship("ServiceTicket", back_populates="service_ticket_user")
+
     cookie_id = Column(Unicode(1023), default="")
 
     ${custom_inverse_links_in_user}

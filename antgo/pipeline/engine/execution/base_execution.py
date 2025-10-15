@@ -11,6 +11,7 @@ from antgo.pipeline.deploy.cpp_op import CppOp
 from antgo.pipeline.control.ifnotnone_op import IfNotNone
 from antgo.pipeline.remote.remote_api import RemoteApiOp
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.utils.reserved import *
 
 class BaseExecution:
     """
@@ -41,20 +42,12 @@ class BaseExecution:
 
         return self._op(*args, **kws)
 
-    def __is_need_exit__(self, session_id=None):
-        if session_id is None:
-            return None
-        exit_condition = get_context_exit_info(session_id, None)
-        return exit_condition
-
     def __call__(self, *arg, **kws):
-        if self.__is_need_exit__(arg[0].__dict__.get('session_id', None)):
-            # 检查退出标记
-            return arg[0]
-
         try:
             if bool(self._index):
                 res = self.__apply__(*arg, **kws)
+                if isinstance(res, ReservedRtnType):
+                    return res
 
                 # Multi outputs.
                 # TODO, 存在无法区分意图情况,op[A,B], op[(A,B)]
@@ -63,16 +56,11 @@ class BaseExecution:
                 if isinstance(self._index, tuple) and len(self._index) >= 2 and ((isinstance(self._index[1], tuple) or isinstance(self._index[1], list))):
                     # (A,B),(A,(B,C))
                     output_index = self._index[1]
-                    if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
-                        output_index = self._op.outIndex
 
                     for i, j in zip(output_index, res):
                         setattr(arg[0], i, j)
                 elif isinstance(self._index, tuple) and len(self._index) >= 2 and (isinstance(self._index[1], str)):
                     output_index = self._index[1]
-                    if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
-                        output_index = self._op.outIndex
-
                     setattr(arg[0], output_index, res)
                 # Single output.
                 else:
@@ -81,17 +69,11 @@ class BaseExecution:
                     if (isinstance(self._index, tuple) or isinstance(self._index, list)) and (isinstance(res, tuple) or isinstance(res, list)):
                         # [A,B]
                         output_index = self._index
-                        if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
-                            output_index = self._op.outIndex
-
                         for i, j in zip(output_index, res):
                             setattr(arg[0], i, j)
                     else:
                         # (B)
                         output_index = self._index
-                        if hasattr(self._op, 'outIndex') and self._op.outIndex is not None:
-                            output_index = self._op.outIndex
-
                         setattr(arg[0], output_index, res)
                 return arg[0]
             else:
@@ -112,4 +94,12 @@ class BaseExecution:
             # 打印异常信息
             traceback.print_exc()
             # 设置退出标记
-            set_context_exit_info(arg[0].__dict__.get('session_id', None), detail='pipeline run abnormal')
+            return ReservedRtnType(
+                    index=None,
+                    data={
+                        'code': -1,
+                        'message': 'fail'
+                    },
+                    message='pipeline run abnormal',
+                    status_code=500,
+            )

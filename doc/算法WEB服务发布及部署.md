@@ -41,6 +41,7 @@ antgo package --name=resizefunc --main=server:app --port=8080 --version=semib --
 # port              对外服务端口
 # user              (OPTIONAL)镜像中心用户名（推荐使用阿里云镜像中心）
 # password          (OPTIONAL)镜像中心密码（推荐使用阿里云镜像中心）
+# data-folder		设置永久存储（宿主机）目录（在容器中将映射到/data文件夹下）
 antgo deploy --ip=xxx --port=xxx --user=xxx --password=xxx --release
 ```
 
@@ -53,5 +54,8 @@ antgo deploy --ip=xxx --port=xxx --user=xxx --password=xxx --release
 # image				基础镜像
 # gpu-id			gpu资源
 # main 				入口文件名
+# root				设置工程文件根目录（~/root/project : /workspace）
+# data-folder		设置永久存储（宿主机）目录（在容器中将映射到/data文件夹下）
+# name				设置http前缀(如果不设置则没有前缀，前缀常用于反向代理下部署多个服务)
 antgo deploy --ip=xxx --port=xxx --mode=http/api --image=xxx --gpu-id=0,1,2,3 --main=server:app
 ```

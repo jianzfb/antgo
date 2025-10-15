@@ -8,8 +8,9 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.functional.mixins.db import *
+from antgo.pipeline.application.common.db import *
 from antgo.pipeline.functional.common.env import *
+from antgo.pipeline.application.common.env import *
 from sqlalchemy import and_, or_
 
 
@@ -31,11 +32,11 @@ class AddorupdateOp(object):
         # 设置需要使用隐信息（数据库、session_id）
         return ['session_id']
 
-    def __call__(self, *args, session_id):
+    @resource_db_env
+    def __call__(self, *args, session_id, db):
         orm_handler = get_db_orm()
         orm_table = getattr(orm_handler, self.table.capitalize())
         record = None
-        db = get_thread_session()
         # 检查是否已经存在
         if len(self.key_i) == 1:
             record = db.query(orm_table).filter(getattr(orm_table, self.field[self.key_i[0]]) == args[self.key_i[0]]).one_or_none()

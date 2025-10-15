@@ -4,11 +4,30 @@ import copy
 import numpy as np
 from antgo.pipeline import *
 from antgo.utils.cache import *
+from antgo.pipeline.application.common.db import *
+from antgo.pipeline.utils.reserved import *
+import traceback
 
 # usage:
 # control.Group.xxx.yyy.zzz[(), ()]()
 # control.Group.subgroup[]()
 # relation [(),()],[(),()],[(),()]
+
+@contextmanager
+def resource_context(use_db=False):
+    resources = {}
+    if use_db:
+        resources['db'] = get_db_session()()
+    try:
+        yield resources
+    except Exception as e: 
+        if use_db:
+            resources['db'].rollback()
+        traceback.print_exc()        
+    finally:
+        if use_db:
+            resources['db'].close()
+
 
 class Group(object):
     def __init__(self, func_list, arg_list, relation, input, output, **kwargs):
@@ -22,6 +41,9 @@ class Group(object):
 
             if getattr(func_op, 'info', None):
                  self.ext_info.extend(getattr(func_op, 'info')())
+
+        # 使用db标记
+        self.use_resource_db = kwargs.get('resource',{}).get('db', False)
 
         self.relation = relation
         self.input_map = {}
@@ -42,70 +64,76 @@ class Group(object):
         return self.ext_info
 
     def __call__(self, *args, **kwargs):
-        input_args = []
-        if self.input is not None:
-            # 管线需要输入,(1) args, (2) cache
-            input_args = list(args)
-            offset = min(len(self.input), len(args))
-            for input_tag in self.input[offset:]:
-                input_data = get_data_in_cache("default", input_tag, None)
-                input_args.append(input_data)
-            args = input_args
+        with resource_context(self.use_resource_db) as resource:
+            input_args = []
+            if self.input is not None:
+                # 管线需要输入,(1) args, (2) cache
+                input_args = list(args)
+                offset = min(len(self.input), len(args))
+                for input_tag in self.input[offset:]:
+                    input_data = get_data_in_cache("default", input_tag, None)
+                    input_args.append(input_data)
+                args = input_args
 
-        inner_data_dict = {}
-        for input_output_info, func_op in zip(self.relation, self.func_list):
-            input_info, output_info = input_output_info
-            # if isinstance(input_output_info, tuple) and len(input_output_info) == 2:
-            #     input_info, output_info = input_output_info
-            # elif isinstance(input_output_info, str) or (isinstance(input_output_info, tuple) and len(input_output_info) == 1):
-            #     input_info = None
-            #     output_info = input_output_info
-    
-            # input_info, output_info = input_output_info
-            # TODO, 需要验证
-            # func_op._index = input_info if isinstance(input_info, tuple) else (input_info,)
-            func_op._index = input_output_info
-            input_data_list = []
-            if input_info is not None:
-                # 算子可能是无输入计算
-                if isinstance(input_info, tuple):
-                    for input_tag in input_info:
-                        if input_tag in inner_data_dict:
+            inner_data_dict = {}
+            for input_output_info, func_op in zip(self.relation, self.func_list):
+                input_info, output_info = input_output_info
+                # if isinstance(input_output_info, tuple) and len(input_output_info) == 2:
+                #     input_info, output_info = input_output_info
+                # elif isinstance(input_output_info, str) or (isinstance(input_output_info, tuple) and len(input_output_info) == 1):
+                #     input_info = None
+                #     output_info = input_output_info
+        
+                # input_info, output_info = input_output_info
+                # TODO, 需要验证
+                # func_op._index = input_info if isinstance(input_info, tuple) else (input_info,)
+                func_op._index = input_output_info
+                input_data_list = []
+                if input_info is not None:
+                    # 算子可能是无输入计算
+                    if isinstance(input_info, tuple):
+                        for input_tag in input_info:
+                            if input_tag in inner_data_dict:
+                                # 来自group产生的内部节点数据
+                                input_data_list.append(inner_data_dict[input_tag])
+                            else:
+                                # 来自外部输入的数据
+                                input_data_list.append(args[self.input_map[input_tag]])
+                    else:
+                        if input_info in inner_data_dict:
                             # 来自group产生的内部节点数据
-                            input_data_list.append(inner_data_dict[input_tag])
+                            input_data_list.append(inner_data_dict[input_info])
                         else:
                             # 来自外部输入的数据
-                            input_data_list.append(args[self.input_map[input_tag]])
+                            input_data_list.append(args[self.input_map[input_info]])
+
+                ext_data_dict = {}
+                if getattr(func_op, 'info', None):
+                    for ext_data_name in getattr(func_op, 'info')():
+                        ext_data_dict.update(
+                            {
+                                ext_data_name: kwargs.get(ext_data_name, None)
+                            }
+                        )
+
+                ext_data_dict.update(resource)
+                output_data_list = func_op(*input_data_list, **ext_data_dict)
+                if isinstance(output_data_list, ReservedRtnType):
+                    # 特殊标记，直接返回
+                    return output_data_list
+
+                if isinstance(output_info, tuple):
+                    for output_tag, output_data in zip(output_info, output_data_list):
+                        inner_data_dict[output_tag] = output_data
                 else:
-                    if input_info in inner_data_dict:
-                        # 来自group产生的内部节点数据
-                        input_data_list.append(inner_data_dict[input_info])
-                    else:
-                        # 来自外部输入的数据
-                        input_data_list.append(args[self.input_map[input_info]])
+                    inner_data_dict[output_info] = output_data_list
 
-            ext_data_dict = {}
-            if getattr(func_op, 'info', None):
-                for ext_data_name in getattr(func_op, 'info')():
-                    ext_data_dict.update(
-                        {
-                            ext_data_name: kwargs.get(ext_data_name, None)
-                        }
-                    )
+            output = []
+            for output_i in range(len(self.output)):
+                output_data = inner_data_dict[self.output[output_i]]
+                # 记录到输出
+                output.append(output_data)
+                # 记录到缓存（跨管线使用）
+                set_data_in_cache('default', self.output[output_i], output_data)
 
-            output_data_list = func_op(*input_data_list, **ext_data_dict)
-            if isinstance(output_info, tuple):
-                for output_tag, output_data in zip(output_info, output_data_list):
-                    inner_data_dict[output_tag] = output_data
-            else:
-                inner_data_dict[output_info] = output_data_list
-
-        output = []
-        for output_i in range(len(self.output)):
-            output_data = inner_data_dict[self.output[output_i]]
-            # 记录到输出
-            output.append(output_data)
-            # 记录到缓存（跨管线使用）
-            set_data_in_cache('default', self.output[output_i], output_data)
-
-        return tuple(output) if len(output) > 1 else output[0]
+            return tuple(output) if len(output) > 1 else output[0]
