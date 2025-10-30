@@ -113,7 +113,7 @@ class ServeMixin:
         input_selection = [cc['data'] for cc in input]
         input_selection_types = [cc['type'] for cc in input]
         for ui_type in input_selection_types:
-            assert(ui_type in ['image', 'sound', 'sound/pcm', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header', 'image-ext', 'sound-ext'])
+            assert(ui_type in ['image', 'sound', 'sound/pcm', 'video', 'text', 'slider', 'checkbox', 'select', 'image-search', 'header', 'image-ext', 'sound-ext', 'file/binary', 'file/text'])
 
         output_selection = [cc['data'] for cc in output]
         output_selection_types = [cc['type'] for cc in output]
@@ -391,8 +391,31 @@ class ServeMixin:
                             'filename': None
                         }
                         input_req[input_name] = sound_data
-                elif input_type in ['video', 'file']:
-                    input_req[input_name] = os.path.join(static_folder, 'image', 'query', input_req[input_name])
+                elif input_type in ['video', 'file/binary', 'file/text']:
+                    if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
+                        try:
+                            file = input_req[input_name]
+                            contents = await file.read()
+                            filename = file.filename
+                            if contents == b'':
+                                raise HTTPException(status_code=400, detail=f"request {input_name}(image) read multi-form abnormal")
+
+                            # if input_type == 'image':
+                            #     input_req[input_name] = cv2.imdecode(np.asarray(bytearray(contents), dtype="uint8"), 1)
+                            # else:
+                            #     input_req[input_name] = {
+                            #         'image': cv2.imdecode(np.asarray(bytearray(contents), dtype="uint8"), 1),
+                            #         'filename': filename
+                            #     }
+                            if input_type == 'file/text':
+                                contents = contents.decode("utf-8")
+                            input_req[input_name] = contents
+                        except Exception:
+                            raise HTTPException(status_code=400, detail=f"request {input_name}({input_type}) read multi-form abnormal")
+                        else:
+                            file.file.close()
+                    else:
+                        raise HTTPException(status_code=400, detail=f"request {input_name}({input_type}) only support multi-form")
 
             # 填充管线数据（请求参数）
             feed_info = {}
