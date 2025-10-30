@@ -238,7 +238,7 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
                     # 矩形框标注
                     export_info['height'] = sample_anno_instance['original_height']
                     export_info['width'] = sample_anno_instance['original_width']
-                                    
+
                     bbox_x = sample_anno_instance['value']['x'] / 100.0 * export_info['width']
                     bbox_y = sample_anno_instance['value']['y'] / 100.0 * export_info['height']
                     bbox_width = sample_anno_instance['value']['width'] / 100.0 * export_info['width']

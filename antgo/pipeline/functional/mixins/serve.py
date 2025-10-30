@@ -180,6 +180,7 @@ class ServeMixin:
         static_folder = './dump'
         os.makedirs(static_folder, exist_ok=True)
         os.makedirs( os.path.join(static_folder, 'image', 'query'), exist_ok=True)
+        os.makedirs( os.path.join(static_folder, 'image', 'response'), exist_ok=True)
 
         from fastapi import FastAPI, Request
         ServerInfo.app = FastAPI()

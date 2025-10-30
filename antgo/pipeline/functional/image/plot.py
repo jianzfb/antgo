@@ -126,25 +126,31 @@ class plot_poly(object):
 
 @register
 class plot_yolo(object):
-  def __init__(self, mode='detect'):
+  def __init__(self, mode='detect', label_map=None):
     assert(mode in ['detect', 'pose', 'segment', 'classify'])
     self.mode = mode
     self.color_map = {}
     self.keypoint_color_map = {}
+    self.label_map = label_map
 
   def __call__(self, image, *args, **kwargs):
     if self.mode == 'detect':
       # bboxes, labels
       bboxes, labels = args
       for xyxy, c in zip(bboxes, labels):
+        if self.label_map is not None:
+          c = self.label_map[c]
+ 
         if c not in self.color_map:
           self.color_map[c] = [random.randint(0, 255) for _ in range(3)]
-
         plot_one_box(xyxy, image, label=str(c), color=self.color_map[c], line_thickness=2)
     elif self.mode == 'pose':
       # bboxes, labels, keypoints
       bboxes, labels, keypoints = args
       for xyxy, c, keypoint_xy in zip(bboxes, labels, keypoints):
+        if self.label_map is not None:
+          c = self.label_map[c]  
+        
         if c not in self.color_map:
           self.color_map[c] = [random.randint(0, 255) for _ in range(3)]
         plot_one_box(xyxy, image, label=str(c), color=self.color_map[c], line_thickness=2)
@@ -157,6 +163,9 @@ class plot_yolo(object):
       # segments
       labels, segments = args
       for c, segment in zip(labels, segments):
+        if self.label_map is not None:
+          c = self.label_map[c]
+
         if c not in self.color_map:
           self.color_map[c] = random.randint(0, 179)
 

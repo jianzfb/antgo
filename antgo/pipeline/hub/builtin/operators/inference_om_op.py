@@ -23,9 +23,7 @@ ACL_ERROR_NONE = 0
 @register
 class inference_om_op(object):
     is_init = False
-    context = None
-    stream = None
-    def __init__(self, om_path, device_id=0, **kwargs):
+    def __init__(self, om_path, device_id=0, max_size=5, is_dyn_batch=False, dyn_max_batch_size=16, dyn_max_cache_time=0.03, **kwargs):
         self.device_id = device_id
         self.model_path = om_path
         # self.context = None
@@ -45,7 +43,23 @@ class inference_om_op(object):
         self.std_val = kwargs.get('std', None)     # 方差
         self.reverse_channel = kwargs.get('reverse_channel', False)
 
-        self.init_acl()
+        if not isinstance(device_id, list):
+            device_id = [device_id]
+
+        # 配置推理服务引擎
+        if not inference_om_op.is_init:
+            # 全局（当前进程）仅进行一次
+            ret = acl.init()
+            if ret != ACL_ERROR_NONE:
+                raise Exception(f"acl init failed, error code: {ret}")
+
+            inference_om_op.is_init = True
+
+        self.max_size = max_size
+        for index, d_id in enumerate(device_id):
+            pass
+
+        # self.init_acl()
         self.load_model()
         self.lock = threading.Lock()
 
@@ -73,23 +87,25 @@ class inference_om_op(object):
 
     def load_model(self):
         """加载.om模型"""
-        self.model_id, ret = acl.mdl.load_from_file(self.model_path)
+        model_id, ret = acl.mdl.load_from_file(self.model_path)
         if ret != ACL_ERROR_NONE:
             raise Exception(f"load model {self.model_path} failed, error code: {ret}")
 
         # 获取模型输入输出描述
         model_desc = acl.mdl.create_desc()
-        ret = acl.mdl.get_desc(model_desc, self.model_id)
+        ret = acl.mdl.get_desc(model_desc, model_id)
         if ret != ACL_ERROR_NONE:
             raise Exception(f"get model desc failed, error code: {ret}")
 
         # 准备输入
+        input_shapes = []
+        input_sizes = []
         input_num = acl.mdl.get_num_inputs(model_desc)
         for i in range(input_num):
             dims = acl.mdl.get_input_dims(model_desc, i)
-            self.input_shapes.append(dims[0]['dims'])
+            input_shapes.append(dims[0]['dims'])
             size = acl.mdl.get_input_size_by_index(model_desc, i)
-            self.input_sizes.append(size)
+            input_sizes.append(size)
 
             # 创建输入缓冲区
             buffer, ret = acl.rt.malloc(size, ACL_MEM_MALLOC_HUGE_FIRST)
@@ -100,15 +116,17 @@ class inference_om_op(object):
             if data_buffer is None:
                 raise Exception(f"create input data buffer {i} failed")
 
-            self.input_buffers.append(data_buffer)
+            input_buffers.append(data_buffer)
 
         # 准备输出
+        output_shapes = []
+        output_sizes = []
         output_num = acl.mdl.get_num_outputs(model_desc)
         for i in range(output_num):
             dims = acl.mdl.get_output_dims(model_desc, i)
-            self.output_shapes.append(dims[0]['dims'])
+            output_shapes.append(dims[0]['dims'])
             size = acl.mdl.get_output_size_by_index(model_desc, i)
-            self.output_sizes.append(size)
+            output_sizes.append(size)
 
             # 创建输出缓冲区
             buffer, ret = acl.rt.malloc(size, ACL_MEM_MALLOC_HUGE_FIRST)
@@ -119,29 +137,31 @@ class inference_om_op(object):
             if data_buffer is None:
                 raise Exception(f"create output data buffer {i} failed")
 
-            self.output_buffers.append(data_buffer)
+            output_buffers.append(data_buffer)
 
         # 创建数据集
-        self.input_dataset = acl.mdl.create_dataset()
-        if self.input_dataset is None:
+        input_dataset = acl.mdl.create_dataset()
+        if input_dataset is None:
             raise Exception("create input dataset failed")
 
-        for buffer in self.input_buffers:
-            _, ret = acl.mdl.add_dataset_buffer(self.input_dataset, buffer)
+        for buffer in input_buffers:
+            _, ret = acl.mdl.add_dataset_buffer(input_dataset, buffer)
             if ret != ACL_ERROR_NONE:
                 raise Exception(f"add input buffer to dataset failed, error code: {ret}")
 
-        self.output_dataset = acl.mdl.create_dataset()
-        if self.output_dataset is None:
+        output_dataset = acl.mdl.create_dataset()
+        if output_dataset is None:
             raise Exception("create output dataset failed")
 
-        for buffer in self.output_buffers:
-            _, ret = acl.mdl.add_dataset_buffer(self.output_dataset, buffer)
+        for buffer in output_buffers:
+            _, ret = acl.mdl.add_dataset_buffer(output_dataset, buffer)
             if ret != ACL_ERROR_NONE:
                 raise Exception(f"add output buffer to dataset failed, error code: {ret}")
 
         acl.mdl.destroy_desc(model_desc)
-        print(f"Model {self.model_path} loaded successfully")
+        print(f"Model {model_path} loaded successfully")
+        return (input_dataset, input_buffers, input_shapes), (output_dataset, output_buffers, output_shapes)
+
 
     def process_input(self, input_data_list):
         """处理输入数据并拷贝到设备"""
@@ -228,6 +248,55 @@ class inference_om_op(object):
         # 最终释放ACL资源
         acl.finalize()
         print(f"All resources {self.model_path} released")
+
+    def _inner_infer(self, *args, sess=None):
+        pass
+
+    def infer(self, index=0):
+        ret = acl.rt.set_device(self.device_id[index])
+        if ret != ACL_ERROR_NONE:
+            raise Exception(f"set device {self.device_id[index]} failed, error code: {ret}")
+
+        context, ret = acl.rt.create_context(self.device_id[index])
+        if ret != ACL_ERROR_NONE:
+            raise Exception(f"create context failed, error code: {ret}")
+
+        stream, ret = acl.rt.create_stream()
+        if ret != ACL_ERROR_NONE:
+            raise Exception(f"create stream failed, error code: {ret}")
+
+        """加载.om模型"""
+        model_id, ret = acl.mdl.load_from_file(self.model_path)
+        if ret != ACL_ERROR_NONE:
+            raise Exception(f"load model {self.model_path} failed, error code: {ret}")
+
+        # 获取模型输入输出描述
+        model_desc = acl.mdl.create_desc()
+        ret = acl.mdl.get_desc(model_desc, model_id)
+        if ret != ACL_ERROR_NONE:
+            raise Exception(f"get model desc failed, error code: {ret}")
+
+        # 准备输入 (动态batch模式，使用最大batch申请)
+        input_shapes = []
+        input_sizes = []
+        input_num = acl.mdl.get_num_inputs(model_desc)
+        for i in range(input_num):
+            dims = acl.mdl.get_input_dims(model_desc, i)
+            input_shapes.append(dims[0]['dims'])
+            size = acl.mdl.get_input_size_by_index(model_desc, i)
+            input_sizes.append(size)
+
+            # 创建输入缓冲区
+            buffer, ret = acl.rt.malloc(size, ACL_MEM_MALLOC_HUGE_FIRST)
+            if ret != ACL_ERROR_NONE:
+                raise Exception(f"malloc input buffer {i} failed, error code: {ret}")
+
+            data_buffer = acl.create_data_buffer(buffer, size)
+            if data_buffer is None:
+                raise Exception(f"create input data buffer {i} failed")
+
+            input_buffers.append(data_buffer)
+
 
     def __call__(self, *args):
         with self.lock:
