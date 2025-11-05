@@ -18,13 +18,6 @@ import numpy as np
 import json
 import os
 import cv2
-try:
-    import gymnasium as gym
-    import mani_skill.envs
-except:
-    gym = None
-    print('no maniskill package import')
-
 
 
 @dynamic_dispatch
@@ -40,6 +33,7 @@ def maniskill_env(*args, **kwargs):
         scene_name = [scene_name]
 
     def inner():
+        import gymnasium as gym
         for name in scene_name:
             env = gym.make(
                 name, 

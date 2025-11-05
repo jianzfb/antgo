@@ -238,8 +238,10 @@ class OperatorLoader:
             function_op_name = function_op_name_list[0]
             function_op = self.load_operator(function_op_name, arg, kws.get(function_op_name.replace('-', '_').replace('/', '_'), {}), tag)
             assert(function_op is not None)
+            if function_op_name.replace('-', '_').replace('/', '_') in kws:
+                kws.pop(function_op_name.replace('-', '_').replace('/', '_'))
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.for_op'), 'For', None)
-            return self.instance_operator(control_op_cls, [], dict(func=function_op, parallel_num=kws.get('parallel_num', 1)))
+            return self.instance_operator(control_op_cls, [], dict(func=function_op, **kws))
         elif control_op_name == 'If':
             true_func_index = info.index('true-func')
             false_func_index = info.index('false-func')

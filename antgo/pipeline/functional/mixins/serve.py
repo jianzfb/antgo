@@ -5,8 +5,6 @@
 from __future__ import division
 from __future__ import unicode_literals
 from __future__ import print_function
-import torchaudio
-import torch
 import queue
 import concurrent.futures
 from antgo.pipeline.functional.entity import Entity
@@ -285,6 +283,8 @@ class ServeMixin:
                             raise HTTPException(status_code=400, detail=f"request {input_name}(image) read base64 abnormal")
                 elif input_type.startswith('sound'):
                     # 支持base64格式+URL格式+UploadFile
+                    import torchaudio
+                    import torch
                     if isinstance(input_req[input_name], starlette.datastructures.UploadFile):
                         signal, fs = None, None
                         try:
@@ -462,17 +462,17 @@ class ServeMixin:
                         break
             except Exception as e:  # swallow any exception
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail='server pipeline inner error 1') 
+                raise HTTPException(status_code=500, detail='server pipeline 500 (unkown)') 
 
             # 检测是否是特殊返回标记
             # 不满足管线完整执行条件，退出/跳转/执行崩溃
             if isinstance(rsp_value, ReservedRtnType):
                 if rsp_value.redirect_url is not None:
-                    # 是否需要跳转
+                    # 是否需要跳转(返回跳转请求)
                     return RedirectResponse(rsp_value.redirect_url)
                 if rsp_value.status_code == 500:
-                    # 管线执行错误
-                    raise HTTPException(status_code=500, detail="server pipeline inner error 2")
+                    # 管线执行错误（严重错误）
+                    raise HTTPException(status_code=500, detail="server pipeline 500")
 
                 rsp_value = Entity(__response__=rsp_value.data)
 
@@ -527,17 +527,16 @@ class ServeMixin:
                 'message': 'success',
             }
             if '__response__' in rsp_value.__dict__:
-                # 将保留字段信息写入响应中
+                # 由于执行条件不满足，导致管线执行未全部执行。通过内容__response__返回。
                 response_info.update(
                     rsp_value.__dict__['__response__']
                 )
-            if response_info['code'] != 0:
                 return response_info
 
             if len(output_info) == 1 and ServerInfo.pipeline_info[server_name]['response_unwarp']:
                 output_info = list(output_info.values())[0]
                 if not isinstance(output_info, dict):
-                    raise HTTPException(status_code=500, detail='server output info parse abnormal') 
+                    raise HTTPException(status_code=500, detail='server output 500') 
 
             response_info.update(output_info)
 

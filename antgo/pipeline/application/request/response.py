@@ -14,30 +14,35 @@ from antgo.pipeline.utils.reserved import *
 
 
 class ResponseOp(object):
-    def __init__(self, check_func, detail=''):
+    def __init__(self, check_func, detail='', response=None):
         self.check_func = check_func
         self.detail = detail
+        self.response = response
 
     def info(self):
         return ['session_id']
 
     def __call__(self, *args, session_id):
+        # 常用于条件判断，检验是否满足后续计算的约束。
+        # 校验失败，不意味服务崩溃，故返回code标记默认为0
         is_ok = self.check_func(*args)
         if is_ok:
-            # 填写响应标记
+            # 默认标记
             return {
                 'code': 0,
                 'message': 'success',
             }
         else:
+            response = {
+                'code': 0,
+                'message': self.detail
+            }
+            if self.response is not None:
+                response.update(self.response)
+
             return ReservedRtnType(
                 index = '__response__',
-                data = {
-                    'code': -1,
-                    'message': 'fail',
-                    'info': self.detail
-                },
+                data = response,
                 session_id=session_id,
-                status_code=200,
-                message=self.detail
+                status_code=200
             )
