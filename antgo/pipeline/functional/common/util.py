@@ -10,6 +10,7 @@ from antgo.pipeline.engine.execution.base_data import *
 import os
 import base64
 import numpy as np
+import cv2
 
 
 @register 
@@ -424,3 +425,53 @@ class unwarp(object):
     def __call__(self, *args):
         unwarp_data = [args[0][name] for name in self.order]
         return tuple(unwarp_data)
+
+@register
+class split_image_ext_input(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, *args):
+        info = args[0]
+        image = info['image']
+        filename = info['filename']
+        return image, filename
+
+
+@register
+class extract_images_by_bboxes(object):
+    def __init__(self, target_size=None, is_warp_to_numpy=False, check_func=None):
+        self.target_size = target_size
+        self.is_warp_to_numpy = is_warp_to_numpy
+        self.check_func = check_func
+
+    def __call__(self, image, bboxes):
+        if bboxes is None or len(bboxes) == 0:
+            if self.is_warp_to_numpy:
+                return np.empty((0, 64, 64, 3), dtype=np.uint8)
+            else:
+                return []
+
+        extract_images = []
+        for bbox in bboxes:
+            x0,y0,x1,y1 = bbox[:4]
+            if self.check_func is not None:
+                if not self.check_func(*(x0,y0,x1,y1)):
+                    continue
+
+            crop_image = image[int(y0):int(y1), int(x0):int(x1)]
+            if self.target_size is not None:
+                crop_image = cv2.resize(crop_image, self.target_size)
+            extract_images.append(crop_image)
+        if len(extract_images) == 0:
+            if self.is_warp_to_numpy:
+                return np.empty((0, 64, 64, 3), dtype=np.uint8)
+            else:
+                return []
+
+        if self.is_warp_to_numpy:
+            extract_images = np.stack(extract_images, 0)
+
+        return extract_images
+
+
