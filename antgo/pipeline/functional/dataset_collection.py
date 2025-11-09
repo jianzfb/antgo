@@ -99,11 +99,11 @@ def yolo_format_dc(ann_file, mode='detect', stage='train', normalize=False, is_r
     def inner():
         sample_num = len(file_name_list)
         for sample_i in range(sample_num):
-            
             file_name = file_name_list[sample_i]
             image_path = f'{image_folder_map[stage]}/{file_name}'
             if is_debug:
-                print(image_path)
+                print(f'sample {sample_i}/{sample_num}: {image_path}')
+
             p = file_name.rfind('.')
             pure_name = file_name[:p]
             label_path = f'{label_folder_map[stage]}/{pure_name}.txt'
@@ -238,7 +238,7 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
                     # 矩形框标注
                     export_info['height'] = sample_anno_instance['original_height']
                     export_info['width'] = sample_anno_instance['original_width']
-                                    
+
                     bbox_x = sample_anno_instance['value']['x'] / 100.0 * export_info['width']
                     bbox_y = sample_anno_instance['value']['y'] / 100.0 * export_info['height']
                     bbox_width = sample_anno_instance['value']['width'] / 100.0 * export_info['width']

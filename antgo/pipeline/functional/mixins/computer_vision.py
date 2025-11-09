@@ -18,58 +18,58 @@ from antgo.pipeline.functional.mixins.yolo_format_func import YOLOFormatGen
 import traceback
 from antgo.utils.sample_gt import *
 from antgo.tools.package import *
-try:
-    import mani_skill.envs
-    from mani_skill.utils.wrappers.record import RecordEpisode
-    # TODO，场景的路径规划需要自动导入
-    from mani_skill.examples.motionplanning.panda.solutions import solvePushCube, solvePickCube, solveStackCube, solvePegInsertionSide, solvePlugCharger
-except:
-    print('no maniskill package import')
-    pass
+# try:
+#     import mani_skill.envs
+#     from mani_skill.utils.wrappers.record import RecordEpisode
+#     # TODO，场景的路径规划需要自动导入
+#     from mani_skill.examples.motionplanning.panda.solutions import solvePushCube, solvePickCube, solveStackCube, solvePegInsertionSide, solvePlugCharger
+# except:
+#     print('no maniskill package import')
+#     pass
 
 
-def _maniskill_episode_record(env, output_dir, prefix, save_video, episode_num):
-    scene_name = env.spec.id
-    env = RecordEpisode(
-        env,
-        output_dir=output_dir,
-        trajectory_name=prefix, 
-        save_video=save_video,
-        source_type="motionplanning",
-        source_desc="official motion planning solution from ManiSkill contributors",
-        video_fps=30,
-        save_on_reset=False
-    )
+# def _maniskill_episode_record(env, output_dir, prefix, save_video, episode_num):
+#     scene_name = env.spec.id
+#     env = RecordEpisode(
+#         env,
+#         output_dir=output_dir,
+#         trajectory_name=prefix, 
+#         save_video=save_video,
+#         source_type="motionplanning",
+#         source_desc="official motion planning solution from ManiSkill contributors",
+#         video_fps=30,
+#         save_on_reset=False
+#     )
 
-    solve = globals()[f'solve{scene_name.split("-")[0]}']
-    seed = 0
-    episode_i = 0
-    # 生成仿真环境操作轨迹
-    while True and episode_i < episode_num:
-        try:
-            res = solve(env, seed=seed, debug=False, vis=False)
-        except Exception as e:
-            print(f"Cannot find valid solution because of an error in motion planning solution: {e}")
-            res = -1
+#     solve = globals()[f'solve{scene_name.split("-")[0]}']
+#     seed = 0
+#     episode_i = 0
+#     # 生成仿真环境操作轨迹
+#     while True and episode_i < episode_num:
+#         try:
+#             res = solve(env, seed=seed, debug=False, vis=False)
+#         except Exception as e:
+#             print(f"Cannot find valid solution because of an error in motion planning solution: {e}")
+#             res = -1
 
-        if res == -1:
-            success = False
-        else:
-            success = res[-1]["success"].item()
-            elapsed_steps = res[-1]["elapsed_steps"].item()
+#         if res == -1:
+#             success = False
+#         else:
+#             success = res[-1]["success"].item()
+#             elapsed_steps = res[-1]["elapsed_steps"].item()
 
-        if not success:
-            seed += 1
-            env.flush_trajectory(save=False)
-            env.flush_video(save=False)
-            continue
+#         if not success:
+#             seed += 1
+#             env.flush_trajectory(save=False)
+#             env.flush_video(save=False)
+#             continue
         
-        print(f"generate episode {episode_i}")
-        env.flush_trajectory()
-        env.flush_video()
-        episode_i += 1
+#         print(f"generate episode {episode_i}")
+#         env.flush_trajectory()
+#         env.flush_video()
+#         episode_i += 1
 
-    env.close()
+#     env.close()
 
 
 class ComputerVisionMixin:
@@ -576,15 +576,15 @@ class ComputerVisionMixin:
 
             package_to_tfrecord(os.path.join(folder, f'{prefix}.json'), tfrecord_folder, prefix, size_in_shard=10000)
 
-    # for robot env
-    def solve(self, output_dir='./record', prefix='trajectory', save_video=True, episode_num=1):
-        for env_info in self:
-            env = list(env_info.__dict__.values())[0]
-            if env['name'] == 'maniskill':
-                _maniskill_episode_record(env['env'], output_dir, prefix, save_video, episode_num)
-            env_info.env['status'] = 'done'
+    # # for robot env
+    # def solve(self, output_dir='./record', prefix='trajectory', save_video=True, episode_num=1):
+    #     for env_info in self:
+    #         env = list(env_info.__dict__.values())[0]
+    #         if env['name'] == 'maniskill':
+    #             _maniskill_episode_record(env['env'], output_dir, prefix, save_video, episode_num)
+    #         env_info.env['status'] = 'done'
 
-    # for robot env
-    def drive(self):
-        for env_ifo in self:
-            pass
+    # # for robot env
+    # def drive(self):
+    #     for env_ifo in self:
+    #         pass

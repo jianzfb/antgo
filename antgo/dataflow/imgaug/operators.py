@@ -898,10 +898,22 @@ class KeepRatio(BaseOperator):
 
 # only for classification
 class RandomRatio(BaseOperator):
-    def __init__(self, r1=0.8, prob=0.5, inputs=None):
+    interp_dict = {
+        'NEAREST': cv2.INTER_NEAREST,
+        'LINEAR': cv2.INTER_LINEAR,
+        'CUBIC': cv2.INTER_CUBIC,
+        'AREA': cv2.INTER_AREA,
+        'LANCZOS4': cv2.INTER_LANCZOS4
+    }    
+    def __init__(self, r1=0.8, prob=0.5, interp='LINEAR', inputs=None):
         super(RandomRatio, self).__init__(inputs=inputs)
         self.r1 = r1
         self.prob = prob
+        if not (interp == "RANDOM" or interp in self.interp_dict):
+            raise ValueError("interp should be one of {}".format(
+                self.interp_dict.keys()))
+
+        self.interp = interp  # 'RANDOM' for yolov3        
 
     def __call__(self, sample, context=None):
         if np.random.random() > self.prob:
@@ -918,7 +930,12 @@ class RandomRatio(BaseOperator):
 
         x_scale = w / im.shape[1]
         y_scale = h / im.shape[0]
-        im = cv2.resize(im, (w, h))
+        if self.interp == "RANDOM":
+            interp = random.choice(list(self.interp_dict.keys()))
+        else:
+            interp = self.interp
+        
+        im = cv2.resize(im, (w, h), interpolation=self.interp_dict[interp])
 
         if 'bboxes' in sample and len(sample['bboxes']) > 0:
             scale_array = np.array([x_scale, y_scale] * 2, dtype=np.float32).reshape(1,4)
