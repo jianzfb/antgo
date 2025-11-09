@@ -73,10 +73,10 @@ class inference_onnx_op(object):
         self.dyn_batch_cache_lock = [threading.Lock() for _ in range(self.dyn_batch_cache_size)] 
 
         self.dyn_max_batch_size = dyn_max_batch_size    # 最大batch=4
+        self.dyn_allow_batch_sizes = []                 # 无固定限制
         self.dyn_max_cache_time = dyn_max_cache_time    # 最大等待时间 0.01秒（10毫秒）
         self.dyn_batch_dispatch_lock = threading.Lock()
         self.dyn_batch_dispatch = {}
-        self.dyn_est_batch_size = dyn_max_batch_size
 
         # 模型基本信息
         self.input_names = []

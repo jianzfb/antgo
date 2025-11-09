@@ -243,22 +243,24 @@ class OperatorLoader:
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.for_op'), 'For', None)
             return self.instance_operator(control_op_cls, [], dict(func=function_op, **kws))
         elif control_op_name == 'If':
-            true_func_index = info.index('true-func')
-            false_func_index = info.index('false-func')
-            function_op_name_list = self.split_function(info[true_func_index+1:false_func_index])
-            true_func_name = function_op_name_list[0]
+            true_func_op, false_func_op = None, None
+            if 'true-func' in info and 'false-func' in info:
+                true_func_index = info.index('true-func')
+                false_func_index = info.index('false-func')
+                function_op_name_list = self.split_function(info[true_func_index+1:false_func_index])
+                true_func_name = function_op_name_list[0]
 
-            function_op_name_list = self.split_function(info[false_func_index+1:])
-            false_func_name = function_op_name_list[0]
+                function_op_name_list = self.split_function(info[false_func_index+1:])
+                false_func_name = function_op_name_list[0]
 
-            true_func_op = self.load_operator(true_func_name, [], kws.get('true_func', dict()), tag)
-            false_func_op = self.load_operator(false_func_name, [], kws.get('false_func', dict()), tag)
-
-            assert(true_func_op is not None)
-            assert(false_func_op is not None)
+                true_func_op = self.load_operator(true_func_name, [], kws.get('true_func', dict()), tag)
+                false_func_op = self.load_operator(false_func_name, [], kws.get('false_func', dict()), tag)
+            else:
+                true_func_op = kws.get('true_func', None)
+                false_func_op = kws.get('false_func', None)
 
             control_op_cls = getattr(importlib.import_module('antgo.pipeline.control.if_op'), 'If', None)
-            return self.instance_operator(control_op_cls, [], dict(true_func=true_func_op, false_func=false_func_op))
+            return self.instance_operator(control_op_cls, [], dict(true_func=true_func_op, false_func=false_func_op, check_func=kws.get('check_func', None)))
         elif control_op_name == 'IfNotNone':
             function_op_name_list = self.split_function(info[2:])
             function_op_name = function_op_name_list[0]

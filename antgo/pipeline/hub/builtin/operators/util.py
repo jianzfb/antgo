@@ -35,6 +35,14 @@ def batchdyn(func):
         main_thread_id = -1
         self.dyn_batch_cache_lock[dyn_batch_cache_i].acquire()
         while True:
+            if len(self.dyn_batch_cache[dyn_batch_cache_i]['data']) >= self.dyn_max_batch_size:
+                # 超过最大batch_size, 需要等待
+                # 等待10ms
+                self.dyn_batch_cache_lock[dyn_batch_cache_i].release()
+                time.sleep(0.01 + float(np.random.random() * 0.003))
+                self.dyn_batch_cache_lock[dyn_batch_cache_i].acquire()
+                continue
+
             if len(self.dyn_batch_cache[dyn_batch_cache_i]['data']) == 0:
                 main_thread_id = threading.current_thread().ident
                 self.dyn_batch_cache[dyn_batch_cache_i]['start_time'] = time.time()
@@ -74,6 +82,12 @@ def batchdyn(func):
                 # 等待 2ms
                 time.sleep(0.002 + float(np.random.random() * 0.003))
                 continue
+            if len(self.dyn_allow_batch_sizes) > 0:
+                if len(self.dyn_batch_cache[dyn_batch_cache_i]['data']) not in self.dyn_allow_batch_sizes:
+                    self.dyn_batch_cache_lock[dyn_batch_cache_i].release()
+                    # 等待 2ms
+                    time.sleep(0.002 + float(np.random.random() * 0.003))                
+                    continue
 
             # 组织完成一组新batch
             dyn_batch_cache = self.dyn_batch_cache[dyn_batch_cache_i]
