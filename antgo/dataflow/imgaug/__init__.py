@@ -38,7 +38,8 @@ from .operators import (
   RandomRatio,
   GrayDistort,
   RandomDraw,
-  RandomSelectInstance)
+  RandomSelectInstance,
+  HueDistort)
 
 from .converting import (
   KeypointConverter,
@@ -82,6 +83,7 @@ __all__ = [
   'RandomNoise',
   'RandomRatio',
   'GrayDistort',
+  'HueDistort',
   'RandomDraw',
   'RandomSelectInstance'
 ]

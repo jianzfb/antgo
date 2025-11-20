@@ -223,7 +223,7 @@ def labelstudio_format_dc(ann_file, data_folder, category_map, is_debug=False):
 
             group_anno_ids = {}
             original_file = anno_info['data']['img'].split('/')[-1] if 'img' in anno_info else anno_info['data']['image'].split('/')[-1]
-
+            print(f'load {original_file}')
             export_info = {}
             export_info['img_path'] = os.path.join(data_folder, original_file)
             export_info['image'] = cv2.imread(export_info['img_path'])

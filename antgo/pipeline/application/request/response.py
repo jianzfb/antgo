@@ -8,7 +8,6 @@ from __future__ import print_function
 
 import os
 import cv2
-from antgo.pipeline.application.common.db import *
 from antgo.pipeline.functional.common.env import *
 from antgo.pipeline.utils.reserved import *
 
