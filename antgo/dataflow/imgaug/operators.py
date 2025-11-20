@@ -2436,6 +2436,27 @@ class GrayDistort(BaseOperator):
         return sample
 
 
+class HueDistort(BaseOperator):
+    def __init__(self, delta=30, prob=0.5):
+        self.delta = delta
+        self.prob = prob
+
+    def __call__(self, sample, context=None):
+        if np.random.random() > self.prob:
+            return sample
+
+        img = sample['image']
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        img = img.astype(np.float32)
+        img[..., 0] += random.uniform(-self.delta, self.delta)
+        img[..., 0][img[..., 0] > 360] -= 360
+        img[..., 0][img[..., 0] < 0] += 360
+        img = np.clip(img, 0, 255).astype(np.uint8)
+        img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
+        sample['image'] = img
+        return sample
+
+
 # FINSH FIX
 class BboxXYXY2XYWH(BaseOperator):
     """

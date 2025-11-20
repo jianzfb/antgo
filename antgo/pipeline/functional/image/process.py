@@ -91,9 +91,11 @@ class resize_keep_ratio_op(object):
 
 @register
 class keep_ratio_op(object):
-    def __init__(self, aspect_ratio, fill_val=0) -> None:
+    def __init__(self, aspect_ratio, align='center',fill_val=0) -> None:
         self.aspect_ratio = aspect_ratio
         self.fill_val = fill_val
+        # left,center,right
+        self.align = align
 
     def __call__(self, image):
         rhi, rwi = image.shape[:2]
@@ -108,12 +110,26 @@ class keep_ratio_op(object):
                 nwi = int(rhi * self.aspect_ratio)
 
             assert(nhi >= rhi)
-            top_padding = (nhi - rhi) // 2
-            bottom_padding = (nhi - rhi) - top_padding
+            if self.align == 'center':
+                top_padding = (nhi - rhi) // 2
+                bottom_padding = (nhi - rhi) - top_padding
+            elif self.align == 'left':
+                top_padding = 0
+                bottom_padding = (nhi - rhi) - top_padding
+            else:
+                top_padding = (nhi - rhi)
+                bottom_padding = 0
 
             assert(nwi >= rwi)
-            left_padding = (nwi - rwi)//2
-            right_padding = (nwi - rwi) - (nwi - rwi)//2
+            if self.align == 'center':
+                left_padding = (nwi - rwi)//2
+                right_padding = (nwi - rwi) - left_padding
+            elif self.align == 'left':
+                left_padding = 0
+                right_padding = (nwi - rwi) - left_padding
+            else:
+                left_padding = (nwi - rwi)
+                right_padding = 0
   
             # 调整image
             image = cv2.copyMakeBorder(image, top_padding, bottom_padding, left_padding, right_padding,
@@ -121,6 +137,23 @@ class keep_ratio_op(object):
 
         return image, [left_padding, top_padding, rwi, rhi]
 
+
+@register
+class inv_keep_ratio_op(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, layout, bboxes):
+        left_padding, top_padding, rwi, rhi = layout
+        ori_bboxes = bboxes.copy()
+        for box_i, box in enumerate(bboxes):
+            x0,y0,x1,y1 = box[:4]
+            ori_bboxes[box_i, 0] = np.clip(x0 - left_padding, 0, rwi)
+            ori_bboxes[box_i, 1] = np.clip(y0 - top_padding, 0, rhi)
+            ori_bboxes[box_i, 2] = np.clip(x1 - left_padding, 0, rwi)
+            ori_bboxes[box_i, 3] = np.clip(y1 - top_padding, 0, rhi)
+        
+        return ori_bboxes
 
 @register
 class preprocess_op(object):
